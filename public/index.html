@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Kanjo | Operations Center</title>
+
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+    <script>
+
+        tailwind.config = { theme: { extend: { colors: { kanjo: { primary: '#6D28D9', dark: '#4C1D95', light: '#F5F3FF', bg: '#F9FAFB' } } } } }
+
+    </script>
+
+    <script>
+
+        window.addEventListener('DOMContentLoaded', () => {
+
+            setTimeout(() => {
+
+                const splash = document.getElementById('kanjoLoadingSplash');
+
+                if (splash) {
+
+                    splash.style.opacity = '0';
+
+                    splash.style.pointerEvents = 'none';
+
+                    setTimeout(() => splash.remove(), 400);
+
+                }
+
+            }, 800);
+
+        });
+
+    </script>
+
+</head>
+
+<body class="bg-kanjo-bg text-slate-800">
+
+
+
+    <div id="kanjoLoadingSplash" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center p-4 transition-opacity duration-400">
+
+        <div class="text-center space-y-6 max-w-sm w-full">
+
+            <div class="relative w-24 h-24 mx-auto flex items-center justify-center">
+
+                <img src="logo.png" alt="Kanjo Logo" class="w-20 h-20 object-contain kangaroo-jumping">
+
+            </div>
+
+            <div class="space-y-2">
+
+                <h3 class="font-black text-2xl text-kanjo-dark">KANJO <span class="text-kanjo-primary">OPS</span></h3>
+
+                <p class="text-xs font-black text-kanjo-primary tracking-wide">الكانجارو جهز كل حاجة، ثواني وفتحت...</p>
+
+            </div>
+
+            <div class="relative w-full bg-kanjo-light h-4 rounded-full overflow-hidden p-0.5 border border-purple-100 shadow-inner">
+
+                <div class="bg-kanjo-primary h-full rounded-full kanjo-progress-bar"></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="toast-container" class="fixed top-4 left-4 right-4 sm:left-auto sm:right-5 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+
+
+    <!-- نافذة محفظة استكمال بيانات السوشيال ميديا (للمناديب) -->
+
+    <div id="quickLinksModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[125]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-xl shadow-2xl max-h-[85vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4 border-b border-purple-100 pb-3">
+
+                <div class="flex items-center gap-2">
+
+                    <div class="bg-purple-100 text-kanjo-primary p-2.5 rounded-xl text-lg"><i class="fa-solid fa-link"></i></div>
+
+                    <div>
+
+                        <h3 class="font-black text-lg text-kanjo-dark">محفظة استكمال روابط السوشيال ميديا</h3>
+
+                        <p class="text-[11px] text-slate-500 font-bold">المحلات التي تمت زيارتها أو التعاقد معها وينقصها روابط رقمية</p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="closeQuickLinksModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="quickLinksListContainer" class="overflow-y-auto hide-scrollbar flex-1 space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="detailsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 id="detailsTitle" class="font-black text-xl text-kanjo-dark">تفاصيل</h3>
+
+                <div class="flex items-center gap-2">
+
+                    <button onclick="printDetailsContent()" class="bg-kanjo-light text-kanjo-primary hover:bg-purple-100 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+
+                        <i class="fa-solid fa-print"></i> طباعة القائمة
+
+                    </button>
+
+                    <button id="exportDetailsExcelBtn" onclick="exportDetailsExcel()" class="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border border-emerald-200">
+
+                        <i class="fa-solid fa-file-excel"></i> تصدير إكسيل
+
+                    </button>
+
+                    <button onclick="closeStatModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+                </div>
+
+            </div>
+
+            <div id="detailsContent" class="overflow-y-auto hide-scrollbar flex-1 space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="archiveReportModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[130]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-4">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3">
+
+                <h3 class="font-black text-lg text-kanjo-dark flex items-center gap-2">
+
+                    <i class="fa-solid fa-box-archive text-amber-600"></i> نقل التقرير إلى سلة الحفظ
+
+                </h3>
+
+                <button onclick="closeArchiveReportModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-xl"></i></button>
+
+            </div>
+
+            <p class="text-xs text-slate-600 font-bold">سيتم إزالة هذا التقرير من المهمة الحالية ومِن رؤية المندوب، وأرشفته في سجل التقارير المستبعدة.</p>
+
+            <div>
+
+                <label class="block text-xs font-bold text-slate-700 mb-1">سبب نقل أو استبعاد التقرير:</label>
+
+                <textarea id="archiveReportReasonInput" placeholder="اكتب ملاحظتك أو سبب استبعاد التقرير هنا..." class="w-full p-3 bg-kanjo-light border border-purple-100 rounded-xl text-xs font-bold outline-none focus:border-kanjo-primary min-h-[90px]"></textarea>
+
+            </div>
+
+            <div class="flex gap-3 pt-2">
+
+                <button onclick="confirmArchiveReport()" class="flex-1 bg-amber-600 text-white py-3 rounded-xl font-bold hover:bg-amber-700 transition text-xs shadow-md">تأكيد ونقل التقرير</button>
+
+                <button onclick="closeArchiveReportModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300 transition text-xs">إلغاء</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="viewArchivedReportsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[130]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4 border-b border-purple-100 pb-3">
+
+                <h3 class="font-black text-xl text-kanjo-dark flex items-center gap-2">
+
+                    <i class="fa-solid fa-box-archive text-amber-600"></i> سلة حفظ التقارير الخاطئة / المستبعدة
+
+                </h3>
+
+                <button onclick="document.getElementById('viewArchivedReportsModal').classList.add('hidden')" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="archivedReportsListContainer" class="overflow-y-auto hide-scrollbar flex-1 space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="merchantProfileModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[120]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar space-y-5">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-kanjo-light text-kanjo-primary p-3 rounded-2xl text-xl"><i class="fa-solid fa-store"></i></div>
+
+                    <div>
+
+                        <h3 id="mpMerchantName" class="font-black text-xl text-kanjo-dark">اسم التاجر</h3>
+
+                        <p class="text-xs text-slate-500 font-bold" id="mpMerchantCat">فئة النشاط</p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="closeMerchantProfileModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+
+
+            <div class="space-y-4">
+
+                <div class="bg-kanjo-light p-4 rounded-2xl border border-purple-100 space-y-3">
+
+                    <h4 class="font-black text-xs text-kanjo-primary uppercase tracking-wider">بيانات المسؤول وتواصله</h4>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+
+                        <div>
+
+                            <label class="block text-[10px] font-bold text-slate-500 mb-1">اسم الشخص</label>
+
+                            <input type="text" id="mpContactName" placeholder="اسم المتحدث" class="w-full p-2.5 bg-white border border-purple-100 rounded-xl text-xs font-bold text-slate-800">
+
+                        </div>
+
+                        <div>
+
+                            <label class="block text-[10px] font-bold text-slate-500 mb-1">الصفة</label>
+
+                            <input type="text" id="mpContactRole" placeholder="أونر، مدير..." class="w-full p-2.5 bg-white border border-purple-100 rounded-xl text-xs font-bold text-slate-800">
+
+                        </div>
+
+                        <div>
+
+                            <label class="block text-[10px] font-bold text-slate-500 mb-1">رقم الهاتف</label>
+
+                            <input type="tel" id="mpContactPhone" placeholder="رقم التواصل" dir="ltr" class="w-full p-2.5 bg-white border border-purple-100 rounded-xl text-xs font-bold text-slate-800 text-right">
+
+                        </div>
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">العنوان الفعلي / المكان</label>
+
+                        <input type="text" id="mpAddress" placeholder="عنوان المكان بالتفصيل" class="w-full p-2.5 bg-white border border-purple-100 rounded-xl text-xs font-bold text-slate-800">
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="bg-slate-50 p-4 rounded-2xl border border-purple-100 space-y-3">
+
+                    <h4 class="font-black text-xs text-slate-700 uppercase tracking-wider">روابط منصات التواصل الاجتماعي والموقع</h4>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                        <div class="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <i class="fa-brands fa-facebook text-blue-600 text-lg w-6 text-center"></i>
+
+                            <input type="url" id="mpFbPage" placeholder="لينك صفحة الفيسبوك" class="w-full text-xs font-bold outline-none bg-transparent">
+
+                        </div>
+
+                        <div class="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <i class="fa-solid fa-users text-blue-500 text-lg w-6 text-center"></i>
+
+                            <input type="url" id="mpFbGroup" placeholder="لينك جروب الفيسبوك" class="w-full text-xs font-bold outline-none bg-transparent">
+
+                        </div>
+
+                        <div class="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <i class="fa-brands fa-instagram text-pink-600 text-lg w-6 text-center"></i>
+
+                            <input type="url" id="mpInsta" placeholder="لينك صفحة إنستغرام" class="w-full text-xs font-bold outline-none bg-transparent">
+
+                        </div>
+
+                        <div class="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <i class="fa-solid fa-globe text-kanjo-primary text-lg w-6 text-center"></i>
+
+                            <input type="url" id="mpWebsite" placeholder="لينك الموقع الإلكتروني" class="w-full text-xs font-bold outline-none bg-transparent">
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100 space-y-2">
+
+                    <h4 class="font-black text-xs text-kanjo-dark uppercase tracking-wider">الملخص التشغيلي وحالة الميدان</h4>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+
+                        <div class="bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <span class="block text-[10px] text-slate-400 font-bold">الفريق المسند</span>
+
+                            <span id="mpTeamDisplay" class="font-black text-kanjo-primary">-</span>
+
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <span class="block text-[10px] text-slate-400 font-bold">حالة الزيارة</span>
+
+                            <span id="mpVisitStatus" class="font-black text-slate-700">-</span>
+
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <span class="block text-[10px] text-slate-400 font-bold">إجمالي الزيارات</span>
+
+                            <span id="mpTotalVisits" class="font-black text-orange-600">0</span>
+
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-xl border border-purple-100">
+
+                            <span class="block text-[10px] text-slate-400 font-bold">حالة التعاقد</span>
+
+                            <span id="mpContractStatus" class="font-black text-emerald-600">-</span>
+
+                        </div>
+
+                    </div>
+
+                    <div id="mpVisitDatesContainer" class="text-[11px] text-slate-600 bg-white p-3 rounded-xl border border-purple-100 mt-2">
+
+                        <span class="font-bold text-slate-500 block mb-1">📅 تواريخ وسجلات الزيارات الميدانية:</span>
+
+                        <div id="mpVisitDatesList" class="space-y-1">لا توجد زيارات مسجلة بعد</div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+
+            <div id="mpActionsContainer" class="flex gap-3 pt-2">
+
+                <button id="mpSaveBtn" onclick="saveMerchantProfile()" class="flex-1 bg-kanjo-primary text-white py-3.5 rounded-xl font-bold hover:bg-violet-800 shadow-md text-xs">حفظ التعديلات وتحديث كل النظام</button>
+
+                <button onclick="closeMerchantProfileModal()" class="flex-1 bg-slate-200 py-3.5 rounded-xl font-bold hover:bg-slate-300 text-xs">خروج</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="transferModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl">
+
+            <h3 class="font-black text-xl mb-2 text-kanjo-dark">طلب نقل مسؤولية محل</h3>
+
+            <p id="transferModalSubtitle" class="text-xs text-slate-600 mb-4 font-bold bg-kanjo-light p-3 rounded-xl border border-purple-100"></p>
+
+            <div class="space-y-4">
+
+                <div>
+
+                    <label class="block text-xs font-bold text-slate-700 mb-1">أسباب رغبة النقل:</label>
+
+                    <textarea id="transferReasonInput" placeholder="اكتب أسبابك بالتفصيل هنا..." class="w-full p-3.5 bg-kanjo-light border rounded-xl min-h-[100px] outline-none focus:border-kanjo-primary text-xs font-bold"></textarea>
+
+                </div>
+
+                <div class="flex gap-3">
+
+                    <button onclick="submitTransferRequest()" class="flex-1 bg-kanjo-primary text-white py-3 rounded-xl font-bold hover:bg-violet-800 transition text-xs shadow-md">تقديم الطلب</button>
+
+                    <button onclick="closeTransferModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300 transition text-xs">إلغاء</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="adminTransferModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 class="font-black text-xl text-kanjo-dark"><i class="fa-solid fa-right-left ml-2"></i>طلبات نقل المهام المعلقة</h3>
+
+                <button onclick="document.getElementById('adminTransferModal').classList.add('hidden')" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="adminTransferList" class="overflow-y-auto hide-scrollbar flex-1 space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="exportModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+
+            <h3 class="font-black text-xl mb-4 text-kanjo-dark">تصدير البيانات (Excel)</h3>
+
+            <div class="space-y-3 mb-6">
+
+                <label class="flex items-center gap-3 p-3 bg-kanjo-light rounded-xl cursor-pointer">
+
+                    <input type="checkbox" id="expAll" onchange="toggleExportOptions('all')" checked class="w-5 h-5 accent-kanjo-primary"> الكل
+
+                </label>
+
+                <label class="flex items-center gap-3 p-3 bg-kanjo-light rounded-xl cursor-pointer">
+
+                    <input type="checkbox" id="expVisits" onchange="toggleExportOptions('item')" class="w-5 h-5 accent-kanjo-primary disabled:opacity-50" disabled> الزيارات فقط
+
+                </label>
+
+                <label class="flex items-center gap-3 p-3 bg-kanjo-light rounded-xl cursor-pointer">
+
+                    <input type="checkbox" id="expReports" onchange="toggleExportOptions('item')" class="w-5 h-5 accent-kanjo-primary disabled:opacity-50" disabled> التقارير فقط
+
+                </label>
+
+                <label class="flex items-center gap-3 p-3 bg-kanjo-light rounded-xl cursor-pointer">
+
+                    <input type="checkbox" id="expSigned" onchange="toggleExportOptions('item')" class="w-5 h-5 accent-kanjo-primary disabled:opacity-50" disabled> العقود المحققة
+
+                </label>
+
+            </div>
+
+            <div class="flex gap-3">
+
+                <button onclick="performExport()" class="flex-1 bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700">تصدير الملف</button>
+
+                <button onclick="document.getElementById('exportModal').classList.add('hidden')" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300">إلغاء</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="deleteModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center m-4">
+
+            <i class="fa-solid fa-trash text-red-500 text-4xl mb-4"></i>
+
+            <h3 class="font-black text-xl mb-2 text-kanjo-dark">هل أنت متأكد من الحذف؟</h3>
+
+            <div class="flex gap-3 mt-4">
+
+                <button onclick="confirmDelete()" class="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700">حذف نهائي</button>
+
+                <button onclick="closeDeleteModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300">خروج</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="editModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <h3 class="font-black text-lg sm:text-xl mb-4 text-kanjo-dark">تعديل كامل للمهمة</h3>
+
+            <form id="editForm" class="space-y-3">
+
+                <input type="text" id="editName" class="w-full p-3.5 bg-kanjo-light border rounded-xl" placeholder="اسم التاجر">
+
+                <select id="editCat" class="w-full p-3.5 bg-kanjo-light border rounded-xl"></select>
+
+                <select id="editTeam" class="w-full p-3.5 bg-kanjo-light border rounded-xl">
+
+                    <option value="Fox Team">Fox Team</option>
+
+                    <option value="Power Team">Power Team</option>
+
+                </select>
+
+                <input type="date" id="editDate" class="w-full p-3.5 bg-kanjo-light border rounded-xl">
+
+                <input type="number" id="editTarget" class="w-full p-3.5 bg-kanjo-light border rounded-xl" placeholder="التارجت">
+
+                <textarea id="editNotes" class="w-full p-3.5 bg-kanjo-light border rounded-xl" placeholder="ملاحظات"></textarea>
+
+                <div class="flex gap-3 mt-5">
+
+                    <button type="button" onclick="saveEditTask()" class="flex-1 bg-kanjo-primary text-white py-3.5 rounded-xl font-bold hover:bg-violet-800 shadow-md">حفظ التعديلات</button>
+
+                    <button type="button" onclick="closeEditModal()" class="flex-1 bg-slate-200 py-3.5 rounded-xl font-bold hover:bg-slate-300">خروج</button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- نافذة بيانات استلام المرتب والمستحقات المالية (للموظفين: سارة، مصطفى، أحمد جمعة، يوسف) -->
+    <div id="financialProfileModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[135]">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar space-y-5">
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="bg-emerald-50 text-emerald-600 p-3 rounded-2xl text-xl"><i class="fa-solid fa-money-check-dollar"></i></div>
+                    <div>
+                        <h3 class="font-black text-lg sm:text-xl text-kanjo-dark">بيانات استلام المرتب والمستحقات المالية</h3>
+                        <p class="text-[11px] text-slate-500 font-bold">اختر طريقة الاستلام المفضلة وأدخل بياناتك بدقة تامة</p>
+                    </div>
+                </div>
+                <button onclick="closeFinancialProfileModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+            </div>
+
+            <div class="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-2xl text-[11px] font-bold leading-relaxed flex items-start gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                <span>يرجى مراجعة البيانات بدقة متناهية. إدخال بيانات خاطئة قد يؤدي إلى تأخر تحويل مستحقاتك المالية. أنت مسؤول بالكامل عن صحة الأرقام المدخلة.</span>
+            </div>
+
+            <div id="financialProfileStatusBadgeWrapper" class="hidden flex items-center gap-2">
+                <span class="text-[11px] font-bold text-slate-500">حالة الاعتماد الحالية:</span>
+                <span id="financialProfileStatusBadge" class="text-[11px] font-black px-2.5 py-1 rounded-full"></span>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-2">طريقة استلام المرتب:</label>
+                <select id="fpMethod" onchange="renderFinancialMethodFields()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-kanjo-primary">
+                    <option value="">اختر طريقة الاستلام...</option>
+                    <option value="ewallet">محفظة إلكترونية (فودافون كاش / أورانج كاش / اتصالات كاش / وي باي)</option>
+                    <option value="instapay">إنستاباي (InstaPay)</option>
+                    <option value="bank">تحويل بنكي</option>
+                    <option value="post">حساب البريد المصري</option>
+                </select>
+            </div>
+
+            <div id="fpFieldsContainer" class="space-y-3">
+                <p class="text-xs text-slate-400 font-bold text-center py-4">يرجى اختيار طريقة الاستلام أولاً لعرض الحقول المطلوبة</p>
+            </div>
+
+            <div class="flex gap-3 pt-2 sticky bottom-0 bg-white">
+                <button onclick="saveFinancialProfile()" class="flex-1 bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md text-xs sm:text-sm"><i class="fa-solid fa-floppy-disk"></i> حفظ بيانات الدفع</button>
+                <button onclick="closeFinancialProfileModal()" class="flex-1 bg-slate-200 py-3.5 rounded-xl font-bold hover:bg-slate-300 text-xs sm:text-sm">خروج</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <header class="bg-white border-b border-purple-100 p-3 sticky top-0 z-40 shadow-sm relative">
+
+        <div class="max-w-6xl mx-auto flex justify-between items-center px-1">
+
+            <div class="flex items-center gap-2">
+
+                <img id="headerLogo" src="logo.png" alt="Logo" class="w-10 h-10 object-contain">
+
+                <h1 id="headerTitle" class="font-black text-lg sm:text-xl text-kanjo-dark">KANJO <span class="text-kanjo-primary">OPS</span></h1>
+
+            </div>
+
+            <div id="userInfo" class="hidden flex items-center gap-2 bg-kanjo-light px-3 py-1.5 rounded-full relative">
+
+                <div id="userAvatarContainer" class="flex-shrink-0"></div>
+
+               
+
+                <div id="archivedReportsBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openViewArchivedReportsModal()" class="relative text-slate-600 hover:text-amber-600 transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-box-archive text-amber-600"></i>
+
+                        <span>سلة التقارير الخاطئة</span>
+
+                    </button>
+
+                </div>
+
+
+
+                <div id="financialProfileBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openFinancialProfileModal()" class="relative text-slate-600 hover:text-emerald-600 transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-money-check-dollar text-emerald-600"></i>
+
+                        <span>بيانات استلام المرتب</span>
+
+                        <span id="financialProfileBadge" class="hidden absolute -top-1 -right-1 flex h-3 w-3">
+
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-amber-500 border-2 border-white"></span>
+
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+
+                <div id="adminTransferNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openAdminTransferModal()" class="relative text-slate-600 hover:text-kanjo-primary transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-right-left text-kanjo-primary"></i>
+
+                        <span>طلبات النقل</span>
+
+                        <span id="transferBadge" class="hidden absolute -top-1 -right-1 flex h-3 w-3">
+
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white"></span>
+
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+
+                <div id="notificationsWrapper" class="hidden relative mr-2">
+
+                    <button onclick="toggleNotifications()" class="relative text-slate-500 hover:text-kanjo-primary transition-colors p-1">
+
+                        <i class="fa-solid fa-bell text-lg"></i>
+
+                        <span id="notifBadge" class="hidden absolute -top-1 -right-1 flex h-3 w-3">
+
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+
+                            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white"></span>
+
+                        </span>
+
+                    </button>
+
+                    <div id="notificationsDropdown" class="hidden absolute right-0 sm:right-auto sm:left-0 top-10 w-[90vw] sm:w-80 max-w-sm bg-white rounded-2xl shadow-2xl border border-purple-100 z-50 overflow-hidden flex flex-col">
+
+                        <div class="bg-kanjo-light p-3 border-b border-purple-100 flex justify-between items-center">
+
+                            <span class="font-black text-kanjo-dark">الإشعارات</span>
+
+                            <button onclick="clearNotifications()" class="text-xs text-slate-500 hover:text-red-500 font-bold">تحديد كمقروء</button>
+
+                        </div>
+
+                        <div id="notificationsList" class="max-h-80 overflow-y-auto hide-scrollbar flex-1 bg-slate-50"></div>
+
+                    </div>
+
+                </div>
+
+                <span id="userNameDisplay" class="font-bold text-xs sm:text-sm text-kanjo-dark border-r border-purple-200 pr-3"></span>
+
+                <button onclick="logout()" class="text-slate-400 hover:text-red-500 transition-colors p-1 border-r border-purple-200 pr-2 mr-1"><i class="fa-solid fa-power-off"></i></button>
+
+            </div>
+
+        </div>
+
+    </header>
+
+
+
+    <main class="p-4 sm:p-6 pb-24 min-h-6xl mx-auto">
+
+        <div id="loginSection" class="max-w-md mx-auto mt-8 sm:mt-12 bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-purple-100 text-center">
+
+            <img src="logo.png" alt="Logo" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6">
+
+            <h2 class="text-xl sm:text-2xl font-black mb-6 text-kanjo-dark">تسجيل الدخول</h2>
+
+            <input type="password" id="pinInput" placeholder="أدخل رمز الدخول" maxlength="4" class="w-full text-center text-2xl sm:text-3xl p-4 bg-kanjo-light border border-purple-100 rounded-2xl mb-6 font-black tracking-[0.3em] sm:tracking-[0.5em] outline-none focus:border-kanjo-primary transition-colors">
+
+            <button onclick="login()" class="w-full bg-kanjo-primary text-white py-3.5 sm:py-4 rounded-2xl font-bold text-base sm:text-lg hover:bg-violet-800 transition">دخول النظام</button>
+
+        </div>
+
+
+
+        <div id="accountingSection" class="hidden space-y-6">
+
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-purple-100 space-y-6">
+
+                <div class="flex flex-wrap justify-between items-center gap-3 border-b border-purple-100 pb-4">
+
+                    <div>
+
+                        <h2 class="text-xl sm:text-2xl font-black text-kanjo-dark flex items-center gap-2">
+
+                            <i class="fa-solid fa-wallet text-emerald-600"></i> مركز الحسابات والرواتب الشامل
+
+                        </h2>
+
+                        <p class="text-xs text-slate-500 font-bold mt-1">حساب الرواتب الأساسية، توزيع عمولات التيمات بالتساوي من السيستم، وحوافز العمولة الإضافية (Extra Incentive)</p>
+
+                    </div>
+
+                    <div class="flex items-center gap-2">
+
+                        <button onclick="exportPayrollExcel()" class="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm">
+
+                            <i class="fa-solid fa-file-excel"></i> تصدير تقرير الرواتب (Excel)
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="bg-gradient-to-l from-kanjo-light to-white p-4 rounded-2xl border border-purple-100 flex flex-wrap items-end gap-3 justify-between">
+
+                    <div class="flex flex-wrap items-end gap-3">
+
+                        <div>
+
+                            <label class="block text-[11px] font-black text-kanjo-dark mb-1"><i class="fa-regular fa-calendar-days text-kanjo-primary"></i> فترة الرواتب (حسب تاريخ التعاقد النهائي)</label>
+
+                            <input type="month" id="payrollPeriod" onchange="onPayrollPeriodChange()" class="p-3 bg-white border border-purple-200 rounded-xl text-sm font-black text-kanjo-primary outline-none focus:border-kanjo-primary min-w-[180px]">
+
+                        </div>
+
+                        <button type="button" onclick="setPayrollPeriodCurrent()" class="bg-kanjo-primary text-white px-4 py-3 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm">
+
+                            الشهر الحالي
+
+                        </button>
+
+                        <button type="button" onclick="setPayrollPeriodAll()" class="bg-white text-kanjo-dark border border-purple-200 px-4 py-3 rounded-xl text-xs font-bold hover:bg-purple-50 transition shadow-sm">
+
+                            كل الفترات
+
+                        </button>
+
+                    </div>
+
+                    <div class="text-left space-y-1">
+
+                        <div id="payrollPeriodLabel" class="text-sm font-black text-kanjo-dark">—</div>
+
+                        <div id="payrollPeriodContractsHint" class="text-[11px] font-bold text-slate-500">تعاقدات نهائية فقط (بدون الاتفاقات المبدئية)</div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div id="payrollSummaryDashboard" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                    <div class="bg-gradient-to-br from-orange-50 to-orange-100/60 p-4 rounded-2xl border border-orange-200 shadow-sm space-y-2">
+
+
+                        <div class="flex justify-between items-center">
+
+                            <h4 class="font-black text-orange-950 text-sm flex items-center gap-2"><i class="fa-solid fa-shield-cat text-orange-600"></i> ملخص تعاقدات Fox Team</h4>
+
+                            <span id="foxTotalSignedBadge" class="bg-orange-200 text-orange-900 text-xs font-black px-2.5 py-0.5 rounded-full">0 عقود مؤكدة</span>
+
+                        </div>
+
+                        <div id="foxBreakdownList" class="text-xs text-slate-700 space-y-1 pt-1 font-bold">
+
+                            <div>- الفئة الأولى (100% - 200 ج): 0 عقود</div>
+
+                            <div>- الفئة الثانية (>90% - 150 ج): 0 عقود</div>
+
+                            <div>- الفئة الثالثة (<90% - 100 ج): 0 عقود</div>
+
+                            <div>- فئة العمولة الإضافية (>100%): 0 عقود</div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="bg-gradient-to-br from-blue-50 to-blue-100/60 p-4 rounded-2xl border border-blue-200 shadow-sm space-y-2">
+
+                        <div class="flex justify-between items-center">
+
+                            <h4 class="font-black text-blue-950 text-sm flex items-center gap-2"><i class="fa-solid fa-bolt text-blue-600"></i> ملخص تعاقدات Power Team</h4>
+
+                            <span id="powerTotalSignedBadge" class="bg-blue-200 text-blue-900 text-xs font-black px-2.5 py-0.5 rounded-full">0 عقود مؤكدة</span>
+
+                        </div>
+
+                        <div id="powerBreakdownList" class="text-xs text-slate-700 space-y-1 pt-1 font-bold">
+
+                            <div>- الفئة الأولى (100% - 200 ج): 0 عقود</div>
+
+                            <div>- الفئة الثانية (>90% - 150 ج): 0 عقود</div>
+
+                            <div>- الفئة الثالثة (<90% - 100 ج): 0 عقود</div>
+
+                            <div>- فئة العمولة الإضافية (>100%): 0 عقود</div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="bg-gradient-to-br from-purple-50 to-indigo-50/70 p-5 rounded-2xl border border-purple-200 shadow-sm space-y-4">
+
+                    <h3 class="font-black text-sm text-kanjo-dark flex items-center gap-2">
+
+                        <i class="fa-solid fa-user-shield text-kanjo-primary"></i> إعدادات راتب وعمولات مدير منطقة دسوق
+
+                    </h3>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                        <div>
+
+                            <label class="block text-xs font-bold text-slate-700 mb-1">الراتب الأساسي لمدير الدسوق (ج.م):</label>
+
+                            <input type="number" id="desoukManagerBase" value="5000" oninput="saveAndRenderPayroll()" class="w-full p-3 bg-white border border-purple-200 rounded-xl text-xs font-black text-kanjo-primary outline-none focus:border-kanjo-primary">
+
+                        </div>
+
+                        <div>
+
+                            <label class="block text-xs font-bold text-slate-700 mb-1">نسبة المدير من عمولات الفئات (%):</label>
+
+                            <input type="number" id="desoukManagerCommissionPercent" value="50" step="1" oninput="saveAndRenderPayroll()" class="w-full p-3 bg-white border border-purple-200 rounded-xl text-xs font-black text-kanjo-primary outline-none focus:border-kanjo-primary" placeholder="مثال: 50 أو 60">
+
+                        </div>
+
+                        <div>
+
+                            <label class="block text-xs font-bold text-slate-700 mb-1">حافز إضافي لـ العمولة الإضافية (ج.م/عقد):</label>
+
+                            <input type="number" id="desoukManagerExtraIncentiveBonus" value="50" step="1" oninput="saveAndRenderPayroll()" class="w-full p-3 bg-white border border-purple-200 rounded-xl text-xs font-black text-kanjo-primary outline-none focus:border-kanjo-primary" placeholder="المبلغ لكل عقد إضافي">
+
+                        </div>
+
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+
+                        <div class="bg-white/90 p-3 rounded-xl border border-purple-100 flex justify-between items-center">
+
+                            <span class="text-xs text-slate-500 font-bold">إجمالي عمولات الفئات المجمعة للتيمين:</span>
+
+                            <span id="desoukTeamTotalCommsDisplay" class="text-sm font-black text-emerald-600">0 ج.م</span>
+
+                        </div>
+
+                        <div class="bg-white/90 p-3 rounded-xl border border-purple-100 flex justify-between items-center">
+
+                            <span class="text-xs text-slate-500 font-bold">إجمالي عقود العمولة الإضافية للتيمين:</span>
+
+                            <span id="desoukTotalExtraCountDisplay" class="text-sm font-black text-purple-700">0 عقد</span>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="bg-kanjo-light p-4 rounded-2xl border border-purple-100 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+
+                    <div>
+
+                        <label class="block text-xs font-bold text-slate-700 mb-1">الراتب الأساسي الثابت للمندوب:</label>
+
+                        <input type="text" value="5000 ج.م (يوسف 3000 ج.م)" disabled class="w-full p-3 bg-white border border-purple-200 rounded-xl text-xs font-black text-slate-700">
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-xs font-bold text-slate-700 mb-1">قيمة العمولة الإضافية للمندوب (ج.م/عقد):</label>
+
+                        <input type="number" id="globalExtraIncentive" placeholder="0" oninput="saveAndRenderPayroll()" class="w-full p-3 bg-white border border-purple-200 rounded-xl text-xs font-black text-kanjo-primary outline-none focus:border-kanjo-primary">
+
+                    </div>
+
+                    <div class="flex items-end h-full pt-5">
+
+                        <span class="text-[11px] text-slate-500 font-bold">💡 يتم جلب وحساب التعاقدات والشرائح تلقائياً من بيانات السيستم.</span>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                    <div class="bg-purple-50 p-4 rounded-2xl border border-purple-100 text-center">
+
+                        <span class="text-[11px] font-bold text-slate-500 block">إجمالي الرواتب الأساسية (مناديب + مدير)</span>
+
+                        <h4 id="pyTotalBase" class="text-2xl font-black text-kanjo-dark mt-1">23,000 ج.م</h4>
+
+                    </div>
+
+                    <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+
+                        <span class="text-[11px] font-bold text-slate-500 block">إجمالي العمولات والحوافز المحققة</span>
+
+                        <h4 id="pyTotalCommissions" class="text-2xl font-black text-emerald-600 mt-1">0 ج.م</h4>
+
+                    </div>
+
+                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-center">
+
+                        <span class="text-[11px] font-bold text-slate-500 block">إجمالي المنصرف النهائي للشركة</span>
+
+                        <h4 id="pyTotalNet" class="text-2xl font-black text-blue-600 mt-1">23,000 ج.م</h4>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="overflow-x-auto">
+
+                    <table class="w-full text-right border-collapse">
+
+                        <thead>
+
+                            <tr class="bg-kanjo-light text-kanjo-dark text-xs font-black border-b border-purple-100">
+
+                                <th class="p-3.5 rounded-r-2xl">الموظف / المسؤول</th>
+
+                                <th class="p-3.5">الفريق / الدور</th>
+
+                                <th class="p-3.5">الأساسي</th>
+
+                                <th class="p-3.5 cursor-pointer hover:text-kanjo-primary" onclick="showCardDetails('payroll_tier1')">عقود الفئة الأولى (100% - 200 ج) 🔍</th>
+
+                                <th class="p-3.5 cursor-pointer hover:text-kanjo-primary" onclick="showCardDetails('payroll_tier2')">عقود الفئة الثانية (>90% - 150 ج) 🔍</th>
+
+                                <th class="p-3.5 cursor-pointer hover:text-kanjo-primary" onclick="showCardDetails('payroll_tier3')">عقود الفئة الثالثة (<90% - 100 ج) 🔍</th>
+
+                                <th class="p-3.5">إجمالي العمولات</th>
+
+                                <th class="p-3.5">العمولة الإضافية / النسبة (>100%)</th>
+
+                                <th class="p-3.5 rounded-l-2xl">الإجمالي النهائي</th>
+
+                            </tr>
+
+                        </thead>
+
+                        <tbody id="payrollTableBody" class="text-xs font-bold text-slate-700 divide-y divide-purple-50">
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <div id="financialAccountingSection" class="hidden space-y-6">
+            <div class="bg-white p-6 rounded-3xl shadow-sm border border-purple-100 space-y-6">
+                <div class="flex flex-wrap justify-between items-center gap-3 border-b border-purple-100 pb-4">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-black text-kanjo-dark flex items-center gap-2">
+                            <i class="fa-solid fa-money-check-dollar text-emerald-600"></i> مراجعة بيانات دفع مرتبات المناديب
+                        </h2>
+                        <p class="text-xs text-slate-500 font-bold mt-1">مراجعة، اعتماد، وتصدير بيانات استلام المستحقات المالية المسجلة من الموظفين أولاً بأول</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="exportFinancialProfilesExcel()" class="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-file-excel"></i> تصدير بيانات الدفع (Excel)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="bg-purple-50 p-4 rounded-2xl border border-purple-100 text-center">
+                        <span class="text-[11px] font-bold text-slate-500 block">إجمالي الملفات المسجلة</span>
+                        <h4 id="fpStatTotal" class="text-2xl font-black text-kanjo-dark mt-1">0</h4>
+                    </div>
+                    <div class="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-center">
+                        <span class="text-[11px] font-bold text-slate-500 block">قيد المراجعة</span>
+                        <h4 id="fpStatPending" class="text-2xl font-black text-amber-600 mt-1">0</h4>
+                    </div>
+                    <div class="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                        <span class="text-[11px] font-bold text-slate-500 block">معتمدة</span>
+                        <h4 id="fpStatApproved" class="text-2xl font-black text-emerald-600 mt-1">0</h4>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-right border-collapse">
+                        <thead>
+                            <tr class="bg-kanjo-light text-kanjo-dark text-xs font-black border-b border-purple-100">
+                                <th class="p-3.5 rounded-r-2xl">الموظف</th>
+                                <th class="p-3.5">الفريق</th>
+                                <th class="p-3.5">طريقة الاستلام</th>
+                                <th class="p-3.5">تفاصيل الدفع</th>
+                                <th class="p-3.5">آخر تحديث</th>
+                                <th class="p-3.5">الحالة</th>
+                                <th class="p-3.5 rounded-l-2xl">إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="financialProfilesTableBody" class="text-xs font-bold text-slate-700 divide-y divide-purple-50">
+                            <tr><td colspan="7" class="p-6 text-center text-slate-400 font-bold">لا توجد بيانات دفع مسجلة بعد</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+
+        <div id="dashboardSection" class="hidden space-y-6">
+
+           
+
+            <!-- مربع ملخص رواتب الشركة الخاص بالحساب الحالي والشهر الحالي (للمؤسسين فقط) -->
+
+            <div id="founderPayrollSummaryBox" class="hidden bg-gradient-to-r from-emerald-600 to-teal-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3 cursor-pointer hover:opacity-95 transition" onclick="showFounderPayrollDetails()">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-white/20 p-3 rounded-2xl text-xl"><i class="fa-solid fa-wallet"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base">إجمالي الرواتب للشركة — <span id="founderPayrollPeriodHint">الشهر الحالي</span></h4>
+
+                        <p class="text-xs text-emerald-100 font-bold">مبني على التعاقدات النهائية فقط حسب فترة الحسابات المختارة</p>
+
+                    </div>
+
+                </div>
+
+                <div class="bg-white text-emerald-800 px-4 py-2 rounded-2xl font-black text-sm shadow-md flex items-center gap-2">
+
+                    <span id="founderTotalNetDisplay">0 ج.م</span> <i class="fa-solid fa-arrow-left text-xs"></i>
+
+                </div>
+
+            </div>
+
+
+
+            <!-- زر وشريط محفظة استكمال بيانات السوشيال ميديا (للمناديب) -->
+
+            <div id="quickLinksWalletBanner" class="hidden bg-gradient-to-r from-purple-600 to-indigo-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-white/20 p-3 rounded-2xl text-xl"><i class="fa-solid fa-folder-open"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base">محفظة استكمال بيانات التجار الرقمية</h4>
+
+                        <p class="text-xs text-purple-100 font-bold" id="quickLinksWalletCountText">لديك محلات تحتاج لاستكمال روابط السوشيال ميديا والموقع</p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="openQuickLinksModal()" class="bg-white text-kanjo-primary px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-purple-50 transition shadow-md flex items-center gap-2">
+
+                    <i class="fa-solid fa-pen-to-square"></i> ابدأ استكمال البيانات الآن
+
+                </button>
+
+            </div>
+
+
+
+            <!-- شريط حالة بيانات استلام المرتب والمستحقات المالية (للمناديب) -->
+            <div id="financialProfileBanner" class="hidden bg-gradient-to-r from-red-600 to-rose-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-3 rounded-2xl text-xl"><i class="fa-solid fa-money-check-dollar"></i></div>
+                    <div>
+                        <h4 class="font-black text-base">بيانات استلام المرتب والمستحقات المالية</h4>
+                        <p class="text-xs text-white/90 font-bold" id="financialProfileBannerText">لم تقم بتسجيل بيانات استلام المرتب بعد</p>
+                    </div>
+                </div>
+                <button onclick="openFinancialProfileModal()" class="bg-white text-red-700 px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-red-50 transition shadow-md flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square"></i> تسجيل / تعديل البيانات
+                </button>
+            </div>
+
+
+
+            <div id="advancedDashboard" class="hidden bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-purple-100 space-y-6">
+
+                <div class="flex flex-wrap justify-between items-center gap-2 border-b border-purple-100 pb-3">
+
+                    <h2 class="text-xl font-black text-kanjo-dark flex items-center gap-2">
+
+                        <i class="fa-solid fa-chart-line text-kanjo-primary"></i> لوحة تحليل الأداء التنفيذي
+
+                    </h2>
+
+                    <button id="advancedExportBtn" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm">
+
+                        <i class="fa-solid fa-file-excel"></i> تصدير الفلتر الحالي (Excel)
+
+                    </button>
+
+                </div>
+
+
+
+                <div class="grid grid-cols-1 sm:grid-cols-5 gap-3 bg-slate-50 p-4 rounded-2xl border border-purple-50">
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-slate-500 mb-1">من تاريخ</label>
+
+                        <input type="date" id="filterStartDate" class="w-full p-2 text-xs bg-white border border-purple-100 rounded-xl font-bold text-slate-700">
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-slate-500 mb-1">إلى تاريخ</label>
+
+                        <input type="date" id="filterEndDate" class="w-full p-2 text-xs bg-white border border-purple-100 rounded-xl font-bold text-slate-700">
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-slate-500 mb-1">الفريق</label>
+
+                        <select id="filterTeam" class="w-full p-2 text-xs bg-white border border-purple-100 rounded-xl font-bold text-slate-700">
+
+                            <option value="all">كل الفرق</option>
+
+                            <option value="Fox Team">Fox Team</option>
+
+                            <option value="Power Team">Power Team</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-slate-500 mb-1">المندوب</label>
+
+                        <select id="filterUser" class="w-full p-2 text-xs bg-white border border-purple-100 rounded-xl font-bold text-slate-700">
+
+                            <option value="all">كل الأفراد</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-slate-500 mb-1">الفئة</label>
+
+                        <select id="filterCategory" class="w-full p-2 text-xs bg-white border border-purple-100 rounded-xl font-bold text-slate-700">
+
+                            <option value="all">كل الفئات</option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+                    <div onclick="showCardDetails('targets')" class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100/50 text-center cursor-pointer hover:bg-purple-100 transition">
+
+                        <p class="text-slate-400 text-[10px] font-black">متوسط المستهدف (Target)</p>
+
+                        <h4 id="advStatTargets" class="text-2xl font-black text-kanjo-primary mt-1">0%</h4>
+
+                    </div>
+
+                    <div onclick="showCardDetails('achieved')" class="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-100/50 text-center cursor-pointer hover:bg-emerald-100 transition">
+
+                        <p class="text-slate-400 text-[10px] font-black">متوسط المحقق (Achieved)</p>
+
+                        <h4 id="advStatAchieved" class="text-2xl font-black text-emerald-600 mt-1">0%</h4>
+
+                    </div>
+
+                    <div onclick="showCardDetails('tasks')" class="bg-blue-50/70 p-4 rounded-2xl border border-blue-100/50 text-center cursor-pointer hover:bg-blue-100 transition">
+
+                        <p class="text-slate-400 text-[10px] font-black">تغطية الميدان (الزيارات / الإجمالي)</p>
+
+                        <h4 id="advStatTasks" class="text-xl sm:text-2xl font-black text-blue-600 mt-1">0 من أصل 0</h4>
+
+                    </div>
+
+                    <div onclick="showCardDetails('visits')" class="bg-orange-50/70 p-4 rounded-2xl border border-orange-100/50 text-center cursor-pointer hover:bg-orange-100 transition">
+
+                        <p class="text-slate-400 text-[10px] font-black">الإجمالي الكلي لعدد الزيارات</p>
+
+                        <h4 id="advStatVisits" class="text-2xl font-black text-orange-600 mt-1">0</h4>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+
+                    <div onclick="showCardDetails('conversion')" class="bg-white p-4 rounded-2xl border border-purple-100 flex items-center gap-3 shadow-sm cursor-pointer hover:bg-purple-50 transition">
+
+                        <div class="bg-purple-100 text-kanjo-primary p-3 rounded-xl text-xl"><i class="fa-solid fa-percentage"></i></div>
+
+                        <div>
+
+                            <p class="text-slate-400 text-[11px] font-bold">معدل التعاقد</p>
+
+                            <h5 id="metricConversionRate" class="text-xs font-black text-slate-800 mt-0.5">0%</h5>
+
+                        </div>
+
+                    </div>
+
+                    <div onclick="showCardDetails('targetSuccess')" class="bg-white p-4 rounded-2xl border border-purple-100 flex items-center gap-3 shadow-sm cursor-pointer hover:bg-purple-50 transition">
+
+                        <div class="bg-emerald-100 text-emerald-600 p-3 rounded-xl text-xl"><i class="fa-solid fa-bullseye"></i></div>
+
+                        <div>
+
+                            <p class="text-slate-400 text-[11px] font-bold">نسبة إنجاز الأهداف</p>
+
+                            <h5 id="metricTargetSuccessRate" class="text-xs font-black text-slate-800 mt-0.5">0%</h5>
+
+                        </div>
+
+                    </div>
+
+                    <div onclick="showCardDetails('unsignedCats')" class="bg-white p-4 rounded-2xl border border-purple-100 flex items-center gap-3 shadow-sm cursor-pointer hover:bg-purple-50 transition">
+
+                        <div class="bg-amber-100 text-amber-600 p-3 rounded-xl text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+
+                        <div>
+
+                            <p class="text-slate-400 text-[11px] font-bold">فئات بلا تعاقد</p>
+
+                            <h5 id="metricUnsignedCats" class="text-xs font-black text-slate-800 mt-0.5">0 فئات</h5>
+
+                        </div>
+
+                    </div>
+
+                    <div onclick="showCardDetails('topPerformer')" class="bg-white p-4 rounded-2xl border border-purple-100 flex items-center gap-3 shadow-sm cursor-pointer hover:bg-purple-50 transition">
+
+                        <div id="performerIconContainer" class="bg-orange-100 text-orange-600 p-3 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0">
+
+                            <i id="performerIcon" class="fa-solid fa-user-tie text-xl"></i>
+
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+
+                            <p class="text-slate-400 text-[11px] font-bold">أفضل مندوب</p>
+
+                            <div id="metricTopPerformer" class="text-[11px] font-black text-slate-800 mt-0.5 whitespace-normal leading-tight">-</div>
+
+                        </div>
+
+                    </div>
+
+                    <div onclick="showCardDetails('topTeam')" class="bg-white p-4 rounded-2xl border border-purple-100 flex items-center gap-3 shadow-sm cursor-pointer hover:bg-purple-50 transition">
+
+                        <div id="teamIconContainer" class="bg-blue-100 text-blue-600 p-3 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0">
+
+                            <i id="teamIcon" class="fa-solid fa-crown text-xl"></i>
+
+                        </div>
+
+                        <div class="min-w-0 flex-1">
+
+                            <p class="text-slate-400 text-[11px] font-bold">أفضل فريق</p>
+
+                            <div id="metricTopTeam" class="text-[11px] font-black text-slate-800 mt-0.5 whitespace-normal leading-tight">-</div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+
+                    <div class="bg-white p-4 border border-purple-100 rounded-2xl h-[260px] flex flex-col justify-center items-center">
+
+                        <p class="text-xs font-black text-slate-500 mb-2 self-start"><i class="fa-solid fa-chart-bar"></i> مقارنة متوسط العمولة المحققة ضد المستهدفة</p>
+
+                        <div class="w-full h-full relative flex justify-center items-center">
+
+                            <canvas id="chartPerformance"></canvas>
+
+                        </div>
+
+                    </div>
+
+                    <div class="bg-white p-4 border border-purple-100 rounded-2xl h-[260px] flex flex-col justify-center items-center">
+
+                        <p class="text-xs font-black text-slate-500 mb-2 self-start"><i class="fa-solid fa-chart-pie"></i> توزيع فئات النشاط التجاري المحقق (بالأرقام والفئات)</p>
+
+                        <div class="w-full h-full relative flex justify-center items-center">
+
+                            <canvas id="chartCategories"></canvas>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="sticky top-[70px] z-30 space-y-3">
+
+                <div class="relative group">
+
+                    <input type="text" id="searchInput" oninput="applySearch()" placeholder="🔍 ابحث عن اسم المطعم..." class="w-full p-4 pl-12 bg-white border border-purple-100 rounded-2xl shadow-sm outline-none focus:border-kanjo-primary focus:ring-1 focus:ring-kanjo-primary transition-all font-bold text-slate-700">
+
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-kanjo-primary"></i>
+
+                </div>
+
+                <div id="liveFeedToggle" class="hidden">
+
+                    <button onclick="toggleLiveView()" class="w-full bg-slate-800 text-white py-3 rounded-2xl font-bold text-sm hover:bg-black transition flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-satellite-dish pulse-live text-red-500"></i> <span id="toggleText">عرض المهام الجارية (LIVE)</span>
+
+                    </button>
+
+                </div>
+
+            </div>
+
+
+
+            <div id="taskFormWrapper" class="hidden">
+
+                <div id="adminPanel" class="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-purple-100 space-y-4">
+
+                    <h3 class="font-black text-lg sm:text-xl text-kanjo-dark">إسناد مهمة جديدة</h3>
+
+                    <form id="taskForm" onsubmit="submitTask(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+
+                        <input type="text" id="mName" placeholder="اسم التاجر" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                        <select id="mCat" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required><option value="">الفئة...</option></select>
+
+                        <select id="mTeam" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                            <option value="Fox Team">فريق Fox Team</option>
+
+                            <option value="Power Team">فريق Power Team</option>
+
+                        </select>
+
+                        <input type="date" id="mTime" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                        <input type="number" id="mTarget" placeholder="نسبة التارجت المقترحة (مثال: 5 أو 10)" step="0.1" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                        <input type="text" id="mNotes" placeholder="ملاحظات توجيهية" class="p-3.5 bg-kanjo-light border rounded-xl w-full">
+
+                        <button type="submit" class="bg-kanjo-primary text-white py-3.5 rounded-xl col-span-full font-bold hover:bg-violet-800 transition shadow-md">إضافة المهمة</button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+           
+
+            <button id="exportBtn" onclick="openExportModal()" class="hidden w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md">تصدير البيانات العامة (Excel)</button>
+
+           
+
+            <div id="tasksContainer" class="space-y-4"></div>
+
+        </div>
+
+    </main>
+
+
+
+    <div id="reportModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <h3 class="font-black text-lg sm:text-xl mb-3 text-kanjo-dark sticky top-0 bg-white pb-2">تقرير <span id="modalTaskName" class="text-kanjo-primary"></span></h3>
+
+            <div class="space-y-2.5">
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+
+                    <input type="text" id="repContactName" placeholder="اسم المتحدث معه" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold">
+
+                    <input type="text" id="repContactRole" placeholder="الصفة (أونر، مدير...)" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold">
+
+                    <input type="tel" id="repContactPhone" placeholder="رقم التواصل" dir="ltr" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold text-right">
+
+                </div>
+
+
+
+                <textarea id="repGeneral" placeholder="ملاحظات عامة" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold min-h-[55px]" rows="2"></textarea>
+
+                <textarea id="repMerchant" placeholder="ملاحظات على التاجر" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold min-h-[45px]" rows="2"></textarea>
+
+                <textarea id="repTeam" placeholder="ملاحظات عن الزملاء" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold min-h-[45px]" rows="2"></textarea>
+
+                <textarea id="repNext" placeholder="مقترحات القادم" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold min-h-[45px]" rows="2"></textarea>
+
+               
+
+                <div class="space-y-2 bg-kanjo-light p-3 rounded-xl border border-purple-100">
+
+                    <label class="block text-xs font-bold text-slate-700">حالة التعاقد:</label>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+
+                        <label class="flex items-center gap-2 p-2 bg-white border rounded-xl cursor-pointer">
+
+                            <input type="radio" name="contractStatus" value="none" id="repNoContract" checked onchange="toggleAchievedField()" class="accent-kanjo-primary w-4 h-4">
+
+                            <span class="font-bold text-xs">بدون تعاقد</span>
+
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 bg-white border rounded-xl cursor-pointer">
+
+                            <input type="radio" name="contractStatus" value="provisional" id="repProvContract" onchange="toggleAchievedField()" class="accent-amber-500 w-4 h-4">
+
+                            <span class="font-bold text-xs text-amber-700">🤝 اتفاق مبدئي</span>
+
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 bg-white border rounded-xl cursor-pointer">
+
+                            <input type="radio" name="contractStatus" value="signed" id="repIsSigned" onchange="toggleAchievedField()" class="accent-emerald-600 w-4 h-4">
+
+                            <span class="font-bold text-xs text-emerald-700">✅ تم التعاقد (> 0%)</span>
+
+                        </label>
+
+                    </div>
+
+                </div>
+
+
+
+                <div>
+
+                    <input type="number" id="repPercentage" placeholder="نسبة العمولة % (مبدئية أو محققة)" step="0.1" disabled class="w-full p-2.5 bg-kanjo-light border rounded-xl font-bold text-xs">
+
+                </div>
+
+
+
+                <div class="bg-purple-50 p-3 rounded-xl border border-purple-100">
+
+                    <label class="flex items-center gap-2 font-bold cursor-pointer mb-2 text-xs"><input type="checkbox" id="repCreateTask" onchange="toggleTaskOptions()" class="w-4 h-4 accent-kanjo-primary"> إنشاء مهمة متابعة</label>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                        <input type="date" id="repNextDate" disabled class="w-full p-2.5 bg-white border rounded-xl text-xs">
+
+                        <select id="repNextType" disabled class="w-full p-2.5 bg-white border rounded-xl text-xs"><option value="زيارة">زيارة</option><option value="اتصال">اتصال</option><option value="واتساب">واتساب</option></select>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="flex gap-3 mt-4 sticky bottom-0 bg-white pt-2">
+
+                <button onclick="submitReport()" class="flex-1 bg-kanjo-primary text-white py-3 rounded-xl font-bold hover:bg-violet-800 shadow-md text-xs">حفظ التقرير</button>
+
+                <button onclick="closeReportModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300 text-xs">خروج</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <script type="module" src="js/main.js"></script>
+
+</body>
+
+</html>
+
