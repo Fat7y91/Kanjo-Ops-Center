@@ -996,13 +996,81 @@ const preloadContractImages = (element) => {
 
 };
 
+const delayContractRender = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const bringContractIntoLayout = (element) => {
+
+    element.classList.remove('hidden');
+
+    element.style.display = 'block';
+
+    element.style.position = 'absolute';
+
+    element.style.left = '0';
+
+    element.style.top = '0';
+
+    element.style.right = 'auto';
+
+    element.style.zIndex = '9999';
+
+    element.style.visibility = 'visible';
+
+    element.style.background = '#ffffff';
+
+    element.style.width = '210mm';
+
+    element.style.maxWidth = '210mm';
+
+    element.style.padding = '20mm';
+
+    element.style.margin = '0';
+
+    element.style.overflow = 'visible';
+
+    element.style.height = 'auto';
+
+    element.style.minHeight = '0';
+
+    element.style.boxShadow = 'none';
+
+    element.style.border = 'none';
+
+    element.style.opacity = '1';
+
+    element.style.transform = 'none';
+
+    void element.offsetHeight;
+
+    return element;
+
+};
+
+const restoreContractElement = (element) => {
+
+    if (!element) return;
+
+    element.removeAttribute('style');
+
+    element.classList.add('hidden');
+
+};
+
 window.exportContractPDF = async () => {
 
     const element = document.getElementById('contract-template-container');
 
     if (!element) {
 
-        showToast("يرجى إنشاء العقد أولاً", false);
+        window.showToast("يرجى إنشاء العقد أولاً", false);
+
+        return;
+
+    }
+
+    if (typeof window.html2pdf !== 'function') {
+
+        window.showToast("مكتبة تصدير PDF غير محملة", false);
 
         return;
 
@@ -1012,7 +1080,7 @@ window.exportContractPDF = async () => {
 
     if (!task) {
 
-        showToast("يرجى فتح العقد أولاً", false);
+        window.showToast("يرجى فتح العقد أولاً", false);
 
         return;
 
@@ -1026,65 +1094,71 @@ window.exportContractPDF = async () => {
 
     const merchantName = sanitizeFileName(window.getBaseName ? window.getBaseName(task.name) : task.name);
 
-    element.style.display = 'block';
-
-    element.style.position = 'absolute';
-
-    element.style.left = '0';
-
-    element.style.top = '0';
-
-    element.style.zIndex = '9999';
-
-    element.style.background = '#ffffff';
-
-    element.style.visibility = 'visible';
-
-    element.style.width = '210mm';
-
-    element.style.padding = '20mm';
-
-    element.style.margin = '0';
-
-    element.style.overflow = 'visible';
-
-    element.style.height = 'auto';
-
-    void element.offsetHeight;
-
-    await preloadContractImages(element);
-
-    const opt = {
-
-        margin: 10,
-
-        filename: `عقد_كانجو_${merchantName}.pdf`,
-
-        image: { type: 'jpeg', quality: 0.98 },
-
-        html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
-
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-
-        pagebreak: { mode: ['css', 'legacy'] }
-
-    };
-
-    await new Promise(resolve => setTimeout(resolve, 400));
+    bringContractIntoLayout(element);
 
     try {
 
-        await html2pdf().set(opt).from(element).save();
+        await preloadContractImages(element);
 
-        element.style.display = 'none';
+        if (document.fonts && typeof document.fonts.ready === 'object') {
+
+            await document.fonts.ready;
+
+        }
+
+        void element.offsetHeight;
+
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        await delayContractRender(450);
+
+        const opt = {
+
+            margin: 10,
+
+            filename: `عقد_كانجو_${merchantName}.pdf`,
+
+            image: { type: 'jpeg', quality: 0.98 },
+
+            html2canvas: {
+
+                scale: 2,
+
+                useCORS: true,
+
+                logging: false,
+
+                letterRendering: true,
+
+                backgroundColor: '#ffffff',
+
+                scrollX: 0,
+
+                scrollY: 0,
+
+                windowWidth: element.scrollWidth || undefined,
+
+                windowHeight: element.scrollHeight || undefined
+
+            },
+
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+
+            pagebreak: { mode: ['css', 'legacy'] }
+
+        };
+
+        await html2pdf().set(opt).from(element).save();
 
         window.showToast("تم تصدير العقد PDF بنجاح!");
 
     } catch (err) {
 
-        element.style.display = 'none';
-
         window.showToast("فشل تصدير العقد PDF", false);
+
+    } finally {
+
+        restoreContractElement(element);
 
     }
 
