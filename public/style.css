@@ -322,25 +322,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     color: #F59E0B;
 }
 
-/* —— طباعة العقد —— */
-@media print {
-    #contract-template-container {
-        position: static !important;
-        display: block !important;
-        background: #ffffff !important;
-    }
-    .contract-document {
-        box-shadow: none !important;
-        margin: 0 !important;
-        padding: 24px !important;
-        max-width: none !important;
-    }
-    body * { visibility: hidden; }
-    #contract-template-container,
-    #contract-template-container * { visibility: visible; }
-    #contract-template-container { position: absolute; top: 0; right: 0; left: 0; width: 100%; }
-}
-
 /* —— قواعد عقد الاحترافي الأساسية —— */
 #contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.8; }
 
@@ -370,3 +351,77 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 .contract-signatures { display: table; width: 100%; margin-top: 50px; }
 
 .contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; }
+
+/* —— الطباعة عبر window.print() —— */
+@media print {
+    body * {
+        visibility: hidden !important;
+    }
+
+    #contract-template-container,
+    #contract-template-container * {
+        visibility: visible !important;
+    }
+
+    #contract-template-container {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
+        border: none !important;
+        color: #1e293b;
+        font-family: 'Tahoma', 'Arial', sans-serif;
+        direction: rtl;
+        text-align: justify;
+        line-height: 1.8;
+        overflow: visible !important;
+        z-index: 999999 !important;
+    }
+
+    .contract-document {
+        box-shadow: none !important;
+        border: none !important;
+        margin: 0 !important;
+        max-width: none !important;
+        padding: 15px !important;
+    }
+
+    header,
+    nav,
+    .navbar,
+    footer,
+    #loginSection,
+    #accountingSection,
+    #financialAccountingSection,
+    #dashboardSection,
+    #taskFormWrapper,
+    #contractPreviewModal,
+    #contractsManagerModal,
+    #contractsNavBtnWrapper,
+    #userInfo,
+    #notificationsWrapper,
+    #quickLinksModal,
+    #detailsModal,
+    #archiveReportModal,
+    #viewArchivedReportsModal,
+    #merchantProfileModal,
+    #transferModal,
+    #adminTransferModal,
+    #exportModal,
+    #deleteModal,
+    #editModal,
+    #financialProfileModal,
+    #reportModal,
+    .modal,
+    .fixed,
+    .sticky {
+        display: none !important;
+    }
+}

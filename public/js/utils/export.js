@@ -974,35 +974,13 @@ const isMedicalCategory = (cat) => {
 
 };
 
-const preloadContractImages = (element) => {
+window.exportContractPDF = () => {
 
-    const images = Array.from(element.querySelectorAll('img'));
+    const task = getCurrentContractTask();
 
-    return Promise.all(images.map(img => {
+    if (!task) {
 
-        return new Promise((resolve) => {
-
-            if (img.complete && img.naturalWidth > 0) return resolve();
-
-            const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
-
-            img.addEventListener('load', done);
-
-            img.addEventListener('error', done);
-
-        });
-
-    }));
-
-};
-
-const delayContractRender = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-window.exportContractPDF = async () => {
-
-    if (typeof window.html2pdf !== 'function') {
-
-        window.showToast("مكتبة تصدير PDF غير محملة", false);
+        window.showToast("يرجى فتح العقد أولاً", false);
 
         return;
 
@@ -1013,16 +991,6 @@ window.exportContractPDF = async () => {
     if (!source) {
 
         window.showToast("يرجى إنشاء العقد أولاً", false);
-
-        return;
-
-    }
-
-    const task = getCurrentContractTask();
-
-    if (!task) {
-
-        window.showToast("يرجى فتح العقد أولاً", false);
 
         return;
 
@@ -1042,95 +1010,33 @@ window.exportContractPDF = async () => {
 
     }
 
-    const merchantName = sanitizeFileName(window.getBaseName ? window.getBaseName(task.name) : task.name);
+    source.style.display = 'block';
 
-    try {
+    source.style.position = 'absolute';
 
-        await preloadContractImages(source);
+    source.style.left = '0';
 
-        if (document.fonts && typeof document.fonts.ready === 'object') {
+    source.style.top = '0';
 
-            await document.fonts.ready;
+    source.style.width = '100%';
 
-        }
+    source.style.background = '#ffffff';
 
-        await delayContractRender(600);
+    source.style.zIndex = '999999';
 
-        const opt = {
+    source.style.visibility = 'visible';
 
-            margin: 10,
+    window.showToast("🖨️ جاري فتح نافذة الطباعة... (اختر حفظ كملف PDF)", true);
 
-            filename: `عقد_كانجو_${merchantName}.pdf`,
+    window.print();
 
-            image: { type: 'jpeg', quality: 0.98 },
+    setTimeout(() => {
 
-            html2canvas: {
+        source.removeAttribute('style');
 
-                scale: 2,
+        source.style.display = 'none';
 
-                useCORS: true,
-
-                logging: false,
-
-                letterRendering: true,
-
-                backgroundColor: '#ffffff',
-
-                scrollX: 0,
-
-                scrollY: 0,
-
-                onclone: (clonedDoc) => {
-
-                    const cloneEl = clonedDoc.getElementById('contract-template-container');
-
-                    if (!cloneEl) return;
-
-                    cloneEl.classList.remove('hidden');
-
-                    cloneEl.style.display = 'block';
-
-                    cloneEl.style.position = 'absolute';
-
-                    cloneEl.style.left = '0';
-
-                    cloneEl.style.top = '0';
-
-                    cloneEl.style.width = '210mm';
-
-                    cloneEl.style.maxWidth = '210mm';
-
-                    cloneEl.style.background = '#ffffff';
-
-                    cloneEl.style.padding = '20mm';
-
-                    cloneEl.style.margin = '0';
-
-                    cloneEl.style.visibility = 'visible';
-
-                    cloneEl.style.zIndex = '999999';
-
-                    cloneEl.style.overflow = 'visible';
-
-                }
-
-            },
-
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-
-            pagebreak: { mode: ['css', 'legacy'] }
-
-        };
-
-        await html2pdf().set(opt).from(source).save();
-
-        window.showToast("تم تصدير العقد PDF بنجاح!");
-
-    } catch (err) {
-
-        window.showToast("فشل تصدير العقد PDF", false);
-
-    }
+    }, 1500);
 
 };
 
