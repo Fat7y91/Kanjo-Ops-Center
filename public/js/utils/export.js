@@ -1436,6 +1436,26 @@ ${clauseHtml}
 
 </div>
 
+<div class="contract-footer" style="border-top: 2px dashed #E2E8F0; margin-top: 30px; padding-top: 15px;">
+
+<div class="contract-footer-title" style="font-size: 12px; font-weight: bold; color: #4B0082; text-align: center; margin-bottom: 10px;"><i class="fa-brands fa-google" style="margin-left: 5px;"></i> قنوات كانجو الرسمية للتواصل والمتابعة</div>
+
+<div class="contract-footer-links" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 14px;">
+
+<div class="contract-footer-item" style="font-size: 11px;"><a href="https://wa.me/201111669528" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-whatsapp" style="color: #4B0082; margin-left: 4px;"></i> واتساب: 01111669528</a></div>
+
+<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.facebook.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-facebook" style="color: #4B0082; margin-left: 4px;"></i> فيسبوك: kanjo.app.eg</a></div>
+
+<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.instagram.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-instagram" style="color: #4B0082; margin-left: 4px;"></i> انستجرام: kanjo.app.eg</a></div>
+
+<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.tiktok.com/@kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-tiktok" style="color: #4B0082; margin-left: 4px;"></i> تيك توك: @kanjo.app.eg</a></div>
+
+</div>
+
+<div class="contract-footer-note" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">يرجى متابعة حساباتنا الرسمية على منصات التواصل الاجتماعي للاطلاع على آخر العروض والخدمات، والتواصل معنا عبر واتساب لاستفسارات التشغيل والدعم الفني.</div>
+
+</div>
+
 </div> <!-- END contract-document -->`;
 
     document.getElementById('contract-template-container').innerHTML = html;
