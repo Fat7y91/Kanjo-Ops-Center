@@ -893,11 +893,19 @@ window.exportContractPDF = () => {
 
     element.style.zIndex = '9999';
 
-    element.style.background = 'white';
+    element.style.background = '#ffffff';
+
+    element.style.visibility = 'visible';
 
     element.style.width = '210mm';
 
     element.style.padding = '20mm';
+
+    element.style.margin = '0';
+
+    element.style.overflow = 'visible';
+
+    void element.offsetHeight;
 
     const opt = {
 
@@ -907,7 +915,7 @@ window.exportContractPDF = () => {
 
         image: { type: 'jpeg', quality: 0.98 },
 
-        html2canvas: { scale: 2, useCORS: true, logging: true, letterRendering: true },
+        html2canvas: { scale: 2, useCORS: true, logging: true, letterRendering: true, backgroundColor: '#ffffff' },
 
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
 
@@ -1045,7 +1053,7 @@ window.buildContractHTML = (task) => {
 
         headerHtml = `
 
-            <div class="contract-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
 
                 <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
 
@@ -1059,7 +1067,7 @@ window.buildContractHTML = (task) => {
 
         headerHtml = `
 
-            <div class="contract-header" style="display: flex; justify-content: center; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: center; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
 
                 <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
 
@@ -1177,21 +1185,17 @@ ${headerHtml}
 
 <div class="contract-text">يخضع الطرف الثاني لمؤشرات الأداء مثل سرعة القبول، زمن التجهيز، معدل الإلغاء، نفاد المخزون، جودة التغليف، الشكاوى، المرتجعات، تقييم العملاء ودقة البيانات. ويحق لكانجو عند المخالفة التنبيه، الإنذار، إخفاء منتج، تعليق منتج أو فرع أو حساب، خفض الظهور، وقف الحملات، خصم التعويضات، حجز المستحقات، إنهاء العقد والمطالبة بالتعويض. وتعد مخالفات جسيمة: المنتجات المقلدة أو المحظورة أو المنتهية، تسريب البيانات، التحصيل الخارجي، الالتفاف، التلاعب بالأسعار أو التقييمات، رفض مرتجع مستحق، تزوير المستندات، أو الإضرار بسمعة كانجو.</div>
 
-<div class="contract-clause-title">البند الخامس عشر: التسويات والمقاصة والضرائب</div>
+ <div class="contract-clause-title">البند الخامس عشر: التسوية المالية وشفافية المستحقات</div>
 
-<div class="contract-text">تصدر كانجو كشف حساب دوريًا يوضح الطلبات، المرتجعات، الخصومات، عمولة كانجو، الرسوم، التعويضات وصافي المستحق، وتتم التسوية وفق دورة [أسبوعية/نصف شهرية/شهرية]. ويحق لكانجو الخصم أو المقاصة أو حجز المستحقات عند وجود شكاوى أو مرتجعات أو نزاع أو رصيد سالب أو مخالفة أو تحقيق. ويجوز للطرف الثاني الاعتراض خلال [....] أيام من إتاحة الكشف وإلا عُد مقبولًا. ويلتزم الطرف الثاني بالضرائب والفواتير والتراخيص والسجلات، ولا تتحمل كانجو مخالفاته الضريبية أو التنظيمية.</div>
+<div class="contract-text">تلتزم كانجو بالشفافية الكاملة في كل التعاملات المالية؛ حيث تصدر كشف حساب دوري وواضح يوضح جميع الطلبات والمبيعات والمرتجعات ورسوم التشغيل والخدمات وصافي المستحقات. وسواء كان الدفع نقدًا عند الاستلام أو عبر وسائل الدفع الإلكترونية، تتم التسوية وفق دورة تسوية ثابتة ومعلنة، وتصل مستحقات الطرف الثاني كاملة وفي مواعيدها دون تأخير. ويمكن للطرف الثاني متابعة مستحقاته وكشوف حسابه في أي وقت من خلال لوحة التحكم أو التطبيق، لضمان رؤية واضحة وآمنة لجميع المعاملات المالية، وتتعهد كانجو بحماية بياناته المالية وعدم مشاركتها إلا بالقدر اللازم للتشغيل.</div>
 
-<div class="contract-clause-title">البند السادس عشر: التعليق والإنهاء وآثاره</div>
-
-<div class="contract-text">يجوز لكانجو تعليق حساب الطرف الثاني أو أي منتج أو فرع عند وجود شكوى خطيرة، منتج مخالف، نقص مستندات، انتهاء ترخيص، رصيد سالب، تكرار إلغاء أو تأخير، تسريب بيانات، أو خطر على العملاء أو سمعة المنصة. ويجوز لأي طرف إنهاء العقد بإخطار [....] يومًا، ويجوز لكانجو إنهاؤه فورًا عند الإخلال الجسيم. وعند الانتهاء يلتزم الطرف الثاني بالتوقف عن استخدام المنصة، تسوية المستحقات، رد أي عهد، حذف بيانات العملاء، عدم استخدام شعار كانجو، وتنفيذ الضمانات والمرتجعات القائمة.</div>
-
-<div class="contract-clause-title">البند السابع عشر: القانون والإخطارات والأحكام الختامية</div>
+<div class="contract-clause-title">البند السادس عشر: القانون والإخطارات والأحكام الختامية</div>
 
 <div class="contract-text">تكون الإخطارات صحيحة عبر البريد الإلكتروني، لوحة التحكم، التطبيق، الرسائل، واتساب العمل، الخطاب المسجل أو التسليم باليد، ويلتزم الطرف الثاني بتحديث بياناته. يخضع العقد لقوانين جمهورية مصر العربية، ويُسعى لحل النزاع وديًا خلال 15 يومًا، ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك. ويمثل العقد وملاحقه كامل الاتفاق، ولا يعد عدم استعمال كانجو لأي حق تنازلًا عنه، وتعد سجلات المنصة وكشوف الحساب والتذاكر والتقييمات قرائن معتبرة، ولا يجوز التنازل عن العقد إلا بموافقة كتابية من كانجو.</div>
 
-<div class="contract-clause-title">ملحق مختصر: العمولات والبيانات والتوقيعات</div>
+<div class="contract-clause-title">ملحق مختصر: البيانات والتوقيعات</div>
 
-<div class="contract-text">الفئة التجارية: ${window.safeString(task.cat) || 'غير محدد'} | نسبة كانجو المحققة: <strong>[ ${task.achieved}% ]</strong></div>
+<div class="contract-text">الفئة التجارية: ${window.safeString(task.cat) || 'غير محدد'} | رسوم التشغيل والخدمات: <strong>[ ${task.achieved}% ]</strong></div>
 
 <div class="contract-signatures">
 

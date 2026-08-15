@@ -159,27 +159,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     padding: 48px 56px;
     font-size: 14px;
     position: relative;
-    overflow: hidden;
-}
-
-.contract-document::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 100%;
-    height: 8px;
-    background: linear-gradient(90deg, #4B0082, #F59E0B, #4B0082);
-}
-
-.contract-document::after {
-    content: "";
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 100%;
-    height: 8px;
-    background: linear-gradient(90deg, #4B0082, #F59E0B, #4B0082);
 }
 
 /* —— ترويسة العقد —— */
