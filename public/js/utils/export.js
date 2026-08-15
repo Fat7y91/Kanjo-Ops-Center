@@ -857,7 +857,7 @@ window.exportContractPDF = () => {
 
     const element = document.getElementById('contract-template-container');
 
-    if (!element || !element.innerHTML.trim()) {
+    if (!element) {
 
         showToast("يرجى إنشاء العقد أولاً", false);
 
@@ -867,33 +867,79 @@ window.exportContractPDF = () => {
 
     const task = getCurrentContractTask();
 
-    const merchantName = sanitizeFileName(task ? (window.getBaseName ? window.getBaseName(task.name) : task.name) : 'متعاقد');
+    if (!task) {
 
-    html2pdf()
+        showToast("يرجى فتح العقد أولاً", false);
 
-        .set({
+        return;
 
-            margin: 10,
+    }
 
-            filename: `عقد_كانجو_${merchantName}.pdf`,
+    if (typeof window.buildContractHTML === 'function') {
 
-            image: { type: 'jpeg', quality: 0.98 },
+        window.buildContractHTML(task);
 
-            html2canvas: { scale: 2, useCORS: true },
+    }
 
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    const merchantName = sanitizeFileName(window.getBaseName ? window.getBaseName(task.name) : task.name);
 
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    element.style.display = 'block';
 
-        })
+    element.style.position = 'absolute';
 
-        .from(element)
+    element.style.left = '0';
 
-        .save()
+    element.style.top = '0';
 
-        .then(() => showToast("تم تصدير العقد بصيغة PDF بنجاح"))
+    element.style.zIndex = '9999';
 
-        .catch(() => showToast("فشل تصدير العقد PDF", false));
+    element.style.background = 'white';
+
+    element.style.width = '210mm';
+
+    element.style.padding = '20mm';
+
+    const opt = {
+
+        margin: 10,
+
+        filename: `عقد_كانجو_${merchantName}.pdf`,
+
+        image: { type: 'jpeg', quality: 0.98 },
+
+        html2canvas: { scale: 2, useCORS: true, logging: true, letterRendering: true },
+
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+
+    };
+
+    setTimeout(() => {
+
+        html2pdf()
+
+            .set(opt)
+
+            .from(element)
+
+            .save()
+
+            .then(() => {
+
+                element.style.display = 'none';
+
+                window.showToast("تم تصدير العقد PDF بنجاح!");
+
+            })
+
+            .catch(() => {
+
+                element.style.display = 'none';
+
+                window.showToast("فشل تصدير العقد PDF", false);
+
+            });
+
+    }, 300);
 
 };
 
@@ -993,21 +1039,39 @@ window.buildContractHTML = (task) => {
 
     const cDate = formatContractDate((typeof window.extractTaskContractDate === 'function') ? window.extractTaskContractDate(task) : task.time);
 
-    let logosHTML = '';
+    let headerHtml = '';
 
     if (window.currentMerchantLogoBase64) {
 
-        logosHTML = `<img class="contract-logo" src="logo.png" alt="Kanjo"><img class="contract-logo" src="${window.currentMerchantLogoBase64}" alt="شعار التاجر" style="border: 1px solid #E2E8F0; border-radius: 8px;">`;
+        headerHtml = `
+
+            <div class="contract-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+
+                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
+
+                <div><img src="${window.currentMerchantLogoBase64}" alt="Merchant Logo" style="max-height: 70px; max-width: 100px; object-fit: contain;"></div>
+
+            </div>
+
+        `;
 
     } else {
 
-        logosHTML = `<img class="contract-logo" src="logo.png" alt="Kanjo" style="margin: 0 auto;">`;
+        headerHtml = `
+
+            <div class="contract-header" style="display: flex; justify-content: center; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+
+                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
+
+            </div>
+
+        `;
 
     }
 
     const html = `<div class="contract-document">
 
-<div class="contract-header">${logosHTML}</div>
+${headerHtml}
 
 <div class="contract-title">عقد انضمام وتشغيل بائع / مورد / تاجر / أمين مخزن على منصة كانجو</div>
 

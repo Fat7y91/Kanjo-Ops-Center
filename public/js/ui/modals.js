@@ -1104,7 +1104,7 @@ window.closeDeleteModal = () => document.getElementById('deleteModal').classList
 
 window.confirmDelete = async () => { await deleteDoc(doc(db, "tasks", taskToDelete)); closeDeleteModal(); showToast("تم حذف المهمة نهائياً"); };
 
-let currentMerchantLogoBase64 = '';
+window.currentMerchantLogoBase64 = '';
 
 window.handleMerchantLogoUpload = (event) => {
 
@@ -1116,7 +1116,7 @@ window.handleMerchantLogoUpload = (event) => {
 
     reader.onload = (e) => {
 
-        currentMerchantLogoBase64 = e.target.result;
+        window.currentMerchantLogoBase64 = e.target.result;
 
         showToast("تم تحميل شعار التاجر بنجاح");
 
@@ -1124,7 +1124,7 @@ window.handleMerchantLogoUpload = (event) => {
 
     reader.onerror = () => {
 
-        currentMerchantLogoBase64 = '';
+        window.currentMerchantLogoBase64 = '';
 
         showToast("فشل تحميل الشعار، حاول مرة أخرى", false);
 
@@ -1228,7 +1228,7 @@ window.openContractPreview = (taskId) => {
 
     if (logoInput) logoInput.value = '';
 
-    currentMerchantLogoBase64 = '';
+    window.currentMerchantLogoBase64 = '';
 
     if (task && typeof window.buildContractHTML === 'function') {
 
