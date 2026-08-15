@@ -998,79 +998,73 @@ const preloadContractImages = (element) => {
 
 const delayContractRender = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const bringContractIntoLayout = (element) => {
+const createOffscreenContractWrapper = (html) => {
 
-    element.classList.remove('hidden');
+    const wrapper = document.createElement('div');
 
-    element.style.display = 'block';
+    wrapper.id = 'contract-export-wrapper';
 
-    element.style.position = 'absolute';
+    wrapper.style.position = 'fixed';
 
-    element.style.left = '0';
+    wrapper.style.left = '-9999px';
 
-    element.style.top = '0';
+    wrapper.style.top = '0';
 
-    element.style.right = 'auto';
+    wrapper.style.width = '210mm';
 
-    element.style.zIndex = '9999';
+    wrapper.style.background = '#ffffff';
 
-    element.style.visibility = 'visible';
+    wrapper.style.zIndex = '999999';
 
-    element.style.background = '#ffffff';
+    wrapper.style.direction = 'rtl';
 
-    element.style.width = '210mm';
+    wrapper.style.textAlign = 'justify';
 
-    element.style.maxWidth = '210mm';
+    wrapper.style.padding = '20mm';
 
-    element.style.padding = '20mm';
+    wrapper.style.fontFamily = "'Tahoma', 'Arial', sans-serif";
 
-    element.style.margin = '0';
+    wrapper.style.lineHeight = '1.8';
 
-    element.style.overflow = 'visible';
+    wrapper.style.color = '#1e293b';
 
-    element.style.height = 'auto';
+    wrapper.style.margin = '0';
 
-    element.style.minHeight = '0';
+    wrapper.style.overflow = 'visible';
 
-    element.style.boxShadow = 'none';
+    wrapper.innerHTML = html;
 
-    element.style.border = 'none';
+    document.body.appendChild(wrapper);
 
-    element.style.opacity = '1';
+    void wrapper.offsetHeight;
 
-    element.style.transform = 'none';
-
-    void element.offsetHeight;
-
-    return element;
+    return wrapper;
 
 };
 
-const restoreContractElement = (element) => {
+const removeOffscreenContractWrapper = () => {
 
-    if (!element) return;
+    const wrapper = document.getElementById('contract-export-wrapper');
 
-    element.removeAttribute('style');
-
-    element.classList.add('hidden');
+    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
 
 };
 
 window.exportContractPDF = async () => {
 
-    const element = document.getElementById('contract-template-container');
+    if (typeof window.html2pdf !== 'function') {
 
-    if (!element) {
-
-        window.showToast("يرجى إنشاء العقد أولاً", false);
+        window.showToast("مكتبة تصدير PDF غير محملة", false);
 
         return;
 
     }
 
-    if (typeof window.html2pdf !== 'function') {
+    const source = document.getElementById('contract-template-container');
 
-        window.showToast("مكتبة تصدير PDF غير محملة", false);
+    if (!source) {
+
+        window.showToast("يرجى إنشاء العقد أولاً", false);
 
         return;
 
@@ -1092,13 +1086,21 @@ window.exportContractPDF = async () => {
 
     }
 
+    if (!source.innerHTML.trim()) {
+
+        window.showToast("يرجى إنشاء العقد أولاً", false);
+
+        return;
+
+    }
+
     const merchantName = sanitizeFileName(window.getBaseName ? window.getBaseName(task.name) : task.name);
 
-    bringContractIntoLayout(element);
+    const wrapper = createOffscreenContractWrapper(source.innerHTML);
 
     try {
 
-        await preloadContractImages(element);
+        await preloadContractImages(wrapper);
 
         if (document.fonts && typeof document.fonts.ready === 'object') {
 
@@ -1106,11 +1108,11 @@ window.exportContractPDF = async () => {
 
         }
 
-        void element.offsetHeight;
+        void wrapper.offsetHeight;
 
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-        await delayContractRender(450);
+        await delayContractRender(600);
 
         const opt = {
 
@@ -1136,9 +1138,9 @@ window.exportContractPDF = async () => {
 
                 scrollY: 0,
 
-                windowWidth: element.scrollWidth || undefined,
+                windowWidth: wrapper.scrollWidth || undefined,
 
-                windowHeight: element.scrollHeight || undefined
+                windowHeight: wrapper.scrollHeight || undefined
 
             },
 
@@ -1148,7 +1150,7 @@ window.exportContractPDF = async () => {
 
         };
 
-        await html2pdf().set(opt).from(element).save();
+        await html2pdf().set(opt).from(wrapper).save();
 
         window.showToast("تم تصدير العقد PDF بنجاح!");
 
@@ -1158,7 +1160,7 @@ window.exportContractPDF = async () => {
 
     } finally {
 
-        restoreContractElement(element);
+        removeOffscreenContractWrapper();
 
     }
 
