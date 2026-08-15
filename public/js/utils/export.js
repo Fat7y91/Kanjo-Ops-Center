@@ -998,58 +998,6 @@ const preloadContractImages = (element) => {
 
 const delayContractRender = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-const createOffscreenContractWrapper = (html) => {
-
-    const wrapper = document.createElement('div');
-
-    wrapper.id = 'contract-export-wrapper';
-
-    wrapper.style.position = 'fixed';
-
-    wrapper.style.left = '-9999px';
-
-    wrapper.style.top = '0';
-
-    wrapper.style.width = '210mm';
-
-    wrapper.style.background = '#ffffff';
-
-    wrapper.style.zIndex = '999999';
-
-    wrapper.style.direction = 'rtl';
-
-    wrapper.style.textAlign = 'justify';
-
-    wrapper.style.padding = '20mm';
-
-    wrapper.style.fontFamily = "'Tahoma', 'Arial', sans-serif";
-
-    wrapper.style.lineHeight = '1.8';
-
-    wrapper.style.color = '#1e293b';
-
-    wrapper.style.margin = '0';
-
-    wrapper.style.overflow = 'visible';
-
-    wrapper.innerHTML = html;
-
-    document.body.appendChild(wrapper);
-
-    void wrapper.offsetHeight;
-
-    return wrapper;
-
-};
-
-const removeOffscreenContractWrapper = () => {
-
-    const wrapper = document.getElementById('contract-export-wrapper');
-
-    if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
-
-};
-
 window.exportContractPDF = async () => {
 
     if (typeof window.html2pdf !== 'function') {
@@ -1096,21 +1044,15 @@ window.exportContractPDF = async () => {
 
     const merchantName = sanitizeFileName(window.getBaseName ? window.getBaseName(task.name) : task.name);
 
-    const wrapper = createOffscreenContractWrapper(source.innerHTML);
-
     try {
 
-        await preloadContractImages(wrapper);
+        await preloadContractImages(source);
 
         if (document.fonts && typeof document.fonts.ready === 'object') {
 
             await document.fonts.ready;
 
         }
-
-        void wrapper.offsetHeight;
-
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
         await delayContractRender(600);
 
@@ -1138,9 +1080,39 @@ window.exportContractPDF = async () => {
 
                 scrollY: 0,
 
-                windowWidth: wrapper.scrollWidth || undefined,
+                onclone: (clonedDoc) => {
 
-                windowHeight: wrapper.scrollHeight || undefined
+                    const cloneEl = clonedDoc.getElementById('contract-template-container');
+
+                    if (!cloneEl) return;
+
+                    cloneEl.classList.remove('hidden');
+
+                    cloneEl.style.display = 'block';
+
+                    cloneEl.style.position = 'absolute';
+
+                    cloneEl.style.left = '0';
+
+                    cloneEl.style.top = '0';
+
+                    cloneEl.style.width = '210mm';
+
+                    cloneEl.style.maxWidth = '210mm';
+
+                    cloneEl.style.background = '#ffffff';
+
+                    cloneEl.style.padding = '20mm';
+
+                    cloneEl.style.margin = '0';
+
+                    cloneEl.style.visibility = 'visible';
+
+                    cloneEl.style.zIndex = '999999';
+
+                    cloneEl.style.overflow = 'visible';
+
+                }
 
             },
 
@@ -1150,17 +1122,13 @@ window.exportContractPDF = async () => {
 
         };
 
-        await html2pdf().set(opt).from(wrapper).save();
+        await html2pdf().set(opt).from(source).save();
 
         window.showToast("تم تصدير العقد PDF بنجاح!");
 
     } catch (err) {
 
         window.showToast("فشل تصدير العقد PDF", false);
-
-    } finally {
-
-        removeOffscreenContractWrapper();
 
     }
 
