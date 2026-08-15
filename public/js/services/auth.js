@@ -229,6 +229,16 @@ function applyThemeAndShowDashboard() {
 
 
 
+        const contractsNavBtnWrapper = document.getElementById('contractsNavBtnWrapper');
+
+        if (contractsNavBtnWrapper) {
+
+            contractsNavBtnWrapper.classList.toggle('hidden', currentUser.name !== 'أ/ محمود');
+
+        }
+
+
+
         const archivedReportsBtnWrapper = document.getElementById('archivedReportsBtnWrapper');
 
         if (archivedReportsBtnWrapper) {

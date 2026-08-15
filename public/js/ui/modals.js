@@ -1104,4 +1104,150 @@ window.closeDeleteModal = () => document.getElementById('deleteModal').classList
 
 window.confirmDelete = async () => { await deleteDoc(doc(db, "tasks", taskToDelete)); closeDeleteModal(); showToast("تم حذف المهمة نهائياً"); };
 
+let currentMerchantLogoBase64 = '';
+
+window.handleMerchantLogoUpload = (event) => {
+
+    const file = event.target.files && event.target.files[0];
+
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+
+        currentMerchantLogoBase64 = e.target.result;
+
+        showToast("تم تحميل شعار التاجر بنجاح");
+
+    };
+
+    reader.onerror = () => {
+
+        currentMerchantLogoBase64 = '';
+
+        showToast("فشل تحميل الشعار، حاول مرة أخرى", false);
+
+    };
+
+    reader.readAsDataURL(file);
+
+};
+
+window.openContractsManagerModal = () => {
+
+    const modal = document.getElementById('contractsManagerModal');
+
+    if (!modal) return;
+
+    const filterEl = document.getElementById('contractTeamFilter');
+
+    const listEl = document.getElementById('contractsManagerList');
+
+    const teamFilter = filterEl ? filterEl.value : 'all';
+
+    const signedTasks = (window.allTasksCache || []).filter(t => t.isSigned === true && Number(t.achieved) > 0);
+
+    const filtered = teamFilter === 'all' ? signedTasks : signedTasks.filter(t => t.team === teamFilter);
+
+    if (!listEl) {
+
+        modal.classList.remove('hidden');
+
+        return;
+
+    }
+
+    if (filtered.length === 0) {
+
+        listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-file-circle-minus text-4xl mb-3"></i><p class="font-bold">لا توجد عقود مطابقة</p></div>';
+
+    } else {
+
+        listEl.innerHTML = filtered.map(t => {
+
+            const achieved = Number(t.achieved) || 0;
+
+            return `<div class="flex justify-between items-center p-4 rounded-2xl border border-purple-100 bg-kanjo-light hover:bg-purple-100 transition-colors">
+
+                <div>
+
+                    <div class="font-bold text-sm text-kanjo-dark">${window.safeString(t.name)}</div>
+
+                    <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-2">
+
+                        <span><i class="fa-solid fa-people-group ml-1 text-kanjo-primary"></i>${window.safeString(t.team) || 'غير محدد'}</span>
+
+                        <span><i class="fa-solid fa-tag ml-1 text-kanjo-primary"></i>${window.safeString(t.cat) || 'غير محدد'}</span>
+
+                        <span class="text-emerald-600 font-bold"><i class="fa-solid fa-percent ml-1"></i>${achieved}%</span>
+
+                    </div>
+
+                </div>
+
+                <button onclick="openContractPreview('${t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>
+
+            </div>`;
+
+        }).join('');
+
+    }
+
+    modal.classList.remove('hidden');
+
+};
+
+window.openContractPreview = (taskId) => {
+
+    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
+    const modal = document.getElementById('contractPreviewModal');
+
+    if (!modal) return;
+
+    const taskNameEl = document.getElementById('cpTaskName');
+
+    const taskIdEl = document.getElementById('cpTaskId');
+
+    const logoInput = document.getElementById('cpMerchantLogo');
+
+    if (task) {
+
+        if (taskNameEl) taskNameEl.innerText = task.name;
+
+        if (taskIdEl) taskIdEl.value = task.id;
+
+    } else {
+
+        if (taskNameEl) taskNameEl.innerText = 'المهمة غير موجودة';
+
+        if (taskIdEl) taskIdEl.value = '';
+
+    }
+
+    if (logoInput) logoInput.value = '';
+
+    currentMerchantLogoBase64 = '';
+
+    if (task && typeof window.buildContractHTML === 'function') {
+
+        window.buildContractHTML(task);
+
+        const previewContainer = document.getElementById('contractPreviewContainer');
+
+        if (previewContainer) {
+
+            const template = document.getElementById('contract-template-container');
+
+            previewContainer.innerHTML = template ? template.innerHTML : '';
+
+        }
+
+    }
+
+    modal.classList.remove('hidden');
+
+};
+
 export {};

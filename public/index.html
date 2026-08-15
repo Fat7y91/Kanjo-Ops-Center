@@ -20,6 +20,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
     <link rel="stylesheet" href="style.css">
 
     <script>
@@ -464,6 +466,82 @@
 
 
 
+    <div id="contractsManagerModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 class="font-black text-xl text-kanjo-dark"><i class="fa-solid fa-file-signature ml-2"></i>إدارة العقود</h3>
+
+                <button onclick="document.getElementById('contractsManagerModal').classList.add('hidden')" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div class="mb-4">
+
+                <label class="block text-sm font-bold text-slate-600 mb-1">تصفية حسب الفريق</label>
+
+                <select id="contractTeamFilter" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kanjo-primary">
+
+                    <option value="all">كل الفرق</option>
+
+                    <option value="Fox Team">Fox Team</option>
+
+                    <option value="Power Team">Power Team</option>
+
+                </select>
+
+            </div>
+
+            <div id="contractsManagerList" class="overflow-y-auto hide-scrollbar flex-1 space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="contractPreviewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+
+        <div class="bg-white rounded-3xl p-6 w-full max-w-3xl shadow-2xl max-h-[85vh] flex flex-col">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 class="font-black text-xl text-kanjo-dark"><i class="fa-solid fa-file-contract ml-2"></i>عقد احترافي</h3>
+
+                <button onclick="document.getElementById('contractPreviewModal').classList.add('hidden')" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <span id="cpTaskName" class="text-lg font-bold text-kanjo-dark mb-2"></span>
+
+            <input type="hidden" id="cpTaskId">
+
+            <div class="mb-4">
+
+                <label class="block text-sm font-bold text-slate-600 mb-1">شعار التاجر (اختياري)</label>
+
+                <input type="file" id="cpMerchantLogo" accept="image/*" onchange="handleMerchantLogoUpload(event)" class="block w-full text-sm text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-kanjo-light file:px-4 file:py-2 file:text-kanjo-primary file:font-bold hover:file:bg-purple-100">
+
+            </div>
+
+            <div id="contractPreviewContainer" class="overflow-y-auto hide-scrollbar flex-1 mb-4"></div>
+
+            <div class="flex gap-3">
+
+                <button onclick="exportContractPDF()" class="flex-1 bg-kanjo-primary hover:bg-kanjo-dark text-white font-bold py-2.5 rounded-xl transition-colors"><i class="fa-solid fa-file-pdf ml-2"></i>تصدير PDF</button>
+
+                <button onclick="exportContractWord()" class="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl transition-colors"><i class="fa-solid fa-file-word ml-2"></i>تصدير Word</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
     <div id="exportModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
 
         <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
@@ -693,6 +771,20 @@
                             <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500 border-2 border-white"></span>
 
                         </span>
+
+                    </button>
+
+                </div>
+
+
+
+                <div id="contractsNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openContractsManagerModal()" class="relative text-slate-600 hover:text-kanjo-primary transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-file-signature text-kanjo-dark"></i>
+
+                        <span>إدارة العقود</span>
 
                     </button>
 
@@ -1590,6 +1682,8 @@
 
 
     <script type="module" src="js/main.js"></script>
+
+    <div id="contract-template-container" class="hidden"></div>
 
 </body>
 

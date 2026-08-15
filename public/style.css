@@ -140,3 +140,252 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     input, select, textarea { font-size: 16px !important; }
     button { touch-action: manipulation; }
 }
+
+/* —— عقد احترافي: حاوية القالب —— */
+#contract-template-container {
+    background: #ffffff;
+    direction: rtl;
+    text-align: justify;
+    font-family: 'Tahoma', 'Arial', sans-serif;
+    color: #1f2937;
+    line-height: 1.9;
+}
+
+/* —— مستند العقد —— */
+.contract-document {
+    background: #ffffff;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 48px 56px;
+    font-size: 14px;
+    position: relative;
+    overflow: hidden;
+}
+
+.contract-document::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(90deg, #4B0082, #F59E0B, #4B0082);
+}
+
+.contract-document::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(90deg, #4B0082, #F59E0B, #4B0082);
+}
+
+/* —— ترويسة العقد —— */
+.contract-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    padding-bottom: 24px;
+    border-bottom: 3px solid #F59E0B;
+    margin-bottom: 28px;
+}
+
+.contract-logo {
+    max-height: 90px;
+    max-width: 160px;
+    object-fit: contain;
+}
+
+.contract-ref {
+    text-align: left;
+    direction: ltr;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.7;
+}
+
+.contract-ref strong {
+    color: #4B0082;
+}
+
+/* —— عنوان العقد —— */
+.contract-title {
+    font-size: 28px;
+    font-weight: 900;
+    color: #4B0082;
+    text-align: center;
+    margin: 8px 0 6px;
+    letter-spacing: 0.5px;
+}
+
+.contract-subtitle {
+    font-size: 15px;
+    font-weight: 700;
+    color: #F59E0B;
+    text-align: center;
+    margin: 0 0 28px;
+    letter-spacing: 1px;
+}
+
+.contract-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 22px 0;
+}
+
+.contract-divider::before,
+.contract-divider::after {
+    content: "";
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #F59E0B, transparent);
+}
+
+.contract-divider span {
+    color: #4B0082;
+    font-weight: 700;
+}
+
+/* —— فقرات وبنود —— */
+.contract-clause {
+    margin-bottom: 20px;
+}
+
+.contract-clause-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: #4B0082;
+    margin-bottom: 8px;
+    padding-right: 12px;
+    border-right: 4px solid #F59E0B;
+}
+
+.contract-clause-body {
+    padding-right: 16px;
+    color: #374151;
+}
+
+.contract-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 20px;
+    font-size: 13.5px;
+}
+
+.contract-data-table th,
+.contract-data-table td {
+    border: 1px solid #e5e7eb;
+    padding: 10px 14px;
+    text-align: right;
+}
+
+.contract-data-table th {
+    background: #4B0082;
+    color: #ffffff;
+    font-weight: 800;
+    width: 30%;
+}
+
+.contract-data-table td {
+    background: #ffffff;
+    color: #1f2937;
+}
+
+.contract-data-table tr:nth-child(even) td {
+    background: #fbf7ff;
+}
+
+/* —— توقيعات الطرفين —— */
+.contract-signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 40px;
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 2px solid #F59E0B;
+}
+
+.contract-signature-box {
+    flex: 1;
+    text-align: center;
+}
+
+.contract-signature-box .signature-line {
+    height: 42px;
+    border-bottom: 2px dashed #9ca3af;
+    margin-bottom: 10px;
+}
+
+.contract-signature-box strong {
+    display: block;
+    color: #4B0082;
+    font-size: 15px;
+}
+
+.contract-signature-box span {
+    display: block;
+    color: #6b7280;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* —— تذييل العقد —— */
+.contract-footer {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+    text-align: center;
+    color: #6b7280;
+    font-size: 11.5px;
+    line-height: 1.7;
+}
+
+.contract-footer strong {
+    color: #4B0082;
+}
+
+.contract-footer .gold {
+    color: #F59E0B;
+}
+
+/* —— طباعة العقد —— */
+@media print {
+    #contract-template-container {
+        position: static !important;
+        display: block !important;
+        background: #ffffff !important;
+    }
+    .contract-document {
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 24px !important;
+        max-width: none !important;
+    }
+    body * { visibility: hidden; }
+    #contract-template-container,
+    #contract-template-container * { visibility: visible; }
+    #contract-template-container { position: absolute; top: 0; right: 0; left: 0; width: 100%; }
+}
+
+/* —— قواعد عقد الاحترافي الأساسية —— */
+#contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.8; }
+
+.contract-document { padding: 40px; background: #fff; }
+
+.contract-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 20px; margin-bottom: 30px; }
+
+.contract-title { text-align: center; font-size: 22px; font-weight: 900; color: #4B0082; margin-bottom: 25px; }
+
+.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+
+.contract-clause-title { font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-top: 25px; margin-bottom: 10px; }
+
+.contract-text { font-size: 14px; margin-bottom: 15px; }
+
+.contract-signatures { display: table; width: 100%; margin-top: 50px; }
+
+.contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; }
