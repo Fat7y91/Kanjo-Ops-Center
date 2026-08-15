@@ -1146,9 +1146,91 @@ window.openContractsManagerModal = () => {
 
     const teamFilter = filterEl ? filterEl.value : 'all';
 
-    const signedTasks = (window.allTasksCache || []).filter(t => t.isSigned === true && Number(t.achieved) > 0);
+    const allTasks = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
 
-    const filtered = teamFilter === 'all' ? signedTasks : signedTasks.filter(t => t.team === teamFilter);
+    const uniqueMap = new Map();
+
+    allTasks.forEach(t => {
+
+        if (!t || t.isSigned !== true || Number(t.achieved) <= 0) return;
+
+        const base = window.getBaseName ? window.getBaseName(t.name) : t.name;
+
+        if (!base) return;
+
+        const existing = uniqueMap.get(base);
+
+        if (!existing) {
+
+            uniqueMap.set(base, t);
+
+            return;
+
+        }
+
+        const existingFollowUp = existing.name !== base;
+
+        const newFollowUp = t.name !== base;
+
+        const existingA = Number(existing.achieved) || 0;
+
+        const newA = Number(t.achieved) || 0;
+
+        if (existingFollowUp && !newFollowUp) uniqueMap.set(base, t);
+
+        else if (!existingFollowUp && newFollowUp) { /* keep existing */ }
+
+        else if (newA > existingA) uniqueMap.set(base, t);
+
+    });
+
+    let uniqueTasks = Array.from(uniqueMap.values());
+
+    if (teamFilter !== 'all') {
+
+        uniqueTasks = uniqueTasks.filter(t => {
+
+            const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
+
+            return team === teamFilter;
+
+        });
+
+    }
+
+    uniqueTasks = uniqueTasks.sort((a, b) => {
+
+        const na = window.getBaseName ? window.getBaseName(a.name) : a.name;
+
+        const nb = window.getBaseName ? window.getBaseName(b.name) : b.name;
+
+        return String(na).localeCompare(String(nb), 'ar');
+
+    });
+
+    const statsEl = document.getElementById('contractsManagerStats');
+
+    if (statsEl) {
+
+        const allUnique = window.buildUniqueSignedMerchants ? window.buildUniqueSignedMerchants() : [];
+
+        const filteredUnique = uniqueTasks.length;
+
+        const serialEnd = 1001 + allUnique.length - 1;
+
+        const serialRange = allUnique.length > 0 ? `#1001 → #${serialEnd}` : '—';
+
+        statsEl.innerHTML = `<div class="grid grid-cols-3 gap-2 mb-4">
+
+<div class="bg-kanjo-light rounded-2xl p-3 text-center border border-purple-100"><div class="text-2xl font-black text-kanjo-primary">${String(allUnique.length)}</div><div class="text-xs text-slate-500 font-bold mt-1">إجمالي العقود</div></div>
+
+<div class="bg-kanjo-light rounded-2xl p-3 text-center border border-purple-100"><div class="text-2xl font-black text-amber-500">${String(filteredUnique)}</div><div class="text-xs text-slate-500 font-bold mt-1">عقود الفريق المحدد</div></div>
+
+<div class="bg-kanjo-light rounded-2xl p-3 text-center border border-purple-100"><div class="text-base font-black text-kanjo-primary">${serialRange}</div><div class="text-xs text-slate-500 font-bold mt-1">نطاق الأرقام المسلسلة</div></div>
+
+</div>`;
+
+    }
 
     if (!listEl) {
 
@@ -1158,29 +1240,33 @@ window.openContractsManagerModal = () => {
 
     }
 
-    if (filtered.length === 0) {
+    if (uniqueTasks.length === 0) {
 
         listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-file-circle-minus text-4xl mb-3"></i><p class="font-bold">لا توجد عقود مطابقة</p></div>';
 
     } else {
 
-        listEl.innerHTML = filtered.map(t => {
+        listEl.innerHTML = uniqueTasks.map(t => {
 
             const achieved = Number(t.achieved) || 0;
+
+            const serial = window.getContractSerialNumber ? window.getContractSerialNumber(t) : '';
+
+            const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
 
             return `<div class="flex justify-between items-center p-4 rounded-2xl border border-purple-100 bg-kanjo-light hover:bg-purple-100 transition-colors">
 
                 <div>
 
-                    <div class="font-bold text-sm text-kanjo-dark">${window.safeString(t.name)}</div>
+                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> ${window.safeString(t.name)}</div>
 
                     <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-2">
 
-                        <span><i class="fa-solid fa-people-group ml-1 text-kanjo-primary"></i>${window.safeString(t.team) || 'غير محدد'}</span>
+                        <span><i class="fa-solid fa-people-group ml-1 text-kanjo-primary"></i>${window.safeString(team) || 'غير محدد'}</span>
 
                         <span><i class="fa-solid fa-tag ml-1 text-kanjo-primary"></i>${window.safeString(t.cat) || 'غير محدد'}</span>
 
-                        <span class="text-emerald-600 font-bold"><i class="fa-solid fa-percent ml-1"></i>${achieved}%</span>
+                        <span class="text-amber-500 font-bold"><i class="fa-solid fa-percent ml-1"></i>${achieved}%</span>
 
                     </div>
 

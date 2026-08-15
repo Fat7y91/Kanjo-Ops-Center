@@ -894,6 +894,74 @@ const CONTRACT_BUSINESS_TYPES = {
 
 const ARABIC_CLAUSE_NUMBERS = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر', 'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر', 'الثامن عشر', 'التاسع عشر', 'العشرون'];
 
+const CONTRACT_SERIAL_START = 1001;
+
+const buildUniqueSignedMerchants = () => {
+
+    const source = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
+
+    const uniqueMap = new Map();
+
+    source.forEach(t => {
+
+        if (!t || t.isSigned !== true || Number(t.achieved) <= 0) return;
+
+        const base = window.getBaseName ? window.getBaseName(t.name) : t.name;
+
+        if (!base) return;
+
+        const existing = uniqueMap.get(base);
+
+        if (!existing) {
+
+            uniqueMap.set(base, t);
+
+            return;
+
+        }
+
+        const existingFollowUp = existing.name !== base;
+
+        const newFollowUp = t.name !== base;
+
+        const existingA = Number(existing.achieved) || 0;
+
+        const newA = Number(t.achieved) || 0;
+
+        if (existingFollowUp && !newFollowUp) uniqueMap.set(base, t);
+
+        else if (!existingFollowUp && newFollowUp) { /* keep existing */ }
+
+        else if (newA > existingA) uniqueMap.set(base, t);
+
+    });
+
+    return Array.from(uniqueMap.values()).sort((a, b) => {
+
+        const na = window.getBaseName ? window.getBaseName(a.name) : a.name;
+
+        const nb = window.getBaseName ? window.getBaseName(b.name) : b.name;
+
+        return String(na).localeCompare(String(nb), 'ar');
+
+    });
+
+};
+
+window.getContractSerialNumber = (task) => {
+
+    const merchants = buildUniqueSignedMerchants();
+
+    const base = task ? (window.getBaseName ? window.getBaseName(task.name) : task.name) : '';
+
+    const idx = merchants.findIndex(t => (window.getBaseName ? window.getBaseName(t.name) : t.name) === base);
+
+    return idx >= 0 ? CONTRACT_SERIAL_START + idx : CONTRACT_SERIAL_START;
+
+};
+
+window.buildUniqueSignedMerchants = buildUniqueSignedMerchants;
+
 const getMerchantBusinessInfo = (task) => {
 
     const baseName = window.getBaseName ? window.getBaseName(task.name) : task.name;
@@ -1075,6 +1143,8 @@ body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans
 .contract-clause-title { font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-top: 20px; margin-bottom: 10px; }
 
 .contract-text { font-size: 14px; margin-bottom: 15px; }
+
+.contract-serial-badge { display: inline-block; font-size: 11px; font-weight: bold; color: #F59E0B; background-color: #F5F3FF; border: 1px solid #F59E0B; border-radius: 20px; padding: 3px 12px; margin-bottom: 10px; }
 
 </style></head><body>${contractHtml}</body></html>`;
 
@@ -1331,6 +1401,8 @@ window.buildContractHTML = (task) => {
     const html = `<div class="contract-document">
 
 ${headerHtml}
+
+<div class="contract-serial-badge">عقد رقم #${window.getContractSerialNumber(task)}</div>
 
 <div class="contract-title">عقد انضمام ${businessType} ${merchantName} إلى منصة كانجو</div>
 
