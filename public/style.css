@@ -350,6 +350,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 .contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
 
+.contract-final-block { page-break-inside: avoid; break-inside: avoid; margin-top: 15px; }
+
 .contract-serial-badge {
     display: inline-block;
     font-size: 10px;
@@ -421,7 +423,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         padding: 10px !important;
     }
 
-    .contract-clause-block {
+    .contract-clause-block,
+    .contract-final-block {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
     }
@@ -431,6 +434,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .contract-clause-title,
     .contract-text,
     .contract-signatures,
+    .contract-contact-footer,
     .contract-footer {
         page-break-inside: avoid !important;
         break-inside: avoid !important;

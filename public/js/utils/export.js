@@ -1200,17 +1200,19 @@ body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans
 
 .contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
 
-.contract-footer { border-top: 2px dashed #E2E8F0; margin-top: 20px; padding-top: 10px; text-align: center; }
+.contract-final-block { page-break-inside: avoid; break-inside: avoid; margin-top: 15px; }
+
+.contract-contact-footer { border-top: 2px dashed #E2E8F0; margin-top: 15px; padding-top: 15px; text-align: center; }
 
 .contract-footer-title { font-size: 12px; font-weight: bold; color: #4B0082; margin-bottom: 8px; }
 
-.contract-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.contract-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; }
 
 .contract-footer-item { font-size: 11px; }
 
 .contract-footer-item a { color: #4B0082; text-decoration: none; }
 
-.contract-footer-note { font-size: 10px; color: #64748B; margin-top: 8px; line-height: 1.6; }
+.contract-footer-copyright { font-size: 10px; color: #64748B; margin-top: 10px; line-height: 1.6; }
 
 </style></head><body>${contractHtml}</body></html>`;
 
@@ -1490,6 +1492,8 @@ ${headerHtml}
 
 ${clauseHtml}
 
+<div class="contract-final-block" style="page-break-inside: avoid; break-inside: avoid; margin-top: 15px;">
+
 <div class="contract-clause-title">ملحق مختصر: البيانات والتوقيعات</div>
 
 <div class="contract-text">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
@@ -1502,11 +1506,11 @@ ${clauseHtml}
 
 </div>
 
-<div class="contract-footer" style="border-top: 2px dashed #E2E8F0; margin-top: 30px; padding-top: 15px;">
+<div class="contract-contact-footer" style="border-top: 2px dashed #E2E8F0; margin-top: 15px; padding-top: 15px;">
 
 <div class="contract-footer-title" style="font-size: 12px; font-weight: bold; color: #4B0082; text-align: center; margin-bottom: 10px;"><i class="fa-brands fa-google" style="margin-left: 5px;"></i> قنوات كانجو الرسمية للتواصل والمتابعة</div>
 
-<div class="contract-footer-links" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 14px;">
+<div class="contract-footer-links" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 15px;">
 
 <div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.facebook.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-facebook" style="color: #4B0082; margin-left: 4px;"></i> فيسبوك: kanjo.app.eg</a></div>
 
@@ -1516,7 +1520,9 @@ ${clauseHtml}
 
 </div>
 
-<div class="contract-footer-note" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">يرجى متابعة حساباتنا الرسمية على منصات التواصل الاجتماعي للاطلاع على آخر العروض والخدمات.</div>
+<div class="contract-footer-copyright" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية المالكة والمشغلة للعلامة التجارية كانجو - جميع الحقوق محفوظة</div>
+
+</div>
 
 </div>
 
