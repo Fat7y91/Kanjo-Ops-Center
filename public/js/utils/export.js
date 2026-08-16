@@ -1384,7 +1384,11 @@ window.buildContractHTML = (task) => {
 
     ];
 
-    if (isFoodCategory(resolvedCat)) {
+    const FOOD_PREP_KEYWORDS = ['مطاعم', 'كافيه', 'عصائر', 'مخبوزات', 'حلويات', 'أسماك', 'جزارة', 'دواجن'];
+
+    const catSource = String(task.cat || resolvedCat || '');
+
+    if (FOOD_PREP_KEYWORDS.some(k => catSource.includes(k))) {
 
         clauses.push({
 
@@ -1507,7 +1511,6 @@ window.buildContractHTML = (task) => {
                     <span>توقيع الطرف الأول (كانجو): ..............................</span>
                     <span>توقيع الطرف الثاني (${merchantName}): ..............................</span>
                 </div>
-                <div style="text-align: left; font-size: 10px; color: #64748b; margin-top: 6px;">صفحة رقم ( ..... ) من إجمالي ( ..... ) صفحة</div>
             </td></tr>
         </tfoot>
     `;
