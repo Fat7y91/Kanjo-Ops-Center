@@ -323,41 +323,43 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 
 /* —— قواعد عقد الاحترافي الأساسية —— */
-#contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.8; }
+#contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.6; }
 
-.contract-document { padding: 40px; background: #fff; }
+.contract-document { padding: 24px; background: #fff; }
 
-.contract-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 20px; margin-bottom: 30px; }
+.contract-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 10px; margin-bottom: 16px; }
 
-.contract-title { text-align: center; font-size: 22px; font-weight: 900; color: #4B0082; margin-bottom: 25px; }
+.contract-title { text-align: center; font-size: 18px; font-weight: 900; color: #4B0082; margin-bottom: 14px; }
 
-.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
 
 .contract-clause-title {
-    font-size: 16px;
+    font-size: 13.5px;
     font-weight: 800;
     color: #4B0082;
     background-color: #F5F3FF;
-    padding: 10px 14px;
+    padding: 6px 10px;
     border-right: 4px solid #F59E0B;
     border-radius: 0 6px 6px 0;
-    margin-top: 24px;
-    margin-bottom: 12px;
-    line-height: 1.6;
+    margin-top: 12px;
+    margin-bottom: 7px;
+    line-height: 1.5;
 }
 
-.contract-text { font-size: 14px; line-height: 1.9; margin-bottom: 15px; padding-right: 4px; }
+.contract-text { font-size: 12.5px; line-height: 1.7; margin-bottom: 10px; padding-right: 4px; }
+
+.contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
 
 .contract-serial-badge {
     display: inline-block;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: #F59E0B;
     background-color: #F5F3FF;
     border: 1px solid #F59E0B;
     border-radius: 9999px;
-    padding: 3px 12px;
-    margin-bottom: 10px;
+    padding: 2px 10px;
+    margin-bottom: 8px;
     letter-spacing: 0.3px;
 }
 
@@ -374,7 +376,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     vertical-align: middle;
 }
 
-.contract-signatures { display: table; width: 100%; margin-top: 50px; }
+.contract-signatures { display: table; width: 100%; margin-top: 30px; }
 
 .contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; }
 
@@ -406,7 +408,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         font-family: 'Tahoma', 'Arial', sans-serif;
         direction: rtl;
         text-align: justify;
-        line-height: 1.8;
+        line-height: 1.6;
         overflow: visible !important;
         z-index: 999999 !important;
     }
@@ -416,7 +418,22 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         border: none !important;
         margin: 0 !important;
         max-width: none !important;
-        padding: 15px !important;
+        padding: 10px !important;
+    }
+
+    .contract-clause-block {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    .contract-header,
+    .contract-parties,
+    .contract-clause-title,
+    .contract-text,
+    .contract-signatures,
+    .contract-footer {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
 
     header,

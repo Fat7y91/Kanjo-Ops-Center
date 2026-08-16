@@ -1042,7 +1042,7 @@ const isMedicalCategory = (cat) => {
 
 };
 
-window.exportContractPDF = () => {
+window.exportContractPDF = async () => {
 
     const task = getCurrentContractTask();
 
@@ -1077,6 +1077,54 @@ window.exportContractPDF = () => {
         return;
 
     }
+
+    await new Promise((resolve) => {
+
+        const imgs = Array.from(source.querySelectorAll('img'));
+
+        if (imgs.length === 0) {
+
+            resolve();
+
+            return;
+
+        }
+
+        const fallbackTimer = setTimeout(() => resolve(), 1200);
+
+        let pending = imgs.length;
+
+        const markLoaded = () => {
+
+            pending -= 1;
+
+            if (pending <= 0) {
+
+                clearTimeout(fallbackTimer);
+
+                resolve();
+
+            }
+
+        };
+
+        imgs.forEach((img) => {
+
+            if (img.complete && img.naturalWidth > 0) {
+
+                markLoaded();
+
+                return;
+
+            }
+
+            img.addEventListener('load', markLoaded, { once: true });
+
+            img.addEventListener('error', markLoaded, { once: true });
+
+        });
+
+    });
 
     source.style.display = 'block';
 
@@ -1128,23 +1176,41 @@ window.exportContractWord = () => {
 
     const fullHtml = `<html xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>عقد كانجو</title><style>
 
-body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans-serif; line-height: 1.8; color: #1e293b; }
+body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans-serif; line-height: 1.6; color: #1e293b; }
 
-.contract-document { padding: 20px; }
+.contract-document { padding: 14px; }
 
-.contract-header { border-bottom: 3px solid #4B0082; padding-bottom: 20px; margin-bottom: 25px; }
+.contract-header { border-bottom: 3px solid #4B0082; padding-bottom: 12px; margin-bottom: 16px; }
 
-.contract-logo { max-height: 80px; }
+.contract-logo { max-height: 60px; }
 
-.contract-title { text-align: center; font-size: 20px; font-weight: bold; color: #4B0082; margin-bottom: 20px; }
+.contract-title { text-align: center; font-size: 17px; font-weight: bold; color: #4B0082; margin-bottom: 14px; }
 
-.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
 
-.contract-clause-title { font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-top: 20px; margin-bottom: 10px; }
+.contract-clause-title { font-size: 13.5px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 6px 10px; border-right: 4px solid #F59E0B; margin-top: 12px; margin-bottom: 7px; }
 
-.contract-text { font-size: 14px; margin-bottom: 15px; }
+.contract-text { font-size: 12.5px; margin-bottom: 10px; }
 
-.contract-serial-badge { display: inline-block; font-size: 11px; font-weight: bold; color: #F59E0B; background-color: #F5F3FF; border: 1px solid #F59E0B; border-radius: 20px; padding: 3px 12px; margin-bottom: 10px; }
+.contract-serial-badge { display: inline-block; font-size: 10px; font-weight: bold; color: #F59E0B; background-color: #F5F3FF; border: 1px solid #F59E0B; border-radius: 20px; padding: 2px 10px; margin-bottom: 8px; }
+
+.contract-signatures { display: table; width: 100%; margin-top: 24px; }
+
+.contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; font-size: 12.5px; }
+
+.contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
+
+.contract-footer { border-top: 2px dashed #E2E8F0; margin-top: 20px; padding-top: 10px; text-align: center; }
+
+.contract-footer-title { font-size: 12px; font-weight: bold; color: #4B0082; margin-bottom: 8px; }
+
+.contract-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+
+.contract-footer-item { font-size: 11px; }
+
+.contract-footer-item a { color: #4B0082; text-decoration: none; }
+
+.contract-footer-note { font-size: 10px; color: #64748B; margin-top: 8px; line-height: 1.6; }
 
 </style></head><body>${contractHtml}</body></html>`;
 
@@ -1220,11 +1286,11 @@ window.buildContractHTML = (task) => {
 
         headerHtml = `
 
-            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 10px; margin-bottom: 16px;">
 
-                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
+                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 55px; max-width: 110px; object-fit: contain;"></div>
 
-                <div><img src="${window.currentMerchantLogoBase64}" alt="Merchant Logo" style="max-height: 70px; max-width: 100px; object-fit: contain;"></div>
+                <div><img src="${window.currentMerchantLogoBase64}" alt="Merchant Logo" style="max-height: 55px; max-width: 90px; object-fit: contain;"></div>
 
             </div>
 
@@ -1234,9 +1300,9 @@ window.buildContractHTML = (task) => {
 
         headerHtml = `
 
-            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: center; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-bottom: 25px;">
+            <div class="contract-header" style="display: flex; flex-direction: row; justify-content: center; align-items: center; direction: rtl; border-bottom: 3px solid #4B0082; padding-bottom: 10px; margin-bottom: 16px;">
 
-                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 70px; max-width: 120px; object-fit: contain;"></div>
+                <div><img src="logo.png" alt="Kanjo Logo" style="max-height: 55px; max-width: 110px; object-fit: contain;"></div>
 
             </div>
 
@@ -1350,7 +1416,7 @@ window.buildContractHTML = (task) => {
 
             title: 'خدمة ما بعد البيع والمرتجعات',
 
-            body: 'يلتزم الطرف الثاني بالرد على استفسارات العملاء، معالجة شكاوى العيوب أو النقص أو التلف أو الاختلاف، تنفيذ الضمان المعلن أو القانوني، قبول المرتجعات أو الاستبدال متى كان العميل محقًا، رد قيمة المنتج أو تعويض العميل إذا ثبت خطأ الطرف الثاني، وتقديم الفواتير ومستندات الضمان أو مصدر المنتج عند الطلب. ويتحمل تكلفة المرتجع أو الاستبدال أو التعويض إذا كان السبب راجعًا إلى عيب المنتج، سوء التغليف، خطأ التجهيز، نقص البيانات، التضليل، أو مخالفة الوصف.'
+            body: 'يلتزم الطرف الثاني بالتعاون مع خدمة عملاء كانجو للرد على الاستفسارات المتعلقة بحالة الطلبات أو معالجة الشكاوى الناتجة عن عيوب التجهيز أو النقص أو التلف أو الاختلاف، دون اتصال مباشر من الطرف الثاني بالعملاء إلا من خلال قنوات كانجو الرسمية. ويتولى الطرف الثاني معالجة ما يصل إليه من ملاحظات عبر خدمة عملاء كانجو، وتنفيذ الضمان المعلن أو القانوني، وقبول المرتجعات أو الاستبدال متى كان العميل محقًا، ورد قيمة المنتج أو تعويض العميل إذا ثبت خطأ الطرف الثاني، وتقديم الفواتير ومستندات الضمان أو مصدر المنتج عند الطلب. ويتحمل تكلفة المرتجع أو الاستبدال أو التعويض إذا كان السبب راجعًا إلى عيب المنتج، سوء التغليف، خطأ التجهيز، نقص البيانات، التضليل، أو مخالفة الوصف.'
 
         },
 
@@ -1382,7 +1448,7 @@ window.buildContractHTML = (task) => {
 
             title: 'القانون والإخطارات والأحكام الختامية',
 
-            body: 'تكون الإخطارات صحيحة عبر البريد الإلكتروني، لوحة التحكم، التطبيق، الرسائل، واتساب العمل، الخطاب المسجل أو التسليم باليد، ويلتزم الطرف الثاني بتحديث بياناته. يخضع العقد لقوانين جمهورية مصر العربية، ويُسعى لحل النزاع وديًا خلال 15 يومًا، ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك. ويمثل العقد وملاحقه كامل الاتفاق، ولا يعد عدم استعمال كانجو لأي حق تنازلًا عنه، وتعد سجلات المنصة وكشوف الحساب والتذاكر والتقييمات قرائن معتبرة، ولا يجوز التنازل عن العقد إلا بموافقة كتابية من كانجو.'
+            body: 'تكون الإخطارات صحيحة عبر البريد الإلكتروني، لوحة التحكم، التطبيق، الرسائل، واتساب العمل، الخطاب المسجل أو التسليم باليد، ويلتزم الطرف الثاني بتحديث بياناته. يخضع العقد لقوانين جمهورية مصر العربية، ويُسعى لحل النزاع وديًا خلال 15 يومًا، ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك. ويمثل العقد وملاحقه كامل الاتفاق، ولا يعد عدم استعمال كانجو لأي حق تنازلًا عنه، وتعد سجلات المنصة وكشوف الحساب والتذاكر والتقييمات قرائن معتبرة.'
 
         }
 
@@ -1392,9 +1458,9 @@ window.buildContractHTML = (task) => {
 
         const numberLabel = ARABIC_CLAUSE_NUMBERS[idx] || (idx + 1);
 
-        return `<div class="contract-clause-title">البند ${numberLabel}: ${cl.title}</div>
+        return `<div class="contract-clause-block" style="page-break-inside: avoid; break-inside: avoid;"><div class="contract-clause-title">البند ${numberLabel}: ${cl.title}</div>
 
-<div class="contract-text">${cl.body}</div>`;
+<div class="contract-text">${cl.body}</div></div>`;
 
     }).join('\n\n');
 
@@ -1410,7 +1476,7 @@ ${headerHtml}
 
 <div class="contract-parties">
 
-<strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية المالكة والمشغلة للعلامة التجارية كانجو ويمثلها أ/ محمود بصفته مدير التشغيل والتعاقدات.<br><br>
+<strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية المالكة والمشغلة للعلامة التجارية كانجو ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
 
 <strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
 
@@ -1430,7 +1496,7 @@ ${clauseHtml}
 
 <div class="contract-signatures">
 
-<div class="contract-sign-box"><div style="color: #4B0082; margin-bottom: 10px;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div><div>الاسم: محمود</div><div>الصفة: مدير التشغيل والتعاقدات</div><div style="margin-top: 20px;">التوقيع/الختم: ..................</div></div>
+<div class="contract-sign-box"><div style="color: #4B0082; margin-bottom: 10px;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div><div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div><div style="margin-top: 20px;">التوقيع/الختم: ..................</div></div>
 
 <div class="contract-sign-box"><div style="color: #4B0082; margin-bottom: 10px;">الطرف الثاني: الشريك التجاري</div><div>الاسم: ${window.safeString(contactName) || '.................'}</div><div>الصفة: ${window.safeString(contactRole) || '.................'}</div><div style="margin-top: 20px;">التوقيع/الختم: ..................</div></div>
 
@@ -1442,8 +1508,6 @@ ${clauseHtml}
 
 <div class="contract-footer-links" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 14px;">
 
-<div class="contract-footer-item" style="font-size: 11px;"><a href="https://wa.me/201111669528" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-whatsapp" style="color: #4B0082; margin-left: 4px;"></i> واتساب: 01111669528</a></div>
-
 <div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.facebook.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-facebook" style="color: #4B0082; margin-left: 4px;"></i> فيسبوك: kanjo.app.eg</a></div>
 
 <div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.instagram.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-instagram" style="color: #4B0082; margin-left: 4px;"></i> انستجرام: kanjo.app.eg</a></div>
@@ -1452,7 +1516,7 @@ ${clauseHtml}
 
 </div>
 
-<div class="contract-footer-note" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">يرجى متابعة حساباتنا الرسمية على منصات التواصل الاجتماعي للاطلاع على آخر العروض والخدمات، والتواصل معنا عبر واتساب لاستفسارات التشغيل والدعم الفني.</div>
+<div class="contract-footer-note" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">يرجى متابعة حساباتنا الرسمية على منصات التواصل الاجتماعي للاطلاع على آخر العروض والخدمات.</div>
 
 </div>
 
