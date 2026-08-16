@@ -348,7 +348,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 .contract-text { font-size: 12.5px; line-height: 1.7; margin-bottom: 10px; padding-right: 4px; }
 
-.contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
+.contract-clause-wrapper { page-break-inside: avoid; break-inside: avoid; margin-bottom: 35px; }
 
 .contract-final-block { page-break-inside: avoid; break-inside: avoid; margin-top: 15px; }
 
@@ -423,7 +423,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         padding: 10px !important;
     }
 
-    .contract-clause-block,
+    .contract-clause-wrapper,
     .contract-final-block {
         page-break-inside: avoid !important;
         break-inside: avoid !important;

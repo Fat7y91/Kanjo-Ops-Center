@@ -1198,7 +1198,7 @@ body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans
 
 .contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; font-size: 12.5px; }
 
-.contract-clause-block { page-break-inside: avoid; break-inside: avoid; }
+.contract-clause-wrapper { page-break-inside: avoid; break-inside: avoid; margin-bottom: 35px; }
 
 .contract-final-block { page-break-inside: avoid; break-inside: avoid; margin-top: 15px; }
 
@@ -1460,9 +1460,13 @@ window.buildContractHTML = (task) => {
 
         const numberLabel = ARABIC_CLAUSE_NUMBERS[idx] || (idx + 1);
 
-        return `<div class="contract-clause-block" style="page-break-inside: avoid; break-inside: avoid;"><div class="contract-clause-title">البند ${numberLabel}: ${cl.title}</div>
+        return `<div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 35px;">
 
-<div class="contract-text">${cl.body}</div></div>`;
+    <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 10px 15px; border-right: 4px solid #F59E0B; margin-bottom: 12px;">البند ${numberLabel}: ${cl.title}</div>
+
+    <div class="contract-text" style="font-size: 14px; line-height: 1.9; text-align: justify; color: #1e293b;">${cl.body}</div>
+
+</div>`;
 
     }).join('\n\n');
 
