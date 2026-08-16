@@ -1464,14 +1464,14 @@ window.buildContractHTML = (task) => {
 
     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 10px 15px; border-right: 4px solid #F59E0B; margin-bottom: 12px;">البند ${numberLabel}: ${cl.title}</div>
 
-    <div class="contract-text" style="font-size: 14px; line-height: 1.9; text-align: justify; color: #1e293b;">${cl.body}</div>
+    <div class="contract-text" style="font-size: 14px; line-height: 1.9; text-align: justify; color: #1e293b; font-weight: bold;">${cl.body}</div>
 
 </div>`;
 
     }).join('\n\n');
 
     const printBorderAndWatermark = `
-        <div style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; border: 4px double #4B0082; z-index: -1; pointer-events: none; margin: 10px;"></div>
+        <div style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; border: 3px double #4B0082; z-index: -1; pointer-events: none; margin: 12mm;"></div>
         <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: -2; pointer-events: none;">
             <img src="logo.png" style="width: 450px; max-width: 80vw; filter: grayscale(100%);">
         </div>
@@ -1479,10 +1479,10 @@ window.buildContractHTML = (task) => {
 
     const tableHeader = `
         <thead>
-            <tr><th style="padding: 0 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-top: 15px; margin-bottom: 20px;">
+            <tr><th style="padding: 15mm 20mm 5mm 20mm;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-top: 0; margin-bottom: 20px;">
                     <div style="width: 100px; text-align: right;"><img src="logo.png" style="max-height: 65px; object-fit: contain;"></div>
-                    <div style="font-size: 16px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${businessType} ${merchantName}</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${businessType} ${merchantName}</div>
                     <div style="width: 100px; text-align: left;">${window.currentMerchantLogoBase64 ? `<img src="${window.currentMerchantLogoBase64}" style="max-height: 65px; max-width: 90px; object-fit: contain;">` : ''}</div>
                 </div>
             </th></tr>
@@ -1491,10 +1491,10 @@ window.buildContractHTML = (task) => {
 
     const tableFooter = `
         <tfoot>
-            <tr><td style="padding: 0 15px;">
+            <tr><td style="padding: 5mm 20mm 15mm 20mm;">
                 <div style="border-top: 2px dashed #E2E8F0; margin-top: 20px; margin-bottom: 15px; padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #4B0082;">
                     <span>تأشير الطرف الأول (كانجو): ..............................</span>
-                    <span>تأشير الطرف الثاني (${businessType}): ..............................</span>
+                    <span>تأشير الطرف الثاني (${merchantName}): ..............................</span>
                 </div>
             </td></tr>
         </tfoot>
@@ -1503,30 +1503,30 @@ window.buildContractHTML = (task) => {
     // The main body content (Intro, Parties, Clauses, and Final Signatures + Socials)
     const tableBody = `
         <tbody>
-            <tr><td style="padding: 0 15px;">
-                <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; line-height: 1.8;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
-                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; line-height: 1.8;">
+            <tr><td style="padding: 0 20mm;">
+                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
+                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                     <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
                     <strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
                     بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
                 </div>
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 30px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
-                    <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
+                    <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
                 </div>
                 ${clauseHtml}
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
-                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8;">
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div>
                             <div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div>
                             <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
                         </div>
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
-                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: الشريك التجاري</div>
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${merchantName}</div>
                             <div>الاسم: ${window.safeString(contactName) || '....................'}</div><div>الصفة: ${window.safeString(contactRole) || '....................'}</div>
                             <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
                         </div>
