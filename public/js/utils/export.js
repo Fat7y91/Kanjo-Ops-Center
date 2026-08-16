@@ -1276,6 +1276,18 @@ window.buildContractHTML = (task) => {
 
     }
 
+    const formalContactRole = String(contactRole || '').trim()
+
+        .replace(/\s*(اونر|الاونر|صاحب المحل|صاحب المكان|صاحب المتجر|المحل)\s*/gi, 'المالك')
+
+        .replace(/\s*(owner)\s*/gi, 'المالك')
+
+        .replace(/\s*(مانيجر|المدير العام|المشرف)\s*/gi, 'المدير')
+
+        .replace(/\s*(manager)\s*/gi, 'المدير')
+
+        .replace(/\s*(بائع|موظف)\s*/gi, 'المدير');
+
     const address = task.address || '........................';
 
     const phone = contactPhone || '........................';
@@ -1514,6 +1526,8 @@ window.buildContractHTML = (task) => {
                     <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
                 </div>
                 ${clauseHtml}
+                <!-- Legal Copies Clause -->
+                <div style="page-break-inside: avoid; break-inside: avoid; margin: 15px 0; text-align: center; font-size: 13px; line-height: 1.9; font-weight: bold; color: #4B0082; background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #F59E0B; border-radius: 6px; padding: 12px 15px;">تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها، ويتكون العقد من البنود والملاحق المذكورة أعلاه.</div>
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
@@ -1526,7 +1540,7 @@ window.buildContractHTML = (task) => {
                         </div>
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${merchantName}</div>
-                            <div>الاسم: ${window.safeString(contactName) || '....................'}</div><div>الصفة: ${window.safeString(contactRole) || '....................'}</div>
+                            <div>الاسم: ${window.safeString(contactName) || '....................'}</div><div>الصفة: ${window.safeString(formalContactRole) || '....................'}</div>
                             <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
                         </div>
                     </div>
