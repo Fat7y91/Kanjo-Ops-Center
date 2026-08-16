@@ -1470,67 +1470,80 @@ window.buildContractHTML = (task) => {
 
     }).join('\n\n');
 
-    const html = `<div class="contract-document">
+    const printBorderAndWatermark = `
+        <div style="position: fixed; top: 0; bottom: 0; left: 0; right: 0; border: 4px double #4B0082; z-index: -1; pointer-events: none; margin: 10px;"></div>
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: -2; pointer-events: none;">
+            <img src="logo.png" style="width: 450px; max-width: 80vw; filter: grayscale(100%);">
+        </div>
+    `;
 
-${headerHtml}
+    const tableHeader = `
+        <thead>
+            <tr><th style="padding: 0 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #4B0082; padding-bottom: 15px; margin-top: 15px; margin-bottom: 20px;">
+                    <div style="width: 100px; text-align: right;"><img src="logo.png" style="max-height: 65px; object-fit: contain;"></div>
+                    <div style="font-size: 16px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${businessType} ${merchantName}</div>
+                    <div style="width: 100px; text-align: left;">${window.currentMerchantLogoBase64 ? `<img src="${window.currentMerchantLogoBase64}" style="max-height: 65px; max-width: 90px; object-fit: contain;">` : ''}</div>
+                </div>
+            </th></tr>
+        </thead>
+    `;
 
-<div class="contract-serial-badge">عقد رقم #${window.getContractSerialNumber(task)}</div>
+    const tableFooter = `
+        <tfoot>
+            <tr><td style="padding: 0 15px;">
+                <div style="border-top: 2px dashed #E2E8F0; margin-top: 20px; margin-bottom: 15px; padding-top: 12px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #4B0082;">
+                    <span>تأشير الطرف الأول (كانجو): ..............................</span>
+                    <span>تأشير الطرف الثاني (${businessType}): ..............................</span>
+                </div>
+            </td></tr>
+        </tfoot>
+    `;
 
-<div class="contract-title">عقد انضمام ${businessType} ${merchantName} إلى منصة كانجو</div>
+    // The main body content (Intro, Parties, Clauses, and Final Signatures + Socials)
+    const tableBody = `
+        <tbody>
+            <tr><td style="padding: 0 15px;">
+                <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; line-height: 1.8;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
+                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; line-height: 1.8;">
+                    <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
+                    <strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
+                    بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
+                </div>
+                <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 30px;">
+                    <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
+                    <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
+                </div>
+                ${clauseHtml}
+                <!-- Final Signatures Block -->
+                <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
+                    <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8;">
+                        <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div>
+                            <div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div>
+                            <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
+                        </div>
+                        <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: الشريك التجاري</div>
+                            <div>الاسم: ${window.safeString(contactName) || '....................'}</div><div>الصفة: ${window.safeString(contactRole) || '....................'}</div>
+                            <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
+                        </div>
+                    </div>
+                    <!-- Social Footer -->
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 2px dashed #E2E8F0; display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap; direction: ltr;">
+                        <div style="font-size: 12px; color: #4B0082; font-weight: bold;"><i class="fa-brands fa-facebook" style="color: #1877F2; font-size: 16px; margin-right: 5px;"></i> kanjo.app.eg</div>
+                        <div style="font-size: 12px; color: #4B0082; font-weight: bold;"><i class="fa-brands fa-instagram" style="color: #E4405F; font-size: 16px; margin-right: 5px;"></i> kanjo.app.eg</div>
+                        <div style="font-size: 12px; color: #4B0082; font-weight: bold;"><i class="fa-brands fa-tiktok" style="color: #000000; font-size: 16px; margin-right: 5px;"></i> @kanjo.app.eg</div>
+                    </div>
+                    <div style="text-align: center; margin-top: 10px; font-size: 11px; color: #64748b; font-weight: bold; direction: rtl;">شركة كاند جوو لخدمات التوصيل والتجارة الإلكترونية - جميع الحقوق محفوظة © 2026</div>
+                </div>
+            </td></tr>
+        </tbody>
+    `;
 
-<div class="contract-text">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
-
-<div class="contract-parties">
-
-<strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية المالكة والمشغلة للعلامة التجارية كانجو ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
-
-<strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
-
-بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span> | البريد: ........................ | الحساب البنكي/وسيلة التسوية: ........................
-
-</div>
-
-<div class="contract-clause-title">التمهيد</div>
-
-<div class="contract-text">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات والخدمات، وحيث إن الطرف الثاني يرغب في الانضمام إليها بصفته ${businessType}؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات، ووضوح الأسعار، وسلامة العملاء، وحماية البيانات، واستحقاق رسوم خدمات المنصة، ومنع الالتفاف على المنصة. ويعد هذا التمهيد وملاحق العقد وسياسات كانجو جزءًا لا يتجزأ منه.</div>
-
-${clauseHtml}
-
-<div class="contract-final-block" style="page-break-inside: avoid; break-inside: avoid; margin-top: 15px;">
-
-<div class="contract-clause-title">ملحق مختصر: البيانات والتوقيعات</div>
-
-<div class="contract-text">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
-
-<div class="contract-signatures">
-
-<div class="contract-sign-box"><div style="color: #4B0082; margin-bottom: 10px;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div><div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div><div style="margin-top: 20px;">التوقيع/الختم: ..................</div></div>
-
-<div class="contract-sign-box"><div style="color: #4B0082; margin-bottom: 10px;">الطرف الثاني: الشريك التجاري</div><div>الاسم: ${window.safeString(contactName) || '.................'}</div><div>الصفة: ${window.safeString(contactRole) || '.................'}</div><div style="margin-top: 20px;">التوقيع/الختم: ..................</div></div>
-
-</div>
-
-<div class="contract-contact-footer" style="border-top: 2px dashed #E2E8F0; margin-top: 15px; padding-top: 15px;">
-
-<div class="contract-footer-title" style="font-size: 12px; font-weight: bold; color: #4B0082; text-align: center; margin-bottom: 10px;"><i class="fa-brands fa-google" style="margin-left: 5px;"></i> قنوات كانجو الرسمية للتواصل والمتابعة</div>
-
-<div class="contract-footer-links" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 15px;">
-
-<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.facebook.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-facebook" style="color: #4B0082; margin-left: 4px;"></i> فيسبوك: kanjo.app.eg</a></div>
-
-<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.instagram.com/kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-instagram" style="color: #4B0082; margin-left: 4px;"></i> انستجرام: kanjo.app.eg</a></div>
-
-<div class="contract-footer-item" style="font-size: 11px;"><a href="https://www.tiktok.com/@kanjo.app.eg" target="_blank" rel="noopener" style="color: #4B0082; text-decoration: none;"><i class="fa-brands fa-tiktok" style="color: #4B0082; margin-left: 4px;"></i> تيك توك: @kanjo.app.eg</a></div>
-
-</div>
-
-<div class="contract-footer-copyright" style="font-size: 10px; color: #64748B; text-align: center; margin-top: 10px; line-height: 1.7;">شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية المالكة والمشغلة للعلامة التجارية كانجو - جميع الحقوق محفوظة</div>
-
-</div>
-
-</div>
-
-</div> <!-- END contract-document -->`;
+    const html = printBorderAndWatermark + '<table style="width: 100%; border-collapse: collapse;">' + tableHeader + tableBody + tableFooter + '</table>';
 
     document.getElementById('contract-template-container').innerHTML = html;
 
