@@ -1471,8 +1471,8 @@ window.buildContractHTML = (task) => {
     }).join('\n\n');
 
     const printBorderAndWatermark = `
-        <div style="position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%); opacity: 0.04; z-index: -2; pointer-events: none;">
-            <img src="logo.png" style="width: 550px; max-width: 85vw; filter: grayscale(100%);">
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; max-width: 70vw; opacity: 0.05; z-index: 999999; pointer-events: none; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
+            <img src="logo.png" style="width: 100%; height: auto; display: block; filter: grayscale(100%);">
         </div>
     `;
 
