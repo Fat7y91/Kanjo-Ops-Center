@@ -1507,6 +1507,7 @@ window.buildContractHTML = (task) => {
                     <span>توقيع الطرف الأول (كانجو): ..............................</span>
                     <span>توقيع الطرف الثاني (${merchantName}): ..............................</span>
                 </div>
+                <div style="text-align: left; font-size: 10px; color: #64748b; margin-top: 6px;">صفحة رقم ( ..... ) من إجمالي ( ..... ) صفحة</div>
             </td></tr>
         </tfoot>
     `;
