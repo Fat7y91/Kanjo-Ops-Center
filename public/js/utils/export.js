@@ -1471,7 +1471,7 @@ window.buildContractHTML = (task) => {
     }).join('\n\n');
 
     const printBorderAndWatermark = `
-        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; max-width: 70vw; opacity: 0.05; z-index: 999999; pointer-events: none; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
+        <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 500px; max-width: 70vw; opacity: 0.06; z-index: 9999999; pointer-events: none; print-color-adjust: exact; -webkit-print-color-adjust: exact;">
             <img src="logo.png" style="width: 100%; height: auto; display: block; filter: grayscale(100%);">
         </div>
     `;
@@ -1505,7 +1505,7 @@ window.buildContractHTML = (task) => {
             <tr><td style="padding: 0;">
                 <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
                 <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
-                    <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
+                    <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية، المالكة والمشغلة للعلامة التجارية (كانجو)، ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
                     <strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
                     بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
                 </div>
@@ -1520,7 +1520,7 @@ window.buildContractHTML = (task) => {
                     <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
-                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل</div>
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية</div>
                             <div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div>
                             <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
                         </div>
