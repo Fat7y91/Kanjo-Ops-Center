@@ -1108,19 +1108,73 @@ window.confirmDelete = async () => { await deleteDoc(doc(db, "tasks", taskToDele
 
 window.currentMerchantLogoBase64 = '';
 
+window.contractBusinessTypeOverride = '';
+
+window.persistMerchantLogo = async (logoBase64, merchantBaseName) => {
+
+    const q = query(collection(db, "tasks"));
+
+    const snap = await getDocs(q);
+
+    const batch = writeBatch(db);
+
+    snap.forEach((docSnap) => {
+
+        const tData = docSnap.data();
+
+        if (getBaseName(tData.name) === merchantBaseName) {
+
+            batch.update(docSnap.ref, { merchantLogo: logoBase64 });
+
+        }
+
+    });
+
+    await batch.commit();
+
+};
+
 window.handleMerchantLogoUpload = (event) => {
 
     const file = event.target.files && event.target.files[0];
 
     if (!file) return;
 
+    const taskId = document.getElementById('cpTaskId') ? document.getElementById('cpTaskId').value : '';
+
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
 
         window.currentMerchantLogoBase64 = e.target.result;
 
-        showToast("تم تحميل شعار التاجر بنجاح");
+        const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
+        const baseName = task ? getBaseName(task.name) : '';
+
+        if (baseName) {
+
+            try {
+
+                await window.persistMerchantLogo(e.target.result, baseName);
+
+                (window.allTasksCache || []).forEach(t => { if (getBaseName(t.name) === baseName) t.merchantLogo = e.target.result; });
+
+                showToast("تم تحميل شعار التاجر وحفظه في النظام بنجاح");
+
+            } catch (err) {
+
+                showToast("تم تحميل الشعار محلياً لكن فشل حفظه في النظام", false);
+
+            }
+
+        } else {
+
+            showToast("تم تحميل شعار التاجر بنجاح");
+
+        }
+
+        window.refreshContractPreview();
 
     };
 
@@ -1133,6 +1187,102 @@ window.handleMerchantLogoUpload = (event) => {
     };
 
     reader.readAsDataURL(file);
+
+};
+
+window.setContractBusinessType = (value) => {
+
+    window.contractBusinessTypeOverride = value;
+
+    window.refreshContractPreview();
+
+};
+
+window.currentLogoUpdateTaskId = null;
+
+window.openMerchantLogoUpdate = (taskId) => {
+
+    window.currentLogoUpdateTaskId = taskId;
+
+    const input = document.getElementById('merchantCardLogoInput');
+
+    if (input) input.click();
+
+};
+
+window.handleMerchantCardLogoUpload = (event) => {
+
+    const file = event.target.files && event.target.files[0];
+
+    if (!file) return;
+
+    const task = (window.allTasksCache || []).find(t => t.id === window.currentLogoUpdateTaskId);
+
+    const baseName = task ? getBaseName(task.name) : '';
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+
+        window.currentMerchantLogoBase64 = e.target.result;
+
+        if (baseName) {
+
+            try {
+
+                await window.persistMerchantLogo(e.target.result, baseName);
+
+                (window.allTasksCache || []).forEach(t => { if (getBaseName(t.name) === baseName) t.merchantLogo = e.target.result; });
+
+                showToast("تم تحديث شعار التاجر وحفظه في النظام بنجاح");
+
+            } catch (err) {
+
+                showToast("فشل حفظ الشعار، حاول مرة أخرى", false);
+
+            }
+
+        } else {
+
+            showToast("تم تحميل الشعار محلياً بنجاح");
+
+        }
+
+    };
+
+    reader.onerror = () => {
+
+        window.currentMerchantLogoBase64 = '';
+
+        showToast("فشل تحميل الشعار، حاول مرة أخرى", false);
+
+    };
+
+    reader.readAsDataURL(file);
+
+};
+
+window.refreshContractPreview = () => {
+
+    const taskId = document.getElementById('cpTaskId') ? document.getElementById('cpTaskId').value : '';
+
+    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
+    if (task && typeof window.buildContractHTML === 'function') {
+
+        window.buildContractHTML(task);
+
+        const previewContainer = document.getElementById('contractPreviewContainer');
+
+        if (previewContainer) {
+
+            const template = document.getElementById('contract-template-container');
+
+            previewContainer.innerHTML = template ? template.innerHTML : '';
+
+        }
+
+    }
 
 };
 
@@ -1317,6 +1467,32 @@ window.openContractPreview = (taskId) => {
     if (logoInput) logoInput.value = '';
 
     window.currentMerchantLogoBase64 = '';
+
+    window.contractBusinessTypeOverride = '';
+
+    const baseName = task ? getBaseName(task.name) : '';
+
+    const savedLogoTask = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName && t.merchantLogo);
+
+    if (savedLogoTask && savedLogoTask.merchantLogo) window.currentMerchantLogoBase64 = savedLogoTask.merchantLogo;
+
+    const toggleContainer = document.getElementById('cpBusinessTypeToggle');
+
+    if (toggleContainer) {
+
+        const isRestCafe = task ? (window.isRestaurantCafeCategoryExact ? window.isRestaurantCafeCategoryExact(task.cat) : window.isRestaurantCafeCategory(task.cat)) : false;
+
+        toggleContainer.classList.toggle('hidden', !isRestCafe);
+
+        if (isRestCafe) {
+
+            const defaultRadio = toggleContainer.querySelector('input[value="مطعم"]');
+
+            if (defaultRadio) defaultRadio.checked = true;
+
+        }
+
+    }
 
     if (task && typeof window.buildContractHTML === 'function') {
 

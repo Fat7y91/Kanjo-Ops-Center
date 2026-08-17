@@ -108,4 +108,11 @@ window.calculateComm = (target, achieved) => {
 
 window.getBaseName = getBaseName;
 
+window.isRestaurantCafeCategory = (cat) => String(cat || '').includes('مطاعم وكافيهات');
+
+window.isRestaurantCafeCategoryExact = (cat) => {
+    const c = String(cat || '').trim();
+    return c === 'مطاعم وكافيهات' || c.endsWith('مطاعم وكافيهات');
+};
+
 export { getBaseName };

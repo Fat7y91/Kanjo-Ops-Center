@@ -1948,6 +1948,12 @@ window.renderTasks = (grouped) => {
 
             const merchantProfileBtn = `<button onclick="openMerchantProfile('${window.safeString(baseN)}')" class="bg-purple-100 text-kanjo-primary hover:bg-purple-200 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm"><i class="fa-solid fa-id-card"></i> <span>بطاقة التاجر</span></button>`;
 
+            const merchantLogoHtml = t.merchantLogo
+                ? `<img src="${t.merchantLogo}" alt="شعار التاجر" class="w-10 h-10 object-contain rounded-lg border border-purple-100 bg-white p-0.5 shadow-sm">`
+                : '';
+
+            const updateLogoBtn = `<button onclick="openMerchantLogoUpdate('${t.id}')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-amber-200 shadow-sm"><i class="fa-solid fa-image"></i> <span>تحديث اللوجو</span></button>`;
+
 
 
             let cardBadge = '';
@@ -1972,9 +1978,13 @@ window.renderTasks = (grouped) => {
 
                     <div class="flex items-center gap-2 flex-wrap">
 
+                        ${merchantLogoHtml}
+
                         <h3 class="font-bold text-sm sm:text-base text-slate-900">${t.name} ${cardBadge}</h3>
 
                         ${merchantProfileBtn}
+
+                        ${updateLogoBtn}
 
                     </div>
 

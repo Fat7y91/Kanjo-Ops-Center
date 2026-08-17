@@ -1258,6 +1258,10 @@ window.buildContractHTML = (task) => {
 
     const resolvedCat = info.cat;
 
+    const isRestCafe = window.isRestaurantCafeCategoryExact ? window.isRestaurantCafeCategoryExact(resolvedCat) : window.isRestaurantCafeCategory(resolvedCat);
+
+    const titleBusinessType = (isRestCafe && window.contractBusinessTypeOverride) ? window.contractBusinessTypeOverride : businessType;
+
     const achieved = info.achieved;
 
     let contactName = '';
@@ -1494,14 +1498,21 @@ window.buildContractHTML = (task) => {
         </div>
     `;
 
+    const hasMerchantLogo = !!window.currentMerchantLogoBase64;
+
     const tableHeader = `
         <thead>
             <tr><th style="padding: 5px 0;">
+                ${hasMerchantLogo ? `
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4B0082; padding-bottom: 10px; margin-top: 10px; margin-bottom: 15px;">
                     <div style="width: 100px; text-align: right;"><img src="logo.png" style="max-height: 65px; object-fit: contain;"></div>
-                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${businessType} ${merchantName}</div>
-                    <div style="width: 100px; text-align: left;">${window.currentMerchantLogoBase64 ? `<img src="${window.currentMerchantLogoBase64}" style="max-height: 65px; max-width: 90px; object-fit: contain;">` : ''}</div>
-                </div>
+                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${titleBusinessType} ${merchantName}</div>
+                    <div style="width: 100px; text-align: left;"><img src="${window.currentMerchantLogoBase64}" style="max-height: 65px; max-width: 90px; object-fit: contain;"></div>
+                </div>` : `
+                <div style="border-bottom: 2px solid #4B0082; padding-bottom: 10px; margin-top: 10px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: center; align-items: center;"><img src="logo.png" style="max-height: 65px; object-fit: contain;"></div>
+                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center; margin-top: 10px;">عقد انضمام ${titleBusinessType} ${merchantName}</div>
+                </div>`}
             </th></tr>
         </thead>
     `;
@@ -1524,7 +1535,7 @@ window.buildContractHTML = (task) => {
                 <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
                 <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                     <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية، المالكة والمشغلة للعلامة التجارية (كانجو)، ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
-                    <strong>الطرف الثاني:</strong> ${businessType}: ${merchantName}<br>
+                    <strong>الطرف الثاني:</strong> ${titleBusinessType}: ${merchantName}<br>
                     بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
                 </div>
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 20px;">

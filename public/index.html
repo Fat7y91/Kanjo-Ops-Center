@@ -520,6 +520,32 @@
 
             <input type="hidden" id="cpTaskId">
 
+            <div id="cpBusinessTypeToggle" class="mb-4 hidden">
+
+                <label class="block text-sm font-bold text-slate-600 mb-1">نوع النشاط التجاري</label>
+
+                <div class="flex gap-3">
+
+                    <label class="flex-1 flex items-center justify-center gap-2 p-3 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer text-sm font-bold text-kanjo-primary">
+
+                        <input type="radio" name="cpBusinessType" value="مطعم" checked onchange="setContractBusinessType(this.value)">
+
+                        مطعم
+
+                    </label>
+
+                    <label class="flex-1 flex items-center justify-center gap-2 p-3 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer text-sm font-bold text-kanjo-primary">
+
+                        <input type="radio" name="cpBusinessType" value="كافيه" onchange="setContractBusinessType(this.value)">
+
+                        كافيه
+
+                    </label>
+
+                </div>
+
+            </div>
+
             <div class="mb-4">
 
                 <label class="block text-sm font-bold text-slate-600 mb-1">شعار التاجر (اختياري)</label>
@@ -527,6 +553,8 @@
                 <input type="file" id="cpMerchantLogo" accept="image/*" onchange="handleMerchantLogoUpload(event)" class="block w-full text-sm text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-kanjo-light file:px-4 file:py-2 file:text-kanjo-primary file:font-bold hover:file:bg-purple-100">
 
             </div>
+
+            <input type="file" id="merchantCardLogoInput" accept="image/*" onchange="handleMerchantCardLogoUpload(event)" class="hidden">
 
             <div id="contractPreviewContainer" class="overflow-y-auto hide-scrollbar flex-1 mb-4"></div>
 
