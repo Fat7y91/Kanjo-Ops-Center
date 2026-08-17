@@ -6,6 +6,10 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     document.getElementById('mpMerchantName').innerText = merchantBaseName;
 
+    const nameEditEl = document.getElementById('mpMerchantNameEdit');
+
+    if (nameEditEl) nameEditEl.value = merchantBaseName;
+
 
 
     let matchingTasks = [];
@@ -443,6 +447,108 @@ window.saveMerchantProfile = async () => {
     closeMerchantProfileModal();
 
     showToast("🎉 تم حفظ وتحديث بيانات بطاقة التاجر وتواصله ومزامنتها عبر كل أقسام النظام بنجاح!");
+
+};
+
+window.saveMerchantNameEdit = async () => {
+
+    const nameEditEl = document.getElementById('mpMerchantNameEdit');
+
+    if (!nameEditEl) return;
+
+    const newName = nameEditEl.value.trim();
+
+    if (!newName) {
+
+        showToast("يرجى كتابة اسم التاجر الجديد", false);
+
+        return;
+
+    }
+
+    const oldBaseName = activeMerchantBaseName;
+
+    if (newName === oldBaseName) {
+
+        showToast("الاسم لم يتغير", false);
+
+        return;
+
+    }
+
+    const duplicate = (window.allTasksCache || []).some(t => getBaseName(t.name) === newName && getBaseName(t.name) !== oldBaseName);
+
+    if (duplicate) {
+
+        showToast("يوجد تاجر آخر بنفس هذا الاسم بالفعل", false);
+
+        return;
+
+    }
+
+    const q = query(collection(db, "tasks"));
+
+    const snap = await getDocs(q);
+
+    const batch = writeBatch(db);
+
+    snap.forEach((docSnap) => {
+
+        const tData = docSnap.data();
+
+        if (getBaseName(tData.name) === oldBaseName) {
+
+            const isFollowUp = /\(متابعة\)|\(متابعه\)/.test(String(tData.name || ''));
+
+            batch.update(docSnap.ref, { name: isFollowUp ? `${newName} (متابعة)` : newName });
+
+        }
+
+    });
+
+    await batch.commit();
+
+    (window.allTasksCache || []).forEach(t => {
+
+        if (getBaseName(t.name) === oldBaseName) {
+
+            const isFollowUp = /\(متابعة\)|\(متابعه\)/.test(String(t.name || ''));
+
+            t.name = isFollowUp ? `${newName} (متابعة)` : newName;
+
+        }
+
+    });
+
+    activeMerchantBaseName = newName;
+
+    document.getElementById('mpMerchantName').innerText = newName;
+
+    if (nameEditEl) nameEditEl.value = newName;
+
+    showToast("تم تعديل اسم التاجر وتحديثه فورياً في كل أجزاء النظام");
+
+    if (window.lastSnapshot && typeof window.renderDashboard === 'function') window.renderDashboard(window.lastSnapshot);
+
+};
+
+window.openMerchantContract = () => {
+
+    const baseName = activeMerchantBaseName;
+
+    const task = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName);
+
+    if (!task) {
+
+        showToast("لا توجد مهمة مسجلة لهذا التاجر", false);
+
+        return;
+
+    }
+
+    closeMerchantProfileModal();
+
+    window.openContractPreview(task.id);
 
 };
 
@@ -1286,6 +1392,8 @@ window.refreshContractPreview = () => {
 
 };
 
+window.searchContracts = () => window.openContractsManagerModal();
+
 window.openContractsManagerModal = () => {
 
     const modal = document.getElementById('contractsManagerModal');
@@ -1297,6 +1405,10 @@ window.openContractsManagerModal = () => {
     const listEl = document.getElementById('contractsManagerList');
 
     const teamFilter = filterEl ? filterEl.value : 'all';
+
+    const searchInput = document.getElementById('contractsSearchInput');
+
+    const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
     const allTasks = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
 
@@ -1345,6 +1457,24 @@ window.openContractsManagerModal = () => {
             const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
 
             return team === teamFilter;
+
+        });
+
+    }
+
+    if (searchQuery) {
+
+        uniqueTasks = uniqueTasks.filter(t => {
+
+            const base = window.getBaseName ? window.getBaseName(t.name) : t.name;
+
+            const serial = String(window.getContractSerialNumber ? window.getContractSerialNumber(t) : '');
+
+            const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
+
+            const haystack = [base, serial, String(team || ''), String(t.cat || '')].join(' ').toLowerCase();
+
+            return haystack.includes(searchQuery);
 
         });
 
@@ -1410,7 +1540,7 @@ window.openContractsManagerModal = () => {
 
                 <div>
 
-                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> ${window.safeString(t.name)}</div>
+                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> <a href="javascript:void(0)" onclick="openMerchantProfile('${window.safeString(window.getBaseName ? window.getBaseName(t.name) : t.name)}')" class="text-kanjo-primary hover:text-violet-800 hover:underline cursor-pointer">${window.safeString(t.name)}</a></div>
 
                     <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-2">
 

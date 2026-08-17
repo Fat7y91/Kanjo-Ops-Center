@@ -252,6 +252,20 @@
 
             </div>
 
+            <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200 space-y-2">
+
+                <h4 class="font-black text-xs text-kanjo-dark uppercase tracking-wider">✏️ تعديل اسم التاجر (يتحدث تلقائياً في كل النظام)</h4>
+
+                <div class="flex gap-2">
+
+                    <input type="text" id="mpMerchantNameEdit" class="w-full p-2.5 bg-white border border-purple-100 rounded-xl text-xs font-bold text-slate-800">
+
+                    <button onclick="saveMerchantNameEdit()" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 shadow-sm whitespace-nowrap">حفظ الاسم الجديد</button>
+
+                </div>
+
+            </div>
+
 
 
             <div class="space-y-4">
@@ -402,6 +416,8 @@
 
                 <button id="mpSaveBtn" onclick="saveMerchantProfile()" class="flex-1 bg-kanjo-primary text-white py-3.5 rounded-xl font-bold hover:bg-violet-800 shadow-md text-xs">حفظ التعديلات وتحديث كل النظام</button>
 
+                <button onclick="openMerchantContract()" class="flex-1 bg-amber-500 text-white py-3.5 rounded-xl font-bold hover:bg-amber-600 shadow-md text-xs"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد جديد</button>
+
                 <button onclick="closeMerchantProfileModal()" class="flex-1 bg-slate-200 py-3.5 rounded-xl font-bold hover:bg-slate-300 text-xs">خروج</button>
 
             </div>
@@ -491,6 +507,14 @@
                     <option value="Power Team">Power Team</option>
 
                 </select>
+
+            </div>
+
+            <div class="mb-4">
+
+                <label class="block text-sm font-bold text-slate-600 mb-1">بحث في العقود</label>
+
+                <input type="text" id="contractsSearchInput" oninput="searchContracts()" placeholder="ابحث برقم العقد، اسم التاجر، الفئة، أو الفريق..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kanjo-primary">
 
             </div>
 
