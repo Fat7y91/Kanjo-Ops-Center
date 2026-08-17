@@ -20,7 +20,7 @@ const valueLabelsPlugin = {
 
                     ctx.fillStyle = '#1e293b';
 
-                    ctx.font = 'bold 12px Tahoma';
+                    ctx.font = 'bold 12px Cairo, Tahoma, Arial';
 
                     ctx.textAlign = 'center';
 

@@ -146,7 +146,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     background: #ffffff;
     direction: rtl;
     text-align: justify;
-    font-family: 'Tahoma', 'Arial', sans-serif;
+    font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
     color: #1f2937;
     line-height: 1.9;
 }
@@ -323,7 +323,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 
 /* —— قواعد عقد الاحترافي الأساسية —— */
-#contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.6; }
+#contract-template-container { background-color: #ffffff; color: #1e293b; font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; direction: rtl; text-align: justify; line-height: 1.6; }
 
 .contract-document { padding: 24px; background: #fff; }
 
@@ -407,7 +407,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         box-shadow: none !important;
         border: none !important;
         color: #1e293b;
-        font-family: 'Tahoma', 'Arial', sans-serif;
+        font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
         direction: rtl;
         text-align: justify;
         line-height: 1.6;

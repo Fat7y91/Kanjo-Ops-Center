@@ -734,7 +734,9 @@ window.printDetailsContent = () => {
 
             <style>
 
-                body { font-family: Tahoma, Arial, sans-serif; padding: 25px; color: #1e293b; background: #fff; }
+                @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;900&display=swap');
+
+                body { font-family: 'Cairo', Tahoma, Arial, sans-serif; padding: 25px; color: #1e293b; background: #fff; }
 
                 h2 { text-align: center; color: #4C1D95; margin-bottom: 25px; border-bottom: 2px solid #ddd; padding-bottom: 10px; }
 

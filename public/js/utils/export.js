@@ -1176,7 +1176,9 @@ window.exportContractWord = () => {
 
     const fullHtml = `<html xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>عقد كانجو</title><style>
 
-body { direction: rtl; text-align: justify; font-family: 'Tahoma', 'Arial', sans-serif; line-height: 1.6; color: #1e293b; }
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;900&display=swap');
+
+body { direction: rtl; text-align: justify; font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; line-height: 1.6; color: #1e293b; }
 
 .contract-document { padding: 14px; }
 
