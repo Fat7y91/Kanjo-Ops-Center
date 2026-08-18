@@ -1272,7 +1272,9 @@ window.buildContractHTML = (task) => {
 
     const info = getMerchantBusinessInfo(task);
 
-    const merchantName = info.baseName;
+    let merchantName = info.baseName;
+
+    if (typeof window.sanitizeLegalText === 'function') merchantName = window.sanitizeLegalText(merchantName) || merchantName;
 
     const businessType = info.businessType;
 
@@ -1324,17 +1326,11 @@ window.buildContractHTML = (task) => {
 
     }
 
-    const formalContactRole = String(contactRole || '').trim()
+    if (contactName && typeof window.sanitizeLegalText === 'function') contactName = window.sanitizeLegalText(contactName) || contactName;
 
-        .replace(/\s*(اونر|الاونر|صاحب المحل|صاحب المكان|صاحب المتجر|المحل)\s*/gi, 'المالك')
+    const formalContactRole = (typeof window.sanitizeLegalRole === 'function') ? window.sanitizeLegalRole(contactRole) : '';
 
-        .replace(/\s*(owner)\s*/gi, 'المالك')
-
-        .replace(/\s*(مانيجر|المدير العام|المشرف)\s*/gi, 'المدير')
-
-        .replace(/\s*(manager)\s*/gi, 'المدير')
-
-        .replace(/\s*(بائع|موظف)\s*/gi, 'المدير');
+    const sanitizedNotes = (typeof window.sanitizeLegalText === 'function') ? window.sanitizeLegalText(task.notes || '') : String(task.notes || '');
 
     const address = task.address || '........................';
 
@@ -1610,6 +1606,7 @@ window.buildContractHTML = (task) => {
                     <strong>الطرف الثاني:</strong> ${titleBusinessType}: ${merchantName}<br>
                     بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
                 </div>
+                ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
                     <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
@@ -1621,8 +1618,8 @@ window.buildContractHTML = (task) => {
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
-                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRate}% ]</strong></div>
-                    ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #4B0082;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: ${ex.rate}%`).join(' — ')}</div>` : ''}
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRate}% ]</strong></div>
+                    ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: [ ${ex.rate}% ]`).join(' — ')}</div>` : ''}
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية</div>
@@ -1886,6 +1883,86 @@ window.generateContract = () => {
         previewContainer.innerHTML = template.innerHTML;
 
     }
+
+};
+
+window.sanitizeLegalText = (text) => {
+
+    if (text === null || text === undefined) return '';
+
+    const legalDictionary = {
+        'المالكالمكان': 'المالك',
+        'المالك المكان': 'المالك',
+        'اونر المكان': 'المالك',
+        'صاحب المكان': 'المالك',
+        'صاحب المحل': 'المالك',
+        'اونر': 'المالك',
+        'مانيجر': 'المدير المسئول',
+        'مدير المكان': 'المدير المسئول',
+        'مسئول المكان': 'المدير المسئول',
+        'ديل': 'اتفاق مبرم',
+        'دان': 'تمت الموافقة',
+        'كنسلة': 'إلغاء التعاقد',
+        'عربون': 'دفعة مقدمة',
+        'كاش': 'نقداً',
+        'لوكيشن': 'الموقع الجغرافي',
+        'فرع رئيسي': 'المقر الرئيسي',
+        'نسبة المنصة': 'رسوم الخدمة',
+        'ف الميه': '%',
+        'بالمية': '%'
+    };
+
+    let cleaned = String(text).trim();
+
+    const ARABIC_WORD_CHARS = 'A-Za-z0-9_\\u0600-\\u06FF';
+
+    const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    for (const key in legalDictionary) {
+
+        const escaped = escapeRegex(key);
+
+        let pattern;
+
+        if (/\s/.test(key)) {
+
+            pattern = escaped;
+
+        } else if (key.startsWith('ال')) {
+
+            pattern = `(?<![${ARABIC_WORD_CHARS}])${escaped}(?![${ARABIC_WORD_CHARS}])`;
+
+        } else {
+
+            pattern = `(?<![${ARABIC_WORD_CHARS}])(?:ال)?${escaped}(?![${ARABIC_WORD_CHARS}])`;
+
+        }
+
+        cleaned = cleaned.replace(new RegExp(pattern, 'gi'), legalDictionary[key]);
+
+    }
+
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+
+    return cleaned;
+
+};
+
+window.sanitizeLegalRole = (role) => {
+
+    const input = String(role || '').trim();
+
+    if (!input) return '';
+
+    const lower = input.toLowerCase();
+
+    if (/اونر|صاحب|مالك|owner/.test(lower)) return 'المالك';
+
+    if (/مانيجر|مدير|مشرف|مسئول|manager/.test(lower)) return 'المدير المسئول';
+
+    if (/بائع|موظف|مندوب|seller|employee/.test(lower)) return 'المدير';
+
+    return window.sanitizeLegalText(input);
 
 };
 
