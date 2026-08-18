@@ -2,6 +2,32 @@
 
 window.closeStatModal = () => document.getElementById('detailsModal').classList.add('hidden');
 
+window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
+
+    const safeName = window.safeString ? window.safeString(name) : String(name || '');
+
+    const baseName = window.getBaseName ? window.getBaseName(name) : String(name || '');
+
+    const safeBase = window.safeString ? window.safeString(baseName) : baseName;
+
+    let logoHtml = '';
+
+    if (showLogo && Array.isArray(window.allTasksCache)) {
+
+        const logoTask = window.allTasksCache.find(t => t && t.merchantLogo && window.getBaseName && window.getBaseName(t.name) === baseName);
+
+        if (logoTask && logoTask.merchantLogo) {
+
+            logoHtml = `<img src="${logoTask.merchantLogo}" alt="شعار التاجر" class="w-8 h-8 rounded-full border border-gray-200 object-cover inline-block mr-2 align-middle">`;
+
+        }
+
+    }
+
+    return `${logoHtml}<a href="javascript:void(0)" onclick="openMerchantProfile('${safeBase}')" class="text-purple-800 hover:text-purple-600 hover:underline cursor-pointer font-semibold transition-colors duration-200 ${extraClass}">${safeName}</a>`;
+
+};
+
 window.showCardDetails = (cardType) => {
 
     currentStatModalType = cardType;
@@ -35,32 +61,6 @@ window.showCardDetails = (cardType) => {
         </button>
 
     `;
-
-    window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
-
-        const safeName = window.safeString ? window.safeString(name) : String(name || '');
-
-        const baseName = window.getBaseName ? window.getBaseName(name) : String(name || '');
-
-        const safeBase = window.safeString ? window.safeString(baseName) : baseName;
-
-        let logoHtml = '';
-
-        if (showLogo && Array.isArray(window.allTasksCache)) {
-
-            const logoTask = window.allTasksCache.find(t => t && t.merchantLogo && window.getBaseName && window.getBaseName(t.name) === baseName);
-
-            if (logoTask && logoTask.merchantLogo) {
-
-                logoHtml = `<img src="${logoTask.merchantLogo}" alt="شعار التاجر" class="w-8 h-8 rounded-full border border-gray-200 object-cover inline-block mr-2 align-middle">`;
-
-            }
-
-        }
-
-        return `${logoHtml}<a href="javascript:void(0)" onclick="openMerchantProfile('${safeBase}')" class="text-purple-800 hover:text-purple-600 hover:underline cursor-pointer font-semibold transition-colors duration-200 ${extraClass}">${safeName}</a>`;
-
-    };
 
 
 
