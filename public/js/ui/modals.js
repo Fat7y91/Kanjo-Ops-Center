@@ -638,7 +638,7 @@ window.openQuickLinksModal = () => {
 
                     <div>
 
-                        <h4 class="font-black text-kanjo-dark text-sm">${item.name}</h4>
+                        <h4 class="font-black text-kanjo-dark text-sm">${window.renderMerchantNameLink(item.name)}</h4>
 
                         <span class="text-[11px] text-slate-500 font-bold">الفئة: ${item.cat}</span>
 
@@ -798,7 +798,7 @@ window.openViewArchivedReportsModal = async () => {
 
                 <div class="flex justify-between items-center font-black text-amber-950">
 
-                    <span>المحل: ${item.taskName} (كاتب التقرير: ${rep.name || '-'})</span>
+                    <span>المحل: ${window.renderMerchantNameLink(item.taskName)} (كاتب التقرير: ${rep.name || '-'})</span>
 
                     <span class="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">نقل بواسطة: ${item.archivedBy}</span>
 
@@ -1540,7 +1540,7 @@ window.openContractsManagerModal = () => {
 
                 <div>
 
-                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> <a href="javascript:void(0)" onclick="openMerchantProfile('${window.safeString(window.getBaseName ? window.getBaseName(t.name) : t.name)}')" class="text-kanjo-primary hover:text-violet-800 hover:underline cursor-pointer">${window.safeString(t.name)}</a></div>
+                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> ${window.renderMerchantNameLink(t.name)}</div>
 
                     <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-2">
 

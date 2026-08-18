@@ -36,6 +36,32 @@ window.showCardDetails = (cardType) => {
 
     `;
 
+    window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
+
+        const safeName = window.safeString ? window.safeString(name) : String(name || '');
+
+        const baseName = window.getBaseName ? window.getBaseName(name) : String(name || '');
+
+        const safeBase = window.safeString ? window.safeString(baseName) : baseName;
+
+        let logoHtml = '';
+
+        if (showLogo && Array.isArray(window.allTasksCache)) {
+
+            const logoTask = window.allTasksCache.find(t => t && t.merchantLogo && window.getBaseName && window.getBaseName(t.name) === baseName);
+
+            if (logoTask && logoTask.merchantLogo) {
+
+                logoHtml = `<img src="${logoTask.merchantLogo}" alt="شعار التاجر" class="w-8 h-8 rounded-full border border-gray-200 object-cover inline-block mr-2 align-middle">`;
+
+            }
+
+        }
+
+        return `${logoHtml}<a href="javascript:void(0)" onclick="openMerchantProfile('${safeBase}')" class="text-purple-800 hover:text-purple-600 hover:underline cursor-pointer font-semibold transition-colors duration-200 ${extraClass}">${safeName}</a>`;
+
+    };
+
 
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -56,7 +82,7 @@ window.showCardDetails = (cardType) => {
 
                     <div>
 
-                        <div class="font-black text-kanjo-dark">${item.name}</div>
+                        <div class="font-black text-kanjo-dark">${window.renderMerchantNameLink(item.name)}</div>
 
                         <div class="text-slate-500 text-[11px]">الفئة: ${item.cat || 'غير محدد'} | الفريق: ${item.team || '-'}</div>
 
@@ -282,7 +308,7 @@ window.showCardDetails = (cardType) => {
 
                                 <div class="flex items-center gap-2 flex-wrap">
 
-                                    <h4 class="font-black ${titleColorClass} text-base">${item.name}</h4>
+                                    <h4 class="font-black text-base">${window.renderMerchantNameLink(item.name)}</h4>
 
                                     <span class="text-xs bg-white/80 px-2.5 py-0.5 rounded-full font-bold text-slate-600 border border-slate-200">📅 التاريخ: ${item.contractDate}</span>
 
@@ -360,7 +386,7 @@ window.showCardDetails = (cardType) => {
 
                     <div>
 
-                        <div class="font-black text-blue-900">${item.name}</div>
+                        <div class="font-black">${window.renderMerchantNameLink(item.name)}</div>
 
                         <div class="text-slate-500 text-[11px]">الفئة: ${item.cat || 'غير محدد'}</div>
 
@@ -504,7 +530,7 @@ window.showCardDetails = (cardType) => {
 
                         <div class="flex justify-between items-center">
 
-                            <div class="font-black text-orange-950 text-base"><i class="fa-solid fa-store ml-2 text-orange-600"></i>${merchantName}</div>
+                            <div class="font-black text-orange-950 text-base flex items-center flex-wrap gap-1"><i class="fa-solid fa-store text-orange-600"></i>${window.renderMerchantNameLink(merchantName)}</div>
 
                             <div class="flex items-center gap-3">
 
@@ -554,7 +580,7 @@ window.showCardDetails = (cardType) => {
 
                         <div>
 
-                            <div class="font-black text-slate-800">${item.name} ${statusText}</div>
+                            <div class="font-black text-slate-800">${window.renderMerchantNameLink(item.name)} ${statusText}</div>
 
                             <div class="text-slate-500 text-[11px]">الفئة: ${item.cat || '-'}</div>
 
@@ -586,7 +612,7 @@ window.showCardDetails = (cardType) => {
 
                     <div>
 
-                        <div class="font-black text-kanjo-dark">${item.name} ${isFinalSigned ? '✅' : (item.isProvisional ? '🤝' : '')}</div>
+                        <div class="font-black text-kanjo-dark">${window.renderMerchantNameLink(item.name)} ${isFinalSigned ? '✅' : (item.isProvisional ? '🤝' : '')}</div>
 
                         <div class="text-slate-500 text-[11px]">مستهدف العمولة: ${item.target}% | المحقق/المبدئي: ${item.achieved}%</div>
 
@@ -652,7 +678,7 @@ window.showCardDetails = (cardType) => {
 
                         <div>
 
-                            <div class="font-black text-orange-950">${c.name} ✅</div>
+                            <div class="font-black">${window.renderMerchantNameLink(c.name)} ✅</div>
 
                             <div class="text-slate-500 text-[11px]">المندوب: ${c.rep} | الفئة: ${c.cat || '-'}</div>
 
@@ -692,7 +718,7 @@ window.showCardDetails = (cardType) => {
 
                         <div>
 
-                            <div class="font-black text-blue-950">${c.name} ✅</div>
+                            <div class="font-black">${window.renderMerchantNameLink(c.name)} ✅</div>
 
                             <div class="text-slate-500 text-[11px]">الفريق: ${c.team} | المندوب: ${c.rep}</div>
 
@@ -1980,7 +2006,7 @@ window.renderTasks = (grouped) => {
 
                         ${merchantLogoHtml}
 
-                        <h3 class="font-bold text-sm sm:text-base text-slate-900">${t.name} ${cardBadge}</h3>
+                        <h3 class="font-bold text-sm sm:text-base text-slate-900">${window.renderMerchantNameLink(t.name, false)} ${cardBadge}</h3>
 
                         ${merchantProfileBtn}
 
