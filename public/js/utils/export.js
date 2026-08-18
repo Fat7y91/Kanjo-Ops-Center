@@ -1250,6 +1250,12 @@ window.buildContractHTML = (task) => {
 
     }
 
+    if (typeof window.autoFillCommissionForm === 'function') {
+
+        window.autoFillCommissionForm(task);
+
+    }
+
     const info = getMerchantBusinessInfo(task);
 
     const merchantName = info.baseName;
@@ -1263,6 +1269,20 @@ window.buildContractHTML = (task) => {
     const titleBusinessType = (isRestCafe && window.contractBusinessTypeOverride) ? window.contractBusinessTypeOverride : businessType;
 
     const achieved = info.achieved;
+
+    const savedCommission = task.commission;
+
+    const autoExtracted = (typeof window.extractCommissionData === 'function') ? window.extractCommissionData(task.notes || '') : { baseCommission: null, exceptions: [] };
+
+    const hasSavedCommission = savedCommission && ((savedCommission.baseCommission !== null && savedCommission.baseCommission !== undefined) || (Array.isArray(savedCommission.exceptions) && savedCommission.exceptions.length > 0));
+
+    const commissionData = hasSavedCommission ? savedCommission : autoExtracted;
+
+    const baseCommission = (commissionData && commissionData.baseCommission !== null && commissionData.baseCommission !== undefined && !isNaN(commissionData.baseCommission)) ? commissionData.baseCommission : null;
+
+    const exceptions = (commissionData && Array.isArray(commissionData.exceptions)) ? commissionData.exceptions.filter(ex => ex && ex.category && ex.rate !== null && ex.rate !== undefined && !isNaN(ex.rate)) : [];
+
+    const displayRate = (baseCommission !== null) ? baseCommission : achieved;
 
     let contactName = '';
 
@@ -1529,6 +1549,36 @@ window.buildContractHTML = (task) => {
     `;
 
     // The main body content (Intro, Parties, Clauses, and Final Signatures + Socials)
+    let commissionTableHtml = '';
+
+    if (baseCommission !== null || exceptions.length > 0) {
+
+        let rateRows = '';
+
+        if (baseCommission !== null) {
+
+            rateRows += `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">العمولة الأساسية (جميع المنتجات)</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${baseCommission}%</td></tr>`;
+
+        }
+
+        rateRows += exceptions.map(ex => `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">${window.safeString(ex.category)}</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${ex.rate}%</td></tr>`).join('');
+
+        commissionTableHtml = `
+            <div style="page-break-inside: avoid; break-inside: avoid; margin: 15px 0;">
+                <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق العمولات: نسبة مقابل خدمات المنصة والتشغيل</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px; font-weight: bold; color: #1e293b;">
+                    <thead>
+                        <tr style="background-color: #4B0082; color: #FFFFFF;">
+                            <th style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">الفئة / النشاط</th>
+                            <th style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">نسبة مقابل خدمات المنصة</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rateRows}</tbody>
+                </table>
+            </div>`;
+
+    }
+
     const tableBody = `
         <tbody>
             <tr><td style="padding: 0;">
@@ -1543,12 +1593,13 @@ window.buildContractHTML = (task) => {
                     <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>
                 </div>
                 ${clauseHtml}
+                ${commissionTableHtml}
                 <!-- Legal Copies Clause -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin: 15px 0; text-align: center; font-size: 13px; line-height: 1.9; font-weight: bold; color: #4B0082; background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #F59E0B; border-radius: 6px; padding: 12px 15px;">تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها، ويتكون العقد من البنود والملاحق المذكورة أعلاه.</div>
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
-                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${achieved}% ]</strong></div>
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRate}% ]</strong></div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية</div>
@@ -1578,6 +1629,274 @@ window.buildContractHTML = (task) => {
     document.getElementById('contract-template-container').innerHTML = html;
 
     showToast("تم إنشاء العقد بنجاح");
+
+};
+
+window.extractCommissionData = (notes) => {
+
+    const result = { baseCommission: null, exceptions: [] };
+
+    const text = String(notes || '').trim();
+
+    if (!text) return result;
+
+    const numberPattern = '(\\d+(?:\\.\\d+)?)';
+
+    const markerPattern = '(?:%|٪|ف\\s*الميه|ف\\s*المية|ف\\s*المئه|في\\s*الميه|في\\s*المية|في\\s*المئه|فالميه|فالمية|الميه|المية|المئه|ميه|ميّة|مية|مئة)';
+
+    const CATEGORY_KEYWORDS = ['موبايل', 'محمول', 'اكسسوار', 'إكسسوار', 'اكسسور', 'إكسسور', 'اجهزه', 'أجهزة', 'اجهزة', 'الكترونيات', 'إلكترونيات', 'الالكترونيات', 'الكتروني', 'إلكتروني', 'سوبر ماركت', 'سوبرماركت', 'صيدليه', 'صيدلية', 'ملابس', 'مفروشات', 'مستلزمات', 'منظفات', 'هدايا', 'عصائر', 'حلويات', 'مخبوزات', 'خضار', 'فواكه', 'دواجن', 'جزاره', 'جزارة', 'اسماك', 'أسماك', 'كنترول', 'كونترول', 'العاب', 'ألعاب', 'سباكه', 'سباكة', 'كهرباء', 'ادوات', 'أدوات', 'احذية', 'أحذية', 'حقائب', 'ساعات', 'نظارات', 'عطور', 'مكياج', 'لعب', 'كتب', 'ورق'];
+
+    const candidates = [];
+
+    const grabContext = (start, end) => text.slice(Math.max(0, start), Math.min(text.length, end));
+
+    const pushCandidate = (rate, context) => {
+
+        if (rate === null || isNaN(rate)) return;
+
+        candidates.push({ rate: rate, context: context });
+
+    };
+
+    let m;
+
+    const markBefore = new RegExp(markerPattern + '\\s*' + numberPattern, 'gi');
+
+    while ((m = markBefore.exec(text)) !== null) {
+
+        pushCandidate(parseFloat(m[1]), grabContext(m.index - 45, m.index + m[0].length + 25));
+
+    }
+
+    const numberBeforeMark = new RegExp(numberPattern + '\\s*' + markerPattern, 'gi');
+
+    while ((m = numberBeforeMark.exec(text)) !== null) {
+
+        pushCandidate(parseFloat(m[1]), grabContext(m.index - 45, m.index + m[0].length + 25));
+
+    }
+
+    candidates.forEach(c => {
+
+        const lower = c.context.toLowerCase();
+
+        const matchedKeyword = CATEGORY_KEYWORDS.find(k => lower.includes(k));
+
+        if (matchedKeyword) {
+
+            const words = c.context.match(/[A-Za-z\u0600-\u06FF]{2,}/g) || [];
+
+            let catWord = words.find(w => w.includes(matchedKeyword)) || matchedKeyword;
+
+            catWord = String(catWord).replace(/^ال/, '');
+
+            const exists = result.exceptions.some(e => e.category === catWord);
+
+            if (!exists) result.exceptions.push({ category: catWord, rate: c.rate });
+
+        } else if (result.baseCommission === null) {
+
+            result.baseCommission = c.rate;
+
+        }
+
+    });
+
+    return result;
+
+};
+
+window.collectCommissionExceptions = () => {
+
+    const exceptions = [];
+
+    const rows = document.querySelectorAll('#cpExceptionsRows .cp-exception-row');
+
+    rows.forEach(row => {
+
+        const catEl = row.querySelector('.cp-exc-category');
+
+        const rateEl = row.querySelector('.cp-exc-rate');
+
+        const category = catEl ? String(catEl.value || '').trim() : '';
+
+        const rate = rateEl ? parseFloat(rateEl.value) : NaN;
+
+        if (category && !isNaN(rate) && rate >= 0) {
+
+            exceptions.push({ category: category, rate: rate });
+
+        }
+
+    });
+
+    return exceptions;
+
+};
+
+window.addCommissionExceptionRow = (category, rate) => {
+
+    const container = document.getElementById('cpExceptionsRows');
+
+    if (!container) return;
+
+    const row = document.createElement('div');
+
+    row.className = 'cp-exception-row flex gap-2 items-center mb-2';
+
+    const safeCat = String(category || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+    const safeRate = (rate !== null && rate !== undefined && !isNaN(rate)) ? rate : '';
+
+    row.innerHTML = `
+
+        <input type="text" class="cp-exc-category flex-1 min-w-0 border border-slate-300 rounded-xl px-3 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-kanjo-primary" placeholder="الفئة (مثال: موبايلات)" value="${safeCat}">
+
+        <input type="number" class="cp-exc-rate w-20 border border-slate-300 rounded-xl px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-kanjo-primary" placeholder="%" min="0" max="100" step="0.1" value="${safeRate}">
+
+        <button type="button" onclick="removeCommissionExceptionRow(this)" class="text-red-500 hover:text-red-700 font-bold text-lg px-2" title="حذف الاستثناء">&times;</button>
+
+    `;
+
+    container.appendChild(row);
+
+};
+
+window.removeCommissionExceptionRow = (btn) => {
+
+    const row = btn && btn.closest ? btn.closest('.cp-exception-row') : null;
+
+    if (row && row.parentNode) row.parentNode.removeChild(row);
+
+};
+
+window.autoFillCommissionForm = (task) => {
+
+    const baseInput = document.getElementById('cpBaseCommission');
+
+    const rowsContainer = document.getElementById('cpExceptionsRows');
+
+    if (!baseInput || !rowsContainer) return;
+
+    const taskIdInput = document.getElementById('cpTaskId');
+
+    const currentTaskId = taskIdInput ? taskIdInput.value : '';
+
+    const form = document.getElementById('cpCommissionForm');
+
+    if (form && form.dataset && form.dataset.filledFor === currentTaskId) return;
+
+    const saved = task && task.commission;
+
+    const hasSaved = saved && ((saved.baseCommission !== null && saved.baseCommission !== undefined && saved.baseCommission !== '') || (Array.isArray(saved.exceptions) && saved.exceptions.length > 0));
+
+    const data = hasSaved ? saved : window.extractCommissionData(task ? task.notes || '' : '');
+
+    baseInput.value = (data && data.baseCommission !== null && data.baseCommission !== undefined && !isNaN(data.baseCommission)) ? data.baseCommission : '';
+
+    rowsContainer.innerHTML = '';
+
+    if (data && Array.isArray(data.exceptions)) {
+
+        data.exceptions.forEach(ex => {
+
+            if (ex && ex.category) window.addCommissionExceptionRow(ex.category, ex.rate);
+
+        });
+
+    }
+
+    if (form && form.dataset) form.dataset.filledFor = currentTaskId;
+
+};
+
+window.saveContractCommissions = async () => {
+
+    const taskIdInput = document.getElementById('cpTaskId');
+
+    const taskId = taskIdInput ? taskIdInput.value : '';
+
+    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
+    if (!task) {
+
+        if (window.showToast) window.showToast('لا يوجد عقد محدد لحفظ بيانات العمولات', false);
+
+        return;
+
+    }
+
+    const baseInput = document.getElementById('cpBaseCommission');
+
+    const baseRaw = baseInput ? baseInput.value : '';
+
+    const baseCommission = (baseRaw !== '' && !isNaN(parseFloat(baseRaw))) ? parseFloat(baseRaw) : null;
+
+    const exceptions = window.collectCommissionExceptions();
+
+    if (baseCommission === null && exceptions.length === 0) {
+
+        if (window.showToast) window.showToast('أدخل نسبة العمولة الأساسية أو أضف استثناءً واحدًا على الأقل', false);
+
+        return;
+
+    }
+
+    const payload = { commission: { baseCommission: baseCommission, exceptions: exceptions } };
+
+    try {
+
+        if (window.db && window.doc && window.updateDoc) {
+
+            await window.updateDoc(window.doc(window.db, 'tasks', taskId), payload);
+
+        }
+
+        task.commission = payload.commission;
+
+        if (window.showToast) window.showToast('تم حفظ بيانات العمولات وتحديث العقد');
+
+        window.generateContract();
+
+    } catch (err) {
+
+        console.error('saveContractCommissions error', err);
+
+        if (window.showToast) window.showToast('فشل حفظ بيانات العمولات', false);
+
+    }
+
+};
+
+window.generateContract = () => {
+
+    const taskIdInput = document.getElementById('cpTaskId');
+
+    const taskId = taskIdInput ? taskIdInput.value : '';
+
+    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
+    if (!task) {
+
+        if (window.showToast) window.showToast('المهمة غير موجودة', false);
+
+        return;
+
+    }
+
+    if (typeof window.buildContractHTML !== 'function') return;
+
+    window.buildContractHTML(task);
+
+    const previewContainer = document.getElementById('contractPreviewContainer');
+
+    const template = document.getElementById('contract-template-container');
+
+    if (previewContainer && template) {
+
+        previewContainer.innerHTML = template.innerHTML;
+
+    }
 
 };
 

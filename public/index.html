@@ -566,6 +566,14 @@
 
                     </label>
 
+                    <label class="flex-1 flex items-center justify-center gap-2 p-3 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer text-sm font-bold text-kanjo-primary">
+
+                        <input type="radio" name="cpBusinessType" value="مطعم وكافيه" onchange="setContractBusinessType(this.value)">
+
+                        مطعم وكافيه
+
+                    </label>
+
                 </div>
 
             </div>
@@ -575,6 +583,40 @@
                 <label class="block text-sm font-bold text-slate-600 mb-1">شعار التاجر (اختياري)</label>
 
                 <input type="file" id="cpMerchantLogo" accept="image/*" onchange="handleMerchantLogoUpload(event)" class="block w-full text-sm text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-kanjo-light file:px-4 file:py-2 file:text-kanjo-primary file:font-bold hover:file:bg-purple-100">
+
+            </div>
+
+            <div id="cpCommissionForm" class="mb-4 border-2 border-amber-300 bg-amber-50 rounded-2xl p-4">
+
+                <div id="cpCommissionWarning" class="bg-red-100 border-2 border-red-400 text-red-700 font-bold text-sm rounded-xl p-3 mb-3">
+                    ⚠️ يرجى مراجعة الأرقام المستخرجة تلقائياً والتأكد من صحتها قبل الحفظ، قد يحتوي الاستخراج الآلي على أخطاء.
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+
+                    <div>
+
+                        <label for="cpBaseCommission" class="block text-sm font-bold text-slate-600 mb-1">العمولة الأساسية (%)</label>
+
+                        <input type="number" id="cpBaseCommission" min="0" max="100" step="0.1" placeholder="مثال: 18" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-kanjo-primary">
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-sm font-bold text-slate-600 mb-1">استثناءات النسب (فئة — نسبة)</label>
+
+                        <div id="cpExceptionsRows" class="space-y-2"></div>
+
+                        <button type="button" onclick="addCommissionExceptionRow()" class="mt-1 text-sm font-bold text-kanjo-primary hover:text-kanjo-dark"><i class="fa-solid fa-plus ml-1"></i>إضافة استثناء</button>
+
+                    </div>
+
+                </div>
+
+                <button onclick="saveContractCommissions()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl transition-colors">
+                    <i class="fa-solid fa-floppy-disk ml-2"></i>Save &amp; Render Contract — حفظ وتحديث العقد
+                </button>
 
             </div>
 
