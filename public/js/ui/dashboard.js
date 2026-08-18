@@ -2006,6 +2006,54 @@ window.renderTasks = (grouped) => {
 
                 </div>
 
+                ${(() => {
+
+                    const savedComm = t.commission || {};
+
+                    const savedBase = (savedComm.baseCommission !== null && savedComm.baseCommission !== undefined && savedComm.baseCommission !== '') ? savedComm.baseCommission : null;
+
+                    const baseRate = savedBase !== null ? savedBase : (effectiveTarget ? effectiveTarget : (t.achieved || null));
+
+                    const rawStatus = String(t.agreementStatus || '').trim();
+
+                    let statusText = '';
+
+                    if (rawStatus) {
+
+                        statusText = (rawStatus.includes('نهائي') || rawStatus === 'final' || rawStatus === 'signed' || rawStatus === 'confirmed') ? 'اتفاق نهائي' : 'اتفاق مبدئي';
+
+                    } else if (effectiveIsSigned) {
+
+                        statusText = 'اتفاق نهائي';
+
+                    } else if (effectiveIsProvisional) {
+
+                        statusText = 'اتفاق مبدئي';
+
+                    }
+
+                    if (baseRate === null && !statusText) return '';
+
+                    const statusBadge = statusText ? `<span class="${statusText === 'اتفاق نهائي' ? 'text-emerald-600' : 'text-amber-600'}">(${statusText})</span>` : '';
+
+                    let exceptionHtml = '';
+
+                    if (Array.isArray(savedComm.exceptions)) {
+
+                        exceptionHtml = savedComm.exceptions.filter(ex => ex && ex.category).map(ex => `<div class="text-[11px] sm:text-xs font-bold text-purple-900 mt-1">استثناء: ${window.safeString ? window.safeString(ex.category) : ex.category} ${(ex.rate !== null && ex.rate !== undefined && ex.rate !== '') ? ex.rate + '%' : ''}</div>`).join('');
+
+                    }
+
+                    return `<div class="mt-1.5 p-2.5 bg-purple-50 border border-purple-200 rounded-xl">
+
+                        <div class="text-xs sm:text-sm font-black text-kanjo-primary">النسبة الأساسية: ${baseRate !== null ? baseRate + '%' : '-'} ${statusBadge}</div>
+
+                        ${exceptionHtml}
+
+                    </div>`;
+
+                })()}
+
                 ${effectiveIsSigned ? window.calculateComm(effectiveTarget, effectiveAchieved) : ''}
 
                 ${progressHtml}

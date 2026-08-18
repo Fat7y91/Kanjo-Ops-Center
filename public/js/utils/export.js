@@ -866,7 +866,7 @@ const CONTRACT_BUSINESS_TYPES = {
     'جزارة': 'محل جزارة',
     'خضار': 'متجر خضار وفاكهة',
     'دواجن': 'متجر دواجن',
-    'عصائر': 'كشك عصائر',
+    'عصائر': 'محل',
     'مخبوزات': 'مخبز',
     'مسليات': 'متجر مسليات',
     'حلويات': 'متجر حلويات',
@@ -1012,15 +1012,29 @@ const getMerchantBusinessInfo = (task) => {
 
     if (!cat) cat = task.cat || 'غير محدد';
 
-    let businessType = 'تاجر';
+    let explicitType = '';
 
-    for (const key in CONTRACT_BUSINESS_TYPES) {
+    candidates.forEach(t => {
 
-        if (cat.includes(key)) {
+        const ft = String(t.facilityType || '').trim();
 
-            businessType = CONTRACT_BUSINESS_TYPES[key];
+        if (ft && !CONTRACT_PLACEHOLDER_CATS.includes(ft)) explicitType = ft;
 
-            break;
+    });
+
+    let businessType = explicitType || 'منشأة';
+
+    if (!explicitType) {
+
+        for (const key in CONTRACT_BUSINESS_TYPES) {
+
+            if (cat.includes(key)) {
+
+                businessType = CONTRACT_BUSINESS_TYPES[key];
+
+                break;
+
+            }
 
         }
 
@@ -1608,6 +1622,7 @@ window.buildContractHTML = (task) => {
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
                     <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRate}% ]</strong></div>
+                    ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #4B0082;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: ${ex.rate}%`).join(' — ')}</div>` : ''}
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية</div>
