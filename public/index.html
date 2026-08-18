@@ -588,27 +588,35 @@
 
             <div id="cpCommissionForm" class="mb-4 border-2 border-amber-300 bg-amber-50 rounded-2xl p-4">
 
-                <div id="cpCommissionWarning" class="bg-red-100 border-2 border-red-400 text-red-700 font-bold text-sm rounded-xl p-3 mb-3">
-                    ⚠️ يرجى مراجعة الأرقام المستخرجة تلقائياً والتأكد من صحتها قبل الحفظ، قد يحتوي الاستخراج الآلي على أخطاء.
-                </div>
+                <label class="flex items-center justify-between gap-3 cursor-pointer">
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                    <span class="text-sm font-bold text-slate-700">إضافة نسب استثنائية (اختياري)</span>
 
-                    <div>
+                    <input type="checkbox" id="cpExceptionToggle" onchange="toggleExceptionForm(this.checked)" class="w-5 h-5 accent-kanjo-primary">
 
-                        <label for="cpBaseCommission" class="block text-sm font-bold text-slate-600 mb-1">العمولة الأساسية (%)</label>
+                </label>
 
-                        <input type="number" id="cpBaseCommission" min="0" max="100" step="0.1" placeholder="مثال: 18" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-kanjo-primary">
+                <div id="cpExceptionFields" class="hidden mt-3">
 
-                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
 
-                    <div>
+                        <div>
 
-                        <label class="block text-sm font-bold text-slate-600 mb-1">استثناءات النسب (فئة — نسبة)</label>
+                            <label for="cpBaseCommission" class="block text-sm font-bold text-slate-600 mb-1">العمولة الأساسية (%)</label>
 
-                        <div id="cpExceptionsRows" class="space-y-2"></div>
+                            <input type="number" id="cpBaseCommission" min="0" max="100" step="0.1" placeholder="مثال: 18" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-kanjo-primary">
 
-                        <button type="button" onclick="addCommissionExceptionRow()" class="mt-1 text-sm font-bold text-kanjo-primary hover:text-kanjo-dark"><i class="fa-solid fa-plus ml-1"></i>إضافة استثناء</button>
+                        </div>
+
+                        <div>
+
+                            <label class="block text-sm font-bold text-slate-600 mb-1">استثناءات النسب (فئة — نسبة)</label>
+
+                            <div id="cpExceptionsRows" class="space-y-2"></div>
+
+                            <button type="button" onclick="addCommissionExceptionRow()" class="mt-1 text-sm font-bold text-kanjo-primary hover:text-kanjo-dark"><i class="fa-solid fa-plus ml-1"></i>إضافة استثناء</button>
+
+                        </div>
 
                     </div>
 

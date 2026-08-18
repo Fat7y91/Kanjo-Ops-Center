@@ -1250,9 +1250,9 @@ window.buildContractHTML = (task) => {
 
     }
 
-    if (typeof window.autoFillCommissionForm === 'function') {
+    if (typeof window.loadSavedCommissionForm === 'function') {
 
-        window.autoFillCommissionForm(task);
+        window.loadSavedCommissionForm(task);
 
     }
 
@@ -1270,17 +1270,25 @@ window.buildContractHTML = (task) => {
 
     const achieved = info.achieved;
 
-    const savedCommission = task.commission;
+    const toggleEl = document.getElementById('cpExceptionToggle');
 
-    const autoExtracted = (typeof window.extractCommissionData === 'function') ? window.extractCommissionData(task.notes || '') : { baseCommission: null, exceptions: [] };
+    const exceptionsEnabled = toggleEl ? toggleEl.checked : false;
 
-    const hasSavedCommission = savedCommission && ((savedCommission.baseCommission !== null && savedCommission.baseCommission !== undefined) || (Array.isArray(savedCommission.exceptions) && savedCommission.exceptions.length > 0));
+    let baseCommission = null;
 
-    const commissionData = hasSavedCommission ? savedCommission : autoExtracted;
+    let exceptions = [];
 
-    const baseCommission = (commissionData && commissionData.baseCommission !== null && commissionData.baseCommission !== undefined && !isNaN(commissionData.baseCommission)) ? commissionData.baseCommission : null;
+    if (exceptionsEnabled) {
 
-    const exceptions = (commissionData && Array.isArray(commissionData.exceptions)) ? commissionData.exceptions.filter(ex => ex && ex.category && ex.rate !== null && ex.rate !== undefined && !isNaN(ex.rate)) : [];
+        const baseEl = document.getElementById('cpBaseCommission');
+
+        const baseRaw = baseEl ? baseEl.value : '';
+
+        baseCommission = (baseRaw !== '' && !isNaN(parseFloat(baseRaw))) ? parseFloat(baseRaw) : null;
+
+        exceptions = window.collectCommissionExceptions();
+
+    }
 
     const displayRate = (baseCommission !== null) ? baseCommission : achieved;
 
@@ -1632,77 +1640,11 @@ window.buildContractHTML = (task) => {
 
 };
 
-window.extractCommissionData = (notes) => {
+window.toggleExceptionForm = (checked) => {
 
-    const result = { baseCommission: null, exceptions: [] };
+    const fields = document.getElementById('cpExceptionFields');
 
-    const text = String(notes || '').trim();
-
-    if (!text) return result;
-
-    const numberPattern = '(\\d+(?:\\.\\d+)?)';
-
-    const markerPattern = '(?:%|٪|ف\\s*الميه|ف\\s*المية|ف\\s*المئه|في\\s*الميه|في\\s*المية|في\\s*المئه|فالميه|فالمية|الميه|المية|المئه|ميه|ميّة|مية|مئة)';
-
-    const CATEGORY_KEYWORDS = ['موبايل', 'محمول', 'اكسسوار', 'إكسسوار', 'اكسسور', 'إكسسور', 'اجهزه', 'أجهزة', 'اجهزة', 'الكترونيات', 'إلكترونيات', 'الالكترونيات', 'الكتروني', 'إلكتروني', 'سوبر ماركت', 'سوبرماركت', 'صيدليه', 'صيدلية', 'ملابس', 'مفروشات', 'مستلزمات', 'منظفات', 'هدايا', 'عصائر', 'حلويات', 'مخبوزات', 'خضار', 'فواكه', 'دواجن', 'جزاره', 'جزارة', 'اسماك', 'أسماك', 'كنترول', 'كونترول', 'العاب', 'ألعاب', 'سباكه', 'سباكة', 'كهرباء', 'ادوات', 'أدوات', 'احذية', 'أحذية', 'حقائب', 'ساعات', 'نظارات', 'عطور', 'مكياج', 'لعب', 'كتب', 'ورق'];
-
-    const candidates = [];
-
-    const grabContext = (start, end) => text.slice(Math.max(0, start), Math.min(text.length, end));
-
-    const pushCandidate = (rate, context) => {
-
-        if (rate === null || isNaN(rate)) return;
-
-        candidates.push({ rate: rate, context: context });
-
-    };
-
-    let m;
-
-    const markBefore = new RegExp(markerPattern + '\\s*' + numberPattern, 'gi');
-
-    while ((m = markBefore.exec(text)) !== null) {
-
-        pushCandidate(parseFloat(m[1]), grabContext(m.index - 45, m.index + m[0].length + 25));
-
-    }
-
-    const numberBeforeMark = new RegExp(numberPattern + '\\s*' + markerPattern, 'gi');
-
-    while ((m = numberBeforeMark.exec(text)) !== null) {
-
-        pushCandidate(parseFloat(m[1]), grabContext(m.index - 45, m.index + m[0].length + 25));
-
-    }
-
-    candidates.forEach(c => {
-
-        const lower = c.context.toLowerCase();
-
-        const matchedKeyword = CATEGORY_KEYWORDS.find(k => lower.includes(k));
-
-        if (matchedKeyword) {
-
-            const words = c.context.match(/[A-Za-z\u0600-\u06FF]{2,}/g) || [];
-
-            let catWord = words.find(w => w.includes(matchedKeyword)) || matchedKeyword;
-
-            catWord = String(catWord).replace(/^ال/, '');
-
-            const exists = result.exceptions.some(e => e.category === catWord);
-
-            if (!exists) result.exceptions.push({ category: catWord, rate: c.rate });
-
-        } else if (result.baseCommission === null) {
-
-            result.baseCommission = c.rate;
-
-        }
-
-    });
-
-    return result;
+    if (fields) fields.classList.toggle('hidden', !checked);
 
 };
 
@@ -1770,13 +1712,15 @@ window.removeCommissionExceptionRow = (btn) => {
 
 };
 
-window.autoFillCommissionForm = (task) => {
+window.loadSavedCommissionForm = (task) => {
+
+    const toggleEl = document.getElementById('cpExceptionToggle');
 
     const baseInput = document.getElementById('cpBaseCommission');
 
     const rowsContainer = document.getElementById('cpExceptionsRows');
 
-    if (!baseInput || !rowsContainer) return;
+    if (!toggleEl || !baseInput || !rowsContainer) return;
 
     const taskIdInput = document.getElementById('cpTaskId');
 
@@ -1790,19 +1734,35 @@ window.autoFillCommissionForm = (task) => {
 
     const hasSaved = saved && ((saved.baseCommission !== null && saved.baseCommission !== undefined && saved.baseCommission !== '') || (Array.isArray(saved.exceptions) && saved.exceptions.length > 0));
 
-    const data = hasSaved ? saved : window.extractCommissionData(task ? task.notes || '' : '');
+    if (hasSaved) {
 
-    baseInput.value = (data && data.baseCommission !== null && data.baseCommission !== undefined && !isNaN(data.baseCommission)) ? data.baseCommission : '';
+        toggleEl.checked = true;
 
-    rowsContainer.innerHTML = '';
+        window.toggleExceptionForm(true);
 
-    if (data && Array.isArray(data.exceptions)) {
+        baseInput.value = (saved.baseCommission !== null && saved.baseCommission !== undefined && !isNaN(saved.baseCommission)) ? saved.baseCommission : '';
 
-        data.exceptions.forEach(ex => {
+        rowsContainer.innerHTML = '';
 
-            if (ex && ex.category) window.addCommissionExceptionRow(ex.category, ex.rate);
+        if (Array.isArray(saved.exceptions)) {
 
-        });
+            saved.exceptions.forEach(ex => {
+
+                if (ex && ex.category) window.addCommissionExceptionRow(ex.category, ex.rate);
+
+            });
+
+        }
+
+    } else {
+
+        toggleEl.checked = false;
+
+        window.toggleExceptionForm(false);
+
+        baseInput.value = '';
+
+        rowsContainer.innerHTML = '';
 
     }
 
@@ -1821,6 +1781,20 @@ window.saveContractCommissions = async () => {
     if (!task) {
 
         if (window.showToast) window.showToast('لا يوجد عقد محدد لحفظ بيانات العمولات', false);
+
+        return;
+
+    }
+
+    const toggleEl = document.getElementById('cpExceptionToggle');
+
+    const exceptionsEnabled = toggleEl ? toggleEl.checked : false;
+
+    if (!exceptionsEnabled) {
+
+        if (window.showToast) window.showToast('تم إنشاء العقد بالنظام القياسي (بدون نسب استثنائية)');
+
+        window.generateContract();
 
         return;
 
