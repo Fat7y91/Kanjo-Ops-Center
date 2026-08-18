@@ -2,6 +2,12 @@
 
 window.closeStatModal = () => document.getElementById('detailsModal').classList.add('hidden');
 
+window.canManageContracts = () => {
+
+    return !!(window.currentUser && (window.currentUser.name === 'أ/ محمود' || window.currentUser.role === 'admin'));
+
+};
+
 window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
 
     const safeName = window.safeString ? window.safeString(name) : String(name || '');

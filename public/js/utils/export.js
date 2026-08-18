@@ -1256,6 +1256,14 @@ body { direction: rtl; text-align: justify; font-family: 'Cairo', 'Tahoma', 'Ari
 
 window.buildContractHTML = (task) => {
 
+    if (window.canManageContracts && !window.canManageContracts()) {
+
+        alert('عفواً، لا تمتلك صلاحية إصدار العقود. يرجى الرجوع لمدير التشغيل (محمود).');
+
+        return;
+
+    }
+
     if (!task) {
 
         showToast("المهمة غير موجودة", false);
@@ -1855,6 +1863,14 @@ window.saveContractCommissions = async () => {
 };
 
 window.generateContract = () => {
+
+    if (window.canManageContracts && !window.canManageContracts()) {
+
+        alert('عفواً، لا تمتلك صلاحية إصدار العقود. يرجى الرجوع لمدير التشغيل (محمود).');
+
+        return;
+
+    }
 
     const taskIdInput = document.getElementById('cpTaskId');
 

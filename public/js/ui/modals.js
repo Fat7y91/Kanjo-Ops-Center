@@ -10,6 +10,16 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     if (nameEditEl) nameEditEl.value = merchantBaseName;
 
+    const canManageContracts = window.canManageContracts ? window.canManageContracts() : false;
+
+    const nameEditSection = document.getElementById('mpNameEditSection');
+
+    if (nameEditSection) nameEditSection.style.display = canManageContracts ? '' : 'none';
+
+    const createContractBtn = document.getElementById('mpCreateContractBtn');
+
+    if (createContractBtn) createContractBtn.style.display = canManageContracts ? '' : 'none';
+
 
 
     let matchingTasks = [];
