@@ -51,7 +51,9 @@ window.applyTeamTheme = (team) => {
 
 }
 
-window.login = (pinOverride = null) => { 
+window.login = async (pinOverride = null) => { 
+
+    if (window.authReady) { try { await window.authReady; } catch (e) {} }
 
     const pin = pinOverride || document.getElementById('pinInput').value; 
 

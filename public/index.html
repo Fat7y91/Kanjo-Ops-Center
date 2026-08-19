@@ -54,6 +54,14 @@
 
     </script>
 
+    <!-- Firebase App Check site-key injection point (set before js/main.js loads).
+         reCAPTCHA v3: paste the site key into the quotes, e.g.
+         window.FIREBASE_APP_CHECK_SITE_KEY = '6Lc...';
+         (Cloudflare Turnstile variant: swap the provider in js/config/firebase.js.) -->
+    <script>
+        window.FIREBASE_APP_CHECK_SITE_KEY = '';
+    </script>
+
 </head>
 
 <body class="bg-kanjo-bg text-slate-800">

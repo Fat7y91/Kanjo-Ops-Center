@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════════
+    // Kanjo Operations Center — Firestore Security Rules (RBAC)
+    //
+    // Principle: deny everything by default, then grant the minimum
+    // privilege required for each collection.
+    //
+    // Roles
+    //   - admin  : أ/ محمود (the manager). Identified by either a Firebase
+    //              Auth custom claim `role == 'admin'` OR membership in the
+    //              app_security/admins allowlist (uid list).
+    //   - user   : any authenticated Firebase Auth session. The dashboard
+    //              signs in anonymously under the hood so every session
+    //              satisfies `request.auth != null`.
+    //
+    // App Check: request.app.data.appid / request.app.token.verification
+    // are evaluated by the platform only after "Enforce" is enabled in the
+    // Firebase console (see firebase.js App Check stub).
+    // ═══════════════════════════════════════════════════════════════
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Admin = custom claim role 'admin' OR uid listed in app_security/admins
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/app_security/admins) &&
+         get(/databases/$(database)/documents/app_security/admins).data.uids is list &&
+         get(/databases/$(database)/documents/app_security/admins).data.uids.hasAny([request.auth.uid]))
+      );
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 1) Global default: deny everything.
+    //    Every collection below must explicitly opt in or it stays locked.
+    // ═══════════════════════════════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 2) Highly sensitive collections — vendor contracts, commission
+    //    rates and merchant master records. ADMIN/أ/محمود ONLY.
+    // ═══════════════════════════════════════════════════════════════
+    match /contracts/{docId} {
+      // Vendor contracts contain sensitive terms: admin only for ALL ops
+      allow read, write: if isAdmin();
+    }
+
+    match /commissions/{docId} {
+      // Commission rates: admin only for ALL ops
+      allow read, write: if isAdmin();
+    }
+
+    match /merchants/{docId} {
+      // Basic merchant data is readable by any authenticated user,
+      // but creating/updating/deleting merchant records is admin-only.
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 3) Operational collections used by the dashboard app.
+    //    Requires an authenticated session (anonymous auth in firebase.js).
+    // ═══════════════════════════════════════════════════════════════
+    match /tasks/{docId} {
+      // Tasks carry the live pipeline: reps update reports/attendances,
+      // admins create/edit/delete. Authenticated sessions may read/write.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn();
+    }
+
+    match /notifications/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /transferRequests/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /financial_profiles/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /settings/{docId} {
+      // e.g. settings/payrollConfig
+      allow read, write: if isSignedIn();
+    }
+
+    match /archivedReports/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 4) Admin allowlist bootstrap.
+    //    app_security/admins = { uids: ['<firebase-uid-of-محمود>'] }
+    //
+    //    First-run bootstrap: BEFORE the allowlist document exists, one
+    //    authenticated session may CREATE it (this is how the first admin
+    //    registers without a backend). Immediately after rules go live the
+    //    manager MUST create that document. Afterwards only admins can read
+    //    or change it.
+    // ═══════════════════════════════════════════════════════════════
+    match /app_security/{docId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn()
+        && docId == 'admins'
+        && !exists(/databases/$(database)/documents/app_security/admins);
+      allow update, delete: if isAdmin();
+    }
+  }
+}

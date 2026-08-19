@@ -17,3 +17,10 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
           channelId: live
           projectId: kanjo-desouk
+      - name: Deploy Firestore security rules
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}' > "$RUNNER_TEMP/firebase-sa.json"
+          npx -y firebase-tools@latest deploy --only firestore:rules --project kanjo-desouk
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true

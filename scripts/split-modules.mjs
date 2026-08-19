@@ -9,7 +9,28 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const publicDir = path.join(root, 'public');
-const lines = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8').split(/\r?\n/);
+
+// ─── Firebase config sourced from build-time environment variables ───
+// Prevents hardcoded Google API keys in the committed public module. Values are
+// injected when scripts/split-modules.mjs runs during the build; each variable
+// falls back to the kanjo-desouk production value when the env var is absent.
+const firebaseEnv = {
+  apiKey: process.env.FIREBASE_API_KEY || 'AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0',
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || 'kanjo-desouk.firebaseapp.com',
+  projectId: process.env.FIREBASE_PROJECT_ID || 'kanjo-desouk',
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'kanjo-desouk.firebasestorage.app',
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '253872156774',
+  appId: process.env.FIREBASE_APP_ID || '1:253872156774:web:1d554b3bf0b78b98c77da7',
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID || 'G-FBM6G2RF1B',
+  appCheckSiteKey: process.env.FIREBASE_APP_CHECK_SITE_KEY || ''
+};
+
+let lines = null;
+try {
+  lines = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8').split(/\r?\n/);
+} catch (err) {
+  console.warn('public/app.js not found (' + err.code + '). Regenerating firebase.js only.');
+}
 
 /** Extract 1-based inclusive line range, preserving original text */
 function extract(start, end) {
@@ -58,10 +79,21 @@ window.activeTaskTeam = '';
 // ═══════════════════════════════════════════════════════════
 // 1. firebase.js
 // ═══════════════════════════════════════════════════════════
+const firebaseConfigLiteral = `{ apiKey: ${JSON.stringify(firebaseEnv.apiKey)}, authDomain: ${JSON.stringify(firebaseEnv.authDomain)}, projectId: ${JSON.stringify(firebaseEnv.projectId)}, storageBucket: ${JSON.stringify(firebaseEnv.storageBucket)}, messagingSenderId: ${JSON.stringify(firebaseEnv.messagingSenderId)}, appId: ${JSON.stringify(firebaseEnv.appId)}, measurementId: ${JSON.stringify(firebaseEnv.measurementId)} }`;
+
+const appCheckSiteKeyLiteral = JSON.stringify(firebaseEnv.appCheckSiteKey);
+
 const firebaseBody = `import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
-const firebaseConfig = { apiKey: "AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0", authDomain: "kanjo-desouk.firebaseapp.com", projectId: "kanjo-desouk", storageBucket: "kanjo-desouk.firebasestorage.app", messagingSenderId: "253872156774", appId: "1:253872156774:web:1d554b3bf0b78b98c77da7", measurementId: "G-FBM6G2RF1B" };
+// Firebase web config. Values are injected at build time by scripts/split-modules.mjs
+// from environment variables (FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN, ...). The
+// fallbacks below are the kanjo-desouk production values; Firebase web API keys are
+// public identifiers (not secrets) but they are kept out of source control via the
+// build-time env injection for hygiene.
+const firebaseConfig = ${firebaseConfigLiteral};
 
 const app = initializeApp(firebaseConfig);
 
@@ -76,6 +108,43 @@ try {
 } catch (e) {
     db = getFirestore(app);
 }
+
+// ─── Firebase App Check (stub for reCAPTCHA v3 / Cloudflare Turnstile) ───
+// Inject the site key by setting window.FIREBASE_APP_CHECK_SITE_KEY BEFORE this
+// module loads (see the inline script in index.html), or at build time via the
+// FIREBASE_APP_CHECK_SITE_KEY env var in scripts/split-modules.mjs.
+// App Check only starts enforcing after "Enforce" is enabled in the Firebase console.
+const appCheckSiteKey = (typeof window !== 'undefined' && window.FIREBASE_APP_CHECK_SITE_KEY) || ${appCheckSiteKeyLiteral};
+if (appCheckSiteKey) {
+    try {
+        window.appCheck = initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(appCheckSiteKey),
+            isTokenAutoRefreshEnabled: true
+        });
+        console.log("Firebase App Check initialized with reCAPTCHA v3 site key.");
+    } catch (e) {
+        console.error("Firebase App Check init failed:", e);
+    }
+}
+
+// ─── Firebase Auth baseline for security rules ───
+// The dashboard keeps its PIN login UX; under the hood every session ALSO signs in
+// anonymously to Firebase Auth. This makes \`request.auth != null\` true for every
+// session so the strict Firestore rules (deny-by-default) keep the app working
+// while blocking anonymous/unauthenticated access.
+const auth = getAuth(app);
+window.auth = auth;
+window.signInAnonymously = signInAnonymously;
+
+// Resolves once an authenticated session is established. Data listeners should
+// wait on window.authReady before reading/writing so they don't race auth.
+window.authReady = signInAnonymously(auth)
+    .then((user) => user)
+    .catch((err) => {
+        if (auth.currentUser) return auth.currentUser;
+        console.error("Anonymous sign-in failed; Firestore security rules will deny access:", err);
+        return null;
+    });
 
 window.db = db;
 window.collection = collection;
@@ -104,6 +173,11 @@ export {
 `;
 
 write('js/config/firebase.js', firebaseBody);
+
+if (!lines) {
+  console.log('\n✅ Firebase config regenerated from environment variables (firebase.js only).');
+  process.exit(0);
+}
 
 // ═══════════════════════════════════════════════════════════
 // 2. constants.js

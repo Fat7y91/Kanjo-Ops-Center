@@ -19,9 +19,12 @@ categories.sort().forEach(c => {
     if (editCat) editCat.innerHTML += `<option value="${c}">${c}</option>`;
 });
 
-/* Restore session if present */
-const savedUser = localStorage.getItem(SESSION_KEY);
-if (savedUser) {
-    window.currentUser = JSON.parse(savedUser);
-    applyThemeAndShowDashboard();
-}
+/* Restore session if present — wait for Firebase auth baseline so Firestore
+   rules (deny-by-default, require request.auth) don't reject the first reads. */
+window.authReady.then(() => {
+    const savedUser = localStorage.getItem(SESSION_KEY);
+    if (savedUser) {
+        window.currentUser = JSON.parse(savedUser);
+        applyThemeAndShowDashboard();
+    }
+});
