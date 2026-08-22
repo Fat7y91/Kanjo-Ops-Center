@@ -1,4 +1,4 @@
-/* Kanjo Ops — Firestore Cloud Operations */
+/* Kanjo Ops — Firestore Cloud Operations (Stable Final Version) */
 
 window.toggleNotifications = () => {
     const dropdown = document.getElementById('notificationsDropdown');
@@ -605,11 +605,11 @@ function rerenderDashboard() {
 const loadMoreTasks = () => {};
 window.loadMoreTasks = loadMoreTasks;
 
-// تم استبدال الاستماع الحي بطلب قسري وشامل لجلب الجدول بالكامل دون أي قيود
+// الاستماع الحي الكامل والصريح بدون أي قيود لجلب جميع المستندات والعقود
 window.listenToTasks = () => {
     const tasksCol = collection(db, "tasks");
     
-    getDocs(tasksCol).then((snapshot) => {
+    onSnapshot(tasksCol, (snapshot) => {
         window.tasksMemory.clear();
         snapshot.forEach((docSnap) => {
             window.tasksMemory.set(docSnap.id, docSnap.data());
@@ -638,8 +638,8 @@ window.listenToTasks = () => {
         }
 
         rerenderDashboard();
-    }).catch((error) => {
-        console.error("Firestore getDocs error:", error);
+    }, (error) => {
+        console.error("Firestore snapshot error:", error);
         if (typeof showToast === 'function') {
             showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
         }
