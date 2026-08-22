@@ -1,230 +1,117 @@
 /* Kanjo Ops — Firestore Cloud Operations */
 
 window.toggleNotifications = () => {
-
     const dropdown = document.getElementById('notificationsDropdown');
-
     dropdown.classList.toggle('hidden');
-
 };
-
-
 
 document.addEventListener('click', (e) => {
-
     const wrapper = document.getElementById('notificationsWrapper');
-
     const dropdown = document.getElementById('notificationsDropdown');
-
     if (wrapper && !wrapper.contains(e.target) && !dropdown.classList.contains('hidden')) {
-
         dropdown.classList.add('hidden');
-
     }
-
 });
 
-
-
 window.clearNotifications = async () => {
-
     const q = query(collection(db, "notifications"), where("isRead", "==", false));
-
     const querySnapshot = await getDocs(q);
-
     const batch = writeBatch(db);
-
     querySnapshot.forEach((doc) => {
-
         batch.update(doc.ref, { isRead: true });
-
     });
-
     await batch.commit();
-
     document.getElementById('notificationsDropdown').classList.add('hidden');
-
     showToast("تم تحديد الكل كمقروء");
-
 };
-
-
 
 const updateNotificationsUI = (notifs) => {
-
     const list = document.getElementById('notificationsList');
-
     const badge = document.getElementById('notifBadge');
-
     if(!list || !badge) return;
-
     list.innerHTML = '';
-
     
-
     const uniqueNotifsMap = new Map();
-
     notifs.forEach(n => {
-
         const key = `${n.taskId || ''}-${n.title || ''}-${n.body || ''}`;
-
         if (!uniqueNotifsMap.has(key) || (n.timestamp > uniqueNotifsMap.get(key).timestamp)) {
-
             uniqueNotifsMap.set(key, n);
-
         }
-
     });
-
     const cleanNotifs = Array.from(uniqueNotifsMap.values());
 
-
-
     const unreadCount = cleanNotifs.filter(n => !n.isRead).length;
-
     
-
     if (cleanNotifs.length === 0) {
-
         badge.classList.add('hidden');
-
         list.innerHTML = '<div class="p-6 text-center text-slate-400 font-bold text-sm">لا توجد إشعارات</div>';
-
         return;
-
     }
-
-
 
     if (unreadCount === 0) {
-
         badge.classList.add('hidden');
-
     } else {
-
         badge.classList.remove('hidden');
-
     }
 
-
-
     cleanNotifs.sort((a, b) => {
-
         const timeA = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp || 0);
-
         const timeB = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp || 0);
-
         return timeB - timeA;
-
     }).forEach((notif) => {
-
         const item = document.createElement('div');
-
         const isUnread = !notif.isRead;
-
         item.className = `p-3 border-b border-purple-50 cursor-pointer transition-colors ${isUnread ? 'bg-purple-50/70 font-semibold' : 'bg-white hover:bg-slate-50 opacity-80'}`;
-
         
-
         const timeStr = window.formatNotificationTime(notif.timestamp);
 
-
-
         item.innerHTML = `
-
             <div class="flex gap-3 items-start">
-
                 <div class="text-${notif.color} mt-1"><i class="fa-solid ${notif.icon} text-lg"></i></div>
-
                 <div class="flex-1">
-
                     <div class="flex justify-between items-center">
-
                         <div class="font-bold text-sm text-slate-800">${notif.title} ${isUnread ? '<span class="inline-block w-2 h-2 bg-kanjo-primary rounded-full mr-1"></span>' : ''}</div>
-
                         <span class="text-[10px] text-slate-400 font-medium">${timeStr}</span>
-
                     </div>
-
                     <div class="text-xs text-slate-500 mt-0.5">${notif.body}</div>
-
                 </div>
-
             </div>
-
         `;
-
         item.onclick = () => {
-
             document.getElementById('notificationsDropdown').classList.add('hidden');
-
             if (notif.taskId) window.goToTask(notif.taskId, notif.date);
-
         };
-
         list.appendChild(item);
-
     });
-
 };
-
-
 
 window.goToTask = (taskId, taskDate) => {
-
     const detailsElements = document.querySelectorAll('details');
-
     detailsElements.forEach(d => { if (d.innerHTML.includes(taskDate)) d.open = true; });
-
     setTimeout(() => {
-
         const taskDiv = document.getElementById(`task-card-${taskId}`);
-
         if (taskDiv) {
-
             taskDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
             taskDiv.classList.add('highlight-task');
-
             setTimeout(() => { taskDiv.classList.remove('highlight-task'); }, 2000);
-
         } else { showToast("قد تكون هذه المهمة مخفية حالياً", false); }
-
     }, 300);
-
 };
-
-
 
 window.notifyManager = async (title, body, type, taskId, taskDate) => {
-
     let icon = 'fa-bell'; let color = 'kanjo-primary';
-
     if(type === 'report') { icon = 'fa-file-lines'; color = 'blue-500'; }
-
     if(type === 'visit') { icon = 'fa-location-dot'; color = 'red-500'; }
-
     if(type === 'contract') { icon = 'fa-handshake'; color = 'green-500'; }
-
     if(type === 'financial') { icon = 'fa-money-check-dollar'; color = 'emerald-600'; }
 
-
-
     await addDoc(collection(db, "notifications"), {
-
         title, body, icon, color, taskId, date: taskDate || '', isRead: false, timestamp: new Date()
-
     });
-
 };
 
-
-
-
 window.recordAttendance = async function(taskId, type) {
-
     if (!navigator.geolocation) return showToast("المتصفح لا يدعم الموقع", false);
-
     if (window._visitBusyMap && window._visitBusyMap[taskId]) {
         showToast("⏳ يتم تسجيل الزيارة الآن... انتظر لحظة", false);
         return;
@@ -254,7 +141,6 @@ window.recordAttendance = async function(taskId, type) {
         const taskData = window.tasksMemory.get(taskId) || {};
         const baseName = getBaseName(taskData.name);
 
-        // تحديث فوري من الذاكرة فقط (بدون getDocs لكل المهام = أسرع ولا يتهنج)
         const relatedIds = [];
         if (window.tasksMemory && window.tasksMemory.size > 0) {
             window.tasksMemory.forEach((t, id) => {
@@ -263,7 +149,6 @@ window.recordAttendance = async function(taskId, type) {
         }
         if (!relatedIds.includes(taskId)) relatedIds.push(taskId);
 
-        // العنوان التفصيلي اختياري وسريع — لا نوقف التسجيل لو Nominatim بطيء
         let cleanAddress = null;
         try {
             cleanAddress = await Promise.race([
@@ -291,7 +176,6 @@ window.recordAttendance = async function(taskId, type) {
                 time: id === taskId ? todayStr : (tData.time || todayStr)
             };
             if (cleanAddress) updatePayload.address = cleanAddress;
-            // للمهام المرتبطة بنفس المحل: حدّث العنوان فقط بدون تكرار الحضور
             if (id !== taskId) {
                 updatePayload = cleanAddress ? { address: cleanAddress } : null;
             }
@@ -300,7 +184,6 @@ window.recordAttendance = async function(taskId, type) {
 
         await batch.commit();
 
-        // تحديث الذاكرة المحلية فوراً لاستجابة UI فورية
         const mem = window.tasksMemory.get(taskId);
         if (mem) {
             if (!Array.isArray(mem.attendances)) mem.attendances = [];
@@ -314,7 +197,6 @@ window.recordAttendance = async function(taskId, type) {
             ? "🟢 تم بدء الزيارة وتسجيل GPS بنجاح!"
             : "🔴 تم إنهاء الزيارة وتسجيل الموقع بنجاح!");
 
-        // تبديل حالة الزر فوراً بدون انتظار onSnapshot (يمنع التهنيج والرجوع لحالة قديمة)
         const wrap = document.getElementById(`visit-wrap-${taskId}`);
         if (wrap) {
             if (type === 'start') {
@@ -338,628 +220,313 @@ window.recordAttendance = async function(taskId, type) {
     } finally {
         if (window._visitBusyMap) delete window._visitBusyMap[taskId];
     }
-
 }
 
 window.submitTask = async (e) => { 
-
     e.preventDefault(); 
-
     await addDoc(collection(db, "tasks"), { 
-
         name: document.getElementById('mName').value, 
-
         cat: document.getElementById('mCat').value, 
-
         team: document.getElementById('mTeam').value, 
-
         time: document.getElementById('mTime').value, 
-
         target: parseFloat(document.getElementById('mTarget').value), 
-
         notes: document.getElementById('mNotes').value, 
-
         reports: [], 
-
         attendances: [], 
-
         isSigned: false,
-
         isProvisional: false, 
-
         achieved: 0, 
-
         createdAt: new Date() 
-
     }); 
-
     document.getElementById('taskForm').reset(); 
-
     showToast("تم إضافة المهمة بنجاح"); 
-
 };
-
-
 
 window.openReportModal = (taskId, name, team, target, notes) => { 
-
     activeTaskId = taskId; 
-
     activeTaskName = name; 
-
     activeTaskTeam = team; 
-
     currentTarget = target || 0; 
-
     currentNotes = notes || ""; 
-
     window.resetReportFields(); 
-
     document.getElementById('modalTaskName').innerText = name; 
-
     document.getElementById('reportModal').classList.remove('hidden'); 
-
 };
-
-
 
 window.closeReportModal = () => document.getElementById('reportModal').classList.add('hidden');
 
-
-
 window.openEditModal = (id, data) => { 
-
     editTaskId = id; 
-
     document.getElementById('editName').value = data.name; 
-
     document.getElementById('editCat').value = data.cat; 
-
     document.getElementById('editTeam').value = data.team; 
-
     document.getElementById('editDate').value = data.time; 
-
     document.getElementById('editTarget').value = data.target; 
-
     document.getElementById('editNotes').value = data.notes; 
-
     document.getElementById('editModal').classList.remove('hidden'); 
-
 };
-
-
 
 window.closeEditModal = () => document.getElementById('editModal').classList.add('hidden');
 
-
-
 window.openTransferModal = (taskId, taskName, taskTeam) => {
-
     activeTransferTaskId = taskId;
-
     activeTransferTaskName = taskName;
-
     activeTransferTaskTeam = taskTeam;
-
     document.getElementById('transferModalSubtitle').innerHTML = `المحل المطلوب نقله:<br><span class="text-kanjo-primary font-black text-sm block mt-1">${taskName}</span><span class="text-slate-500 font-bold block mt-1">يتبع حالياً: (${taskTeam})</span>`;
-
     document.getElementById('transferReasonInput').value = '';
-
     document.getElementById('transferModal').classList.remove('hidden');
-
 };
-
-
 
 window.closeTransferModal = () => {
-
     document.getElementById('transferModal').classList.add('hidden');
-
 };
-
-
 
 window.submitTransferRequest = async () => {
-
     const reason = document.getElementById('transferReasonInput').value.trim();
-
     if (!reason) {
-
         return showToast("برجاء كتابة أسباب طلب النقل", false);
-
     }
-
     const currentTeam = currentUser.team;
-
     
-
     await addDoc(collection(db, "transferRequests"), {
-
         taskId: activeTransferTaskId,
-
         taskName: activeTransferTaskName,
-
         fromTeam: activeTransferTaskTeam,
-
         toTeam: currentTeam,
-
         requestedBy: currentUser.name,
-
         reason: reason,
-
         status: 'pending',
-
         timestamp: new Date()
-
     });
-
-
 
     window.closeTransferModal();
-
     showToast("تم إرسال طلب النقل إلى إدارة التشغيل بنجاح");
-
 };
-
-
 
 window.openAdminTransferModal = async () => {
-
     const listContainer = document.getElementById('adminTransferList');
-
     listContainer.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل الطلبات...</div>';
-
     document.getElementById('adminTransferModal').classList.remove('hidden');
 
-
-
     const q = query(collection(db, "transferRequests"), where("status", "==", "pending"));
-
     const snap = await getDocs(q);
-
-
 
     if (snap.empty) {
-
         listContainer.innerHTML = '<div class="text-center text-slate-400 py-8 font-bold">لا توجد طلبات نقل معلقة حالياً</div>';
-
         return;
-
     }
-
-
 
     listContainer.innerHTML = '';
-
     snap.forEach(docSnap => {
-
         const req = docSnap.data();
-
         const reqId = docSnap.id;
 
-
-
         listContainer.innerHTML += `
-
             <div class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100 space-y-2">
-
                 <div class="flex justify-between items-center font-black text-kanjo-dark text-sm">
-
                     <span>${req.taskName}</span>
-
                     <span class="text-xs bg-purple-200 text-purple-900 px-2.5 py-1 rounded-full">نقل من (${req.fromTeam}) إلى (${req.toTeam})</span>
-
                 </div>
-
                 <div class="text-xs text-slate-600">
-
                     <b>المقدم:</b> ${req.requestedBy}
-
                 </div>
-
                 <div class="bg-white p-3 rounded-xl border border-purple-100 text-xs text-slate-700">
-
                     <b>السبب:</b> ${req.reason}
-
                 </div>
-
                 <div class="flex gap-2 pt-2">
-
                     <button onclick="approveTransfer('${reqId}', '${req.taskId}', '${req.toTeam}')" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">قبول ونقل المهمة</button>
-
                     <button onclick="rejectTransfer('${reqId}')" class="flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition">إلغاء / رفض</button>
-
                 </div>
-
             </div>
-
         `;
-
     });
-
 };
-
-
 
 window.approveTransfer = async (reqId, taskId, targetTeam) => {
-
     const todayStr = new Date().toISOString().slice(0, 10);
-
     
-
     await updateDoc(doc(db, "tasks", taskId), {
-
         team: targetTeam,
-
         time: todayStr
-
     });
-
-
 
     await updateDoc(doc(db, "transferRequests", reqId), {
-
         status: 'approved'
-
     });
 
-
-
     document.getElementById('adminTransferModal').classList.add('hidden');
-
     showToast("🎉 تمت الموافقة على طلب النقل ونقل المهمة لتاريخ اليوم بنجاح!");
-
 };
-
-
 
 window.rejectTransfer = async (reqId) => {
-
     await updateDoc(doc(db, "transferRequests", reqId), {
-
         status: 'rejected'
-
     });
-
     document.getElementById('adminTransferModal').classList.add('hidden');
-
     showToast("تم إغلاق طلب النقل");
-
 };
-
-
 
 window.saveEditTask = async () => {
-
     const newNameInput = document.getElementById('editName').value;
-
     const newCat = document.getElementById('editCat').value;
-
     const newTeam = document.getElementById('editTeam').value;
-
     const newDate = document.getElementById('editDate').value;
-
     const newTarget = parseFloat(document.getElementById('editTarget').value);
-
     const newNotes = document.getElementById('editNotes').value;
 
-
-
     const originalTask = window.tasksMemory.get(editTaskId) || {};
-
     const oldBaseName = getBaseName(originalTask.name);
-
     const newBaseName = getBaseName(newNameInput);
 
-
-
     const q = query(collection(db, "tasks"));
-
     const snap = await getDocs(q);
-
     const batch = writeBatch(db);
 
-
-
     snap.forEach((docSnap) => {
-
         const tData = docSnap.data();
-
         const tBase = getBaseName(tData.name);
-
         if (tBase === oldBaseName || tBase === newBaseName) {
-
             if (docSnap.id === editTaskId) {
-
                 batch.update(docSnap.ref, {
-
                     name: newNameInput,
-
                     cat: newCat,
-
                     team: newTeam,
-
                     time: newDate,
-
                     target: newTarget,
-
                     notes: newNotes
-
                 });
-
             } else {
-
                 let suffix = tData.name.replace(oldBaseName, '');
-
                 let updatedName = newBaseName + suffix;
-
                 batch.update(docSnap.ref, {
-
                     name: updatedName,
-
                     cat: newCat,
-
                     team: newTeam,
-
                     target: newTarget
-
                 });
-
             }
-
         }
-
     });
 
-
-
     await batch.commit();
-
     window.closeEditModal(); 
-
     showToast("تم تعديل البيانات ومزامنة جميع المتابعات المرتبطة بنجاح"); 
-
 };
 
-
-
 window.submitReport = async () => { 
-
     const createNew = document.getElementById('repCreateTask').checked; 
-
     const nextDate = document.getElementById('repNextDate').value; 
-
     const achieved = parseFloat(document.getElementById('repPercentage').value);
-
     
-
     let isSigned = document.getElementById('repIsSigned').checked;
-
     let isProvisional = document.getElementById('repProvContract').checked;
-
     
-
     if (isSigned && (isNaN(achieved) || achieved <= 0)) {
-
         showToast("لا يمكن اختيار (تم التعاقد النهائي) بنسبة عمولة 0%! للنسبة 0% يرجى اختيار (اتفاق مبدئي).", false);
-
         return;
-
     }
-
-
 
     if (isProvisional && isNaN(achieved)) { 
-
         showToast("يرجى إدخال نسبة العمولة المبدئية", false); 
-
         return; 
-
     }
-
-
 
     if ((isSigned || isProvisional) && achieved > 100) { 
-
         showToast("نسبة العمولة لا يمكن أن تتجاوز 100%!", false); 
-
         return; 
-
     }
 
-
-
     const todayStr = new Date().toISOString().slice(0, 10);
-
     const nowTimeStr = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
     const nowTimestampStr = `${todayStr} ${nowTimeStr}`;
 
-
-
     const activeTaskData = window.tasksMemory.get(activeTaskId) || {};
-
     const baseName = getBaseName(activeTaskData.name || activeTaskName);
 
-
-
     let seriesTarget = activeTaskData.target || currentTarget;
-
     window.tasksMemory.forEach((t) => {
-
         if (getBaseName(t.name) === baseName && t.target > 0) {
-
             seriesTarget = t.target;
-
         }
-
     });
-
-
 
     const q = query(collection(db, "tasks"));
-
     const snap = await getDocs(q);
-
     const batch = writeBatch(db);
 
-
-
     snap.forEach((docSnap) => {
-
         const tData = docSnap.data();
-
         const tBase = getBaseName(tData.name);
-
         if (tBase === baseName) {
-
             if (docSnap.id === activeTaskId) {
-
                 batch.update(docSnap.ref, {
-
                     reports: arrayUnion({ 
-
                         name: currentUser.name, 
-
                         time: new Date().toLocaleTimeString(), 
-
                         date: todayStr, 
-
                         timestamp: nowTimestampStr,
-
                         contactName: document.getElementById('repContactName').value,
-
                         contactRole: document.getElementById('repContactRole').value,
-
                         contactPhone: document.getElementById('repContactPhone').value,
-
                         general: document.getElementById('repGeneral').value, 
-
                         merchant: document.getElementById('repMerchant').value, 
-
                         team: document.getElementById('repTeam').value, 
-
                         next: document.getElementById('repNext').value 
-
                     }),
-
                     isSigned: isSigned,
-
                     isProvisional: isProvisional,
-
                     achieved: (isSigned || isProvisional) ? achieved : 0,
-
                     target: seriesTarget,
-
                     time: todayStr
-
                 });
-
             } else {
-
                 batch.update(docSnap.ref, {
-
                     isSigned: isSigned,
-
                     isProvisional: isProvisional,
-
                     achieved: (isSigned || isProvisional) ? achieved : 0,
-
                     target: seriesTarget
-
                 });
-
             }
-
         }
-
     });
 
-
-
     await batch.commit();
-
-
 
     await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
 
-
-
     if(isSigned) showToast("🎉 تم تسجيل التعاقد النهائي وربطه بكل السلسلة والمتابعات بنجاح!"); 
-
     else if(isProvisional) showToast("🤝 تم تسجيل اتفاق مبدئي بنجاح!"); 
 
-
-
     if(createNew && nextDate) { 
-
         const followUpName = baseName + " (متابعة)";
-
         let exists = false;
-
         snap.forEach((docSnap) => {
-
             const tData = docSnap.data();
-
             if (getBaseName(tData.name) === baseName && tData.time === nextDate) {
-
                 exists = true;
-
             }
-
         });
 
-
-
         if(!exists) {
-
             await addDoc(collection(db, "tasks"), { 
-
                 name: followUpName, 
-
                 cat: activeTaskData.cat || "متابعة", 
-
                 team: activeTaskData.team || activeTaskTeam, 
-
                 time: nextDate, 
-
                 target: seriesTarget, 
-
                 notes: activeTaskData.notes || currentNotes, 
-
                 reports: [], 
-
                 attendances: [], 
-
                 isSigned: isSigned,
-
                 isProvisional: isProvisional, 
-
                 achieved: (isSigned || isProvisional) ? achieved : 0,
-
                 createdAt: new Date() 
-
             }); 
-
         }
-
     } 
-
     document.getElementById('reportModal').classList.add('hidden'); 
-
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
-
 };
-
-/* ─────────────────────────────────────────────────────────────
-   Paginated Firestore fetching — multi-city scalability.
-   - Realtime: latest TASKS_PAGE_SIZE tasks via onSnapshot (limit 50,
-     orderBy createdAt desc). No more full-collection scan.
-   - Load More: getDocs + startAfter(lastVisible) appends older pages
-     into tasksMemory without ever fetching the whole collection.
-   - Timeout failsafe: any fetch slower than TASKS_FETCH_TIMEOUT ms
-     falls back to a clean render + slow-network toast.
-   ───────────────────────────────────────────────────────────── */
 
 const TASKS_PAGE_SIZE = 50;
 const TASKS_FETCH_TIMEOUT = 8000;
@@ -1064,13 +631,11 @@ function loadTasksPage(startAfterDoc) {
     window.tasksLoading = true;
 
     const tasksCol = collection(db, "tasks");
-    // COMPOSITE INDEX REMINDER: orderBy('createdAt') on the tasks collection uses
-    // Firestore's auto-created single-field index. If you later combine
-    // orderBy('createdAt', 'desc') WITH a where(...) filter, create the composite
-    // index in the Firebase Console: Firestore > Indexes > Add Index.
+    
+    // تم إزالة orderBy بالكامل عشان الداتا القديمة اللي مفيهاش createdAt تظهر كلها
     const q = startAfterDoc
-        ? query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE), startAfter(startAfterDoc))
-        : query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE));
+        ? query(tasksCol, limit(TASKS_PAGE_SIZE), startAfter(startAfterDoc))
+        : query(tasksCol, limit(TASKS_PAGE_SIZE));
 
     fetchWithTimeout(() => getDocs(q), TASKS_FETCH_TIMEOUT)
         .then((result) => {
@@ -1105,15 +670,12 @@ window.loadMoreTasks = loadMoreTasks;
 
 window.listenToTasks = () => {
     const tasksCol = collection(db, "tasks");
-    // COMPOSITE INDEX REMINDER: orderBy('createdAt', 'desc') with limit() needs no
-    // manual composite index, but any future where() filter combined with this
-    // orderBy requires one in the Firebase Console (Firestore > Indexes).
-    const realtimeQ = query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE));
+    
+    // تم إزالة orderBy من هنا برضه عشان الفلترة متخفيش الداتا القديمة
+    const realtimeQ = query(tasksCol, limit(TASKS_PAGE_SIZE));
 
     onSnapshot(realtimeQ, (snapshot) => {
 
-        // Runs once per session only: prevents write-amplification (each batch commit
-        // re-triggers this snapshot → more writes → render churn) on every app open.
         if (!window.hasRunSignedMigration) {
             window.hasRunSignedMigration = true;
             const migrationBatch = writeBatch(db);
@@ -1158,49 +720,27 @@ window.listenToTasks = () => {
 };
 
 function updateQuickLinksWalletCounter() {
-
     let missingCount = 0;
-
     window.allTasksCache.forEach(t => {
-
         if (t.team !== currentUser.team) return;
-
         let hasV = (t.attendances && t.attendances.length > 0) || t.isSigned || t.isProvisional;
-
         if (hasV) {
-
             let hasMissing = !t.fbPage || !t.fbGroup || !t.insta || !t.website || 
-
                            t.fbPage.trim() === '' || t.fbGroup.trim() === '' || t.insta.trim() === '' || t.website.trim() === '';
-
             if (hasMissing) {
-
                 missingCount++;
-
             }
-
         }
-
     });
 
-
-
     const countTextEl = document.getElementById('quickLinksWalletCountText');
-
     if (countTextEl) {
-
         if (missingCount > 0) {
-
             countTextEl.innerText = `لديك ${missingCount} محل تحتاج لاستكمال روابط السوشيال ميديا والموقع`;
-
         } else {
-
             countTextEl.innerText = `🎉 ممتاز! جميع المحلات مكتملة الروابط الرقمية تماماً`;
-
         }
-
     }
-
 }
 
 window.updateNotificationsUI = updateNotificationsUI;
