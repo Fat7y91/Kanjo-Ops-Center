@@ -528,12 +528,11 @@ window.submitReport = async () => {
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
 };
 
-const TASKS_PAGE_SIZE = 50;
 const TASKS_FETCH_TIMEOUT = 8000;
 
 window.tasksLastVisible = null;
 window.tasksLoading = false;
-window.tasksAllLoaded = false;
+window.tasksAllLoaded = true; // تم تعديلها لأننا هنسحب كل الداتا
 
 function fetchWithTimeout(fn, ms) {
     return new Promise((resolve, reject) => {
@@ -632,10 +631,8 @@ function loadTasksPage(startAfterDoc) {
 
     const tasksCol = collection(db, "tasks");
     
-    // تم إزالة orderBy بالكامل عشان الداتا القديمة اللي مفيهاش createdAt تظهر كلها
-    const q = startAfterDoc
-        ? query(tasksCol, limit(TASKS_PAGE_SIZE), startAfter(startAfterDoc))
-        : query(tasksCol, limit(TASKS_PAGE_SIZE));
+    // إزالة حد الـ 50 بالكامل لجلب الداتا بدون أي قيود
+    const q = query(tasksCol);
 
     fetchWithTimeout(() => getDocs(q), TASKS_FETCH_TIMEOUT)
         .then((result) => {
@@ -649,8 +646,7 @@ function loadTasksPage(startAfterDoc) {
             docs.forEach((docSnap) => {
                 window.tasksMemory.set(docSnap.id, docSnap.data());
             });
-            window.tasksLastVisible = docs.length > 0 ? docs[docs.length - 1] : window.tasksLastVisible;
-            window.tasksAllLoaded = docs.length < TASKS_PAGE_SIZE;
+            window.tasksAllLoaded = true;
             window.tasksLoading = false;
             rerenderDashboard();
         })
@@ -662,8 +658,8 @@ function loadTasksPage(startAfterDoc) {
 }
 
 const loadMoreTasks = () => {
-    if (window.tasksLoading || window.tasksAllLoaded || !window.tasksLastVisible) return;
-    loadTasksPage(window.tasksLastVisible);
+    if (window.tasksLoading || window.tasksAllLoaded) return;
+    loadTasksPage();
 };
 
 window.loadMoreTasks = loadMoreTasks;
@@ -671,8 +667,8 @@ window.loadMoreTasks = loadMoreTasks;
 window.listenToTasks = () => {
     const tasksCol = collection(db, "tasks");
     
-    // تم إزالة orderBy من هنا برضه عشان الفلترة متخفيش الداتا القديمة
-    const realtimeQ = query(tasksCol, limit(TASKS_PAGE_SIZE));
+    // إزالة حد الـ 50 بالكامل للمزامنة المباشرة لكل البيانات بدون تقطيع
+    const realtimeQ = query(tasksCol);
 
     onSnapshot(realtimeQ, (snapshot) => {
 
@@ -706,10 +702,7 @@ window.listenToTasks = () => {
             }
         });
 
-        if (snapshot.docs.length > 0) {
-            window.tasksLastVisible = snapshot.docs[snapshot.docs.length - 1];
-        }
-        window.tasksAllLoaded = snapshot.docs.length < TASKS_PAGE_SIZE;
+        window.tasksAllLoaded = true;
 
         rerenderDashboard();
 
