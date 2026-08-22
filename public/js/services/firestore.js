@@ -528,24 +528,10 @@ window.submitReport = async () => {
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
 };
 
-const TASKS_FETCH_TIMEOUT = 8000;
-
-window.tasksLastVisible = null;
-window.tasksLoading = false;
-window.tasksAllLoaded = true; // تم تعديلها لأننا هنسحب كل الداتا
-
-function fetchWithTimeout(fn, ms) {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => resolve({ timedOut: true }), ms);
-        Promise.resolve().then(fn).then((result) => {
-            clearTimeout(timer);
-            resolve(result);
-        }).catch((err) => {
-            clearTimeout(timer);
-            reject(err);
-        });
-    });
-}
+// ==========================================
+// تم محو جميع القيود والـ Pagination والـ Timeouts
+// لجلب قاعدة البيانات بالكامل دون توقف
+// ==========================================
 
 function buildVirtualSnapshot() {
     return {
@@ -601,76 +587,35 @@ function computeUniqueMerchantsFromMemory() {
 function rerenderDashboard() {
     window.lastSnapshot = buildVirtualSnapshot();
     computeUniqueMerchantsFromMemory();
+    
     if (currentUser && currentUser.role === 'accounting') {
-        renderPayrollTable();
+        if (typeof renderPayrollTable === 'function') renderPayrollTable();
     } else {
-        renderDashboard(window.lastSnapshot);
+        if (typeof renderDashboard === 'function') renderDashboard(window.lastSnapshot);
     }
-    window.loadPayrollSettingsAndCalculateFounderSummary();
-    checkAndUpdateMissingAddresses(window.allTasksCache);
+    
+    if (typeof window.loadPayrollSettingsAndCalculateFounderSummary === 'function') {
+        window.loadPayrollSettingsAndCalculateFounderSummary();
+    }
+    
+    if (typeof checkAndUpdateMissingAddresses === 'function') {
+        checkAndUpdateMissingAddresses(window.allTasksCache);
+    }
+    
     if (currentUser && currentUser.role === 'rep') {
         updateQuickLinksWalletCounter();
     }
 }
 
-window.showSlowNetworkToast = () => {
-    if (typeof showToast === 'function') {
-        showToast("تحذير: الاتصال بالشبكة بطيء — يتم عرض أحدث البيانات المتاحة فقط", false);
-    }
-};
-
-function handleSlowNetwork() {
-    console.warn("PERFORMANCE: Firestore fetch exceeded " + TASKS_FETCH_TIMEOUT + "ms. Falling back to clean state.");
-    rerenderDashboard();
-    window.showSlowNetworkToast();
-}
-
-function loadTasksPage(startAfterDoc) {
-    if (window.tasksLoading) return;
-    window.tasksLoading = true;
-
-    const tasksCol = collection(db, "tasks");
-    
-    // إزالة حد الـ 50 بالكامل لجلب الداتا بدون أي قيود
-    const q = query(tasksCol);
-
-    fetchWithTimeout(() => getDocs(q), TASKS_FETCH_TIMEOUT)
-        .then((result) => {
-            if (result && result.timedOut) {
-                window.tasksLoading = false;
-                handleSlowNetwork();
-                return;
-            }
-            const querySnapshot = result;
-            const docs = querySnapshot.docs;
-            docs.forEach((docSnap) => {
-                window.tasksMemory.set(docSnap.id, docSnap.data());
-            });
-            window.tasksAllLoaded = true;
-            window.tasksLoading = false;
-            rerenderDashboard();
-        })
-        .catch((err) => {
-            window.tasksLoading = false;
-            console.error("Firestore tasks fetch error:", err);
-            handleSlowNetwork();
-        });
-}
-
-const loadMoreTasks = () => {
-    if (window.tasksLoading || window.tasksAllLoaded) return;
-    loadTasksPage();
-};
-
+// دالة فارغة لمنع تعطل ملف main.js عند عمل scroll
+const loadMoreTasks = () => {};
 window.loadMoreTasks = loadMoreTasks;
 
 window.listenToTasks = () => {
     const tasksCol = collection(db, "tasks");
     
-    // إزالة حد الـ 50 بالكامل للمزامنة المباشرة لكل البيانات بدون تقطيع
-    const realtimeQ = query(tasksCol);
-
-    onSnapshot(realtimeQ, (snapshot) => {
+    // سحب مباشر وكامل للقاعدة بالكامل فوراً
+    onSnapshot(tasksCol, (snapshot) => {
 
         if (!window.hasRunSignedMigration) {
             window.hasRunSignedMigration = true;
@@ -702,18 +647,20 @@ window.listenToTasks = () => {
             }
         });
 
-        window.tasksAllLoaded = true;
-
         rerenderDashboard();
 
     }, (error) => {
         console.error("Firestore snapshot error:", error);
-        handleSlowNetwork();
+        if (typeof showToast === 'function') {
+            showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
+        }
     });
 };
 
 function updateQuickLinksWalletCounter() {
     let missingCount = 0;
+    if (!window.allTasksCache) return;
+    
     window.allTasksCache.forEach(t => {
         if (t.team !== currentUser.team) return;
         let hasV = (t.attendances && t.attendances.length > 0) || t.isSigned || t.isProvisional;
