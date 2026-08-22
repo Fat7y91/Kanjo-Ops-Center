@@ -846,7 +846,88 @@ function setupAdvancedFilterElements() {
 
 }
 
+/* ─── Boot loading state ───
+   Shown inside the tasks container until the first batch of Firestore data has
+   actually arrived. renderDashboard() overwrites this placeholder with the real
+   lists, so the spinner clears exactly when data is ready (never before). */
+window.showDashboardLoading = () => {
+    if (window.firestoreIndexErrorActive) return;
+    const container = document.getElementById('tasksContainer');
+    if (!container) return;
+    container.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:90px 20px;text-align:center;font-family:'Segoe UI',Tahoma,sans-serif;color:#4b5563;">
+            <div style="width:64px;height:64px;border:6px solid #e5e7eb;border-top-color:#7c3aed;border-radius:50%;animation:kanjo-dashboard-spin 0.9s linear infinite;"></div>
+            <p style="margin-top:26px;font-size:19px;font-weight:700;">جارٍ تحميل بيانات المحلات والعقود...</p>
+            <p style="margin-top:8px;font-size:14px;color:#9ca3af;">يتم عرض أحدث البيانات فور اكتمال التحميل</p>
+        </div>`;
+    if (!document.getElementById('kanjo-dashboard-spin-style')) {
+        const style = document.createElement('style');
+        style.id = 'kanjo-dashboard-spin-style';
+        style.textContent = '@keyframes kanjo-dashboard-spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+    }
+};
+
+/* ─── Firestore missing-index error box ───
+   Invoked by the read-wrappers in js/config/firebase.js whenever a query fails
+   with FAILED_PRECONDITION (a required composite index is missing). Shows a big
+   Arabic error box inside the data container with the exact Firebase
+   index-creation URL as a clickable link so the admin can generate the index. */
+window.showFirestoreIndexError = (url, err) => {
+    const container = document.getElementById('tasksContainer');
+    if (!container) return;
+    window.firestoreIndexErrorActive = true;
+window.hasRenderedData = false;
+
+window.firestoreIndexErrorActive = false;
+    const indexUrl = url || 'https://console.firebase.google.com/project/kanjo-desouk/firestore';
+    container.innerHTML = `
+        <div style="max-width:920px;margin:40px auto;padding:38px 28px;background:#fef2f2;border:5px solid #dc2626;border-radius:16px;text-align:center;font-family:'Segoe UI',Tahoma,sans-serif;box-shadow:0 12px 34px rgba(220,38,38,0.18);">
+            <div style="width:64px;height:64px;margin:0 auto;border-radius:50%;background:#dc2626;color:#ffffff;font-size:40px;font-weight:900;line-height:64px;">!</div>
+            <h2 style="color:#991b1b;font-size:27px;font-weight:800;margin:18px 0 12px;">عفواً، الفايربيز يحتاج إلى فهرسة (Index) لترتيب البيانات.</h2>
+            <p style="color:#7f1d1d;font-size:16px;line-height:1.9;margin-bottom:22px;">لم تعد البيانات تظهر لأن أحد الاستعلامات يحتاج إلى فهرس مركّب (Composite Index).<br>اضغط على الرابط التالي لإنشاء الفهرس تلقائياً في لوحة Firebase، ثم أعد فتح الصفحة.</p>
+            <a href="${indexUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#dc2626;color:#ffffff;padding:15px 28px;border-radius:10px;font-size:16px;font-weight:700;text-decoration:none;word-break:break-all;">${indexUrl}</a>
+            <p style="color:#9ca3af;font-size:13px;margin-top:24px;">بعد إنشاء الفهرس، اضغط زر تحديث الصفحة أو أعد فتح التطبيق.</p>
+        </div>`;
+    console.error("Firestore index error surfaced in UI:", err || {});
+};
+
+/* Tracks whether any task/merchant/contract list has actually been rendered.
+   Until this flips true, any path that reveals the dashboard shows the loading
+   spinner instead of a blank/empty container (covers both session-restore and
+   PIN login entry paths). */
+window.hasRenderedData = false;
+
+/* When the dashboard section becomes visible and no data has been rendered yet
+   (e.g. the user just logged in by PIN), show the loading spinner so the screen
+   is never an empty blank while Firestore is still fetching. */
+(() => {
+    const section = document.getElementById('dashboardSection');
+    if (!section) return;
+    const maybeShowLoading = () => {
+        if (section.classList.contains('hidden')) return;
+        if (window.hasRenderedData) return;
+        window.showDashboardLoading();
+    };
+    new MutationObserver(maybeShowLoading).observe(section, {
+        attributes: true,
+        attributeFilter: ['class']
+    });
+    maybeShowLoading();
+})();
+
 window.renderDashboard = (snapshot) => {
+
+    if (!snapshot) return;
+
+    /* While a missing-index error box is displayed, keep it on screen instead of
+       letting an empty re-render (e.g. handleSlowNetwork fallback) wipe it. Only a
+       render that carries real data clears the error state. */
+    if (window.firestoreIndexErrorActive) {
+        const hasDocs = !!(snapshot.docs && snapshot.docs.length > 0);
+        if (!hasDocs) return;
+        window.firestoreIndexErrorActive = false;
+    }
 
     const container = document.getElementById('tasksContainer'); 
 
@@ -1457,6 +1538,8 @@ window.renderDashboard = (snapshot) => {
         fragment.appendChild(wrapper);
 
     }
+
+    window.hasRenderedData = true;
 
     container.innerHTML = ''; 
 

@@ -19,11 +19,18 @@ categories.sort().forEach(c => {
     if (editCat) editCat.innerHTML += `<option value="${c}">${c}</option>`;
 });
 
-/* Restore session if present. The dashboard opens IMMEDIATELY from localStorage so a
-   slow anonymous-auth baseline never blocks boot; data listeners are deferred inside
-   applyThemeAndShowDashboard until auth is ready (with a failsafe timeout). */
-const savedUser = localStorage.getItem(SESSION_KEY);
-if (savedUser) {
-    window.currentUser = JSON.parse(savedUser);
-    applyThemeAndShowDashboard();
-}
+/* Restore session — but ONLY after the Firebase auth baseline (anonymous sign-in)
+   has resolved, so the strict Firestore rules never reject the first reads and the
+   UI never renders empty lists before data is fetched. There is NO artificial
+   timeout: the loading spinner (injected by dashboard.js) stays visible until the
+   first batch of Firestore data arrives and renderDashboard() replaces it. */
+window.authReady.then(() => {
+    const savedUser = localStorage.getItem(SESSION_KEY);
+    if (savedUser) {
+        window.currentUser = JSON.parse(savedUser);
+        if (typeof window.showDashboardLoading === 'function') {
+            window.showDashboardLoading();
+        }
+        applyThemeAndShowDashboard();
+    }
+});

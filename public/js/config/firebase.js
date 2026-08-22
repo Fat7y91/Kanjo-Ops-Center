@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
@@ -28,6 +28,15 @@ try {
         })
     });
 } catch (e) {
+    // Persistent-cache init failed (e.g. IndexedDB blocked/conflicting across tabs).
+    // Clear any half-initialized persisted cache BEFORE falling back to memory so a
+    // stale IndexedDB state can never poison reads again.
+    console.error("initializeFirestore (persistent cache) failed:", e);
+    if (typeof clearPersistence === 'function') {
+        clearPersistence().then(() => {
+            console.log("Firestore persisted cache cleared; falling back to memory cache.");
+        }).catch((ce) => console.error("clearPersistence error:", ce));
+    }
     db = getFirestore(app);
 }
 
@@ -68,10 +77,72 @@ window.authReady = signInAnonymously(auth)
         return null;
     });
 
+/* ─── Firestore index-error interception ───
+   The paginated queries (orderBy + limit/startAfter) can throw
+   FAILED_PRECONDITION when a required composite index is missing in the
+   Firebase console. Every read in the app goes through these window mirrors,
+   so we wrap them once here: on an index error we surface the exact Firebase
+   index-creation URL through window.showFirestoreIndexError() (rendered by
+   ui/dashboard.js) and still propagate the error to the original caller. */
+
+const FIREBASE_INDEX_URL_RE = /https?:\/\/console\.firebase\.google\.com\/[^\s"'<>)]+/;
+
+const isFirestoreIndexError = (err) => {
+    if (!err) return false;
+    const code = String(err.code || '').toLowerCase();
+    const msg = String(err.message || '');
+    return code === 'failed-precondition'
+        || msg.indexOf('FAILED_PRECONDITION') !== -1
+        || msg.indexOf('indexes?create_composite') !== -1
+        || FIREBASE_INDEX_URL_RE.test(msg);
+};
+
+const reportFirestoreIndexError = (err) => {
+    if (!isFirestoreIndexError(err)) return;
+    const msg = String(err.message || '');
+    const urlMatch = msg.match(FIREBASE_INDEX_URL_RE);
+    const url = urlMatch ? urlMatch[0] : '';
+    console.error("Firestore index error detected:", url || msg);
+    if (typeof window.showFirestoreIndexError === 'function') {
+        window.showFirestoreIndexError(url, err);
+    }
+};
+
+const wrappedGetDocs = (queryRef, ...rest) => {
+    const p = getDocs(queryRef, ...rest);
+    return p.then(
+        (snap) => snap,
+        (err) => { reportFirestoreIndexError(err); throw err; }
+    );
+};
+
+const wrappedGetDoc = (docRef, ...rest) => {
+    const p = getDoc(docRef, ...rest);
+    return p.then(
+        (snap) => snap,
+        (err) => { reportFirestoreIndexError(err); throw err; }
+    );
+};
+
+const wrappedOnSnapshot = (ref, ...args) => {
+    const functionCount = args.filter(a => typeof a === 'function').length;
+    const wrappedArgs = args.map((arg, i) => {
+        if (typeof arg !== 'function') return arg;
+        const isLastFunction = args.slice(i + 1).every(a => typeof a !== 'function');
+        const isErrorHandler = functionCount > 1 && isLastFunction;
+        if (!isErrorHandler) return arg;
+        return (error) => {
+            reportFirestoreIndexError(error);
+            return arg(error);
+        };
+    });
+    return onSnapshot(ref, ...wrappedArgs);
+};
+
 window.db = db;
 window.collection = collection;
 window.addDoc = addDoc;
-window.onSnapshot = onSnapshot;
+window.onSnapshot = wrappedOnSnapshot;
 window.query = query;
 window.where = where;
 window.limit = limit;
@@ -81,10 +152,10 @@ window.doc = doc;
 window.arrayUnion = arrayUnion;
 window.deleteDoc = deleteDoc;
 window.orderBy = orderBy;
-window.getDocs = getDocs;
+window.getDocs = wrappedGetDocs;
 window.writeBatch = writeBatch;
 window.setDoc = setDoc;
-window.getDoc = getDoc;
+window.getDoc = wrappedGetDoc;
 
 
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */
@@ -119,8 +190,8 @@ window.activeTaskTeam = '';
 
 export {
     app, db, firebaseConfig,
-    collection, addDoc, onSnapshot, query, where, updateDoc, doc,
-    arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc,
+    collection, addDoc, wrappedOnSnapshot as onSnapshot, query, where, updateDoc, doc,
+    arrayUnion, deleteDoc, orderBy, wrappedGetDocs as getDocs, writeBatch, setDoc, wrappedGetDoc as getDoc,
     limit, startAfter,
-    initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager
+    initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager, clearPersistence
 };
