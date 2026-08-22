@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
@@ -17,7 +17,10 @@ let db;
 try {
     db = initializeFirestore(app, {
         localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager(),
+            // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
+            // and passing both silently falls back to an in-memory cache that refetches
+            // everything on every reload (main cause of the app being extremely heavy).
+            tabManager: persistentSingleTabManager(),
             // 10 MB hard cap on the persistent (IndexedDB) cache. Prevents old/low-end
             // devices from hanging while the SDK resolves indexes against a huge stale
             // local cache during multi-city scale-up.
@@ -119,5 +122,5 @@ export {
     collection, addDoc, onSnapshot, query, where, updateDoc, doc,
     arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc,
     limit, startAfter,
-    initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager
+    initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager
 };

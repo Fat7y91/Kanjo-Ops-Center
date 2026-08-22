@@ -19,12 +19,11 @@ categories.sort().forEach(c => {
     if (editCat) editCat.innerHTML += `<option value="${c}">${c}</option>`;
 });
 
-/* Restore session if present — wait for Firebase auth baseline so Firestore
-   rules (deny-by-default, require request.auth) don't reject the first reads. */
-window.authReady.then(() => {
-    const savedUser = localStorage.getItem(SESSION_KEY);
-    if (savedUser) {
-        window.currentUser = JSON.parse(savedUser);
-        applyThemeAndShowDashboard();
-    }
-});
+/* Restore session if present. The dashboard opens IMMEDIATELY from localStorage so a
+   slow anonymous-auth baseline never blocks boot; data listeners are deferred inside
+   applyThemeAndShowDashboard until auth is ready (with a failsafe timeout). */
+const savedUser = localStorage.getItem(SESSION_KEY);
+if (savedUser) {
+    window.currentUser = JSON.parse(savedUser);
+    applyThemeAndShowDashboard();
+}

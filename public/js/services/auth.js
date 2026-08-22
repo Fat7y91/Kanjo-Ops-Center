@@ -53,7 +53,7 @@ window.applyTeamTheme = (team) => {
 
 window.login = async (pinOverride = null) => { 
 
-    if (window.authReady) { try { await window.authReady; } catch (e) {} }
+    if (window.authReady) { try { await Promise.race([window.authReady, new Promise(r => setTimeout(r, 5000))]); } catch (e) {} }
 
     const pin = pinOverride || document.getElementById('pinInput').value; 
 
@@ -72,6 +72,13 @@ window.login = async (pinOverride = null) => {
 };
 
 
+
+/* Resolves once the anonymous-auth baseline is ready, or after 5s max. Used to
+   start Firestore listeners without ever blocking the dashboard from opening. */
+const afterAuthReady = () => Promise.race([
+    Promise.resolve(window.authReady).catch(() => null),
+    new Promise((res) => setTimeout(() => res(null), 5000))
+]);
 
 function applyThemeAndShowDashboard() {
 
@@ -93,7 +100,7 @@ function applyThemeAndShowDashboard() {
 
         document.getElementById('dashboardSection').classList.add('hidden');
 
-        loadPayrollSettingsFromFirebase();
+        afterAuthReady().then(() => loadPayrollSettingsFromFirebase());
 
         const financialAccountingSection = document.getElementById('financialAccountingSection');
 
@@ -101,7 +108,7 @@ function applyThemeAndShowDashboard() {
 
             financialAccountingSection.classList.remove('hidden');
 
-            window.loadFinancialProfilesForAccounting();
+            afterAuthReady().then(() => window.loadFinancialProfilesForAccounting());
 
         }
 
@@ -261,6 +268,8 @@ function applyThemeAndShowDashboard() {
 
     
 
+    afterAuthReady().then(() => {
+
     if(canViewLive || isAdmin || isAccounting) {
 
         onSnapshot(query(collection(db, "notifications"), orderBy("timestamp", "desc")), (snap) => {
@@ -326,6 +335,8 @@ function applyThemeAndShowDashboard() {
     loadPayrollSettingsAndCalculateFounderSummary();
 
     listenToTasks(); 
+
+    });
 
 }
 

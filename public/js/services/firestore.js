@@ -1112,23 +1112,28 @@ window.listenToTasks = () => {
 
     onSnapshot(realtimeQ, (snapshot) => {
 
-        const migrationBatch = writeBatch(db);
-        let migrationCount = 0;
-        snapshot.forEach((docSnap) => {
-            const tData = docSnap.data();
-            const currentAch = Number(tData.achieved) || 0;
-            if (tData.isSigned && currentAch === 0) {
-                migrationBatch.update(docSnap.ref, {
-                    isSigned: false,
-                    isProvisional: true
-                });
-                migrationCount++;
+        // Runs once per session only: prevents write-amplification (each batch commit
+        // re-triggers this snapshot → more writes → render churn) on every app open.
+        if (!window.hasRunSignedMigration) {
+            window.hasRunSignedMigration = true;
+            const migrationBatch = writeBatch(db);
+            let migrationCount = 0;
+            snapshot.forEach((docSnap) => {
+                const tData = docSnap.data();
+                const currentAch = Number(tData.achieved) || 0;
+                if (tData.isSigned && currentAch === 0) {
+                    migrationBatch.update(docSnap.ref, {
+                        isSigned: false,
+                        isProvisional: true
+                    });
+                    migrationCount++;
+                }
+            });
+            if (migrationCount > 0) {
+                migrationBatch.commit().then(() => {
+                    showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0% وتحويلها تلقائياً إلى (اتفاق مبدئي) في قاعدة البيانات!`);
+                }).catch(err => console.error("Data Migration Error:", err));
             }
-        });
-        if (migrationCount > 0) {
-            migrationBatch.commit().then(() => {
-                showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0% وتحويلها تلقائياً إلى (اتفاق مبدئي) في قاعدة البيانات!`);
-            }).catch(err => console.error("Data Migration Error:", err));
         }
 
         snapshot.docChanges().forEach((change) => {
