@@ -4,7 +4,7 @@ import { users } from '../config/constants.js';
 const SESSION_KEY = 'kanjo_session_user';
 const IDLE_TIMEOUT = 30 * 60 * 1000;
 let idleTimer;
-let currentUser = null; // تم تعريف المتغير لحل خطأ Strict Mode
+let currentUser = null; 
 
 const resetIdleTimer = () => {
     clearTimeout(idleTimer);
@@ -32,7 +32,6 @@ window.applyTeamTheme = (team) => {
     document.head.appendChild(style);
 }
 
-// تم تعريف دالة تسجيل الدخول بشكل صريح وربطها بالـ Window بأمان
 async function login(pinOverride = null) {
     if (window.authReady) { try { await Promise.race([window.authReady, new Promise(r => setTimeout(r, 5000))]); } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
@@ -51,13 +50,16 @@ async function login(pinOverride = null) {
 }
 window.login = login;
 
-/* Resolves once the anonymous-auth baseline is ready, or after 5s max. */
 const afterAuthReady = () => Promise.race([
     Promise.resolve(window.authReady).catch(() => null),
     new Promise((res) => setTimeout(() => res(null), 5000))
 ]);
 
 function applyThemeAndShowDashboard() {
+    // هذه الأسطر ستقوم بمزامنة المستخدم لو كان هناك تسجيل دخول تلقائي
+    currentUser = window.currentUser || currentUser;
+    if (!currentUser) return; 
+
     if(currentUser.team === 'Fox Team' || currentUser.team === 'Power Team') applyTeamTheme(currentUser.team);
     document.getElementById('loginSection').classList.add('hidden'); 
 
