@@ -830,7 +830,7 @@
 
                 <div id="userAvatarContainer" class="flex-shrink-0"></div>
 
-               
+                
 
                 <div id="archivedReportsBtnWrapper" class="hidden relative mr-1">
 
@@ -958,7 +958,7 @@
 
             <input type="password" id="pinInput" placeholder="أدخل رمز الدخول" maxlength="4" class="w-full text-center text-2xl sm:text-3xl p-4 bg-kanjo-light border border-purple-100 rounded-2xl mb-6 font-black tracking-[0.3em] sm:tracking-[0.5em] outline-none focus:border-kanjo-primary transition-colors">
 
-            <button onclick="login()" class="w-full bg-kanjo-primary text-white py-3.5 sm:py-4 rounded-2xl font-bold text-base sm:text-lg hover:bg-violet-800 transition">دخول النظام</button>
+            <button onclick="window.login ? window.login() : alert('جاري تحميل النظام، برجاء الانتظار ثانية واحدة...')" class="w-full bg-kanjo-primary text-white py-3.5 sm:py-4 rounded-2xl font-bold text-base sm:text-lg hover:bg-violet-800 transition">دخول النظام</button>
 
         </div>
 
@@ -1307,7 +1307,7 @@
 
         <div id="dashboardSection" class="hidden space-y-6">
 
-           
+            
 
             <!-- مربع ملخص رواتب الشركة الخاص بالحساب الحالي والشهر الحالي (للمؤسسين فقط) -->
 
@@ -1675,11 +1675,11 @@
 
             </div>
 
-           
+            
 
             <button id="exportBtn" onclick="openExportModal()" class="hidden w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md">تصدير البيانات العامة (Excel)</button>
 
-           
+            
 
             <div id="tasksContainer" class="space-y-4"></div>
 
@@ -1717,7 +1717,7 @@
 
                 <textarea id="repNext" placeholder="مقترحات القادم" class="w-full p-2.5 bg-kanjo-light border rounded-xl text-xs font-bold min-h-[45px]" rows="2"></textarea>
 
-               
+                
 
                 <div class="space-y-2 bg-kanjo-light p-3 rounded-xl border border-purple-100">
 
@@ -1800,4 +1800,3 @@
 </body>
 
 </html>
-
