@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
@@ -17,7 +17,11 @@ let db;
 try {
     db = initializeFirestore(app, {
         localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager()
+            tabManager: persistentMultipleTabManager(),
+            // 10 MB hard cap on the persistent (IndexedDB) cache. Prevents old/low-end
+            // devices from hanging while the SDK resolves indexes against a huge stale
+            // local cache during multi-city scale-up.
+            cacheSizeBytes: 10485760
         })
     });
 } catch (e) {
@@ -67,6 +71,8 @@ window.addDoc = addDoc;
 window.onSnapshot = onSnapshot;
 window.query = query;
 window.where = where;
+window.limit = limit;
+window.startAfter = startAfter;
 window.updateDoc = updateDoc;
 window.doc = doc;
 window.arrayUnion = arrayUnion;
@@ -112,5 +118,6 @@ export {
     app, db, firebaseConfig,
     collection, addDoc, onSnapshot, query, where, updateDoc, doc,
     arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc,
+    limit, startAfter,
     initializeFirestore, getFirestore, persistentLocalCache, persistentMultipleTabManager
 };

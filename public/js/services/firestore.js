@@ -951,170 +951,205 @@ window.submitReport = async () => {
 
 };
 
-window.listenToTasks = () => { 
+/* ─────────────────────────────────────────────────────────────
+   Paginated Firestore fetching — multi-city scalability.
+   - Realtime: latest TASKS_PAGE_SIZE tasks via onSnapshot (limit 50,
+     orderBy createdAt desc). No more full-collection scan.
+   - Load More: getDocs + startAfter(lastVisible) appends older pages
+     into tasksMemory without ever fetching the whole collection.
+   - Timeout failsafe: any fetch slower than TASKS_FETCH_TIMEOUT ms
+     falls back to a clean render + slow-network toast.
+   ───────────────────────────────────────────────────────────── */
 
-    onSnapshot(query(collection(db, "tasks"), orderBy("time", "asc")), (snapshot) => { 
+const TASKS_PAGE_SIZE = 50;
+const TASKS_FETCH_TIMEOUT = 8000;
 
-        
+window.tasksLastVisible = null;
+window.tasksLoading = false;
+window.tasksAllLoaded = false;
+
+function fetchWithTimeout(fn, ms) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => resolve({ timedOut: true }), ms);
+        Promise.resolve().then(fn).then((result) => {
+            clearTimeout(timer);
+            resolve(result);
+        }).catch((err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
+    });
+}
+
+function buildVirtualSnapshot() {
+    return {
+        docs: Array.from(window.tasksMemory.entries()).map(([id, data]) => ({ id, data: () => data })),
+        forEach: (cb) => {
+            window.tasksMemory.forEach((data, id) => cb({ id, data: () => data }));
+        }
+    };
+}
+
+function computeUniqueMerchantsFromMemory() {
+    const uniqueMerchants = new Map();
+    window.tasksMemory.forEach((task) => {
+        const baseName = getBaseName(task.name);
+        if (!uniqueMerchants.has(baseName)) {
+            uniqueMerchants.set(baseName, {
+                target: 0,
+                achieved: 0,
+                isSigned: false,
+                isProvisional: false,
+                hasVisit: false,
+                cat: null,
+                team: task.team,
+                contractDate: ''
+            });
+        }
+        const mData = uniqueMerchants.get(baseName);
+        const currentTarget = Number(task.target) || 0;
+        const rawAchieved = Number(task.achieved) || 0;
+        let currentAchieved = (task.isSigned || task.isProvisional) ? rawAchieved : 0;
+        if (currentAchieved > 100) currentAchieved = 0;
+        if (currentTarget > mData.target) mData.target = currentTarget;
+        if (currentAchieved > mData.achieved) mData.achieved = currentAchieved;
+        if (task.isSigned && rawAchieved > 0) {
+            mData.isSigned = true;
+            mData.isProvisional = false;
+            let cDate = '';
+            if (typeof window.extractTaskContractDate === 'function') {
+                cDate = window.extractTaskContractDate(task);
+            } else if (task.time) {
+                cDate = task.time;
+            }
+            if (cDate && (!mData.contractDate || cDate > mData.contractDate)) mData.contractDate = cDate;
+        } else if (task.isProvisional || (task.isSigned && rawAchieved === 0)) {
+            mData.isProvisional = true;
+        }
+        if (task.attendances && task.attendances.length > 0) mData.hasVisit = true;
+        if (task.cat && task.cat !== "متابعة" && task.cat !== "متابعه") mData.cat = task.cat;
+    });
+    window.currentUniqueMerchantsGlobal = uniqueMerchants;
+}
+
+function rerenderDashboard() {
+    window.lastSnapshot = buildVirtualSnapshot();
+    computeUniqueMerchantsFromMemory();
+    if (currentUser && currentUser.role === 'accounting') {
+        renderPayrollTable();
+    } else {
+        renderDashboard(window.lastSnapshot);
+    }
+    window.loadPayrollSettingsAndCalculateFounderSummary();
+    checkAndUpdateMissingAddresses(window.allTasksCache);
+    if (currentUser && currentUser.role === 'rep') {
+        updateQuickLinksWalletCounter();
+    }
+}
+
+window.showSlowNetworkToast = () => {
+    if (typeof showToast === 'function') {
+        showToast("تحذير: الاتصال بالشبكة بطيء — يتم عرض أحدث البيانات المتاحة فقط", false);
+    }
+};
+
+function handleSlowNetwork() {
+    console.warn("PERFORMANCE: Firestore fetch exceeded " + TASKS_FETCH_TIMEOUT + "ms. Falling back to clean state.");
+    rerenderDashboard();
+    window.showSlowNetworkToast();
+}
+
+function loadTasksPage(startAfterDoc) {
+    if (window.tasksLoading) return;
+    window.tasksLoading = true;
+
+    const tasksCol = collection(db, "tasks");
+    // COMPOSITE INDEX REMINDER: orderBy('createdAt') on the tasks collection uses
+    // Firestore's auto-created single-field index. If you later combine
+    // orderBy('createdAt', 'desc') WITH a where(...) filter, create the composite
+    // index in the Firebase Console: Firestore > Indexes > Add Index.
+    const q = startAfterDoc
+        ? query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE), startAfter(startAfterDoc))
+        : query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE));
+
+    fetchWithTimeout(() => getDocs(q), TASKS_FETCH_TIMEOUT)
+        .then((result) => {
+            if (result && result.timedOut) {
+                window.tasksLoading = false;
+                handleSlowNetwork();
+                return;
+            }
+            const querySnapshot = result;
+            const docs = querySnapshot.docs;
+            docs.forEach((docSnap) => {
+                window.tasksMemory.set(docSnap.id, docSnap.data());
+            });
+            window.tasksLastVisible = docs.length > 0 ? docs[docs.length - 1] : window.tasksLastVisible;
+            window.tasksAllLoaded = docs.length < TASKS_PAGE_SIZE;
+            window.tasksLoading = false;
+            rerenderDashboard();
+        })
+        .catch((err) => {
+            window.tasksLoading = false;
+            console.error("Firestore tasks fetch error:", err);
+            handleSlowNetwork();
+        });
+}
+
+const loadMoreTasks = () => {
+    if (window.tasksLoading || window.tasksAllLoaded || !window.tasksLastVisible) return;
+    loadTasksPage(window.tasksLastVisible);
+};
+
+window.loadMoreTasks = loadMoreTasks;
+
+window.listenToTasks = () => {
+    const tasksCol = collection(db, "tasks");
+    // COMPOSITE INDEX REMINDER: orderBy('createdAt', 'desc') with limit() needs no
+    // manual composite index, but any future where() filter combined with this
+    // orderBy requires one in the Firebase Console (Firestore > Indexes).
+    const realtimeQ = query(tasksCol, orderBy("createdAt", "desc"), limit(TASKS_PAGE_SIZE));
+
+    onSnapshot(realtimeQ, (snapshot) => {
 
         const migrationBatch = writeBatch(db);
-
         let migrationCount = 0;
-
         snapshot.forEach((docSnap) => {
-
             const tData = docSnap.data();
-
             const currentAch = Number(tData.achieved) || 0;
-
             if (tData.isSigned && currentAch === 0) {
-
                 migrationBatch.update(docSnap.ref, {
-
                     isSigned: false,
-
                     isProvisional: true
-
                 });
-
                 migrationCount++;
-
             }
-
         });
-
-
-
         if (migrationCount > 0) {
-
             migrationBatch.commit().then(() => {
-
                 showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0% وتحويلها تلقائياً إلى (اتفاق مبدئي) في قاعدة البيانات!`);
-
             }).catch(err => console.error("Data Migration Error:", err));
-
         }
-
-
 
         snapshot.docChanges().forEach((change) => {
-
-            if (change.type === "added" || change.type === "modified") { window.tasksMemory.set(change.doc.id, change.doc.data()); }
-
-            else if (change.type === "removed") { window.tasksMemory.delete(change.doc.id); }
-
+            if (change.type === "added" || change.type === "modified") {
+                window.tasksMemory.set(change.doc.id, change.doc.data());
+            } else if (change.type === "removed") {
+                window.tasksMemory.delete(change.doc.id);
+            }
         });
 
-        window.lastSnapshot = snapshot; 
-
-        
-
-        let uniqueMerchants = new Map();
-
-        snapshot.forEach(doc => {
-
-            let task = doc.data();
-
-            let baseName = getBaseName(task.name);
-
-            if (!uniqueMerchants.has(baseName)) {
-
-                uniqueMerchants.set(baseName, {
-
-                    target: 0,
-
-                    achieved: 0,
-
-                    isSigned: false,
-
-                    isProvisional: false,
-
-                    hasVisit: false,
-
-                    cat: null,
-
-                    team: task.team,
-
-                    contractDate: ''
-
-                });
-
-            }
-
-            let mData = uniqueMerchants.get(baseName);
-
-            let currentTarget = Number(task.target) || 0;
-
-            let rawAchieved = Number(task.achieved) || 0;
-
-            let currentAchieved = (task.isSigned || task.isProvisional) ? rawAchieved : 0;
-
-            if (currentAchieved > 100) currentAchieved = 0;
-
-            if (currentTarget > mData.target) mData.target = currentTarget;
-
-            if (currentAchieved > mData.achieved) mData.achieved = currentAchieved;
-
-            if (task.isSigned && rawAchieved > 0) {
-
-                mData.isSigned = true;
-
-                mData.isProvisional = false;
-
-                let cDate = '';
-                if (typeof window.extractTaskContractDate === 'function') {
-                    cDate = window.extractTaskContractDate(task);
-                } else if (task.time) {
-                    cDate = task.time;
-                }
-                if (cDate && (!mData.contractDate || cDate > mData.contractDate)) mData.contractDate = cDate;
-
-            } else if (task.isProvisional || (task.isSigned && rawAchieved === 0)) {
-
-                mData.isProvisional = true;
-
-            }
-
-            if (task.attendances && task.attendances.length > 0) mData.hasVisit = true;
-
-            if (task.cat && task.cat !== "متابعة" && task.cat !== "متابعه") mData.cat = task.cat;
-
-        });
-
-        window.currentUniqueMerchantsGlobal = uniqueMerchants;
-
-
-
-        if (currentUser && currentUser.role === 'rep') {
-
-            updateQuickLinksWalletCounter();
-
+        if (snapshot.docs.length > 0) {
+            window.tasksLastVisible = snapshot.docs[snapshot.docs.length - 1];
         }
+        window.tasksAllLoaded = snapshot.docs.length < TASKS_PAGE_SIZE;
 
-
-
-        if (currentUser && currentUser.role === 'accounting') {
-
-            renderPayrollTable();
-
-        } else {
-
-            renderDashboard(snapshot); 
-
-        }
-
-
-
-        window.loadPayrollSettingsAndCalculateFounderSummary();
-
-        checkAndUpdateMissingAddresses(window.allTasksCache);
+        rerenderDashboard();
 
     }, (error) => {
-
         console.error("Firestore snapshot error:", error);
-
-    }); 
-
+        handleSlowNetwork();
+    });
 };
 
 function updateQuickLinksWalletCounter() {
@@ -1166,4 +1201,4 @@ function updateQuickLinksWalletCounter() {
 window.updateNotificationsUI = updateNotificationsUI;
 window.updateQuickLinksWalletCounter = updateQuickLinksWalletCounter;
 
-export { updateNotificationsUI, updateQuickLinksWalletCounter };
+export { updateNotificationsUI, updateQuickLinksWalletCounter, loadMoreTasks };
