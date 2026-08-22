@@ -337,7 +337,7 @@ function applyThemeAndShowDashboard() {
     listenToTasks(); 
 
     });
-
+window.login = login;
 }
 
 window.applyThemeAndShowDashboard = applyThemeAndShowDashboard;
