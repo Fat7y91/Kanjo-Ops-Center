@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
@@ -32,12 +32,12 @@ try {
     // Clear any half-initialized persisted cache BEFORE falling back to memory so a
     // stale IndexedDB state can never poison reads again.
     console.error("initializeFirestore (persistent cache) failed:", e);
-    if (typeof clearPersistence === 'function') {
-        clearPersistence().then(() => {
+    db = getFirestore(app); // Fallback to memory cache immediately
+    if (typeof clearIndexedDbPersistence === 'function') {
+        clearIndexedDbPersistence(db).then(() => {
             console.log("Firestore persisted cache cleared; falling back to memory cache.");
-        }).catch((ce) => console.error("clearPersistence error:", ce));
+        }).catch((ce) => console.error("clearIndexedDbPersistence error:", ce));
     }
-    db = getFirestore(app);
 }
 
 // ─── Firebase App Check (stub for reCAPTCHA v3 / Cloudflare Turnstile) ───
@@ -193,5 +193,5 @@ export {
     collection, addDoc, wrappedOnSnapshot as onSnapshot, query, where, updateDoc, doc,
     arrayUnion, deleteDoc, orderBy, wrappedGetDocs as getDocs, writeBatch, setDoc, wrappedGetDoc as getDoc,
     limit, startAfter,
-    initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager, clearPersistence
+    initializeFirestore, getFirestore, persistentLocalCache, persistentSingleTabManager, clearIndexedDbPersistence
 };
