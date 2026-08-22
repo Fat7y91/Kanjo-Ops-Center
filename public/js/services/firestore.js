@@ -528,11 +528,6 @@ window.submitReport = async () => {
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
 };
 
-// ==========================================
-// تم محو جميع القيود والـ Pagination والـ Timeouts
-// لجلب قاعدة البيانات بالكامل دون توقف
-// ==========================================
-
 function buildVirtualSnapshot() {
     return {
         docs: Array.from(window.tasksMemory.entries()).map(([id, data]) => ({ id, data: () => data })),
@@ -607,15 +602,18 @@ function rerenderDashboard() {
     }
 }
 
-// دالة فارغة لمنع تعطل ملف main.js عند عمل scroll
 const loadMoreTasks = () => {};
 window.loadMoreTasks = loadMoreTasks;
 
+// تم استبدال الاستماع الحي بطلب قسري وشامل لجلب الجدول بالكامل دون أي قيود
 window.listenToTasks = () => {
     const tasksCol = collection(db, "tasks");
     
-    // سحب مباشر وكامل للقاعدة بالكامل فوراً
-    onSnapshot(tasksCol, (snapshot) => {
+    getDocs(tasksCol).then((snapshot) => {
+        window.tasksMemory.clear();
+        snapshot.forEach((docSnap) => {
+            window.tasksMemory.set(docSnap.id, docSnap.data());
+        });
 
         if (!window.hasRunSignedMigration) {
             window.hasRunSignedMigration = true;
@@ -634,23 +632,14 @@ window.listenToTasks = () => {
             });
             if (migrationCount > 0) {
                 migrationBatch.commit().then(() => {
-                    showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0% وتحويلها تلقائياً إلى (اتفاق مبدئي) في قاعدة البيانات!`);
+                    showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0%!`);
                 }).catch(err => console.error("Data Migration Error:", err));
             }
         }
 
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added" || change.type === "modified") {
-                window.tasksMemory.set(change.doc.id, change.doc.data());
-            } else if (change.type === "removed") {
-                window.tasksMemory.delete(change.doc.id);
-            }
-        });
-
         rerenderDashboard();
-
-    }, (error) => {
-        console.error("Firestore snapshot error:", error);
+    }).catch((error) => {
+        console.error("Firestore getDocs error:", error);
         if (typeof showToast === 'function') {
             showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
         }
