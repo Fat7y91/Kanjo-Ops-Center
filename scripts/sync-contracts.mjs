@@ -12,7 +12,7 @@
      SYNC_DRY_RUN=1 node scripts/sync-contracts.mjs
 */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -24,6 +24,14 @@ const getBaseName = (name) => {
         clean = clean.replace(/\s*\(متابعة\)\s*/g, '').replace(/\s*\(متابعه\)\s*/g, '').trim();
     }
     return clean.trim();
+};
+
+/* The app expects exactly 'Fox Team' / 'Power Team'; normalizes data typos. */
+const normalizeTeam = (team) => {
+    const s = (team || '').trim();
+    if (s === 'PowerTeam') return 'Power Team';
+    if (s === 'FoxTeam') return 'Fox Team';
+    return s;
 };
 
 /* Lenient matching: strips RTL/LTR formatting marks, normalizes Arabic letter
@@ -39,8 +47,13 @@ const normalizeForMatch = (s) => (s || '')
 
 const stripEmoji = (s) => (s || '').replace(/\p{Extended_Pictographic}/gu, '').replace(/\s+/g, ' ').trim();
 
-const dataPath = process.argv[2] || new URL('./contracts-batch-1.json', import.meta.url).pathname;
-const contracts = JSON.parse(readFileSync(dataPath, 'utf8'));
+const batchDir = new URL('.', import.meta.url);
+const dataPaths = process.argv.slice(2).length
+    ? process.argv.slice(2)
+    : readdirSync(batchDir)
+        .filter((f) => /^contracts-batch-.*\.json$/.test(f))
+        .sort()
+        .map((f) => new URL(f, batchDir).pathname);
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 
@@ -98,44 +111,49 @@ const main = async () => {
         opCount = 0;
     };
 
-    for (const c of contracts) {
-        summary.contracts += 1;
-        const matched = new Set();
-        keysFor(c.n).forEach((k) => {
-            const hits = byKey.get(k);
-            if (hits) hits.forEach((h) => matched.add(h));
-        });
-        const hits = Array.from(matched);
+    for (const dataPath of dataPaths) {
+        const contracts = JSON.parse(readFileSync(dataPath, 'utf8'));
+        console.log(`Processing ${dataPath}: ${contracts.length} contract(s)`);
 
-        if (hits.length === 0) {
-            summary.notFound.push(c.n);
-            continue;
-        }
+        for (const c of contracts) {
+            summary.contracts += 1;
+            const matched = new Set();
+            keysFor(c.n).forEach((k) => {
+                const hits = byKey.get(k);
+                if (hits) hits.forEach((h) => matched.add(h));
+            });
+            const hits = Array.from(matched);
 
-        const payloadBase = {
-            time: c.d,
-            cat: c.c,
-            team: c.t,
-            isSigned: c.s === true,
-            achieved: Number(c.a) || 0
-        };
-        if (c.s === true) payloadBase.isProvisional = false;
-
-        for (const hit of hits) {
-            summary.matchedDocs += 1;
-            const payload = { ...payloadBase };
-            /* Backfill createdAt ONLY when missing — keeps the app's
-               orderBy('createdAt','desc') pagination from hiding these tasks. */
-            if (!hit.data.createdAt) {
-                payload.createdAt = new Date(`${c.d}T00:00:00Z`);
+            if (hits.length === 0) {
+                summary.notFound.push(c.n);
+                continue;
             }
-            if (dryRun) {
-                console.log(`[dry-run] would update "${c.n}" -> task ${hit.ref.id}:`, JSON.stringify(payload));
+
+            const payloadBase = {
+                time: c.d,
+                cat: c.c,
+                team: normalizeTeam(c.t),
+                isSigned: c.s === true,
+                achieved: Number(c.a) || 0
+            };
+            if (c.s === true) payloadBase.isProvisional = false;
+
+            for (const hit of hits) {
+                summary.matchedDocs += 1;
+                const payload = { ...payloadBase };
+                /* Backfill createdAt ONLY when missing — keeps the app's
+                   orderBy('createdAt','desc') pagination from hiding these tasks. */
+                if (!hit.data.createdAt) {
+                    payload.createdAt = new Date(`${c.d}T00:00:00Z`);
+                }
+                if (dryRun) {
+                    console.log(`[dry-run] would update "${c.n}" -> task ${hit.ref.id}:`, JSON.stringify(payload));
+                }
+                batch.update(hit.ref, payload);
+                opCount += 1;
+                summary.updatedDocs += 1;
+                if (opCount >= 480) await flush();
             }
-            batch.update(hit.ref, payload);
-            opCount += 1;
-            summary.updatedDocs += 1;
-            if (opCount >= 480) await flush();
         }
     }
 
