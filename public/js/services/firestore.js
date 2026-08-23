@@ -418,10 +418,21 @@ window.saveEditTask = async () => {
 window.submitReport = async () => { 
     const createNew = document.getElementById('repCreateTask').checked; 
     const nextDate = document.getElementById('repNextDate').value; 
-    const achieved = parseFloat(document.getElementById('repPercentage').value);
+    let achieved = parseFloat(document.getElementById('repPercentage').value);
     
     let isSigned = document.getElementById('repIsSigned').checked;
     let isProvisional = document.getElementById('repProvContract').checked;
+
+    // تعديل حالة التعاقد (نهائي/مبدئي/بدون) ونسبة العمولة مسموح به للمدير
+    // (أ/ محمود) فقط. أي مندوب آخر يتم تسجيل تقريره كزيارة روتينية دون أي
+    // تغيير على حقول التعاقد، حمايةً للعقود من التعديل غير المصرح به.
+    const canEditContract = window.canManageContracts ? window.canManageContracts() : false;
+    if (!canEditContract && (isSigned || isProvisional || (!isNaN(achieved) && achieved > 0))) {
+        showToast("تعديل حالة التعاقد ونسبة العمولة مسموح به للمدير (أ/ محمود) فقط، تم تسجيل الزيارة كزيارة روتينية", false);
+        isSigned = false;
+        isProvisional = false;
+        achieved = 0;
+    }
     
     if (isSigned && (isNaN(achieved) || achieved <= 0)) {
         showToast("لا يمكن اختيار (تم التعاقد النهائي) بنسبة عمولة 0%! للنسبة 0% يرجى اختيار (اتفاق مبدئي).", false);
@@ -453,10 +464,13 @@ window.submitReport = async () => {
     });
 
     // Routine visit = تدريب/متابعة (no contract data selected). Such visits MUST NOT
-    // overwrite the contract fields of a task that already has a finalized contract.
+    // overwrite the contract fields of a task that already has a contract:
+    // - finalized contracts are protected for everyone;
+    // - provisional contracts are also protected for non-Mahmoud users (only the
+    //   manager may modify a provisional agreement).
     const isRoutineVisit = !isSigned && !isProvisional && (isNaN(achieved) || achieved <= 0);
 
-    const hasFinalizedContract = (tData) => tData && tData.isSigned === true && (Number(tData.achieved) || 0) > 0;
+    const hasProtectedContract = (tData) => tData && ((tData.isSigned === true && (Number(tData.achieved) || 0) > 0) || (!canEditContract && tData.isProvisional === true));
 
     const q = query(collection(db, "tasks"));
     const snap = await getDocs(q);
@@ -484,21 +498,25 @@ window.submitReport = async () => {
 
                 };
 
-                // For a routine visit on an already-finalized contract, keep the
-                // original contract fields (isSigned/achieved/target/time) untouched.
-                if (!isRoutineVisit || !hasFinalizedContract(tData)) {
+                // For a routine visit on an existing contract, keep the original
+                // contract fields (isSigned/isProvisional/achieved/target/time) untouched.
+                if (!isRoutineVisit || !hasProtectedContract(tData)) {
                     payload.isSigned = isSigned;
                     payload.isProvisional = isProvisional;
                     payload.achieved = (isSigned || isProvisional) ? achieved : 0;
                     payload.target = seriesTarget;
-                    payload.time = todayStr;
+                    // Keep the original signing date on an already-finalized contract so
+                    // the contract never moves to a later payroll month.
+                    if (!(tData.isSigned === true && (Number(tData.achieved) || 0) > 0)) {
+                        payload.time = todayStr;
+                    }
                 }
 
                 batch.update(docSnap.ref, payload);
             } else {
                 // Sibling docs of the same merchant: a routine visit must not clobber
-                // their finalized contract either.
-                if (!isRoutineVisit || !hasFinalizedContract(tData)) {
+                // an existing contract either.
+                if (!isRoutineVisit || !hasProtectedContract(tData)) {
                     batch.update(docSnap.ref, {
                         isSigned: isSigned,
                         isProvisional: isProvisional,
@@ -580,18 +598,16 @@ function computeUniqueMerchantsFromMemory() {
         if (currentAchieved > 100) currentAchieved = 0;
         if (currentTarget > mData.target) mData.target = currentTarget;
         if (currentAchieved > mData.achieved) mData.achieved = currentAchieved;
+        const cDate = (typeof window.extractTaskContractDate === 'function')
+            ? window.extractTaskContractDate(task)
+            : (task.time || '');
         if (task.isSigned && rawAchieved > 0) {
             mData.isSigned = true;
             mData.isProvisional = false;
-            let cDate = '';
-            if (typeof window.extractTaskContractDate === 'function') {
-                cDate = window.extractTaskContractDate(task);
-            } else if (task.time) {
-                cDate = task.time;
-            }
-            if (cDate && (!mData.contractDate || cDate > mData.contractDate)) mData.contractDate = cDate;
+            if (cDate && (!mData.contractDate || cDate < mData.contractDate)) mData.contractDate = cDate;
         } else if (task.isProvisional || (task.isSigned && rawAchieved === 0)) {
             mData.isProvisional = true;
+            if (cDate && (!mData.contractDate || cDate < mData.contractDate)) mData.contractDate = cDate;
         }
         if (task.attendances && task.attendances.length > 0) mData.hasVisit = true;
         if (task.cat && task.cat !== "متابعة" && task.cat !== "متابعه") mData.cat = task.cat;

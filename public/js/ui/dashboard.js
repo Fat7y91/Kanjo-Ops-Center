@@ -246,8 +246,6 @@ window.showCardDetails = (cardType) => {
 
             item.assignedTeam = assignedTeam;
 
-            item.contractDate = latestDate || todayStr;
-
             item.contractTimestamp = latestTimestamp || `${todayStr} 00:00:00`;
 
             item.contactName = lastContactName;
@@ -1065,17 +1063,17 @@ window.renderDashboard = (snapshot) => {
 
             
 
+            const cDate = (typeof window.extractTaskContractDate === 'function')
+                ? window.extractTaskContractDate(task)
+                : (task.time || '');
+
             if (task.isSigned && rawAchieved > 0) {
 
                 mData.isSigned = true;
 
                 mData.isProvisional = false;
 
-                const cDate = (typeof window.extractTaskContractDate === 'function')
-                    ? window.extractTaskContractDate(task)
-                    : (task.time || '');
-
-                if (cDate && (!mData.contractDate || cDate > mData.contractDate)) {
+                if (cDate && (!mData.contractDate || cDate < mData.contractDate)) {
 
                     mData.contractDate = cDate;
 
@@ -1084,6 +1082,12 @@ window.renderDashboard = (snapshot) => {
             } else if (task.isProvisional || (task.isSigned && rawAchieved === 0)) {
 
                 mData.isProvisional = true;
+
+                if (cDate && (!mData.contractDate || cDate < mData.contractDate)) {
+
+                    mData.contractDate = cDate;
+
+                }
 
             }
 

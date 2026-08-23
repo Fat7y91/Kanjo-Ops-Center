@@ -427,17 +427,12 @@ window.setPayrollPeriodAll = () => {
     window.loadPayrollSettingsAndCalculateFounderSummary();
 };
 
-window.extractTaskContractDate = (task) => {
-    let latest = '';
-    if (task && Array.isArray(task.reports)) {
-        task.reports.forEach(r => {
-            const d = r.date || (r.timestamp ? String(r.timestamp).split(' ')[0] : '');
-            if (d && (!latest || d > latest)) latest = d;
-        });
-    }
-    if (!latest && task && task.time) latest = task.time;
-    return latest || '';
-};
+/**
+ * تاريخ التعاقد الأصلي: يُؤخذ من حقل time المثبّت عند التعاقد فقط،
+ * ولا يُشتق أبداً من تواريخ الزيارات/التقارير اللاحقة حتى لا تنتقل
+ * العقود بين أشهر الرواتب بسبب زيارة متابعة لاحقة.
+ */
+window.extractTaskContractDate = (task) => (task && task.time) || '';
 
 /**
  * يجلب التجار المتعاقدين نهائياً فقط (isSigned + achieved > 0)
@@ -471,7 +466,7 @@ window.getFinalSignedMerchantsForPayroll = (periodKey) => {
                 mData.achieved = Math.max(mData.achieved, taskAch);
                 mData.team = t.team || mData.team;
                 const cDate = window.extractTaskContractDate(t);
-                if (cDate && (!mData.contractDate || cDate > mData.contractDate)) mData.contractDate = cDate;
+                if (cDate && (!mData.contractDate || cDate < mData.contractDate)) mData.contractDate = cDate;
             }
         });
     }

@@ -986,6 +986,20 @@ window.openReportModal = (taskId, name, team, target, notes) => {
 
     document.getElementById('reportModal').classList.remove('hidden'); 
 
+    // فقط المدير (أ/ محمود) يمكنه تعديل حالة التعاقد ونسبة العمولة؛
+    // لباقي المستخدمين تُعطَّل اختيارات التعاقد ويُعرض تنبيه واضح.
+    const canEditContract = window.canManageContracts ? window.canManageContracts() : false;
+
+    if (!canEditContract) {
+        ['repNoContract', 'repProvContract', 'repIsSigned', 'repPercentage'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
+    }
+
+    const contractNote = document.getElementById('mahmoudOnlyContractNote');
+    if (contractNote) contractNote.classList.toggle('hidden', canEditContract);
+
 };
 
 

@@ -232,8 +232,6 @@ window.exportDetailsExcel = async () => {
 
                 item.assignedTeam = assignedTeam;
 
-                item.contractDate = latestDate || todayStr;
-
                 item.contractTimestamp = latestTimestamp || `${todayStr} 00:00:00`;
 
             });
