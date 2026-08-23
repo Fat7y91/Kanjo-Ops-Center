@@ -1,0 +1,26 @@
+# Syncs batch-1 contract data into the Firestore `tasks` collection.
+# Runs on push to main when the sync script or batch data changes, or manually.
+name: Sync contracts (batch-1)
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/sync-contracts.mjs'
+      - 'scripts/contracts-batch-1.json'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Run contract sync
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/sync-contracts.mjs scripts/contracts-batch-1.json

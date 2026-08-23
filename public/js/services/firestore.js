@@ -171,9 +171,10 @@ window.recordAttendance = async function(taskId, type) {
         relatedIds.forEach((id) => {
             const ref = doc(db, "tasks", id);
             const tData = window.tasksMemory.get(id) || {};
+            const isFinalizedContract = tData && tData.isSigned === true && (Number(tData.achieved) || 0) > 0;
             let updatePayload = {
                 attendances: id === taskId ? arrayUnion(attendanceEntry) : (tData.attendances || []),
-                time: id === taskId ? todayStr : (tData.time || todayStr)
+                time: (id === taskId && !isFinalizedContract) ? todayStr : (tData.time || todayStr)
             };
             if (cleanAddress) updatePayload.address = cleanAddress;
             if (id !== taskId) {
@@ -188,7 +189,8 @@ window.recordAttendance = async function(taskId, type) {
         if (mem) {
             if (!Array.isArray(mem.attendances)) mem.attendances = [];
             mem.attendances = [...mem.attendances, attendanceEntry];
-            mem.time = todayStr;
+            const memFinalized = mem.isSigned === true && (Number(mem.achieved) || 0) > 0;
+            if (!memFinalized) mem.time = todayStr;
             if (cleanAddress) mem.address = cleanAddress;
             window.tasksMemory.set(taskId, mem);
         }
@@ -450,6 +452,12 @@ window.submitReport = async () => {
         }
     });
 
+    // Routine visit = تدريب/متابعة (no contract data selected). Such visits MUST NOT
+    // overwrite the contract fields of a task that already has a finalized contract.
+    const isRoutineVisit = !isSigned && !isProvisional && (isNaN(achieved) || achieved <= 0);
+
+    const hasFinalizedContract = (tData) => tData && tData.isSigned === true && (Number(tData.achieved) || 0) > 0;
+
     const q = query(collection(db, "tasks"));
     const snap = await getDocs(q);
     const batch = writeBatch(db);
@@ -459,7 +467,7 @@ window.submitReport = async () => {
         const tBase = getBaseName(tData.name);
         if (tBase === baseName) {
             if (docSnap.id === activeTaskId) {
-                batch.update(docSnap.ref, {
+                const payload = {
                     reports: arrayUnion({ 
                         name: currentUser.name, 
                         time: new Date().toLocaleTimeString(), 
@@ -472,20 +480,32 @@ window.submitReport = async () => {
                         merchant: document.getElementById('repMerchant').value, 
                         team: document.getElementById('repTeam').value, 
                         next: document.getElementById('repNext').value 
-                    }),
-                    isSigned: isSigned,
-                    isProvisional: isProvisional,
-                    achieved: (isSigned || isProvisional) ? achieved : 0,
-                    target: seriesTarget,
-                    time: todayStr
-                });
+                    })
+
+                };
+
+                // For a routine visit on an already-finalized contract, keep the
+                // original contract fields (isSigned/achieved/target/time) untouched.
+                if (!isRoutineVisit || !hasFinalizedContract(tData)) {
+                    payload.isSigned = isSigned;
+                    payload.isProvisional = isProvisional;
+                    payload.achieved = (isSigned || isProvisional) ? achieved : 0;
+                    payload.target = seriesTarget;
+                    payload.time = todayStr;
+                }
+
+                batch.update(docSnap.ref, payload);
             } else {
-                batch.update(docSnap.ref, {
-                    isSigned: isSigned,
-                    isProvisional: isProvisional,
-                    achieved: (isSigned || isProvisional) ? achieved : 0,
-                    target: seriesTarget
-                });
+                // Sibling docs of the same merchant: a routine visit must not clobber
+                // their finalized contract either.
+                if (!isRoutineVisit || !hasFinalizedContract(tData)) {
+                    batch.update(docSnap.ref, {
+                        isSigned: isSigned,
+                        isProvisional: isProvisional,
+                        achieved: (isSigned || isProvisional) ? achieved : 0,
+                        target: seriesTarget
+                    });
+                }
             }
         }
     });
