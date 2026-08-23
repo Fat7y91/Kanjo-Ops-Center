@@ -70,7 +70,7 @@ async function getCleanAddressFromCoords(lat, lon) {
 
 async function checkAndUpdateMissingAddresses(tasksCache) {
 
-    if (!currentUser || (currentUser.name !== 'أ/ محمود' && currentUser.role !== 'founder')) return;
+    if (!(window.canManageContracts ? window.canManageContracts() : false)) return;
 
     if (window.hasRunGeoUpdate) return;
 

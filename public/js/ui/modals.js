@@ -60,6 +60,8 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     let isProvisional = false;
 
+    let contractAchieved = 0;
+
     let totalVisits = 0;
 
     let hasVisit = false;
@@ -81,6 +83,8 @@ window.openMerchantProfile = (merchantBaseName) => {
         if (t.isSigned && taskAchieved > 0) isSigned = true;
 
         if (t.isProvisional || (t.isSigned && taskAchieved === 0)) isProvisional = true;
+
+        if ((t.isSigned || t.isProvisional) && taskAchieved > contractAchieved) contractAchieved = taskAchieved;
 
 
 
@@ -198,6 +202,26 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     document.getElementById('mpContractStatus').innerHTML = contractStatusText;
 
+    const canManage = window.canManageContracts ? window.canManageContracts() : false;
+
+    const contractEditSection = document.getElementById('mpContractEditSection');
+
+    if (contractEditSection) contractEditSection.classList.toggle('hidden', !canManage);
+
+    if (canManage) {
+
+        document.getElementById('mpNoContract').checked = !isSigned && !isProvisional;
+
+        document.getElementById('mpProvContract').checked = isProvisional && !isSigned;
+
+        document.getElementById('mpSignedContract').checked = isSigned;
+
+        document.getElementById('mpContractPercentage').value = contractAchieved || '';
+
+        window.toggleMerchantContractPercentage();
+
+    }
+
 
 
     const visitsListContainer = document.getElementById('mpVisitDatesList');
@@ -232,7 +256,7 @@ window.openMerchantProfile = (merchantBaseName) => {
 
 
 
-    const isMahmoud = currentUser && currentUser.name === 'أ/ محمود';
+    const isMahmoud = window.canManageContracts ? window.canManageContracts() : false;
 
     const isRep = currentUser && currentUser.role === 'rep';
 
@@ -320,6 +344,103 @@ window.closeMerchantProfileModal = () => {
 
 
 
+window.toggleMerchantContractPercentage = () => {
+
+    const noContract = document.getElementById('mpNoContract');
+
+    const pctEl = document.getElementById('mpContractPercentage');
+
+    if (!noContract || !pctEl) return;
+
+    pctEl.disabled = noContract.checked;
+
+};
+
+
+
+window.saveMerchantContract = async () => {
+
+    if (!(window.canManageContracts ? window.canManageContracts() : false)) {
+
+        return showToast("عذراً، هذه الصلاحية مقتصرة على المدير فقط", false);
+
+    }
+
+    const isSigned = document.getElementById('mpSignedContract').checked;
+
+    const isProvisional = document.getElementById('mpProvContract').checked;
+
+    const achieved = parseFloat(document.getElementById('mpContractPercentage').value);
+
+    if (isSigned && (isNaN(achieved) || achieved <= 0)) {
+
+        showToast("لا يمكن اختيار (تم التعاقد النهائي) بنسبة عمولة 0%! للنسبة 0% يرجى اختيار (اتفاق مبدئي).", false);
+
+        return;
+
+    }
+
+    if (isProvisional && isNaN(achieved)) {
+
+        showToast("يرجى إدخال نسبة العمولة المبدئية", false);
+
+        return;
+
+    }
+
+    if ((isSigned || isProvisional) && achieved > 100) {
+
+        showToast("نسبة العمولة لا يمكن أن تتجاوز 100%!", false);
+
+        return;
+
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    const q = query(collection(db, "tasks"));
+
+    const snap = await getDocs(q);
+
+    const batch = writeBatch(db);
+
+    snap.forEach((docSnap) => {
+
+        const tData = docSnap.data();
+
+        if (getBaseName(tData.name) === activeMerchantBaseName) {
+
+            const updatePayload = {
+
+                isSigned: isSigned,
+
+                isProvisional: isProvisional,
+
+                achieved: (isSigned || isProvisional) ? achieved : 0
+
+            };
+
+            // حماية تاريخ التعاقد الأصلي للعقود المؤكدة حتى لا تنتقل بين أشهر الرواتب
+            const isFinalized = tData.isSigned === true && (Number(tData.achieved) || 0) > 0;
+
+            if (!isFinalized) updatePayload.time = todayStr;
+
+            batch.update(docSnap.ref, updatePayload);
+
+        }
+
+    });
+
+    await batch.commit();
+
+    closeMerchantProfileModal();
+
+    showToast("تم تحديث حالة التعاقد لجميع مهام التاجر بنجاح");
+
+};
+
+
+
 window.saveMerchantProfile = async () => {
 
     const contactName = document.getElementById('mpContactName').value.trim();
@@ -340,7 +461,7 @@ window.saveMerchantProfile = async () => {
 
 
 
-    const isMahmoud = currentUser && currentUser.name === 'أ/ محمود';
+    const isMahmoud = window.canManageContracts ? window.canManageContracts() : false;
 
     const isRep = currentUser && currentUser.role === 'rep';
 
@@ -682,9 +803,9 @@ window.closeQuickLinksModal = () => {
 
 window.openArchiveReportModal = (taskId, reportIndex) => {
 
-    if (!currentUser || currentUser.name !== 'أ/ محمود') {
+    if (!(window.canManageContracts ? window.canManageContracts() : false)) {
 
-        return showToast("عذراً، هذه الصلاحية مقتصرة على أ/ محمود فقط", false);
+        return showToast("عذراً، هذه الصلاحية مقتصرة على المدير فقط", false);
 
     }
 

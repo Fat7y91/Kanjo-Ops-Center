@@ -96,7 +96,7 @@ function applyThemeAndShowDashboard() {
         }
     }
     
-    const isMahmoud = (currentUser.name === 'أ/ محمود');
+    const isMahmoud = (window.canManageContracts ? window.canManageContracts() : false);
     const isAdmin = (currentUser.role === 'admin');
     const isRep = (currentUser.role === 'rep');
     const canViewLive = (isMahmoud || isFounder);
@@ -140,7 +140,7 @@ function applyThemeAndShowDashboard() {
 
         const contractsNavBtnWrapper = document.getElementById('contractsNavBtnWrapper');
         if (contractsNavBtnWrapper) {
-            contractsNavBtnWrapper.classList.toggle('hidden', currentUser.name !== 'أ/ محمود');
+            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoud);
         }
 
         const archivedReportsBtnWrapper = document.getElementById('archivedReportsBtnWrapper');

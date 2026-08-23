@@ -4,7 +4,13 @@ window.closeStatModal = () => document.getElementById('detailsModal').classList.
 
 window.canManageContracts = () => {
 
-    return !!(window.currentUser && (window.currentUser.name === 'أ/ محمود' || window.currentUser.role === 'admin'));
+    const u = window.currentUser;
+
+    if (!u) return false;
+
+    const name = String(u.name || '').trim();
+
+    return !!(u.role === 'admin' || u.role === 'founder' || name.includes('محمود'));
 
 };
 
@@ -1937,7 +1943,7 @@ window.renderTasks = (grouped) => {
 
                 let archiveReportBtn = '';
 
-                if (currentUser && currentUser.name === 'أ/ محمود') {
+                if (window.canManageContracts ? window.canManageContracts() : false) {
 
                     const originalIdx = (t.reports || []).findIndex(origRep => origRep === r || (origRep.timestamp === r.timestamp && origRep.name === r.name));
 
@@ -2043,7 +2049,7 @@ window.renderTasks = (grouped) => {
 
 
 
-            const adminActions = (currentUser.name === 'أ/ محمود') ? `<div class="flex gap-2"><button onclick="openEditModal('${t.id}', {name: '${window.safeString(t.name)}', cat: '${t.cat}', team: '${t.team}', time: '${t.time}', target: ${effectiveTarget || 0}, notes: '${window.safeString(t.notes)}'})" class="text-kanjo-primary hover:text-violet-800 p-1"><i class="fa fa-edit text-xs"></i></button><button onclick="promptDelete('${t.id}')" class="text-slate-300 hover:bg-red-100 hover:text-red-600 p-1 rounded-full"><i class="fa fa-trash text-xs"></i></button></div>` : ''; 
+            const adminActions = (window.canManageContracts ? window.canManageContracts() : false) ? `<div class="flex gap-2"><button onclick="openEditModal('${t.id}', {name: '${window.safeString(t.name)}', cat: '${t.cat}', team: '${t.team}', time: '${t.time}', target: ${effectiveTarget || 0}, notes: '${window.safeString(t.notes)}'})" class="text-kanjo-primary hover:text-violet-800 p-1"><i class="fa fa-edit text-xs"></i></button><button onclick="promptDelete('${t.id}')" class="text-slate-300 hover:bg-red-100 hover:text-red-600 p-1 rounded-full"><i class="fa fa-trash text-xs"></i></button></div>` : ''; 
 
             const canReport = (currentUser.role !== 'founder'); 
 
