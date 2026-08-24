@@ -380,16 +380,13 @@ window.saveEditTask = async () => {
     const oldBaseName = getBaseName(originalTask.name);
     const newBaseName = getBaseName(newNameInput);
 
-    const q = query(collection(db, "tasks"));
-    const snap = await getDocs(q);
     const batch = writeBatch(db);
 
-    snap.forEach((docSnap) => {
-        const tData = docSnap.data();
+    window.tasksMemory.forEach((tData, id) => {
         const tBase = getBaseName(tData.name);
         if (tBase === oldBaseName || tBase === newBaseName) {
-            if (docSnap.id === editTaskId) {
-                batch.update(docSnap.ref, {
+            if (id === editTaskId) {
+                batch.update(doc(db, "tasks", id), {
                     name: newNameInput,
                     cat: newCat,
                     team: newTeam,
@@ -400,7 +397,7 @@ window.saveEditTask = async () => {
             } else {
                 let suffix = tData.name.replace(oldBaseName, '');
                 let updatedName = newBaseName + suffix;
-                batch.update(docSnap.ref, {
+                batch.update(doc(db, "tasks", id), {
                     name: updatedName,
                     cat: newCat,
                     team: newTeam,
@@ -472,15 +469,12 @@ window.submitReport = async () => {
 
     const hasProtectedContract = (tData) => tData && ((tData.isSigned === true && (Number(tData.achieved) || 0) > 0) || (!canEditContract && tData.isProvisional === true));
 
-    const q = query(collection(db, "tasks"));
-    const snap = await getDocs(q);
     const batch = writeBatch(db);
 
-    snap.forEach((docSnap) => {
-        const tData = docSnap.data();
+    window.tasksMemory.forEach((tData, id) => {
         const tBase = getBaseName(tData.name);
         if (tBase === baseName) {
-            if (docSnap.id === activeTaskId) {
+            if (id === activeTaskId) {
                 const payload = {
                     reports: arrayUnion({ 
                         name: currentUser.name, 
@@ -512,12 +506,12 @@ window.submitReport = async () => {
                     }
                 }
 
-                batch.update(docSnap.ref, payload);
+                batch.update(doc(db, "tasks", id), payload);
             } else {
                 // Sibling docs of the same merchant: a routine visit must not clobber
                 // an existing contract either.
                 if (!isRoutineVisit || !hasProtectedContract(tData)) {
-                    batch.update(docSnap.ref, {
+                    batch.update(doc(db, "tasks", id), {
                         isSigned: isSigned,
                         isProvisional: isProvisional,
                         achieved: (isSigned || isProvisional) ? achieved : 0,
@@ -528,26 +522,18 @@ window.submitReport = async () => {
         }
     });
 
-    await batch.commit();
-
-    await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
-
-    if(isSigned) showToast("🎉 تم تسجيل التعاقد النهائي وربطه بكل السلسلة والمتابعات بنجاح!"); 
-    else if(isProvisional) showToast("🤝 تم تسجيل اتفاق مبدئي بنجاح!"); 
-
-    if(createNew && nextDate) { 
-        const followUpName = baseName + " (متابعة)";
+    // أُنشئ المتابعة داخل نفس الدفعة لدمج أحداث الاستماع (snapshot) في حدث واحد
+    if (createNew && nextDate) { 
         let exists = false;
-        snap.forEach((docSnap) => {
-            const tData = docSnap.data();
+        window.tasksMemory.forEach((tData) => {
             if (getBaseName(tData.name) === baseName && tData.time === nextDate) {
                 exists = true;
             }
         });
 
         if(!exists) {
-            await addDoc(collection(db, "tasks"), { 
-                name: followUpName, 
+            batch.set(doc(collection(db, "tasks")), { 
+                name: baseName + " (متابعة)", 
                 cat: activeTaskData.cat || "متابعة", 
                 team: activeTaskData.team || activeTaskTeam, 
                 time: nextDate, 
@@ -562,6 +548,14 @@ window.submitReport = async () => {
             }); 
         }
     } 
+
+    await batch.commit();
+
+    await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
+
+    if(isSigned) showToast("🎉 تم تسجيل التعاقد النهائي وربطه بكل السلسلة والمتابعات بنجاح!"); 
+    else if(isProvisional) showToast("🤝 تم تسجيل اتفاق مبدئي بنجاح!"); 
+
     document.getElementById('reportModal').classList.add('hidden'); 
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
 };

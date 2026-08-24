@@ -76,17 +76,13 @@ async function checkAndUpdateMissingAddresses(tasksCache) {
 
     window.hasRunGeoUpdate = true;
 
-    
-
     let updateCount = 0;
 
-    
+    const batch = writeBatch(db);
 
     for (let t of tasksCache) {
 
         if (updateCount >= 5) break;
-
-        
 
         if ((!t.address || t.address.trim() === '') && t.attendances && t.attendances.length > 0) {
 
@@ -106,23 +102,15 @@ async function checkAndUpdateMissingAddresses(tasksCache) {
 
                         const baseN = getBaseName(t.name);
 
-                        const q = query(collection(db, "tasks"));
+                        window.tasksMemory.forEach((tData, id) => {
 
-                        const snap = await getDocs(q);
+                            if (getBaseName(tData.name) === baseN) {
 
-                        const batch = writeBatch(db);
-
-                        snap.forEach(docSnap => {
-
-                            if (getBaseName(docSnap.data().name) === baseN) {
-
-                                batch.update(docSnap.ref, { address: cleanAddr });
+                                batch.update(doc(db, "tasks", id), { address: cleanAddr });
 
                             }
 
                         });
-
-                        await batch.commit();
 
                         updateCount++;
 
@@ -135,6 +123,8 @@ async function checkAndUpdateMissingAddresses(tasksCache) {
         }
 
     }
+
+    if (updateCount > 0) await batch.commit();
 
 }
 

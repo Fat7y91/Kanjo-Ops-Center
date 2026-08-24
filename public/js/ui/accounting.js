@@ -15,6 +15,17 @@ const EG_WALLET_PROVIDERS = [
 window.currentFinancialProfileData = null;
 window.financialProfilesCache = new Map();
 
+let _payrollConfigCache = null;
+
+window.getPayrollConfigCached = async () => {
+    if (_payrollConfigCache) return _payrollConfigCache;
+    const docSnap = await getDoc(doc(db, "settings", "payrollConfig"));
+    _payrollConfigCache = docSnap.exists() ? docSnap.data() : {};
+    return _payrollConfigCache;
+};
+
+window.invalidatePayrollConfigCache = () => { _payrollConfigCache = null; };
+
 window.isValidEgyptPhone = (v) => /^01[0125][0-9]{8}$/.test((v || '').trim());
 window.isValidIBAN = (v) => /^EG[0-9]{27}$/.test((v || '').trim().toUpperCase());
 window.isValidNationalId = (v) => /^[0-9]{14}$/.test((v || '').trim());
@@ -693,23 +704,15 @@ window.loadPayrollSettingsFromFirebase = async () => {
 
     try {
 
-        const docRef = doc(db, "settings", "payrollConfig");
+        const data = await window.getPayrollConfigCached();
 
-        const docSnap = await getDoc(docRef);
+        if (data.desoukBase !== undefined) document.getElementById('desoukManagerBase').value = data.desoukBase;
 
-        if (docSnap.exists()) {
+        if (data.desoukCommPercent !== undefined) document.getElementById('desoukManagerCommissionPercent').value = data.desoukCommPercent;
 
-            const data = docSnap.data();
+        if (data.desoukExtraBonus !== undefined) document.getElementById('desoukManagerExtraIncentiveBonus').value = data.desoukExtraBonus;
 
-            if (data.desoukBase !== undefined) document.getElementById('desoukManagerBase').value = data.desoukBase;
-
-            if (data.desoukCommPercent !== undefined) document.getElementById('desoukManagerCommissionPercent').value = data.desoukCommPercent;
-
-            if (data.desoukExtraBonus !== undefined) document.getElementById('desoukManagerExtraIncentiveBonus').value = data.desoukExtraBonus;
-
-            if (data.repExtraIncentive !== undefined) document.getElementById('globalExtraIncentive').value = data.repExtraIncentive;
-
-        }
+        if (data.repExtraIncentive !== undefined) document.getElementById('globalExtraIncentive').value = data.repExtraIncentive;
 
     } catch (e) {
 
@@ -725,11 +728,11 @@ window.loadPayrollSettingsFromFirebase = async () => {
 
 window.loadPayrollSettingsAndCalculateFounderSummary = async () => {
 
+    if (!currentUser || currentUser.role === 'rep') return;
+
     try {
 
-        const docRef = doc(db, "settings", "payrollConfig");
-
-        const docSnap = await getDoc(docRef);
+        const data = await window.getPayrollConfigCached();
 
         let desoukBaseVal = 5000;
 
@@ -739,21 +742,13 @@ window.loadPayrollSettingsAndCalculateFounderSummary = async () => {
 
         let singleExtraVal = 0;
 
+        if (data.desoukBase !== undefined) desoukBaseVal = parseFloat(data.desoukBase) || 0;
 
+        if (data.desoukCommPercent !== undefined) desoukCommPercentVal = parseFloat(data.desoukCommPercent) || 0;
 
-        if (docSnap.exists()) {
+        if (data.desoukExtraBonus !== undefined) desoukExtraBonusVal = parseFloat(data.desoukExtraBonus) || 0;
 
-            const data = docSnap.data();
-
-            if (data.desoukBase !== undefined) desoukBaseVal = parseFloat(data.desoukBase) || 0;
-
-            if (data.desoukCommPercent !== undefined) desoukCommPercentVal = parseFloat(data.desoukCommPercent) || 0;
-
-            if (data.desoukExtraBonus !== undefined) desoukExtraBonusVal = parseFloat(data.desoukExtraBonus) || 0;
-
-            if (data.repExtraIncentive !== undefined) singleExtraVal = parseFloat(data.repExtraIncentive) || 0;
-
-        }
+        if (data.repExtraIncentive !== undefined) singleExtraVal = parseFloat(data.repExtraIncentive) || 0;
 
 
 
@@ -868,6 +863,8 @@ window.saveAndRenderPayroll = async () => {
             updatedAt: new Date()
 
         });
+
+        window.invalidatePayrollConfigCache();
 
     } catch (e) {
 

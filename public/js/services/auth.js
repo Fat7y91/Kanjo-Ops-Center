@@ -154,21 +154,26 @@ function applyThemeAndShowDashboard() {
     }
     
     afterAuthReady().then(() => {
+        if (window._appListenersRegistered) return;
+        window._appListenersRegistered = true;
+        if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+
         if(canViewLive || isAdmin || isAccounting) {
-            if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof orderBy !== 'undefined') {
-                onSnapshot(query(collection(db, "notifications"), orderBy("timestamp", "desc")), (snap) => {
+            if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof orderBy !== 'undefined' && typeof limit !== 'undefined') {
+                const unsub = onSnapshot(query(collection(db, "notifications"), orderBy("timestamp", "desc"), limit(50)), (snap) => {
                     const notifs = [];
                     snap.forEach(d => notifs.push({id: d.id, ...d.data()}));
                     if(typeof updateNotificationsUI !== 'undefined') updateNotificationsUI(notifs);
                 });
+                window._appListenerUnsubscribers.push(unsub);
             }
             if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
                 Notification.requestPermission();
             }
         }
 
-        if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined') {
-            onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending")), (snap) => {
+        if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
+            const unsub = onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending"), limit(50)), (snap) => {
                 if(window.pendingTransferTaskIds) window.pendingTransferTaskIds.clear();
                 snap.forEach(docSnap => {
                     const req = docSnap.data();
@@ -187,10 +192,11 @@ function applyThemeAndShowDashboard() {
                     renderDashboard(window.lastSnapshot);
                 }
             });
+            window._appListenerUnsubscribers.push(unsub);
         }
 
         if(typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
-        if(typeof listenToTasks !== 'undefined') listenToTasks(); 
+        if(typeof listenToTasks !== 'undefined') listenToTasks();
     });
 }
 

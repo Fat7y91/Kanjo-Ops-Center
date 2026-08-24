@@ -398,15 +398,9 @@ window.saveMerchantContract = async () => {
 
     const todayStr = new Date().toISOString().slice(0, 10);
 
-    const q = query(collection(db, "tasks"));
-
-    const snap = await getDocs(q);
-
     const batch = writeBatch(db);
 
-    snap.forEach((docSnap) => {
-
-        const tData = docSnap.data();
+    window.tasksMemory.forEach((tData, id) => {
 
         if (getBaseName(tData.name) === activeMerchantBaseName) {
 
@@ -425,7 +419,7 @@ window.saveMerchantContract = async () => {
 
             if (!isFinalized) updatePayload.time = todayStr;
 
-            batch.update(docSnap.ref, updatePayload);
+            batch.update(doc(db, "tasks", id), updatePayload);
 
         }
 
@@ -467,41 +461,41 @@ window.saveMerchantProfile = async () => {
 
 
 
-    const q = query(collection(db, "tasks"));
+    const matchingIds = [];
 
-    const snap = await getDocs(q);
+    window.tasksMemory.forEach((tData, id) => {
+
+        if (getBaseName(tData.name) === activeMerchantBaseName) matchingIds.push(id);
+
+    });
 
     const batch = writeBatch(db);
 
 
 
-    snap.forEach((docSnap) => {
+    matchingIds.forEach((id) => {
 
-        const tData = docSnap.data();
+        const tData = window.tasksMemory.get(id);
 
-        if (getBaseName(tData.name) === activeMerchantBaseName) {
+        let updatePayload = {
 
-            let updatePayload = {
+            fbPage: fbPage,
 
-                fbPage: fbPage,
+            fbGroup: fbGroup,
 
-                fbGroup: fbGroup,
+            insta: insta,
 
-                insta: insta,
+            website: website
 
-                website: website
+        };
 
-            };
+        if (isMahmoud || address) {
 
-            if (isMahmoud || address) {
-
-                updatePayload.address = address;
-
-            }
-
-            batch.update(docSnap.ref, updatePayload);
+            updatePayload.address = address;
 
         }
+
+        batch.update(doc(db, "tasks", id), updatePayload);
 
     });
 
@@ -515,57 +509,53 @@ window.saveMerchantProfile = async () => {
 
         const reportsBatch = writeBatch(db);
 
-        snap.forEach((docSnap) => {
+        matchingIds.forEach((id) => {
 
-            const tData = docSnap.data();
+            const tData = window.tasksMemory.get(id);
 
-            if (getBaseName(tData.name) === activeMerchantBaseName) {
+            let reports = tData.reports || [];
 
-                let reports = tData.reports || [];
+            if (reports.length > 0) {
 
-                if (reports.length > 0) {
+                reports[reports.length - 1].contactName = contactName || reports[reports.length - 1].contactName;
 
-                    reports[reports.length - 1].contactName = contactName || reports[reports.length - 1].contactName;
+                reports[reports.length - 1].contactRole = contactRole || reports[reports.length - 1].contactRole;
 
-                    reports[reports.length - 1].contactRole = contactRole || reports[reports.length - 1].contactRole;
+                reports[reports.length - 1].contactPhone = contactPhone || reports[reports.length - 1].contactPhone;
 
-                    reports[reports.length - 1].contactPhone = contactPhone || reports[reports.length - 1].contactPhone;
+            } else {
 
-                } else {
+                const todayStr = new Date().toISOString().slice(0, 10);
 
-                    const todayStr = new Date().toISOString().slice(0, 10);
+                reports.push({
 
-                    reports.push({
+                    name: currentUser.name,
 
-                        name: currentUser.name,
+                    time: new Date().toLocaleTimeString(),
 
-                        time: new Date().toLocaleTimeString(),
+                    date: todayStr,
 
-                        date: todayStr,
+                    timestamp: `${todayStr} ${new Date().toLocaleTimeString()}`,
 
-                        timestamp: `${todayStr} ${new Date().toLocaleTimeString()}`,
+                    contactName: contactName,
 
-                        contactName: contactName,
+                    contactRole: contactRole,
 
-                        contactRole: contactRole,
+                    contactPhone: contactPhone,
 
-                        contactPhone: contactPhone,
+                    general: 'استكمال بيانات المسؤول وتواصله عبر بطاقة التاجر',
 
-                        general: 'استكمال بيانات المسؤول وتواصله عبر بطاقة التاجر',
+                    merchant: '',
 
-                        merchant: '',
+                    team: '',
 
-                        team: '',
+                    next: ''
 
-                        next: ''
-
-                    });
-
-                }
-
-                reportsBatch.update(docSnap.ref, { reports: reports });
+                });
 
             }
+
+            reportsBatch.update(doc(db, "tasks", id), { reports: reports });
 
         });
 
@@ -617,21 +607,15 @@ window.saveMerchantNameEdit = async () => {
 
     }
 
-    const q = query(collection(db, "tasks"));
-
-    const snap = await getDocs(q);
-
     const batch = writeBatch(db);
 
-    snap.forEach((docSnap) => {
-
-        const tData = docSnap.data();
+    window.tasksMemory.forEach((tData, id) => {
 
         if (getBaseName(tData.name) === oldBaseName) {
 
             const isFollowUp = /\(متابعة\)|\(متابعه\)/.test(String(tData.name || ''));
 
-            batch.update(docSnap.ref, { name: isFollowUp ? `${newName} (متابعة)` : newName });
+            batch.update(doc(db, "tasks", id), { name: isFollowUp ? `${newName} (متابعة)` : newName });
 
         }
 
@@ -1363,19 +1347,13 @@ window.contractBusinessTypeOverride = '';
 
 window.persistMerchantLogo = async (logoBase64, merchantBaseName) => {
 
-    const q = query(collection(db, "tasks"));
-
-    const snap = await getDocs(q);
-
     const batch = writeBatch(db);
 
-    snap.forEach((docSnap) => {
-
-        const tData = docSnap.data();
+    window.tasksMemory.forEach((tData, id) => {
 
         if (getBaseName(tData.name) === merchantBaseName) {
 
-            batch.update(docSnap.ref, { merchantLogo: logoBase64 });
+            batch.update(doc(db, "tasks", id), { merchantLogo: logoBase64 });
 
         }
 
