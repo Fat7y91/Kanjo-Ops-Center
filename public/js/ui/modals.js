@@ -6,6 +6,13 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     document.getElementById('mpMerchantName').innerText = merchantBaseName;
 
+    const merchantIdEl = document.getElementById('mpMerchantId');
+
+    if (merchantIdEl) {
+        const mid = (window.findMerchantIdForBase ? window.findMerchantIdForBase(merchantBaseName) : '') || '';
+        merchantIdEl.innerText = mid ? `المعرف الدائم: ${mid}` : '';
+    }
+
     const nameEditEl = document.getElementById('mpMerchantNameEdit');
 
     if (nameEditEl) nameEditEl.value = merchantBaseName;
@@ -324,6 +331,18 @@ window.openMerchantProfile = (merchantBaseName) => {
 
 
 
+    /* Merchant official documents — render the Drive folder action button
+       (keyed on the permanent merchantId), never a raw text URL. */
+    const driveSection = document.getElementById('mpDriveFolderSection');
+
+    if (driveSection && typeof window.renderDriveFolderSection === 'function') {
+
+        window.renderDriveFolderSection(driveSection, merchantBaseName);
+
+    }
+
+
+
     document.getElementById('merchantProfileModal').classList.remove('hidden');
 
 };
@@ -623,6 +642,11 @@ window.saveMerchantNameEdit = async () => {
 
     await batch.commit();
 
+    /* The immutable merchantId is untouched by renames — only the display name
+       is updated on the authoritative merchant record so the Drive binding and
+       folder link stay intact. */
+    const existingMid = window.findMerchantIdForBase ? window.findMerchantIdForBase(oldBaseName) : null;
+
     (window.allTasksCache || []).forEach(t => {
 
         if (getBaseName(t.name) === oldBaseName) {
@@ -634,6 +658,17 @@ window.saveMerchantNameEdit = async () => {
         }
 
     });
+
+    if (existingMid) {
+        try {
+            await updateDoc(doc(db, "merchants", existingMid), { name: newName });
+            if (window.merchantsById && window.merchantsById.has(existingMid)) {
+                window.merchantsById.get(existingMid).name = newName;
+            }
+        } catch (err) {
+            console.error("[merchantId] merchant record name sync failed:", err);
+        }
+    }
 
     activeMerchantBaseName = newName;
 

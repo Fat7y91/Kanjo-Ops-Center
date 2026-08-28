@@ -4,6 +4,7 @@ import { categories } from './config/constants.js';
 import './utils/helpers.js';
 import './utils/export.js';
 import './services/geolocation.js';
+import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
 import './services/firestore.js';
 import './ui/modals.js';

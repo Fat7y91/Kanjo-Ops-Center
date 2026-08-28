@@ -1809,6 +1809,11 @@ window.renderTasks = (grouped) => {
 
     let html = ''; const todayStr = new Date().toISOString().slice(0, 10);
 
+    /* Precompute merchant → Drive-folder map once per render so every card can
+       render the "ملفات التاجر الرسمية" button from the permanent merchantId
+       without scanning all tasks for each card. */
+    const driveLookup = (typeof window.buildDriveLookup === 'function') ? window.buildDriveLookup() : new Map();
+
     Object.keys(grouped).sort().forEach(date => { 
 
         const isToday = (date === todayStr); const isOpen = isToday ? 'open' : '';
@@ -2079,6 +2084,26 @@ window.renderTasks = (grouped) => {
 
             const updateLogoBtn = `<button onclick="openMerchantLogoUpdate('${t.id}')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-amber-200 shadow-sm"><i class="fa-solid fa-image"></i> <span>تحديث اللوجو</span></button>`;
 
+            /* ─── Merchant documents / Google Drive buttons ───
+               "رفع المستندات" opens the dedicated upload modal (available to
+               reps + management, not the accounting role). If the merchant
+               already has a Drive folder, render a sleek action button that
+               opens it in a new tab — never a raw text URL. The lookup is keyed
+               on the permanent merchantId (falling back to base-name only for
+               legacy rows that predate the ID migration). */
+            const canUploadDocs = (currentUser.role !== 'accounting');
+
+            const cardMid = t.merchantId || (window.findMerchantIdForBase ? window.findMerchantIdForBase(baseN) : '');
+            const driveRec = driveLookup.get(cardMid || '') || driveLookup.get(baseN);
+
+            const uploadDocsBtnHtml = canUploadDocs
+                ? `<button onclick="openMerchantDocsModal('${t.id}')" class="w-full bg-teal-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-teal-700 transition shadow-sm mt-1"><i class="fa-solid fa-cloud-arrow-up ml-1"></i> رفع المستندات</button>`
+                : '';
+
+            const driveFolderBtnHtml = (driveRec && driveRec.driveFolderLink)
+                ? `<button onclick="openDriveFolder('${window.safeString(driveRec.merchantId || '')}')" class="w-full bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm mt-1" title="فتح مجلد ملفات التاجر الرسمية على Google Drive"><i class="fa-brands fa-google-drive ml-1"></i> ملفات التاجر الرسمية</button>`
+                : '';
+
 
 
             let cardBadge = '';
@@ -2190,6 +2215,10 @@ window.renderTasks = (grouped) => {
                 ${attButtons}
 
                 ${canReport ? `<button onclick="openReportModal('${t.id}', '${window.safeString(t.name)}', '${t.team}', ${effectiveTarget || 0}, '${window.safeString(t.notes)}')" class="w-full bg-kanjo-dark text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-violet-900 transition shadow-sm mt-1">إضافة تقرير</button>` : ''}
+
+                ${uploadDocsBtnHtml}
+
+                ${driveFolderBtnHtml}
 
             </div>`; 
 

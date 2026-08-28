@@ -38,9 +38,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ───────────────────────────────────────────────────────────────
+    // Merchant records (Unique Merchant ID + official documents).
+    // The permanent merchantId is the docId. Anyone signed in may CREATE a
+    // record ONLY for its own matching merchantId, and UPDATE only the
+    // display/document fields (name, drive folder binding) so the Google
+    // Drive link can be saved back after a successful upload. Deleting is
+    // admin-only. The immutable merchantId itself is never editable.
+    // ───────────────────────────────────────────────────────────────
     match /merchants/{docId} {
+      function isMerchantDocForItself() {
+        return request.resource.data.merchantId == docId;
+      }
+
+      function merchantUpdateTouchesOnlyDocumentFields() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'driveFolderId', 'driveFolderLink', 'docsUpdatedAt', 'docsUpdatedBy'
+        ]);
+      }
+
       allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow create: if isSignedIn() && isMerchantDocForItself();
+      allow update: if isAdmin()
+        || (isSignedIn() && merchantUpdateTouchesOnlyDocumentFields());
+      allow delete: if isAdmin();
     }
 
     // 3) Operational collections used by the dashboard app.

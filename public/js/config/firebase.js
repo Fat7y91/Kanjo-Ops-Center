@@ -186,6 +186,8 @@ window.currentUser = null;
 window.activeTaskId = null;
 window.activeTaskName = '';
 window.activeTaskTeam = '';
+window.merchantsById = new Map();
+window.merchantDocsDraft = null;
 
 
 export {

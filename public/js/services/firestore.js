@@ -226,8 +226,11 @@ window.recordAttendance = async function(taskId, type) {
 
 window.submitTask = async (e) => { 
     e.preventDefault(); 
+    const taskName = document.getElementById('mName').value; 
+    const merchantId = window.getOrCreateMerchantId ? window.getOrCreateMerchantId(getBaseName(taskName)) : null;
     await addDoc(collection(db, "tasks"), { 
-        name: document.getElementById('mName').value, 
+        name: taskName, 
+        merchantId: merchantId, 
         cat: document.getElementById('mCat').value, 
         team: document.getElementById('mTeam').value, 
         time: document.getElementById('mTime').value, 
@@ -242,6 +245,7 @@ window.submitTask = async (e) => {
     }); 
     document.getElementById('taskForm').reset(); 
     showToast("تم إضافة المهمة بنجاح"); 
+    if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
 };
 
 window.openReportModal = (taskId, name, team, target, notes) => { 
@@ -534,6 +538,7 @@ window.submitReport = async () => {
         if(!exists) {
             batch.set(doc(collection(db, "tasks")), { 
                 name: baseName + " (متابعة)", 
+                merchantId: window.getOrCreateMerchantId ? window.getOrCreateMerchantId(baseName, activeTaskData) : null, 
                 cat: activeTaskData.cat || "متابعة", 
                 team: activeTaskData.team || activeTaskTeam, 
                 time: nextDate, 
@@ -552,6 +557,8 @@ window.submitReport = async () => {
     await batch.commit();
 
     await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
+
+    if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
 
     if(isSigned) showToast("🎉 تم تسجيل التعاقد النهائي وربطه بكل السلسلة والمتابعات بنجاح!"); 
     else if(isProvisional) showToast("🤝 تم تسجيل اتفاق مبدئي بنجاح!"); 
@@ -665,6 +672,13 @@ window.listenToTasks = () => {
                     showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0%!`);
                 }).catch(err => console.error("Data Migration Error:", err));
             }
+        }
+
+        /* Unique Merchant ID backfill: assign a permanent merchantId to any
+           task doc that still lacks one so the Google Drive binding never
+           depends on the merchant name. */
+        if (typeof window.ensureMerchantIds === 'function') {
+            window.ensureMerchantIds();
         }
 
         rerenderDashboard();

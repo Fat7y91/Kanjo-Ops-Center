@@ -44,6 +44,18 @@ const users = {
 
 const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحمد جمعه، يوسف' };
 
+/* ─── Google Drive Integration (Merchant Documents) ───
+   KANJO_DRIVE_SCRIPT_URL   : URL of the deployed Google Apps Script Web App
+                              (…/exec endpoint) that creates the merchant folder
+                              on Google Drive and uploads the documents.
+   KANJO_DRIVE_SCRIPT_TOKEN : Shared secret agreed between the app and the Apps
+                              Script code (see scripts/drive/Code.gs). It is NOT
+                              a security boundary — it only stops casual callers.
+   Fill both values at deploy time. If empty, the upload feature is disabled and
+   the UI shows a clear message instead of failing silently. */
+const KANJO_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxnHWcXPWWdcOfQ1hdzMuZEODwv00fnl2qwK0HgGb0d23QKtuEzrcze-TRyY8NP0FzkYw/exec';
+const KANJO_DRIVE_SCRIPT_TOKEN = 'kanjo_secure_token_2026';
+
 /** أساسيات رواتب المناديب (مصدر موحّد للحسابات والتصدير) */
 const KANJO_REP_PAYROLL = [
     { name: 'سارة', team: 'Fox Team', base: 5000 },
@@ -58,5 +70,7 @@ window.categories = categories;
 window.users = users;
 window.teamMembers = teamMembers;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
+window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
+window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
 
-export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_REP_PAYROLL };
+export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };

@@ -195,6 +195,22 @@ function applyThemeAndShowDashboard() {
             window._appListenerUnsubscribers.push(unsub);
         }
 
+        /* Merchant records (authoritative drive-folder binding + merchantId).
+           Keeps window.merchantsById fresh so the merchant card / profile can
+           render the "ملفات التاجر الرسمية" Drive button from the permanent
+           merchantId instead of a raw URL. */
+        if (typeof onSnapshot !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined') {
+            window.merchantsById = window.merchantsById || new Map();
+            const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
+                window.merchantsById.clear();
+                snap.forEach(docSnap => window.merchantsById.set(docSnap.id, docSnap.data()));
+                if (window.lastSnapshot && !isAccounting && typeof renderDashboard !== 'undefined' && window.hasRenderedData) {
+                    renderDashboard(window.lastSnapshot);
+                }
+            });
+            window._appListenerUnsubscribers.push(unsub);
+        }
+
         if(typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
         if(typeof listenToTasks !== 'undefined') listenToTasks();
     });

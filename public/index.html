@@ -252,6 +252,8 @@
 
                         <p class="text-xs text-slate-500 font-bold" id="mpMerchantCat">فئة النشاط</p>
 
+                        <p class="text-[10px] text-slate-400 font-black tracking-wider" id="mpMerchantId" dir="ltr"></p>
+
                     </div>
 
                 </div>
@@ -459,6 +461,10 @@
                 </div>
 
             </div>
+
+
+
+            <div id="mpDriveFolderSection" class="hidden"></div>
 
 
 
@@ -1727,6 +1733,100 @@
         </div>
 
     </main>
+
+
+
+    <div id="merchantDocsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[135]">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-3">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-teal-50 text-teal-700 p-3 rounded-2xl text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+
+                    <div>
+
+                        <h3 class="font-black text-lg text-kanjo-dark">رفع مستندات التاجر</h3>
+
+                        <p class="text-xs text-slate-500 font-bold" id="mdMerchantName">-</p>
+
+                        <p class="text-[10px] text-slate-400 font-black tracking-wider" id="mdMerchantId" dir="ltr"></p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="closeMerchantDocsModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+
+
+            <div id="mdExistingFolder" class="hidden mb-3"></div>
+
+
+
+            <div class="space-y-3">
+
+                <div class="bg-kanjo-light p-3 rounded-2xl border border-purple-100 space-y-1.5">
+
+                    <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-file-contract text-kanjo-primary"></i>السجل التجاري <span class="text-[10px] text-slate-400 font-bold">(Commercial Register)</span></label>
+
+                    <input type="file" id="mdCommercial" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('commercial', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+
+                    <div id="mdCommercialChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
+
+                </div>
+
+
+
+                <div class="bg-kanjo-light p-3 rounded-2xl border border-purple-100 space-y-1.5">
+
+                    <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-id-card text-kanjo-primary"></i>البطاقة الضريبية <span class="text-[10px] text-slate-400 font-bold">(Tax ID)</span></label>
+
+                    <input type="file" id="mdTax" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('tax', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+
+                    <div id="mdTaxChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
+
+                </div>
+
+
+
+                <div class="bg-kanjo-light p-3 rounded-2xl border border-purple-100 space-y-1.5">
+
+                    <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-book-open text-kanjo-primary"></i>المنيو <span class="text-[10px] text-slate-400 font-bold">(Menu)</span></label>
+
+                    <input type="file" id="mdMenu" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('menu', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+
+                    <div id="mdMenuChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3 text-[10px] font-bold text-amber-900 leading-relaxed">
+
+                <i class="fa-solid fa-shield-halved ml-1"></i> سيتم إنشاء/استخدام مجلد مخصص لهذا التاجر على Google Drive ورفع المستندات إليه تلقائياً، ثم حفظ رابط المجلد في سجل التاجر داخل النظام. يُفضّل رفع صورة أو PDF واضحة ومقروءة. الحد الأقصى 15 ميجا لكل ملف.
+
+            </div>
+
+
+
+            <div class="flex gap-3 mt-4 sticky bottom-0 bg-white pt-2">
+
+                <button id="mdSubmitBtn" onclick="submitMerchantDocs()" class="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 shadow-md text-xs"><i class="fa-solid fa-google-drive ml-1"></i>رفع إلى Google Drive</button>
+
+                <button onclick="closeMerchantDocsModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300 text-xs">إلغاء</button>
+
+            </div>
+
+        </div>
+
+    </div>
 
 
 
