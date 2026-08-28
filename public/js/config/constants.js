@@ -53,7 +53,7 @@ const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحم
                               a security boundary — it only stops casual callers.
    Fill both values at deploy time. If empty, the upload feature is disabled and
    the UI shows a clear message instead of failing silently. */
-const KANJO_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxnHWcXPWWdcOfQ1hdzMuZEODwv00fnl2qwK0HgGb0d23QKtuEzrcze-TRyY8NP0FzkYw/exec';
+const KANJO_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyaJZv6fIoL51vSvJvfPYHm0ePHe--D8gT_jEh_voxcWR4wk0hNTgJkflN49e_4zAP6ow/exec';
 const KANJO_DRIVE_SCRIPT_TOKEN = 'kanjo_secure_token_2026';
 
 /** أساسيات رواتب المناديب (مصدر موحّد للحسابات والتصدير) */
