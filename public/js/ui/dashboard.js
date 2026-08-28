@@ -1972,7 +1972,7 @@ window.renderTasks = (grouped) => {
 
                 return `
 
-                    <div class="bg-white p-3.5 rounded-2xl mb-2 text-sm text-slate-800 border border-purple-200 shadow-sm space-y-2 w-full h-auto">
+                    <div class="bg-white p-3.5 rounded-2xl text-sm text-slate-800 border border-purple-200 shadow-sm space-y-2 w-full h-auto break-words">
 
                         <div class="flex justify-between items-center border-b border-purple-100 pb-2">
 
@@ -2100,12 +2100,6 @@ window.renderTasks = (grouped) => {
                 ? `<button onclick="openMerchantDocsModal('${t.id}')" class="w-full bg-teal-600 text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-teal-700 transition shadow-sm mt-1"><i class="fa-solid fa-cloud-arrow-up ml-1"></i> رفع المستندات</button>`
                 : '';
 
-            const driveFolderBtnHtml = (driveRec && driveRec.driveFolderLink)
-                ? `<button onclick="openDriveFolder('${window.safeString(driveRec.merchantId || '')}')" class="w-full bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition shadow-sm mt-1" title="فتح مجلد ملفات التاجر الرسمية على Google Drive"><i class="fa-brands fa-google-drive ml-1"></i> ملفات التاجر الرسمية</button>`
-                : '';
-
-
-
             let cardBadge = '';
 
             if (effectiveIsSigned) cardBadge = '<span class="text-emerald-600 ml-1">✅</span>';
@@ -2210,15 +2204,13 @@ window.renderTasks = (grouped) => {
 
                 <div class="mb-1.5 mt-1.5">${attendanceHtml}</div>
 
-                ${visibleReports.length > 0 ? `<div class="space-y-2 mb-2 break-words-custom h-auto">${reportsHtml}</div>` : ''}
+                ${visibleReports.length > 0 ? `<div class="space-y-2 mb-2 h-auto">${reportsHtml}</div>` : ''}
 
                 ${attButtons}
 
                 ${canReport ? `<button onclick="openReportModal('${t.id}', '${window.safeString(t.name)}', '${t.team}', ${effectiveTarget || 0}, '${window.safeString(t.notes)}')" class="w-full bg-kanjo-dark text-white py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-violet-900 transition shadow-sm mt-1">إضافة تقرير</button>` : ''}
 
                 ${uploadDocsBtnHtml}
-
-                ${driveFolderBtnHtml}
 
             </div>`; 
 
