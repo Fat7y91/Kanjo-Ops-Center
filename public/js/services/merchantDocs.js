@@ -285,41 +285,72 @@ const docTypeLabel = (key) => {
     return dt ? dt.label : key;
 };
 
+/* Update the selection chip for a doc type (count + total size). */
+const updateMerchantDocsChip = (docType) => {
+    const files = (window.merchantDocsDraft && window.merchantDocsDraft.files[docType]) || [];
+    const cap = docType.charAt(0).toUpperCase() + docType.slice(1);
+    const chip = document.getElementById('md' + cap + 'Chip');
+    if (!chip) return;
+    if (files.length === 0) {
+        chip.classList.add('hidden');
+        chip.querySelector('span').innerText = '';
+        return;
+    }
+    chip.classList.remove('hidden');
+    const totalKB = files.reduce((s, f) => s + Math.ceil((f.size || 0) / 1024), 0);
+    const names = files.map(f => f.name).join('، ');
+    chip.querySelector('span').innerText = `${files.length} ملف — إجمالي ${totalKB} KB: ${names}`;
+};
+
 window.handleMerchantDocSelect = (docType, event) => {
-    const file = event.target && event.target.files && event.target.files[0];
-    if (!file) return;
+    const input = event.target;
+    const fileList = input && input.files ? Array.from(input.files) : [];
+    if (fileList.length === 0) return;
     if (!window.merchantDocsDraft) {
-        event.target.value = '';
+        input.value = '';
         return;
     }
-    if (file.size > MAX_FILE_BYTES) {
-        showToast("حجم الملف كبير جداً (الحد الأقصى 15 ميجا للملف الواحد)", false);
-        event.target.value = '';
+
+    const oversized = fileList.find(f => f.size > MAX_FILE_BYTES);
+    if (oversized) {
+        showToast(`حجم الملف ${oversized.name} كبير جداً (الحد الأقصى 15 ميجا للملف الواحد)`, false);
+        input.value = '';
         return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const dataUrl = String(e.target.result || '');
-        const commaIdx = dataUrl.indexOf(',');
-        const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
-        window.merchantDocsDraft.files[docType] = {
-            name: file.name,
-            size: file.size,
-            mime: file.type || 'application/octet-stream',
-            base64
+
+    if (!Array.isArray(window.merchantDocsDraft.files[docType])) {
+        window.merchantDocsDraft.files[docType] = [];
+    }
+    const filesArr = window.merchantDocsDraft.files[docType];
+
+    let pending = fileList.length;
+    let readFailed = false;
+    fileList.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = String(e.target.result || '');
+            const commaIdx = dataUrl.indexOf(',');
+            const base64 = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+            filesArr.push({
+                name: file.name,
+                size: file.size,
+                mime: file.type || 'application/octet-stream',
+                base64
+            });
+            pending--;
+            if (pending === 0) updateMerchantDocsChip(docType);
         };
-        const cap = docType.charAt(0).toUpperCase() + docType.slice(1);
-        const chip = document.getElementById('md' + cap + 'Chip');
-        if (chip) {
-            chip.classList.remove('hidden');
-            chip.querySelector('span').innerText = file.name + ' (' + Math.ceil(file.size / 1024) + ' KB)';
-        }
-    };
-    reader.onerror = () => {
-        event.target.value = '';
-        showToast("فشل قراءة الملف، حاول مرة أخرى", false);
-    };
-    reader.readAsDataURL(file);
+        reader.onerror = () => {
+            pending--;
+            readFailed = true;
+            if (pending === 0) {
+                input.value = '';
+                updateMerchantDocsChip(docType);
+                showToast("فشل قراءة ملف، حاول مرة أخرى", false);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
 };
 
 /* Call the Google Apps Script Web App endpoint. Uses a text/plain body so the
@@ -428,12 +459,20 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
 
 window.submitMerchantDocs = async () => {
     if (!window.merchantDocsDraft) return;
-    const entries = Object.entries(window.merchantDocsDraft.files || {});
-    if (entries.length === 0) {
+
+    const draftFiles = window.merchantDocsDraft.files || {};
+    const allFiles = [];
+    Object.entries(draftFiles).forEach(([docType, arr]) => {
+        (Array.isArray(arr) ? arr : []).forEach((f) => {
+            allFiles.push({ docType, ...f });
+        });
+    });
+
+    if (allFiles.length === 0) {
         showToast("اختر ملفاً واحداً على الأقل للرفع (السجل التجاري، البطاقة الضريبية، أو المنيو)", false);
         return;
     }
-    const totalBytes = entries.reduce((s, [, f]) => s + (f.size || 0), 0);
+    const totalBytes = allFiles.reduce((s, f) => s + (f.size || 0), 0);
     if (totalBytes > MAX_TOTAL_BYTES) {
         showToast("إجمالي الملفات يتجاوز الحد المسموح (40 ميجا)", false);
         return;
@@ -442,21 +481,40 @@ window.submitMerchantDocs = async () => {
     const btn = document.getElementById('mdSubmitBtn');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i>جاري الرفع إلى Google Drive...';
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin ml-1"></i>جاري رفع ${allFiles.length} ملف إلى Google Drive...`;
     }
 
     const draft = window.merchantDocsDraft;
+
+    /* De-duplicate file names per doc type so same-named files (e.g. two
+       "scan.pdf") do not overwrite each other in the merchant Drive folder. */
+    const usedNames = {};
+    const payloadFiles = allFiles.map((f) => {
+        let name = f.name;
+        const cap = f.docType.charAt(0).toUpperCase() + f.docType.slice(1);
+        const key = cap + '|' + name;
+        if (usedNames[key] !== undefined) {
+            const dot = name.lastIndexOf('.');
+            const base = dot > 0 ? name.slice(0, dot) : name;
+            const ext = dot > 0 ? name.slice(dot) : '';
+            name = `${base} (${++usedNames[key]})${ext}`;
+        } else {
+            usedNames[key] = 1;
+        }
+        return {
+            docType: f.docType,
+            label: docTypeLabel(f.docType),
+            name,
+            mimeType: f.mime,
+            base64: f.base64
+        };
+    });
+
     const payload = {
         token: (window.KANJO_DRIVE_SCRIPT_TOKEN || '').trim(),
         merchantId: draft.merchantId,
         merchantName: draft.baseName,
-        files: entries.map(([docType, f]) => ({
-            docType,
-            label: docTypeLabel(docType),
-            name: f.name,
-            mimeType: f.mime,
-            base64: f.base64
-        }))
+        files: payloadFiles
     };
 
     try {

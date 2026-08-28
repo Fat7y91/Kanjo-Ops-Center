@@ -1774,7 +1774,7 @@
 
                     <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-file-contract text-kanjo-primary"></i>السجل التجاري <span class="text-[10px] text-slate-400 font-bold">(Commercial Register)</span></label>
 
-                    <input type="file" id="mdCommercial" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('commercial', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+                    <input type="file" id="mdCommercial" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple onchange="handleMerchantDocSelect('commercial', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
 
                     <div id="mdCommercialChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
 
@@ -1786,7 +1786,7 @@
 
                     <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-id-card text-kanjo-primary"></i>البطاقة الضريبية <span class="text-[10px] text-slate-400 font-bold">(Tax ID)</span></label>
 
-                    <input type="file" id="mdTax" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('tax', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+                    <input type="file" id="mdTax" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple onchange="handleMerchantDocSelect('tax', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
 
                     <div id="mdTaxChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
 
@@ -1798,7 +1798,7 @@
 
                     <label class="flex items-center gap-2 text-xs font-black text-kanjo-dark"><i class="fa-solid fa-book-open text-kanjo-primary"></i>المنيو <span class="text-[10px] text-slate-400 font-bold">(Menu)</span></label>
 
-                    <input type="file" id="mdMenu" accept=".pdf,.jpg,.jpeg,.png,.webp" onchange="handleMerchantDocSelect('menu', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
+                    <input type="file" id="mdMenu" accept=".pdf,.jpg,.jpeg,.png,.webp" multiple onchange="handleMerchantDocSelect('menu', event)" class="block w-full text-xs text-slate-600 file:mr-2 file:rounded-xl file:border-0 file:bg-teal-100 file:px-4 file:py-2 file:text-teal-700 file:font-bold hover:file:bg-teal-200">
 
                     <div id="mdMenuChip" class="hidden text-[10px] font-bold text-emerald-700 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i><span></span></div>
 
@@ -1810,7 +1810,7 @@
 
             <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 mt-3 text-[10px] font-bold text-amber-900 leading-relaxed">
 
-                <i class="fa-solid fa-shield-halved ml-1"></i> سيتم إنشاء/استخدام مجلد مخصص لهذا التاجر على Google Drive ورفع المستندات إليه تلقائياً، ثم حفظ رابط المجلد في سجل التاجر داخل النظام. يُفضّل رفع صورة أو PDF واضحة ومقروءة. الحد الأقصى 15 ميجا لكل ملف.
+                <i class="fa-solid fa-shield-halved ml-1"></i> يمكنك اختيار أكثر من ملف في المرة الواحدة لكل نوع. سيتم إنشاء/استخدام مجلد مخصص لهذا التاجر على Google Drive ورفع المستندات إليه تلقائياً، ثم حفظ رابط المجلد في سجل التاجر داخل النظام. يُفضّل رفع صورة أو PDF واضحة ومقروءة. الحد الأقصى 15 ميجا لكل ملف.
 
             </div>
 
