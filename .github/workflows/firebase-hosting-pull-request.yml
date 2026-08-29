@@ -13,6 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Generate runtime config from environment
+        run: node scripts/build-config.mjs
+        env:
+          KANJO_DRIVE_SCRIPT_URL: ${{ secrets.KANJO_DRIVE_SCRIPT_URL }}
+          KANJO_DRIVE_SCRIPT_TOKEN: ${{ secrets.KANJO_DRIVE_SCRIPT_TOKEN }}
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

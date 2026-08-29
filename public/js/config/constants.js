@@ -1,5 +1,7 @@
 /* Kanjo Ops — Global Constants */
 
+import { KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN } from './drive-config.generated.js';
+
 const userImageMap = {
 
     'سارة': 'Sara Zabady.png',
@@ -48,13 +50,14 @@ const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحم
    KANJO_DRIVE_SCRIPT_URL   : URL of the deployed Google Apps Script Web App
                               (…/exec endpoint) that creates the merchant folder
                               on Google Drive and uploads the documents.
-   KANJO_DRIVE_SCRIPT_TOKEN : Shared secret agreed between the app and the Apps
+   KANJO_DRIVE_SCRIPT_TOKEN : Shared token agreed between the app and the Apps
                               Script code (see scripts/drive/Code.gs). It is NOT
                               a security boundary — it only stops casual callers.
-   Fill both values at deploy time. If empty, the upload feature is disabled and
-   the UI shows a clear message instead of failing silently. */
-const KANJO_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyaJZv6fIoL51vSvJvfPYHm0ePHe--D8gT_jEh_voxcWR4wk0hNTgJkflN49e_4zAP6ow/exec';
-const KANJO_DRIVE_SCRIPT_TOKEN = 'kanjo_secure_token_2026';
+   Both values are imported from `./drive-config.generated.js`, which is written
+   at build time by scripts/build-config.mjs from environment variables (CI
+   secrets or .env), so credentials are never hardcoded in source. If empty, the
+   upload feature is disabled and the UI shows a clear message instead of
+   failing silently. */
 
 /** أساسيات رواتب المناديب (مصدر موحّد للحسابات والتصدير) */
 const KANJO_REP_PAYROLL = [

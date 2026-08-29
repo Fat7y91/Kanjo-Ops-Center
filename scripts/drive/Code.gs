@@ -12,21 +12,25 @@
  * 1. Create a new Google Apps Script project:
  *        https://script.google.com/new
  * 2. Replace the default `Code.gs` content with THIS file, then save.
- * 3. Set the two config values at the top of this file:
+ * 3. Set the two config values under Settings → Project Settings →
+ *    Script Properties (the secure, server-side environment store):
  *        ROOT_FOLDER_ID — the ID of the parent folder under which one
- *                         folder per merchant is created. If left empty,
+ *                         folder per merchant is created. If left unset,
  *                         the script auto-creates a root folder named
  *                         "Kanjo Merchant Docs" on the Drive account.
  *        SCRIPT_TOKEN   — a long random string. Copy the SAME value into
- *                         the app's `public/js/config/constants.js` as
- *                         KANJO_DRIVE_SCRIPT_TOKEN. It stops casual
- *                         callers only; treat it as obfuscation, not a
- *                         real security boundary.
+ *                         the web app's KANJO_DRIVE_SCRIPT_TOKEN env var
+ *                         (see .env.example / GitHub Actions secret). It
+ *                         stops casual callers only; treat it as
+ *                         obfuscation, not a real security boundary.
+ *    Until those properties are set, the script falls back to the
+ *    *_FALLBACK constants at the top of this file (kept for a smooth
+ *    transition; remove them after configuring Script Properties).
  * 4. Deploy → New deployment → type "Web app":
  *        - Execute as      : Me        (IMPORTANT — the account that owns Drive)
  *        - Who has access  : Anyone
- *    Copy the `/exec` URL and paste it into the app's
- *        KANJO_DRIVE_SCRIPT_URL  (public/js/config/constants.js)
+ *    Copy the `/exec` URL and set it as the web app's
+ *        KANJO_DRIVE_SCRIPT_URL env var (see .env.example / CI secret).
  * 5. The deployed account must own the target Drive (or the ROOT_FOLDER_ID
  *    folder must be shared with it as Editor).
  *
@@ -69,8 +73,24 @@
 
 /* ────────────────────────────── CONFIG ──────────────────────────────── */
 
-var ROOT_FOLDER_ID = '';      // <-- set your root folder ID, or leave empty
-var SCRIPT_TOKEN   = '';      // <-- set a long random string; mirror in constants.js
+/* Both values are read from Apps Script Script Properties at runtime (see
+   getScriptConfig_() below), which is the proper environment/config store
+   for Apps Script — credentials are NOT committed in source.
+
+   To configure (Settings → Project Settings → Script Properties, or from the
+   app script itself):
+     SCRIPT_TOKEN   = <long random string>   (must equal the value injected into
+                                              the web app via KANJO_DRIVE_SCRIPT_TOKEN)
+     ROOT_FOLDER_ID = <Google Drive folder ID> (optional; empty = auto-create
+                                              "Kanjo Merchant Docs" under the
+                                              deployed account)
+
+   The *_FALLBACK values below are used ONLY when the Script Property is not
+   set yet, to keep the already-deployed instance working during the
+   transition. Once the properties are set, remove the fallback values and
+   re-deploy this script. */
+var SCRIPT_TOKEN_FALLBACK = 'kanjo_secure_token_2026';
+var ROOT_FOLDER_ID_FALLBACK = '';
 
 var ROOT_FOLDER_NAME = 'Kanjo Merchant Docs';
 
@@ -88,6 +108,22 @@ var ALLOWED_MIME = {
 
 /* ──────────────────────────── RESPONSE HELPERS ──────────────────────── */
 
+/* Resolves runtime config from Apps Script Script Properties (the secure,
+   server-side environment store), falling back to the *_FALLBACK constants
+   only while the properties are not yet set (backward compatibility during
+   the transition). See the CONFIG block above. */
+function getScriptConfig_() {
+  var props = PropertiesService.getScriptProperties();
+  var storedToken = String(props.getProperty('SCRIPT_TOKEN') || '').trim();
+  var storedRoot = String(props.getProperty('ROOT_FOLDER_ID') || '').trim();
+  return {
+    token: storedToken || SCRIPT_TOKEN_FALLBACK,
+    rootFolderId: storedRoot || ROOT_FOLDER_ID_FALLBACK,
+    tokenSource: storedToken ? 'script-properties' : 'fallback',
+    rootSource: storedRoot ? 'script-properties' : 'fallback'
+  };
+}
+
 function respond(success, message, extra) {
   var body = { success: success, message: message };
   if (extra) {
@@ -103,9 +139,10 @@ function respond(success, message, extra) {
 /* ──────────────────────────── DRIVE HELPERS ─────────────────────────── */
 
 function getRootFolder_() {
-  if (ROOT_FOLDER_ID) {
+  var rootFolderId = getScriptConfig_().rootFolderId;
+  if (rootFolderId) {
     // Throws a friendly error via doPost if the ID is wrong/inaccessible.
-    return DriveApp.getFolderById(ROOT_FOLDER_ID);
+    return DriveApp.getFolderById(rootFolderId);
   }
   var it = DriveApp.getFoldersByName(ROOT_FOLDER_NAME);
   if (it.hasNext()) return it.next();
@@ -198,7 +235,8 @@ function doPost(e) {
       return respond(false, 'BAD_JSON');
     }
 
-    if (!data || typeof data !== 'object' || !tokensMatch_(data.token, SCRIPT_TOKEN)) {
+    var cfg = getScriptConfig_();
+    if (!data || typeof data !== 'object' || !tokensMatch_(data.token, cfg.token)) {
       return respond(false, 'UNAUTHORIZED');
     }
 
@@ -258,11 +296,12 @@ function doPost(e) {
 /* Friendly status page. Visiting the /exec URL shows config state, not
    stack traces — useful for verifying the deployment works. */
 function doGet() {
+  var cfg = getScriptConfig_();
   return ContentService
     .createTextOutput(
       'Kanjo Ops Drive uploader is running. ' +
-      'Configured token: ' + (SCRIPT_TOKEN ? 'yes' : 'NO') + '. ' +
-      'Root folder: ' + (ROOT_FOLDER_ID ? 'set' : 'auto (' + ROOT_FOLDER_NAME + ')') + '.'
+      'Configured token: ' + (cfg.token ? 'yes' : 'NO') + ' (' + cfg.tokenSource + '). ' +
+      'Root folder: ' + (cfg.rootFolderId ? 'set (' + cfg.rootSource + ')' : 'auto (' + ROOT_FOLDER_NAME + ')') + '.'
     )
     .setMimeType(ContentService.MimeType.TEXT);
 }

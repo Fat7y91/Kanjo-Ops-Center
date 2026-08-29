@@ -199,6 +199,8 @@ const categoriesBlock = extract(3553, 3573);
 
 const constantsBody = `/* Kanjo Ops — Global Constants */
 
+import { KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN } from './drive-config.generated.js';
+
 ${userImageMap}
 
 ${categoriesBlock}
@@ -208,8 +210,10 @@ window.teamImageMap = teamImageMap;
 window.categories = categories;
 window.users = users;
 window.teamMembers = teamMembers;
+window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
+window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
 
-export { userImageMap, teamImageMap, categories, users, teamMembers };
+export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
 `;
 
 write('js/config/constants.js', constantsBody);
