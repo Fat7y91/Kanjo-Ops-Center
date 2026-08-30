@@ -38,18 +38,31 @@ window.generateMerchantId = () => {
    checks BOTH the in-memory task docs and the authoritative `merchants`
    collection, so even when no task doc for this base name is currently loaded
    (e.g. legacy rows or a merchant whose tasks were just created), the stored
-   merchantId is reused instead of minting a fresh one. */
+   merchantId is reused instead of minting a fresh one.
+
+   Precedence (canonical record first): a merchant record that actually carries
+   a Drive binding or tracked `documents` is authoritative, because some legacy
+   tasks mirror a phantom merchantId that resolves to no `merchants/{id}` record
+   (minted by a first-deploy race). Preferring the docs-bearing record keeps
+   uploads (persistDriveFolder) and lookups on the record that holds the
+   documents. Falls back to any same-base-name merchant record, then to a task
+   doc's merchantId. */
 window.findMerchantIdForBase = (baseName) => {
     if (!baseName) return null;
     baseName = getBaseName(baseName);
+    if (window.merchantsById && window.merchantsById.size > 0) {
+        let anyRecord = null;
+        for (const [mid, rec] of window.merchantsById) {
+            if (!rec || !rec.name || getBaseName(rec.name) !== baseName) continue;
+            if (!anyRecord) anyRecord = mid;
+            const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
+            if (rec.driveFolderLink || hasDocs) return mid;
+        }
+        if (anyRecord) return anyRecord;
+    }
     if (window.tasksMemory && window.tasksMemory.size > 0) {
         for (const [, td] of window.tasksMemory) {
             if (td && td.merchantId && getBaseName(td.name) === baseName) return td.merchantId;
-        }
-    }
-    if (window.merchantsById && window.merchantsById.size > 0) {
-        for (const [mid, rec] of window.merchantsById) {
-            if (rec && rec.name && getBaseName(rec.name) === baseName) return mid;
         }
     }
     return null;

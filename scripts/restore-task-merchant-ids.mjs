@@ -13,6 +13,8 @@
      anonymous Firebase REST auth (same pattern as backfill-doc-audit.mjs)
    Dry run (no writes):
      SYNC_DRY_RUN=1 node scripts/restore-task-merchant-ids.mjs
+   Patch-only (repoint tasks, keep empty shell records):
+     SKIP_DELETE=1 node scripts/restore-task-merchant-ids.mjs
 */
 
 import { readFileSync } from 'node:fs';
@@ -23,6 +25,10 @@ const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databas
 const AUTH = 'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + API_KEY;
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
+
+/* When set, only repoint task merchantIds; empty shell records are left in
+   place (they are harmless and deleting them requires explicit approval). */
+const skipDelete = process.env.SKIP_DELETE === '1';
 
 const TARGETS = new Map([
   ['KJ-3KDATB', '212 Perfume'], ['KJ-DQVQW4', 'شابلن'], ['KJ-DMBTFA', 'عروس الشام'],
@@ -218,15 +224,19 @@ const main = async () => {
     if (done > 0) console.log(`  ${done}/${taskPatches.length}`);
   }
 
-  // 2) Delete empty shell records.
-  console.log(`\nDeleting ${deleteCandidates.length} shell merchant records...`);
-  for (const mid of deleteCandidates) {
-    const url = `${BASE}/merchants/${mid}`;
-    try {
-      await fetchJson(url, { method: 'DELETE' });
-      console.log(`  deleted ${mid}`);
-    } catch (e) {
-      errors.push(`DELETE ${mid}: ${e.message}`);
+  // 2) Delete empty shell records (only when explicitly enabled).
+  if (skipDelete) {
+    console.log(`\nSkipping deletion of ${deleteCandidates.length} shell merchant records (SKIP_DELETE=1).`);
+  } else {
+    console.log(`\nDeleting ${deleteCandidates.length} shell merchant records...`);
+    for (const mid of deleteCandidates) {
+      const url = `${BASE}/merchants/${mid}`;
+      try {
+        await fetchJson(url, { method: 'DELETE' });
+        console.log(`  deleted ${mid}`);
+      } catch (e) {
+        errors.push(`DELETE ${mid}: ${e.message}`);
+      }
     }
   }
 

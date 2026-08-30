@@ -26,6 +26,38 @@ const DOC_AUDIT_TYPES = [
     { key: 'menu', label: 'المنيو' }
 ];
 
+/* Resolve the authoritative merchant record for the audit widget.
+   Precedence:
+     1. the task-mirrored merchantId, only if it maps to a real record that
+        actually carries a Drive binding or tracked documents
+     2. any merchant record for this base name that has a Drive binding or a
+        `documents` map (the canonical record uploads/backfill wrote to)
+     3. the task-mirrored merchantId if it maps to any real record
+     4. the first matching record.
+   This makes the widget immune to phantom task merchantIds (minted by the
+   first-deploy race) that resolve to no merchants/{id} record, so backfilled
+   `documents` are read from the canonical record regardless of which merchantId
+   the task carries. */
+const resolveAuditMerchantSource = (baseName, taskMid) => {
+    const recs = [];
+    if (window.merchantsById) {
+        window.merchantsById.forEach((rec, mid) => {
+            if (!rec || !rec.name) return;
+            const rb = window.getBaseName ? window.getBaseName(rec.name) : String(rec.name || '');
+            if (rb !== baseName) return;
+            const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
+            recs.push({ mid, rec, hasDocs, hasLink: !!rec.driveFolderLink });
+        });
+    }
+    const pick = (pred) => recs.find(pred);
+    return (
+        pick((r) => r.mid === taskMid && (r.hasLink || r.hasDocs)) ||
+        pick((r) => r.hasLink || r.hasDocs) ||
+        pick((r) => r.mid === taskMid) ||
+        recs[0] || null
+    );
+};
+
 const buildMerchantDocsAuditData = () => {
 
     const merchantsMap = new Map();
@@ -72,7 +104,9 @@ const buildMerchantDocsAuditData = () => {
 
         if (!m.isSigned || m.achieved <= 0) return;
 
-        const mid = m.merchantId || (window.findMerchantIdForBase ? window.findMerchantIdForBase(m.baseName) : '') || '';
+        const src = resolveAuditMerchantSource(m.baseName, m.merchantId || '');
+
+        const mid = src ? src.mid : '';
 
         let driveFolderLink = '';
 
@@ -80,15 +114,13 @@ const buildMerchantDocsAuditData = () => {
 
         let docsUpdatedAt = '';
 
-        if (mid && window.merchantsById && window.merchantsById.has(mid)) {
+        if (src) {
 
-            const rec = window.merchantsById.get(mid);
+            driveFolderLink = src.rec.driveFolderLink || '';
 
-            driveFolderLink = rec.driveFolderLink || '';
+            documents = (src.rec.documents && typeof src.rec.documents === 'object') ? src.rec.documents : null;
 
-            documents = (rec.documents && typeof rec.documents === 'object') ? rec.documents : null;
-
-            docsUpdatedAt = rec.docsUpdatedAt || '';
+            docsUpdatedAt = src.rec.docsUpdatedAt || '';
 
         }
 
