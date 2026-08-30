@@ -42,7 +42,7 @@ const resolveAuditMerchantSource = (baseName, taskMid) => {
     const recs = [];
     if (window.merchantsById) {
         window.merchantsById.forEach((rec, mid) => {
-            if (!rec || !rec.name) return;
+            if (!rec || rec.archived === true || !rec.name) return;
             const rb = window.getBaseName ? window.getBaseName(rec.name) : String(rec.name || '');
             if (rb !== baseName) return;
             const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);

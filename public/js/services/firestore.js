@@ -227,7 +227,7 @@ window.recordAttendance = async function(taskId, type) {
 window.submitTask = async (e) => { 
     e.preventDefault(); 
     const taskName = document.getElementById('mName').value; 
-    const merchantId = window.getOrCreateMerchantId ? window.getOrCreateMerchantId(getBaseName(taskName)) : null;
+    const merchantId = window.getOrCreateMerchantId ? await window.getOrCreateMerchantId(getBaseName(taskName)) : null;
     await addDoc(collection(db, "tasks"), { 
         name: taskName, 
         merchantId: merchantId, 
@@ -538,7 +538,7 @@ window.submitReport = async () => {
         if(!exists) {
             batch.set(doc(collection(db, "tasks")), { 
                 name: baseName + " (متابعة)", 
-                merchantId: window.getOrCreateMerchantId ? window.getOrCreateMerchantId(baseName, activeTaskData) : null, 
+                merchantId: window.getOrCreateMerchantId ? await window.getOrCreateMerchantId(baseName, activeTaskData) : null, 
                 cat: activeTaskData.cat || "متابعة", 
                 team: activeTaskData.team || activeTaskTeam, 
                 time: nextDate, 

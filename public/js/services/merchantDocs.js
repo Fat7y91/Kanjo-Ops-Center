@@ -46,19 +46,25 @@ window.generateMerchantId = () => {
    (minted by a first-deploy race). Preferring the docs-bearing record keeps
    uploads (persistDriveFolder) and lookups on the record that holds the
    documents. Falls back to any same-base-name merchant record, then to a task
-   doc's merchantId. */
+   doc's merchantId. Archived records (duplicates retired during dedup fixes)
+   are never reused. */
 window.findMerchantIdForBase = (baseName) => {
     if (!baseName) return null;
     baseName = getBaseName(baseName);
     if (window.merchantsById && window.merchantsById.size > 0) {
         let anyRecord = null;
+        let docsRecord = null;
         for (const [mid, rec] of window.merchantsById) {
-            if (!rec || !rec.name || getBaseName(rec.name) !== baseName) continue;
+            if (!rec || rec.archived === true || !rec.name || getBaseName(rec.name) !== baseName) continue;
             if (!anyRecord) anyRecord = mid;
+            /* Prefer the record that owns the Drive folder — that is the true
+               canonical binding. Only fall back to a docs-bearing (but folderless)
+               record, then to any record. */
+            if (rec.driveFolderLink) return mid;
             const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
-            if (rec.driveFolderLink || hasDocs) return mid;
+            if (hasDocs && !docsRecord) docsRecord = mid;
         }
-        if (anyRecord) return anyRecord;
+        return docsRecord || anyRecord;
     }
     if (window.tasksMemory && window.tasksMemory.size > 0) {
         for (const [, td] of window.tasksMemory) {
@@ -68,12 +74,81 @@ window.findMerchantIdForBase = (baseName) => {
     return null;
 };
 
-/* Reuse an existing merchantId for the group, otherwise mint a fresh one.
-   Caller is responsible for persisting it on the doc it creates. */
-window.getOrCreateMerchantId = (baseName, taskData) => {
-    const existing = window.findMerchantIdForBase(baseName);
-    if (existing) return existing;
+/* Authoritative, server-side de-duplication of merchant identity.
+   Before minting a NEW KJ-*** id (and thus before a new Drive folder can ever
+   be created), this queries Firestore for an existing merchant record with the
+   same normalized name (or phone, when the task carries one) and reuses its
+   merchantId — so we NEVER create a duplicate merchant record or a second
+   Drive folder for the same merchant. Only when no record exists does it mint.
+   Archived records are excluded. */
+window.resolveCanonicalMerchantId = async (baseName, taskData) => {
+    baseName = getBaseName(baseName || '');
+
+    /* 1) Fast path: in-memory maps (kept fresh by the merchants onSnapshot). */
+    const mem = window.findMerchantIdForBase(baseName);
+    if (mem) return mem;
+
+    /* 2) Authoritative server lookup by normalized name (and phone). */
+    try {
+        const snap = await getDocs(collection(db, "merchants"));
+        const digitKey = (s) => String(s || '').replace(/\D/g, '');
+        const candidates = [];
+        snap.forEach((ds) => {
+            const rec = ds.data() || {};
+            if (rec.archived === true) return;
+            if (!rec.name) return;
+            if (getBaseName(rec.name) !== baseName) return;
+            const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
+            candidates.push({ id: ds.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
+        });
+
+        if (candidates.length === 0 && taskData) {
+            const taskPhone = taskData.phone || taskData.phoneNumber || (taskData.contact && taskData.contact.phone);
+            const taskDigits = digitKey(taskPhone);
+            if (taskDigits) {
+                snap.forEach((ds) => {
+                    const rec = ds.data() || {};
+                    if (rec.archived === true) return;
+                    const recPhone = rec.phone || (rec.contact && rec.contact.phone) || '';
+                    if (digitKey(recPhone) === taskDigits) {
+                        const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
+                        candidates.push({ id: ds.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
+                    }
+                });
+            }
+        }
+
+        if (candidates.length > 0) {
+            /* Prefer the record whose Drive folder matches the task's mirrored
+               folder (the true canonical binding), then a Drive-bound record,
+               then a docs-bearing one. This guarantees we reuse the EXISTING
+               merchantId + folder instead of minting a duplicate. */
+            const taskLink = taskData && taskData.driveFolderLink;
+            const taskFolderId = taskData && taskData.driveFolderId;
+            const matchesFolder = (c) => (taskFolderId && c.rec.driveFolderId === taskFolderId) || (taskLink && c.rec.driveFolderLink === taskLink);
+            const pick = (pred) => candidates.find(pred);
+            const chosen =
+                pick((c) => matchesFolder(c)) ||
+                pick((c) => c.hasLink) ||
+                pick((c) => c.hasDocs) ||
+                candidates[0];
+            return chosen.id;
+        }
+    } catch (err) {
+        console.error("[merchantDocs] server dedup lookup failed:", err);
+    }
+
+    /* 3) No existing record — reuse the task-mirrored id if any, else mint. */
     return (taskData && taskData.merchantId) || window.generateMerchantId();
+};
+
+/* Reuse an existing merchantId for the group, otherwise mint a fresh one.
+   Async: performs an authoritative Firestore lookup (by normalized name and
+   phone) before ever minting, so the system NEVER issues a second merchantId
+   (or allows a second Drive folder) for a merchant that already exists.
+   Caller is responsible for persisting it on the doc it creates. */
+window.getOrCreateMerchantId = async (baseName, taskData) => {
+    return window.resolveCanonicalMerchantId(baseName, taskData);
 };
 
 /* One-time client-side backfill: assign a merchantId to every task doc that
@@ -268,7 +343,7 @@ window.resetMerchantDocsUI = () => {
     }
 };
 
-window.openMerchantDocsModal = (taskId) => {
+window.openMerchantDocsModal = async (taskId) => {
     if (!window.KANJO_DRIVE_SCRIPT_URL || !window.KANJO_DRIVE_SCRIPT_URL.trim()) {
         showToast("ميزة رفع المستندات غير مفعّلة بعد — الرجاء إعداد رابط Google Drive من الإدارة", false);
         return;
@@ -281,7 +356,9 @@ window.openMerchantDocsModal = (taskId) => {
     if (!task) return showToast("تعذر العثور على بيانات التاجر", false);
 
     const baseName = getBaseName(task.name);
-    const merchantId = window.getOrCreateMerchantId(baseName, task);
+    /* Server-side dedup: reuse the existing merchantId (and thus the existing
+       Drive folder) when the merchant already exists — never mint a duplicate. */
+    const merchantId = await window.getOrCreateMerchantId(baseName, task);
 
     window.merchantDocsDraft = { taskId, baseName, merchantId, files: {} };
 

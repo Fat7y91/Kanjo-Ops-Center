@@ -31,7 +31,7 @@ const dryRun = process.env.SYNC_DRY_RUN === '1';
 const skipDelete = process.env.SKIP_DELETE === '1';
 
 const TARGETS = new Map([
-  ['KJ-3KDATB', '212 Perfume'], ['KJ-DQVQW4', 'شابلن'], ['KJ-DMBTFA', 'عروس الشام'],
+  ['KJ-3KDATB', '212 Perfume'], ['KJ-XVRT4Q', 'شابلن'], ['KJ-DMBTFA', 'عروس الشام'],
   ['KJ-STPD5Y', 'قراقيش'], ['KJ-F2T6UJ', 'كشري باب الحارة'], ['KJ-37CKK7', 'كلاسيك - Classic'],
   ['KJ-M4MWRC', 'لذيذ'], ['KJ-4AYT64', 'هالك'], ['KJ-MKZJ4W', 'Apple بلبل'],
   ['KJ-X5K94U', 'Mr Molten'], ['KJ-4HBH97', 'SOO'], ['KJ-VUAGJV', 'XO Cosmetics']
