@@ -1858,6 +1858,46 @@
 
 
 
+    <div id="pendingUploadsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[135]">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-brand-purple-deep text-brand-gold-light p-3 rounded-2xl text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+
+                    <div>
+
+                        <h3 class="font-black text-lg text-kanjo-dark">مهام رفع المستندات</h3>
+
+                        <p class="text-xs text-slate-500 font-bold" id="pendingUploadsSummary"></p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="closePendingUploadsModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="pendingUploadsList" class="space-y-2"></div>
+
+            <div class="sticky bottom-0 bg-white border-t border-purple-100 pt-3 mt-4 flex items-center justify-between">
+
+                <span class="text-xs font-black text-slate-600">الجزء المكتمل</span>
+
+                <span class="text-xs font-black text-kanjo-primary bg-purple-100 px-3 py-1.5 rounded-full" id="pendingUploadsCount">0</span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
     <div id="merchantDocsAuditModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[136]">
 
         <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">

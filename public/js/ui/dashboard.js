@@ -158,14 +158,16 @@ const buildMerchantDocsAuditData = () => {
 
 };
 
-/* Rep-dashboard "مهام رفع المستندات" widget.
-   Lists the current rep's team merchants that are finalized (isSigned &&
-   achieved > 0) but still miss crucial documents (commercial / tax / menu),
-   reading the authoritative documents map from the canonical merchant record.
-   Each row is an actionable upload task opening the upload modal. Rebuilds
-   automatically on every render (task or merchant snapshot change). */
-const buildPendingUploadsWidget = (team) => {
-    if (!team || !window.allTasksCache) return null;
+/* Rep-dashboard "مهام رفع المستندات" — compact gamified widget + modal.
+   Computes, for the logged-in rep's team, every finalized merchant
+   (isSigned && achieved > 0). Tracks how many have fully uploaded all crucial
+   documents (commercial / tax / menu) vs. how many still miss some, using the
+   authoritative documents map from the canonical merchant record. The widget
+   shows a progress bar; clicking it opens a modal listing the pending merchants
+   with their missing documents and an immediate upload/folder action. */
+const computePendingUploads = (team) => {
+    const result = { team: team || '', total: 0, completed: 0, pending: [], pct: 0 };
+    if (!team || !window.allTasksCache) return result;
 
     const merchantMap = new Map();
     window.allTasksCache.forEach((t) => {
@@ -179,40 +181,122 @@ const buildPendingUploadsWidget = (team) => {
         }
     });
 
-    const pending = [];
+    result.total = merchantMap.size;
     merchantMap.forEach((m) => {
         const src = resolveAuditMerchantSource(m.baseName, '');
+        const merchantId = src ? src.mid : '';
+        const driveFolderLink = src ? (src.rec.driveFolderLink || '') : '';
         const documents = src && src.rec.documents && typeof src.rec.documents === 'object' ? src.rec.documents : null;
         const missingTypes = DOC_AUDIT_TYPES.filter((d) => !documents || !documents[d.key]);
-        if (missingTypes.length === 0) return;
-        pending.push({ ...m, missingTypes });
+        const item = { ...m, merchantId, driveFolderLink, documents, missingTypes };
+        if (missingTypes.length === 0) {
+            result.completed++;
+        } else {
+            result.pending.push(item);
+        }
     });
 
-    if (pending.length === 0) return null;
+    result.pending.sort((a, b) => String(a.baseName).localeCompare(String(b.baseName), 'ar'));
+    result.pct = result.total > 0 ? Math.round((result.completed / result.total) * 100) : 0;
+    return result;
+};
 
-    pending.sort((a, b) => String(a.baseName).localeCompare(String(b.baseName), 'ar'));
-
+const renderPendingUploadItem = (p) => {
+    const missing = p.missingTypes.map((d) => d.label).join('، ');
+    const folderBtn = p.driveFolderLink
+        ? `<button onclick="openDriveFolder('${p.merchantId || ''}')" class="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 bg-kanjo-light text-kanjo-primary hover:bg-purple-100 border border-purple-100">
+             <i class="fa-solid fa-folder-open"></i> فتح المجلد
+           </button>`
+        : '';
     return `
-        <div class="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-amber-100 mb-5">
-            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-                <h3 class="font-black text-sm sm:text-base text-kanjo-dark"><i class="fa-solid fa-cloud-arrow-up ml-1 text-amber-500"></i> مهام رفع المستندات</h3>
-                <span class="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold">${pending.length} تاجر بانتظار المستندات</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-kanjo-light/50 border border-purple-100 rounded-2xl p-3">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-black text-sm text-kanjo-dark">${window.safeString(p.baseName)}</span>
+                    ${p.cat ? `<span class="text-[10px] bg-white text-kanjo-primary px-2 py-0.5 rounded-full font-bold border border-purple-100">${window.safeString(p.cat)}</span>` : ''}
+                </div>
+                <div class="text-[11px] font-bold text-amber-700 mt-1">المفقود: ${missing}</div>
             </div>
-            <div class="space-y-2">
-                ${pending.map((p) => `
-                    <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-purple-50 rounded-2xl p-3">
-                        <div class="min-w-0">
-                            <div class="font-bold text-sm text-slate-900">${window.safeString(p.baseName)}</div>
-                            <div class="text-[10px] text-slate-500 font-bold">${p.cat ? 'الفئة: ' + window.safeString(p.cat) : ''}${p.cat ? ' | ' : ''}المفقود: ${p.missingTypes.map((d) => d.label).join('، ')}</div>
-                        </div>
-                        <button onclick="openMerchantDocsModal('${p.taskId}')" class="bg-teal-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-teal-700 transition shadow-sm flex items-center gap-1">
-                            <i class="fa-solid fa-utensils"></i> رفع المنيو لـ ${window.safeString(p.baseName)}
-                        </button>
-                    </div>
-                `).join('')}
+            <div class="flex gap-2 items-center flex-wrap">
+                ${folderBtn}
+                <button onclick="openMerchantDocsModal('${p.taskId}')" class="bg-brand-purple-deep text-white px-3 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition shadow-sm flex items-center gap-1">
+                    <i class="fa-solid fa-utensils"></i> رفع المنيو
+                </button>
             </div>
         </div>`;
 };
+
+const buildPendingUploadsWidget = (team) => {
+    const data = computePendingUploads(team);
+    window.pendingUploadsData = data;
+    if (!data || data.total === 0) return null;
+
+    const done = data.pct >= 100;
+    return `
+        <button type="button" onclick="openPendingUploadsModal()" class="w-full bg-white p-4 sm:p-5 rounded-3xl shadow-sm border ${done ? 'border-emerald-100' : 'border-purple-100'} mb-5 text-right hover:shadow-md transition-shadow group cursor-pointer">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+                <div class="flex items-center gap-3">
+                    <span class="grid place-items-center w-11 h-11 rounded-2xl ${done ? 'bg-emerald-50 text-emerald-600' : 'bg-brand-purple-deep text-brand-gold-light'} shrink-0">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                    </span>
+                    <div>
+                        <h3 class="font-black text-sm sm:text-base text-kanjo-dark">مهام رفع المستندات</h3>
+                        <p class="text-[11px] font-bold text-slate-500">تم رفع مستندات ${data.completed} من أصل ${data.total} تاجر</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-black ${data.pending.length ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'} px-2.5 py-1 rounded-full">${data.pending.length} تاجر بانتظار</span>
+                    <i class="fa-solid fa-chevron-left text-slate-300 group-hover:text-kanjo-primary transition-colors"></i>
+                </div>
+            </div>
+            <div class="relative mt-3 h-2.5 bg-kanjo-light rounded-full overflow-hidden border border-purple-100">
+                <div class="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-brand-gold-light to-brand-gold transition-all duration-500" style="width:${data.pct}%"></div>
+            </div>
+            <div class="flex justify-between mt-1.5 text-[10px] font-bold text-slate-500">
+                <span>${data.completed} مكتمل</span>
+                <span>${data.pending.length} معلق</span>
+            </div>
+        </button>`;
+};
+
+window.openPendingUploadsModal = () => {
+    const team = (window.pendingUploadsData && window.pendingUploadsData.team) || (window.currentUser && currentUser.team) || '';
+    const data = computePendingUploads(team);
+    window.pendingUploadsData = data;
+
+    const modal = document.getElementById('pendingUploadsModal');
+    if (!modal) return;
+
+    const listEl = document.getElementById('pendingUploadsList');
+    const summaryEl = document.getElementById('pendingUploadsSummary');
+    const countEl = document.getElementById('pendingUploadsCount');
+    if (summaryEl) summaryEl.innerHTML = `تم رفع مستندات <span class="font-black text-kanjo-dark">${data.completed}</span> من أصل <span class="font-black text-kanjo-dark">${data.total}</span> تاجر`;
+    if (countEl) countEl.textContent = String(data.pending.length);
+    if (listEl) {
+        listEl.innerHTML = data.pending.length === 0
+            ? `<div class="text-center py-10 text-slate-400 font-bold">
+                 <i class="fa-solid fa-circle-check text-4xl text-emerald-400 mb-3"></i>
+                 <div>تم رفع جميع مستندات تجار فريقك — لا توجد مهام معلقة</div>
+               </div>`
+            : data.pending.map(renderPendingUploadItem).join('');
+    }
+    modal.classList.remove('hidden');
+};
+
+window.closePendingUploadsModal = () => {
+    const modal = document.getElementById('pendingUploadsModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+/* Close the modal on backdrop click or Escape for a clean CRM feel. */
+window.addEventListener('click', (ev) => {
+    if (ev.target && ev.target.id === 'pendingUploadsModal') {
+        window.closePendingUploadsModal();
+    }
+});
+window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') window.closePendingUploadsModal();
+});
 
 const buildDocAuditChips = (m) => {
 
