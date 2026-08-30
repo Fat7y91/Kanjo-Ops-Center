@@ -202,8 +202,15 @@ function applyThemeAndShowDashboard() {
         if (typeof onSnapshot !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined') {
             window.merchantsById = window.merchantsById || new Map();
             const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
+                window._merchantsLoaded = true;
                 window.merchantsById.clear();
                 snap.forEach(docSnap => window.merchantsById.set(docSnap.id, docSnap.data()));
+                /* Run the merchantId backfill now that the authoritative records
+                   are known, so it can safely reuse existing merchantIds instead
+                   of minting phantoms for records loaded after the tasks snapshot. */
+                if (typeof window.ensureMerchantIds === 'function') {
+                    window.ensureMerchantIds();
+                }
                 if (window.lastSnapshot && !isAccounting && typeof renderDashboard !== 'undefined' && window.hasRenderedData) {
                     renderDashboard(window.lastSnapshot);
                 }

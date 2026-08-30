@@ -66,12 +66,20 @@ window.getOrCreateMerchantId = (baseName, taskData) => {
 /* One-time client-side backfill: assign a merchantId to every task doc that
    still lacks one, grouped by base-name, and upsert the authoritative merchant
    record. Chunked to stay under Firestore's 500-op batch limit. Runs safely
-   alongside the existing signed-contract migration. */
+   alongside the existing signed-contract migration.
+
+   Hardening: never mint a fresh merchantId until the authoritative `merchants`
+   collection has been observed at least once (window._merchantsLoaded). At
+   first load the tasks snapshot can arrive before the merchants listener, so
+   findMerchantIdForBase would see an empty merchantsById and mint phantom IDs
+   for merchants that already have a permanent record. We defer instead; the
+   next snapshot (or the merchants listener) re-invokes us. */
 window.ensureMerchantIds = async () => {
     if (!window.tasksMemory || window.tasksMemory.size === 0) return;
     if (window._merchantIdMigrationRunning) return;
     window._merchantIdMigrationRunning = true;
 
+    const merchantsReady = window.merchantsById && window.merchantsById.size >= 0 && window._merchantsLoaded === true;
     const groups = new Map();
     window.tasksMemory.forEach((td, id) => {
         const base = getBaseName(td.name);
@@ -84,7 +92,14 @@ window.ensureMerchantIds = async () => {
 
     const updates = [];
     groups.forEach((g, base) => {
-        if (!g.merchantId) g.merchantId = window.generateMerchantId();
+        if (!g.merchantId) {
+            /* No task in this group has a merchantId yet. Only mint when the
+               authoritative merchants collection has loaded, otherwise a fresh
+               (phantom) ID could be assigned to a merchant that already has a
+               permanent record we simply haven't seen yet. */
+            if (!merchantsReady) return;
+            g.merchantId = window.generateMerchantId();
+        }
         g.ids.forEach((id) => {
             const td = window.tasksMemory.get(id);
             if (!td || td.merchantId === g.merchantId) return;
