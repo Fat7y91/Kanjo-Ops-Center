@@ -423,7 +423,25 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
         if (d.name) docsByType[key].push(d.name);
     });
     let documents = {};
-    if (window.merchantsById && window.merchantsById.has(merchantId)) {
+    /* Read the authoritative merchant record from Firestore first so the
+       cumulative count is computed against the server state, never a stale
+       in-memory cache. This guarantees legacy counts of OTHER doc types
+       (e.g. tax/commercial) survive a Menu-only upload even on the very first
+       upload of a session or right after a backfill. Fall back to the
+       in-memory map only if the fresh read fails (e.g. offline). */
+    const merchantRef = doc(db, "merchants", merchantId);
+    try {
+        const snap = await getDoc(merchantRef);
+        if (snap.exists()) {
+            const serverData = snap.data() || {};
+            if (serverData.documents && typeof serverData.documents === 'object') {
+                documents = { ...serverData.documents };
+            }
+        }
+    } catch (err) {
+        console.error("[merchantDocs] fresh merchant read failed:", err);
+    }
+    if (Object.keys(documents).length === 0 && window.merchantsById && window.merchantsById.has(merchantId)) {
         const existingRec = window.merchantsById.get(merchantId);
         if (existingRec && existingRec.documents && typeof existingRec.documents === 'object') {
             documents = { ...existingRec.documents };
@@ -432,6 +450,7 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
     Object.entries(docsByType).forEach(([key, names]) => {
         const prev = (documents[key] && typeof documents[key] === 'object') ? documents[key] : {};
         documents[key] = {
+            ...prev,
             uploaded: true,
             count: (Number(prev.count) || 0) + names.length,
             names: (Array.isArray(prev.names) ? prev.names : []).concat(names),
