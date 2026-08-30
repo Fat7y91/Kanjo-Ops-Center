@@ -166,7 +166,7 @@ const buildMerchantDocsAuditData = () => {
    shows a progress bar; clicking it opens a modal listing the pending merchants
    with their missing documents and an immediate upload/folder action. */
 const computePendingUploads = (team) => {
-    const result = { team: team || '', total: 0, completed: 0, pending: [], pct: 0 };
+    const result = { team: team || '', total: 0, completed: 0, pending: [], pct: 0, fileTotal: 0, fileCompleted: 0, filePct: 0 };
     if (!team || !window.allTasksCache) return result;
 
     const merchantMap = new Map();
@@ -182,12 +182,16 @@ const computePendingUploads = (team) => {
     });
 
     result.total = merchantMap.size;
+    result.fileTotal = merchantMap.size * DOC_AUDIT_TYPES.length;
+    let fileCompleted = 0;
     merchantMap.forEach((m) => {
         const src = resolveAuditMerchantSource(m.baseName, '');
         const merchantId = src ? src.mid : '';
         const driveFolderLink = src ? (src.rec.driveFolderLink || '') : '';
         const documents = src && src.rec.documents && typeof src.rec.documents === 'object' ? src.rec.documents : null;
-        const missingTypes = DOC_AUDIT_TYPES.filter((d) => !documents || !documents[d.key]);
+        const presentTypes = DOC_AUDIT_TYPES.filter((d) => documents && documents[d.key]);
+        fileCompleted += presentTypes.length;
+        const missingTypes = DOC_AUDIT_TYPES.filter((d) => !presentTypes.includes(d));
         const item = { ...m, merchantId, driveFolderLink, documents, missingTypes };
         if (missingTypes.length === 0) {
             result.completed++;
@@ -198,6 +202,8 @@ const computePendingUploads = (team) => {
 
     result.pending.sort((a, b) => String(a.baseName).localeCompare(String(b.baseName), 'ar'));
     result.pct = result.total > 0 ? Math.round((result.completed / result.total) * 100) : 0;
+    result.fileCompleted = fileCompleted;
+    result.filePct = result.fileTotal > 0 ? Math.round((fileCompleted / result.fileTotal) * 100) : 0;
     return result;
 };
 
@@ -231,7 +237,7 @@ const buildPendingUploadsWidget = (team) => {
     window.pendingUploadsData = data;
     if (!data || data.total === 0) return null;
 
-    const done = data.pct >= 100;
+    const done = data.filePct >= 100;
     return `
         <button type="button" onclick="openPendingUploadsModal()" class="w-full bg-white p-4 sm:p-5 rounded-3xl shadow-sm border ${done ? 'border-emerald-100' : 'border-purple-100'} mb-5 text-right hover:shadow-md transition-shadow group cursor-pointer">
             <div class="flex items-center justify-between flex-wrap gap-3">
@@ -241,7 +247,7 @@ const buildPendingUploadsWidget = (team) => {
                     </span>
                     <div>
                         <h3 class="font-black text-sm sm:text-base text-kanjo-dark">مهام رفع المستندات</h3>
-                        <p class="text-[11px] font-bold text-slate-500">تم رفع مستندات ${data.completed} من أصل ${data.total} تاجر</p>
+                        <p class="text-[11px] font-bold text-slate-500">تم رفع ${data.fileCompleted} من أصل ${data.fileTotal} ملف</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -250,11 +256,11 @@ const buildPendingUploadsWidget = (team) => {
                 </div>
             </div>
             <div class="relative mt-3 h-2.5 bg-kanjo-light rounded-full overflow-hidden border border-purple-100">
-                <div class="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-brand-gold-light to-brand-gold transition-all duration-500" style="width:${data.pct}%"></div>
+                <div class="absolute inset-y-0 right-0 rounded-full bg-gradient-to-l from-brand-gold-light to-brand-gold transition-all duration-500" style="width:${data.filePct}%"></div>
             </div>
             <div class="flex justify-between mt-1.5 text-[10px] font-bold text-slate-500">
-                <span>${data.completed} مكتمل</span>
-                <span>${data.pending.length} معلق</span>
+                <span>${data.fileCompleted} ملف مرفوع</span>
+                <span>${data.pending.length} تاجر معلق</span>
             </div>
         </button>`;
 };
@@ -270,7 +276,7 @@ window.openPendingUploadsModal = () => {
     const listEl = document.getElementById('pendingUploadsList');
     const summaryEl = document.getElementById('pendingUploadsSummary');
     const countEl = document.getElementById('pendingUploadsCount');
-    if (summaryEl) summaryEl.innerHTML = `تم رفع مستندات <span class="font-black text-kanjo-dark">${data.completed}</span> من أصل <span class="font-black text-kanjo-dark">${data.total}</span> تاجر`;
+    if (summaryEl) summaryEl.innerHTML = `تم رفع <span class="font-black text-kanjo-dark">${data.fileCompleted}</span> من أصل <span class="font-black text-kanjo-dark">${data.fileTotal}</span> ملف`;
     if (countEl) countEl.textContent = String(data.pending.length);
     if (listEl) {
         listEl.innerHTML = data.pending.length === 0
@@ -1959,6 +1965,17 @@ window.renderDashboard = (snapshot) => {
 
 
 
+    /* كارت "مهام رفع المستندات" — يُعرض فقط للمناديب، في مكانه أعلى محفظة
+       استكمال بيانات السوشيال ميديا داخل صفحة HTML الثابتة (وليس داخل قائمة
+       المهام). يُصفر لأي دور آخر حتى لا يعلق بعد تبديل المستخدم. */
+    const pendingSlot = document.getElementById('pendingUploadsWidgetSlot');
+
+    if (pendingSlot) {
+
+        pendingSlot.innerHTML = (currentUser.role === 'rep') ? (buildPendingUploadsWidget(currentUser.team) || '') : '';
+
+    }
+
     if(currentUser.role === 'admin' || currentUser.role === 'founder') { 
 
         ['Fox Team', 'Power Team'].forEach(team => { 
@@ -1986,14 +2003,6 @@ window.renderDashboard = (snapshot) => {
         wrapper.className = "space-y-3 h-auto";
 
         let repHtml = '';
-
-        if (currentUser.role === 'rep') {
-
-            const pendingWidget = buildPendingUploadsWidget(currentUser.team);
-
-            if (pendingWidget) repHtml += pendingWidget;
-
-        }
 
         repHtml += window.renderTasks(groupedByTeam[currentUser.team] || {});
 

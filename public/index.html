@@ -67,6 +67,11 @@
         @apply btn text-white border-2 border-white/25 bg-white/5 backdrop-blur-sm
                hover:border-brand-gold-light hover:text-brand-gold-light hover:-translate-y-0.5;
       }
+      .btn-outline-gold {
+        @apply btn text-brand-gold-light border-2 border-brand-gold/60 bg-transparent
+               hover:bg-brand-purple hover:border-brand-gold-light hover:text-brand-gold-light
+               hover:-translate-y-0.5;
+      }
       .btn-purple {
         @apply btn text-white bg-brand-purple hover:bg-brand-purple-soft hover:-translate-y-0.5;
       }
@@ -115,8 +120,10 @@
         <li><a href="#merchants" class="hover:text-brand-gold-light transition-colors">للتجار</a></li>
         <li><a href="#process" class="hover:text-brand-gold-light transition-colors">آلية الشراكة</a></li>
       </ul>
-      <a href="#join" class="hidden sm:inline-flex btn-gold !py-3 !px-6 text-sm">انضم كشريك تجاري</a>
-      <a href="./dashboard.html" class="hidden sm:inline-flex btn-outline-light text-sm !py-3 !px-6">دخول الفريق</a>
+      <div class="hidden sm:flex items-center gap-4">
+        <a href="#join" class="btn-gold !py-3 !px-6 text-sm">انضم كشريك تجاري</a>
+        <a href="./dashboard.html" class="btn-outline-gold !py-3 !px-6 text-sm">دخول الفريق</a>
+      </div>
       <button id="menuBtn" class="lg:hidden grid place-items-center w-10 h-10 rounded-lg bg-white/10 text-white" aria-label="القائمة">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
@@ -128,7 +135,7 @@
         <li><a href="#merchants" class="block py-3 border-b border-white/5">للتجار</a></li>
         <li><a href="#process" class="block py-3 border-b border-white/5">آلية الشراكة</a></li>
         <li class="pt-4"><a href="#join" class="btn-gold w-full !py-3.5">انضم كشريك تجاري</a></li>
-        <li class="pt-2"><a href="./dashboard.html" class="btn-outline-light w-full !py-3.5">دخول الفريق</a></li>
+        <li class="pt-2"><a href="./dashboard.html" class="btn-outline-gold w-full !py-3.5">دخول الفريق</a></li>
       </ul>
     </div>
   </header>
@@ -152,7 +159,7 @@
           </span>
           <h1 class="text-[2.6rem] leading-snug sm:text-6xl lg:text-[3.6rem] lg:leading-snug font-extrabold tracking-tight mb-7">
             متجرك على <span class="text-transparent bg-clip-text bg-gradient-to-l from-brand-gold-light to-brand-gold">كانجو</span>
-            <br class="hidden sm:block" /> يعني طلبات أكتر.. وهم أقل
+            <br class="hidden sm:block" /> يعني طلبات أكتر.. ومن غير وجع دماغ
           </h1>
           <p class="text-lg lg:text-xl text-white/70 leading-relaxed max-w-xl mx-auto lg:mx-0 mb-10">
             نوصّل منتجاتك لعملاء مدينتك في دقائق — طعام، بقالة، وصيدليات.
