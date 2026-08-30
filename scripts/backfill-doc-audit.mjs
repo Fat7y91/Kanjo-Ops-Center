@@ -22,6 +22,22 @@ const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databas
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 
+/* Name-search targets -> uploaded document counts. These merchants were stuck
+   because the audit widget resolves each merchant from its task `merchantId`,
+   but their records predate detailed document tracking (empty `documents` map),
+   so the legacy banner stayed. Unlike TARGETS (exact id), these are matched
+   flexibly by normalized base-name search terms so the script stays correct if
+   a canonical record is re-created under a different id. */
+const NAME_TARGETS = [
+  { terms: ['ابن حميد', 'ابن حميدو'], docs: { menu: 2 }, label: 'ابن حميدو' },
+  { terms: ['ابو سعده', 'أبو سعده'], docs: { tax: 1 }, label: 'ابو سعده' },
+  { terms: ['الرحمة', 'الفلاحي'], docs: { tax: 1, menu: 1 }, label: 'الرحمة المخبوزات الفلاحي بدسوق' },
+  { terms: ['الطيبات'], docs: { menu: 2 }, label: 'الطيبات بدسوق' },
+  { terms: ['ميكس توب', 'بيتزا ميكس'], docs: { menu: 1 }, label: 'بيتزا ميكس توب' },
+  { terms: ['بريجو', 'prego'], docs: { menu: 2 }, label: 'pizza prego_ بيتزا بريجو' },
+  { terms: ['toma'], docs: { tax: 1 }, label: 'Toma cosmetics' }
+];
+
 /* Exact merchantId targets -> uploaded document counts. The merchantIds are the
    ones stamped on the finalized tasks (what the audit widget resolves). */
 const TARGETS = [
@@ -41,7 +57,7 @@ const TARGETS = [
 
 const getBaseName = (name) => {
   if (!name) return '';
-  let clean = name;
+  let clean = String(name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]/g, '');
   while (clean.includes('(متابعة)') || clean.includes('(متابعه)')) {
     clean = clean.replace(/\s*\(متابعة\)\s*/g, '').replace(/\s*\(متابعه\)\s*/g, '').trim();
   }
@@ -123,6 +139,82 @@ const getMerchant = async (merchantId) => {
   return (await res.json()).fields || {};
 };
 
+const listDocs = async (path) => {
+  const out = [];
+  let page = BASE + '/' + path + '?pageSize=1000';
+  while (page) {
+    const res = await fetchWithAuth(page);
+    if (!res.ok) throw new Error(`LIST ${path} failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    const j = await res.json();
+    (j.documents || []).forEach((d) => out.push(d));
+    page = j.nextPageToken ? BASE + '/' + path + '?pageSize=1000&pageToken=' + j.nextPageToken : null;
+  }
+  return out;
+};
+
+const decodeValue = (v) => {
+  if (!v) return v;
+  if ('stringValue' in v) return v.stringValue;
+  if ('integerValue' in v) return parseInt(v.integerValue, 10);
+  if ('doubleValue' in v) return parseFloat(v.doubleValue);
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(decodeValue);
+  if ('mapValue' in v) { const o = {}; for (const [k, vv] of Object.entries(v.mapValue.fields || {})) o[k] = decodeValue(vv); return o; }
+  if ('nullValue' in v) return null;
+  return v;
+};
+
+/* Resolve each NAME_TARGET to a canonical merchantId by flexible base-name
+   matching. Canonical precedence mirrors the restore plan:
+     1. record referenced by a task's merchantId (what the audit widget resolves)
+     2. record with a driveFolderLink
+     3. record with a documents map
+     4. first record */
+const resolveNameTargets = async () => {
+  const [merchants, tasks] = await Promise.all([listDocs('merchants'), listDocs('tasks')]);
+
+  const merchantById = new Map();
+  merchants.forEach((m) => {
+    const id = m.name.split('/').pop();
+    const raw = decodeValue(m.fields && m.fields.name);
+    merchantById.set(id, {
+      mid: id,
+      raw: raw || '',
+      base: getBaseName(raw),
+      driveFolderLink: decodeValue(m.fields && m.fields.driveFolderLink) || '',
+      hasDocs: !!(m.fields && m.fields.documents && m.fields.documents.mapValue && Object.keys(m.fields.documents.mapValue.fields || {}).length)
+    });
+  });
+
+  const taskReferenced = new Set();
+  tasks.forEach((t) => {
+    const mid = decodeValue(t.fields && t.fields.merchantId);
+    if (mid) taskReferenced.add(mid);
+  });
+
+  const resolved = [];
+  for (const target of NAME_TARGETS) {
+    const term = (s) => s.toLowerCase();
+    const matches = [...merchantById.values()].filter((r) => {
+      const hayRaw = term(r.raw);
+      const hayBase = term(r.base);
+      return target.terms.some((t) => hayRaw.includes(term(t)) || hayBase.includes(term(t)));
+    });
+    if (matches.length === 0) {
+      resolved.push({ target, merchantId: null });
+      continue;
+    }
+    const canon =
+      matches.find((r) => taskReferenced.has(r.mid)) ||
+      matches.find((r) => r.driveFolderLink) ||
+      matches.find((r) => r.hasDocs) ||
+      matches[0];
+    resolved.push({ target, merchantId: canon.mid });
+  }
+  return resolved;
+};
+
 /* Pull the first task carrying this merchantId (used when creating a missing
    authoritative record) to carry over name + Drive folder binding. */
 const getTaskForMerchant = async (merchantId) => {
@@ -186,9 +278,21 @@ const createMerchant = async (merchantId, name, task, documents) => {
 const main = async () => {
   console.log(`[doc-audit] ${dryRun ? 'DRY RUN (no writes)' : 'LIVE RUN'} — project ${PROJECT_ID}`);
 
+  /* Resolve name-search targets to canonical merchantIds first. */
+  const nameTargets = await resolveNameTargets();
+  nameTargets.forEach(({ target, merchantId }) => {
+    if (merchantId) console.log(`[doc-audit] resolved "${target.label}" -> ${merchantId} (${JSON.stringify(target.docs)})`);
+    else console.error(`[doc-audit] ✗ NO MERCHANT MATCHED "${target.label}" — terms ${JSON.stringify(target.terms)}`);
+  });
+
+  const allTargets = [
+    ...TARGETS.map((t) => ({ merchantId: t.merchantId, name: t.name, docs: t.docs, replace: t.replace })),
+    ...nameTargets.filter((r) => r.merchantId).map((r) => ({ merchantId: r.merchantId, name: r.target.label, docs: r.target.docs }))
+  ];
+
   const summary = { created: 0, updated: 0, unchanged: 0, failed: [] };
 
-  for (const target of TARGETS) {
+  for (const target of allTargets) {
     const task = await getTaskForMerchant(target.merchantId);
     const existing = await getMerchant(target.merchantId);
     const refDate = (existing && existing.docsUpdatedAt && existing.docsUpdatedAt.timestampValue)
