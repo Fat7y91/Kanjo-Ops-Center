@@ -42,7 +42,7 @@ try {
 
 // ─── Firebase App Check (stub for reCAPTCHA v3 / Cloudflare Turnstile) ───
 // Inject the site key by setting window.FIREBASE_APP_CHECK_SITE_KEY BEFORE this
-// module loads (see the inline script in index.html), or at build time via the
+// module loads (see the inline script in dashboard.html), or at build time via the
 // FIREBASE_APP_CHECK_SITE_KEY env var in scripts/split-modules.mjs.
 // App Check only starts enforcing after "Enforce" is enabled in the Firebase console.
 const appCheckSiteKey = (typeof window !== 'undefined' && window.FIREBASE_APP_CHECK_SITE_KEY) || "";

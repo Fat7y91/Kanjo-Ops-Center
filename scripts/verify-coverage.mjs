@@ -12,7 +12,7 @@ function walk(dir) {
 }
 
 const allJs = walk('public/js').map(f => fs.readFileSync(f, 'utf8')).join('\n');
-const html = fs.readFileSync('public/index.html', 'utf8');
+const html = fs.readFileSync('public/dashboard.html', 'utf8');
 
 // Extract function names from onclick=... including with args
 const fromHtml = [...html.matchAll(/\b(?:onclick|onchange|onsubmit|oninput|onkeyup)=["']([a-zA-Z_][\w]*)/g)].map(m => m[1]);

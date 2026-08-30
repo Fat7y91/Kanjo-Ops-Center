@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const html = fs.readFileSync('public/index.html', 'utf8');
+const html = fs.readFileSync('public/dashboard.html', 'utf8');
 const onclicks = [...html.matchAll(/onclick="([a-zA-Z_][\w]*)\s*\(/g)].map(m => m[1]);
 const unique = [...new Set(onclicks)].sort();
 
