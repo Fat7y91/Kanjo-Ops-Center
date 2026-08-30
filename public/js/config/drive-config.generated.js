@@ -3,7 +3,7 @@
    build time so credentials never live in hand-edited source. See
    scripts/build-config.mjs and .env.example. */
 
-const KANJO_DRIVE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaJZv6fIoL51vSvJvfPYHm0ePHe--D8gT_jEh_voxcWR4wk0hNTgJkflN49e_4zAP6ow/exec";
+const KANJO_DRIVE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxV7qAewSMWmumUfvsl6oql-HBqo8DlBr5BfNCH7BJCCKrWO7kfNGcOB5GQZRuN0BcBhA/exec";
 
 const KANJO_DRIVE_SCRIPT_TOKEN = "kanjo_secure_token_2026";
 

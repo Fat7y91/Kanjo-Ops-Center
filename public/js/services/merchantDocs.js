@@ -32,12 +32,24 @@ window.generateMerchantId = () => {
     return 'KJ-' + code;
 };
 
-/* Find an already-assigned merchantId for a base-name group (if any). */
+/* Find an already-assigned merchantId for a base-name group (if any).
+   Immutability rule: the merchantId is the permanent, unchanging identity of a
+   merchant. It is NEVER regenerated or overwritten once persisted. This lookup
+   checks BOTH the in-memory task docs and the authoritative `merchants`
+   collection, so even when no task doc for this base name is currently loaded
+   (e.g. legacy rows or a merchant whose tasks were just created), the stored
+   merchantId is reused instead of minting a fresh one. */
 window.findMerchantIdForBase = (baseName) => {
     if (!baseName) return null;
+    baseName = getBaseName(baseName);
     if (window.tasksMemory && window.tasksMemory.size > 0) {
         for (const [, td] of window.tasksMemory) {
             if (td && td.merchantId && getBaseName(td.name) === baseName) return td.merchantId;
+        }
+    }
+    if (window.merchantsById && window.merchantsById.size > 0) {
+        for (const [mid, rec] of window.merchantsById) {
+            if (rec && rec.name && getBaseName(rec.name) === baseName) return mid;
         }
     }
     return null;
@@ -411,13 +423,19 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
             const matchById = td.merchantId === merchantId;
             const matchByBase = getBaseName(td.name) === merchantName;
             if (matchById || matchByBase) {
-                batch.update(doc(db, "tasks", id), {
-                    merchantId,
+                /* Immutability rule: never overwrite a task's existing merchantId
+                   with a different value. Only stamp the field when the task has
+                   no merchantId yet or already holds the same one. */
+                const updatePayload = {
                     driveFolderId: folderId,
                     driveFolderLink: folderLink,
                     docsUpdatedAt: now,
                     docsUpdatedBy: by
-                });
+                };
+                if (!td.merchantId || td.merchantId === merchantId) {
+                    updatePayload.merchantId = merchantId;
+                }
+                batch.update(doc(db, "tasks", id), updatePayload);
                 count++;
             }
         });
