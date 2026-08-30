@@ -53,7 +53,7 @@ service cloud.firestore {
 
       function merchantUpdateTouchesOnlyDocumentFields() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'driveFolderId', 'driveFolderLink', 'docsUpdatedAt', 'docsUpdatedBy'
+          'name', 'driveFolderId', 'driveFolderLink', 'docsUpdatedAt', 'docsUpdatedBy', 'documents'
         ]);
       }
 

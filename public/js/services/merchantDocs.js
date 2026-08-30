@@ -394,9 +394,36 @@ const callDriveScript = async (payload) => {
     }
 };
 
-window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantName) => {
+window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantName, docs = []) => {
     const now = new Date();
     const by = (window.currentUser && window.currentUser.name) || '';
+
+    /* Build a per-docType audit map (commercial / tax / menu). Merge with any
+       previously tracked documents so re-uploads append without wiping data. */
+    const docsByType = {};
+    (Array.isArray(docs) ? docs : []).forEach((d) => {
+        if (!d || !d.docType) return;
+        const key = String(d.docType);
+        if (!docsByType[key]) docsByType[key] = [];
+        if (d.name) docsByType[key].push(d.name);
+    });
+    let documents = {};
+    if (window.merchantsById && window.merchantsById.has(merchantId)) {
+        const existingRec = window.merchantsById.get(merchantId);
+        if (existingRec && existingRec.documents && typeof existingRec.documents === 'object') {
+            documents = { ...existingRec.documents };
+        }
+    }
+    Object.entries(docsByType).forEach(([key, names]) => {
+        const prev = (documents[key] && typeof documents[key] === 'object') ? documents[key] : {};
+        documents[key] = {
+            uploaded: true,
+            count: (Number(prev.count) || 0) + names.length,
+            names: (Array.isArray(prev.names) ? prev.names : []).concat(names),
+            lastUploadAt: now,
+            lastUploadedBy: by
+        };
+    });
 
     const merchantRec = {
         merchantId,
@@ -406,6 +433,8 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
         docsUpdatedAt: now,
         docsUpdatedBy: by
     };
+
+    if (Object.keys(documents).length > 0) merchantRec.documents = documents;
 
     /* Authoritative merchant record (upsert). */
     try {
@@ -542,7 +571,9 @@ window.submitMerchantDocs = async () => {
 
         if (!folderLink) throw new Error('NO_FOLDER_LINK');
 
-        await window.persistDriveFolder(draft.merchantId, folderId, folderLink, draft.baseName);
+        const uploadedDocs = payloadFiles.map((f) => ({ docType: f.docType, name: f.name }));
+
+        await window.persistDriveFolder(draft.merchantId, folderId, folderLink, draft.baseName, uploadedDocs);
 
         window.closeMerchantDocsModal();
         showToast("تم رفع المستندات إلى Google Drive وربطها بسجل التاجر بنجاح");

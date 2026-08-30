@@ -1384,6 +1384,34 @@
 
 
 
+            <!-- بطاقة تدقيق ملفات التجار ذوي الاتفاق النهائي (للأدمن والمؤسسين) -->
+
+            <div id="merchantDocsAuditBanner" class="hidden bg-gradient-to-r from-teal-600 to-cyan-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3 cursor-pointer hover:opacity-95 transition" onclick="openMerchantDocsAuditModal()">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-white/20 p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-contract"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base">تدقيق ملفات التجار — الاتفاق النهائي</h4>
+
+                        <p class="text-xs text-teal-100 font-bold" id="merchantDocsAuditCountText">—</p>
+
+                    </div>
+
+                </div>
+
+                <div class="bg-white text-teal-800 px-4 py-2 rounded-2xl font-black text-sm shadow-md flex items-center gap-2">
+
+                    <span id="merchantDocsAuditRatio">0 / 0</span> <i class="fa-solid fa-arrow-left text-xs"></i>
+
+                </div>
+
+            </div>
+
+
+
             <!-- زر وشريط محفظة استكمال بيانات السوشيال ميديا (للمناديب) -->
 
             <div id="quickLinksWalletBanner" class="hidden bg-gradient-to-r from-purple-600 to-indigo-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">
@@ -1823,6 +1851,38 @@
                 <button onclick="closeMerchantDocsModal()" class="flex-1 bg-slate-200 py-3 rounded-xl font-bold hover:bg-slate-300 text-xs">إلغاء</button>
 
             </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="merchantDocsAuditModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[136]">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-3">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-teal-50 text-teal-700 p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-contract"></i></div>
+
+                    <div>
+
+                        <h3 class="font-black text-lg text-kanjo-dark">تدقيق مستندات التجار</h3>
+
+                        <p class="text-xs text-slate-500 font-bold" id="docsAuditSubtitle">التجار ذوو الاتفاق النهائي</p>
+
+                    </div>
+
+                </div>
+
+                <button onclick="closeMerchantDocsAuditModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="docsAuditList" class="space-y-3"></div>
 
         </div>
 

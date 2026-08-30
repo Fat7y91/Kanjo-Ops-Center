@@ -14,6 +14,270 @@ window.canManageContracts = () => {
 
 };
 
+/* ─── Admin/Founder widget: audit of finalized merchants' uploaded documents ───
+   "Finalized" (اتفاق نهائي) means a task with isSigned && achieved > 0.
+   Uploaded = the merchant has a driveFolderLink on its authoritative record
+   (or mirrored on its tasks). Per-document status comes from the `documents`
+   map persisted by persistDriveFolder (commercial / tax / menu). */
+
+const DOC_AUDIT_TYPES = [
+    { key: 'commercial', label: 'السجل التجاري' },
+    { key: 'tax', label: 'البطاقة الضريبية' },
+    { key: 'menu', label: 'المنيو' }
+];
+
+const buildMerchantDocsAuditData = () => {
+
+    const merchantsMap = new Map();
+
+    if (window.tasksMemory) {
+
+        window.tasksMemory.forEach((td) => {
+
+            const baseName = window.getBaseName ? window.getBaseName(td.name) : String(td.name || '');
+
+            if (!baseName) return;
+
+            if (!merchantsMap.has(baseName)) {
+
+                merchantsMap.set(baseName, { baseName, merchantId: '', isSigned: false, achieved: 0, cat: '', team: td.team || '' });
+
+            }
+
+            const m = merchantsMap.get(baseName);
+
+            const rawAchieved = Number(td.achieved) || 0;
+
+            if (td.isSigned && rawAchieved > 0) {
+
+                m.isSigned = true;
+
+                if (rawAchieved > m.achieved) m.achieved = rawAchieved;
+
+            }
+
+            if (!m.merchantId && td.merchantId) m.merchantId = td.merchantId;
+
+            if (!m.cat && td.cat && td.cat !== 'متابعة' && td.cat !== 'متابعه') m.cat = td.cat;
+
+            if (!m.team && td.team) m.team = td.team;
+
+        });
+
+    }
+
+    const items = [];
+
+    merchantsMap.forEach((m) => {
+
+        if (!m.isSigned || m.achieved <= 0) return;
+
+        const mid = m.merchantId || (window.findMerchantIdForBase ? window.findMerchantIdForBase(m.baseName) : '') || '';
+
+        let driveFolderLink = '';
+
+        let documents = null;
+
+        let docsUpdatedAt = '';
+
+        if (mid && window.merchantsById && window.merchantsById.has(mid)) {
+
+            const rec = window.merchantsById.get(mid);
+
+            driveFolderLink = rec.driveFolderLink || '';
+
+            documents = (rec.documents && typeof rec.documents === 'object') ? rec.documents : null;
+
+            docsUpdatedAt = rec.docsUpdatedAt || '';
+
+        }
+
+        if (!driveFolderLink && window.tasksMemory) {
+
+            window.tasksMemory.forEach((td) => {
+
+                if (!driveFolderLink && td.driveFolderLink && (window.getBaseName ? window.getBaseName(td.name) : td.name) === m.baseName) {
+
+                    driveFolderLink = td.driveFolderLink;
+
+                }
+
+            });
+
+        }
+
+        items.push({ baseName: m.baseName, merchantId: mid, cat: m.cat || '', team: m.team || '', driveFolderLink, documents, docsUpdatedAt });
+
+    });
+
+    items.sort((a, b) => {
+
+        const au = a.driveFolderLink ? 1 : 0;
+
+        const bu = b.driveFolderLink ? 1 : 0;
+
+        if (bu !== au) return bu - au;
+
+        return String(a.baseName).localeCompare(String(b.baseName), 'ar');
+
+    });
+
+    return { total: items.length, uploaded: items.filter((x) => x.driveFolderLink).length, items };
+
+};
+
+const buildDocAuditChips = (m) => {
+
+    const docs = m.documents || {};
+
+    const hasAnyTracked = Object.keys(docs).length > 0;
+
+    const chips = DOC_AUDIT_TYPES.map((d) => {
+
+        const rec = docs[d.key];
+
+        const uploaded = !!(rec && rec.uploaded);
+
+        if (uploaded) {
+
+            const n = Number(rec.count) || 0;
+
+            return `<span class="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full"><i class="fa-solid fa-circle-check"></i>${d.label}${n ? ` (${n})` : ''}</span>`;
+
+        }
+
+        if (hasAnyTracked) {
+
+            return `<span class="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full"><i class="fa-solid fa-circle-xmark"></i>${d.label}</span>`;
+
+        }
+
+        return `<span class="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-100 text-slate-400 px-2.5 py-1 rounded-full"><i class="fa-solid fa-circle-question"></i>${d.label}</span>`;
+
+    }).join(' ');
+
+    let legacyHint = '';
+
+    if (!hasAnyTracked && m.driveFolderLink) {
+
+        legacyHint = '<div class="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5 mt-1.5"><i class="fa-solid fa-triangle-exclamation ml-1"></i>المجلد موجود لكن رُفعت المستندات قبل تفعيل التوثيق التفصيلي — لا تتوفر حالة كل ملف على حدة.</div>';
+
+    }
+
+    return `<div class="flex flex-wrap items-center gap-1.5">${chips}${legacyHint}</div>`;
+
+};
+
+window.renderMerchantDocsAudit = () => {
+
+    const banner = document.getElementById('merchantDocsAuditBanner');
+
+    if (!banner) return;
+
+    const isAllowed = window.canManageContracts ? window.canManageContracts() : false;
+
+    if (!isAllowed) {
+
+        banner.classList.add('hidden');
+
+        return;
+
+    }
+
+    const data = buildMerchantDocsAuditData();
+
+    window.merchantDocsAuditData = data;
+
+    banner.classList.remove('hidden');
+
+    const ratioEl = document.getElementById('merchantDocsAuditRatio');
+
+    const countEl = document.getElementById('merchantDocsAuditCountText');
+
+    if (ratioEl) ratioEl.innerText = `${data.uploaded} / ${data.total}`;
+
+    if (countEl) countEl.innerText = data.total === 0
+
+        ? 'لا يوجد تجار في مرحلة الاتفاق النهائي بعد'
+
+        : `عدد التجار الذين رُفعت ملفاتهم إلى Google Drive: ${data.uploaded} من أصل ${data.total}`;
+
+};
+
+window.closeMerchantDocsAuditModal = () => {
+
+    const modal = document.getElementById('merchantDocsAuditModal');
+
+    if (modal) modal.classList.add('hidden');
+
+};
+
+window.openMerchantDocsAuditModal = () => {
+
+    const modal = document.getElementById('merchantDocsAuditModal');
+
+    const listEl = document.getElementById('docsAuditList');
+
+    if (!modal || !listEl) return;
+
+    const data = (window.merchantDocsAuditData && window.merchantDocsAuditData.items)
+
+        ? window.merchantDocsAuditData
+
+        : buildMerchantDocsAuditData();
+
+    window.merchantDocsAuditData = data;
+
+    const sub = document.getElementById('docsAuditSubtitle');
+
+    if (sub) sub.innerText = `التجار ذوو الاتفاق النهائي: ${data.total} — تم رفع الملفات: ${data.uploaded}`;
+
+    if (data.items.length === 0) {
+
+        listEl.innerHTML = '<div class="bg-kanjo-light p-6 rounded-2xl text-center text-sm font-bold text-slate-500">لا يوجد تجار في مرحلة الاتفاق النهائي حالياً</div>';
+
+        return;
+
+    }
+
+    listEl.innerHTML = data.items.map((m) => {
+
+        const driveBtn = m.driveFolderLink
+
+            ? `<button onclick="openDriveFolder('${window.safeString(m.merchantId)}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1 shadow-sm whitespace-nowrap"><i class="fa-brands fa-google-drive"></i> فتح المجلد</button>`
+
+            : '<span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl whitespace-nowrap">لم يتم رفع الملفات</span>';
+
+        return `
+
+            <div class="bg-kanjo-light p-4 rounded-2xl border border-purple-100 space-y-2.5">
+
+                <div class="flex flex-wrap items-center justify-between gap-2">
+
+                    <div class="min-w-0">
+
+                        <div class="font-black text-sm text-kanjo-dark flex items-center gap-2">${window.renderMerchantNameLink(m.baseName)}</div>
+
+                        <div class="text-[10px] text-slate-500 font-bold mt-0.5">${m.cat ? 'الفئة: ' + window.safeString(m.cat) + ' | ' : ''}الفريق: ${window.safeString(m.team) || '-'}</div>
+
+                        <div class="text-[10px] text-slate-400 font-black tracking-wider mt-0.5" dir="ltr">${window.safeString(m.merchantId) || '—'}</div>
+
+                    </div>
+
+                    <div class="flex items-center gap-2">${driveBtn}</div>
+
+                </div>
+
+                ${buildDocAuditChips(m)}
+
+            </div>`;
+
+    }).join('');
+
+    modal.classList.remove('hidden');
+
+};
+
 window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
 
     const safeName = window.safeString ? window.safeString(name) : String(name || '');
@@ -1496,6 +1760,12 @@ window.renderDashboard = (snapshot) => {
     if(currentUser.role === 'admin' || currentUser.role === 'founder') {
 
         renderAdvancedCharts(perfData, signedCatCounts);
+
+    }
+
+    if (typeof window.renderMerchantDocsAudit === 'function') {
+
+        window.renderMerchantDocsAudit();
 
     }
 
