@@ -807,14 +807,8 @@
     window.addEventListener('scroll', () => {
       header.classList.toggle('shadow-lg', window.scrollY > 20);
     });
-
-    const form = document.getElementById('lead-form');
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      form.classList.add('hidden');
-      document.getElementById('formSuccess').classList.remove('hidden');
-      document.getElementById('formSuccess').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
   </script>
+
+  <script type="module" src="js/landing.js"></script>
 </body>
 </html>

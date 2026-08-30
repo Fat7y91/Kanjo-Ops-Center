@@ -71,6 +71,14 @@ service cloud.firestore {
       allow update, delete: if isSignedIn();
     }
 
+    // Public landing page — merchant lead registration form.
+    // Anyone signed in (incl. anonymous) may CREATE a lead; reads, updates
+    // and deletes are STRICTLY ADMIN ONLY so captured lead data stays private.
+    match /merchant_leads/{docId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isAdmin();
+    }
+
     match /notifications/{docId} {
       allow read, write: if isSignedIn();
     }
