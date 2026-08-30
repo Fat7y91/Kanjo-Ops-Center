@@ -34,7 +34,7 @@ const TARGETS = [
   { merchantId: 'KJ-M4MWRC', name: 'لذيذ', docs: { menu: 3 } },
   { merchantId: 'KJ-4AYT64', name: 'هالك', docs: { menu: 2, tax: 2 } },
   { merchantId: 'KJ-MKZJ4W', name: 'Apple بلبل', docs: { tax: 1 } },
-  { merchantId: 'KJ-X5K94U', name: 'Mr Molten', docs: { tax: 3 } },
+  { merchantId: 'KJ-X5K94U', name: 'Mr Molten', docs: { menu: 3 }, replace: true },
   { merchantId: 'KJ-4HBH97', name: 'SOO', docs: { tax: 1 } },
   { merchantId: 'KJ-VUAGJV', name: 'XO Cosmetics', docs: { tax: 2 } }
 ];
@@ -64,9 +64,11 @@ const toMapValue = (obj) => ({
   }
 });
 
-const buildDocumentsFields = (existingDocuments, targetDocs, refDate) => {
+const buildDocumentsFields = (existingDocuments, targetDocs, refDate, replace = false) => {
   const merged = {};
-  if (existingDocuments && existingDocuments.mapValue && existingDocuments.mapValue.fields) {
+  /* When `replace` is set, ignore any previously tracked documents so stale
+     docType entries (e.g. an incorrect tax count) are removed entirely. */
+  if (!replace && existingDocuments && existingDocuments.mapValue && existingDocuments.mapValue.fields) {
     Object.entries(existingDocuments.mapValue.fields).forEach(([k, v]) => {
       if (!v || !v.mapValue || !v.mapValue.fields) return;
       const pf = v.mapValue.fields;
@@ -192,7 +194,7 @@ const main = async () => {
     const refDate = (existing && existing.docsUpdatedAt && existing.docsUpdatedAt.timestampValue)
       || (task && task.docsUpdatedAt)
       || nowIso();
-    const documents = buildDocumentsFields(existing ? existing.documents : null, target.docs, refDate);
+    const documents = buildDocumentsFields(existing ? existing.documents : null, target.docs, refDate, !!target.replace);
 
     if (dryRun) {
       const verb = existing ? 'update' : 'create';
