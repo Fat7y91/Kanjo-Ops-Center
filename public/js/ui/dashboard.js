@@ -158,6 +158,62 @@ const buildMerchantDocsAuditData = () => {
 
 };
 
+/* Rep-dashboard "مهام رفع المستندات" widget.
+   Lists the current rep's team merchants that are finalized (isSigned &&
+   achieved > 0) but still miss crucial documents (commercial / tax / menu),
+   reading the authoritative documents map from the canonical merchant record.
+   Each row is an actionable upload task opening the upload modal. Rebuilds
+   automatically on every render (task or merchant snapshot change). */
+const buildPendingUploadsWidget = (team) => {
+    if (!team || !window.allTasksCache) return null;
+
+    const merchantMap = new Map();
+    window.allTasksCache.forEach((t) => {
+        if (t.team !== team) return;
+        const rawAchieved = Number(t.achieved) || 0;
+        if (!t.isSigned || rawAchieved <= 0) return;
+        const baseName = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '');
+        if (!baseName) return;
+        if (!merchantMap.has(baseName)) {
+            merchantMap.set(baseName, { baseName, taskId: t.id, achieved: rawAchieved, cat: t.cat || '' });
+        }
+    });
+
+    const pending = [];
+    merchantMap.forEach((m) => {
+        const src = resolveAuditMerchantSource(m.baseName, '');
+        const documents = src && src.rec.documents && typeof src.rec.documents === 'object' ? src.rec.documents : null;
+        const missingTypes = DOC_AUDIT_TYPES.filter((d) => !documents || !documents[d.key]);
+        if (missingTypes.length === 0) return;
+        pending.push({ ...m, missingTypes });
+    });
+
+    if (pending.length === 0) return null;
+
+    pending.sort((a, b) => String(a.baseName).localeCompare(String(b.baseName), 'ar'));
+
+    return `
+        <div class="bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-amber-100 mb-5">
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                <h3 class="font-black text-sm sm:text-base text-kanjo-dark"><i class="fa-solid fa-cloud-arrow-up ml-1 text-amber-500"></i> مهام رفع المستندات</h3>
+                <span class="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold">${pending.length} تاجر بانتظار المستندات</span>
+            </div>
+            <div class="space-y-2">
+                ${pending.map((p) => `
+                    <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-purple-50 rounded-2xl p-3">
+                        <div class="min-w-0">
+                            <div class="font-bold text-sm text-slate-900">${window.safeString(p.baseName)}</div>
+                            <div class="text-[10px] text-slate-500 font-bold">${p.cat ? 'الفئة: ' + window.safeString(p.cat) : ''}${p.cat ? ' | ' : ''}المفقود: ${p.missingTypes.map((d) => d.label).join('، ')}</div>
+                        </div>
+                        <button onclick="openMerchantDocsModal('${p.taskId}')" class="bg-teal-600 text-white px-3 py-2 rounded-xl text-xs font-bold hover:bg-teal-700 transition shadow-sm flex items-center gap-1">
+                            <i class="fa-solid fa-utensils"></i> رفع المنيو لـ ${window.safeString(p.baseName)}
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
+};
+
 const buildDocAuditChips = (m) => {
 
     const docs = m.documents || {};
@@ -1845,7 +1901,19 @@ window.renderDashboard = (snapshot) => {
 
         wrapper.className = "space-y-3 h-auto";
 
-        wrapper.innerHTML = window.renderTasks(groupedByTeam[currentUser.team] || {});
+        let repHtml = '';
+
+        if (currentUser.role === 'rep') {
+
+            const pendingWidget = buildPendingUploadsWidget(currentUser.team);
+
+            if (pendingWidget) repHtml += pendingWidget;
+
+        }
+
+        repHtml += window.renderTasks(groupedByTeam[currentUser.team] || {});
+
+        wrapper.innerHTML = repHtml;
 
         fragment.appendChild(wrapper);
 
