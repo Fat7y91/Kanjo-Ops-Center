@@ -77,6 +77,11 @@
         @apply w-full rounded-xl border-2 border-brand-purple/10 bg-white px-4 py-3.5 text-brand-ink
                placeholder:text-brand-ink/35 focus:outline-none focus:border-brand-gold focus:ring-4 focus:ring-brand-gold/15 transition;
       }
+      .select-field {
+        @apply w-full rounded-xl border-2 border-brand-purple/10 bg-white px-4 py-3 text-brand-ink
+               appearance-none leading-normal
+               focus:outline-none focus:border-brand-gold focus:ring-4 focus:ring-brand-gold/15 transition;
+      }
       .card {
         @apply rounded-3xl border border-brand-purple/5 bg-white shadow-card;
       }
@@ -98,7 +103,7 @@
   <header class="fixed inset-x-0 top-0 z-50 bg-brand-purple/95 backdrop-blur-md border-b border-white/10">
     <nav class="container-k flex items-center justify-between h-16 lg:h-20">
       <a href="#top" class="flex items-center gap-3">
-        <span class="grid place-items-center w-10 h-10 rounded-xl bg-gradient-to-br from-brand-gold-light to-brand-gold text-brand-purple font-display font-extrabold text-lg shadow-gold">K</span>
+        <img src="logo.png" alt="Kanjo" class="h-10 w-auto" />
         <span class="flex flex-col leading-none">
           <span class="text-white font-display font-bold text-2xl tracking-tight">كانجو</span>
           <span class="text-brand-gold-light text-[10px] font-extrabold tracking-widest2 uppercase">Kanjo · Q-commerce</span>
@@ -698,7 +703,7 @@
               </div>
               <div>
                 <label for="lead-category" class="label-form">فئة المتجر</label>
-                <select id="lead-category" name="category" required class="field">
+                <select id="lead-category" name="category" required class="select-field">
                   <option value="" disabled selected>اختر الفئة</option>
                   <option>مطعم / كافيه</option>
                   <option>سوبر ماركت / بقالة</option>
@@ -710,13 +715,13 @@
             <div class="grid sm:grid-cols-2 gap-5">
               <div>
                 <label for="lead-city" class="label-form">المدينة</label>
-                <select id="lead-city" name="city" required class="field">
+                <select id="lead-city" name="city" required class="select-field">
                   <option value="desouk" selected>دسوق</option>
                 </select>
               </div>
               <div>
                 <label for="lead-interest" class="label-form">نوع الشراكة</label>
-                <select id="lead-interest" name="interest" required class="field">
+                <select id="lead-interest" name="interest" required class="select-field">
                   <option value="" disabled selected>اختر نوع الشراكة</option>
                   <option>انضمام كشريك تجاري</option>
                   <option>طلب زيارة مندوب مبيعات</option>
