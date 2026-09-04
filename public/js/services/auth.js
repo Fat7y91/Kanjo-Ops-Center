@@ -222,6 +222,7 @@ function applyThemeAndShowDashboard() {
             window._appListenerUnsubscribers.push(unsub);
         }
 
+        if (typeof window.startCatalogListeners === 'function') window.startCatalogListeners();
         if(typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
         if(typeof listenToTasks !== 'undefined') listenToTasks();
     });
