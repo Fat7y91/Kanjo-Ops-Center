@@ -202,7 +202,7 @@ window.addCatalogVariationRow = (name, price) => {
     const row = document.createElement('div');
     row.className = 'flex gap-2 items-center catalog-variation-row';
     row.id = id;
-    row.innerHTML = `<input type="text" class="catalog-variation-name flex-1 min-w-0 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="المقاس / اللون" value="${catalogEscapeHtml(name || '')}">
+    row.innerHTML = `<input type="text" class="catalog-variation-name flex-1 min-w-0 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="الحجم (وسط، كبير) / اللون" value="${catalogEscapeHtml(name || '')}">
         <input type="number" min="0" step="0.01" class="catalog-variation-price w-28 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="السعر" value="${catalogEscapeHtml(price == null ? '' : price)}">
         <button type="button" onclick="removeCatalogVariationRow('${id}')" class="shrink-0 w-10 h-10 rounded-xl bg-red-50 text-red-500 font-black hover:bg-red-100">×</button>`;
     list.appendChild(row);
@@ -217,8 +217,15 @@ window.onCatalogProductTypeChange = () => {
     const typeEl = document.getElementById('catalogProductType');
     const section = document.getElementById('catalogVariationsSection');
     const list = document.getElementById('catalogVariationsList');
+    const priceWrap = document.getElementById('catalogBasePriceWrap');
+    const priceEl = document.getElementById('catalogBasePrice');
     const isVariable = !!(typeEl && typeEl.value === 'variable');
     if (section) section.classList.toggle('hidden', !isVariable);
+    if (priceWrap) priceWrap.classList.toggle('hidden', isVariable);
+    if (priceEl) {
+        if (isVariable) priceEl.removeAttribute('required');
+        else priceEl.setAttribute('required', 'required');
+    }
     if (isVariable && list && list.children.length === 0) window.addCatalogVariationRow();
 };
 
@@ -318,18 +325,20 @@ window.submitCatalogProduct = async (event) => {
     if (!descriptionEn) return window.showToast('أدخل وصف المنتج بالإنجليزية', false);
     if (!sku) return window.showToast('أدخل كود المنتج / الباركود', false);
     if (!productType) return window.showToast('اختر نوع المنتج', false);
-    const basePrice = Number(priceRaw);
-    if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) return window.showToast('أدخل سعراً صحيحاً', false);
+    let basePrice = Number(priceRaw);
     if (!category) return window.showToast('لا توجد فئة مسجّلة لهذا التاجر', false);
     let variations = [];
     if (productType === 'variable') {
         const rawVars = collectCatalogVariations();
         if (rawVars.length === 0) return window.showToast('أضف خياراً واحداً على الأقل للمنتج المتغير', false);
         for (const v of rawVars) {
-            if (!v.name) return window.showToast('أدخل اسم كل خيار (مقاس / لون)', false);
+            if (!v.name) return window.showToast('أدخل اسم كل خيار (الحجم / اللون)', false);
             if (v.priceRaw === '' || Number.isNaN(v.price) || v.price < 0) return window.showToast('أدخل سعراً صحيحاً لكل خيار', false);
             variations.push({ name: v.name, price: v.price });
         }
+        basePrice = Math.min(...variations.map((v) => v.price));
+    } else if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) {
+        return window.showToast('أدخل سعراً صحيحاً', false);
     }
     if (!file) return window.showToast('ارفع صورة المنتج الأصلية', false);
     if (file.size > CATALOG_MAX_IMAGE_BYTES) return window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);

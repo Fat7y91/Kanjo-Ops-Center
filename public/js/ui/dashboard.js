@@ -210,7 +210,7 @@ const computePendingUploads = (team) => {
 const renderPendingUploadItem = (p) => {
     const missing = p.missingTypes.map((d) => d.label).join('، ');
     const folderBtn = p.driveFolderLink
-        ? `<button onclick="openDriveFolder('${p.merchantId || ''}')" class="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 bg-kanjo-light text-kanjo-primary hover:bg-purple-100 border border-purple-100">
+        ? `<button type="button" onclick="openDriveFolder('${p.merchantId || ''}')" class="px-3 py-2 rounded-xl text-xs font-black transition flex items-center gap-1 bg-[#E57723] text-white hover:opacity-90 shadow-md">
              <i class="fa-solid fa-folder-open"></i> فتح المجلد
            </button>`
         : '';
@@ -225,7 +225,7 @@ const renderPendingUploadItem = (p) => {
             </div>
             <div class="flex gap-2 items-center flex-wrap">
                 ${folderBtn}
-                <button onclick="openMerchantDocsModal('${p.taskId}')" class="bg-brand-purple-deep text-white px-3 py-2 rounded-xl text-xs font-bold hover:opacity-90 transition shadow-sm flex items-center gap-1">
+                <button type="button" onclick="openMerchantDocsFromPending('${p.taskId}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-xs font-black hover:opacity-90 transition shadow-md flex items-center gap-1">
                     <i class="fa-solid fa-utensils"></i> رفع المنيو
                 </button>
             </div>
@@ -292,6 +292,11 @@ window.openPendingUploadsModal = () => {
 window.closePendingUploadsModal = () => {
     const modal = document.getElementById('pendingUploadsModal');
     if (modal) modal.classList.add('hidden');
+};
+
+window.openMerchantDocsFromPending = (taskId) => {
+    window.closePendingUploadsModal();
+    if (typeof window.openMerchantDocsModal === 'function') window.openMerchantDocsModal(taskId);
 };
 
 /* Close the modal on backdrop click or Escape for a clean CRM feel. */

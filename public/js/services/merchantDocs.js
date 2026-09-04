@@ -344,6 +344,7 @@ window.resetMerchantDocsUI = () => {
 };
 
 window.openMerchantDocsModal = async (taskId) => {
+    if (typeof window.closePendingUploadsModal === 'function') window.closePendingUploadsModal();
     if (!window.KANJO_DRIVE_SCRIPT_URL || !window.KANJO_DRIVE_SCRIPT_URL.trim()) {
         showToast("ميزة رفع المستندات غير مفعّلة بعد — الرجاء إعداد رابط Google Drive من الإدارة", false);
         return;
