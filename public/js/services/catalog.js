@@ -179,6 +179,20 @@ const downloadKanjoCsv = (rows, fileName) => {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+const catalogRawImageUrls = (p) => {
+    if (Array.isArray(p && p.rawImageUrls) && p.rawImageUrls.length) {
+        return p.rawImageUrls.map((u) => String(u || '')).filter(Boolean);
+    }
+    return (p && p.rawImageUrl) ? [String(p.rawImageUrl)] : [];
+};
+
+const catalogEnhancedImageUrls = (p) => {
+    if (Array.isArray(p && p.enhancedImageUrls) && p.enhancedImageUrls.length) {
+        return p.enhancedImageUrls.map((u) => String(u || '')).filter(Boolean);
+    }
+    return (p && p.enhancedImageUrl) ? [String(p.enhancedImageUrl)] : [];
+};
+
 const mapCatalogProductToExportRow = (p) => ({
     product_key: '',
     product_type: p.product_type || '',
@@ -188,7 +202,7 @@ const mapCatalogProductToExportRow = (p) => ({
     description_en: p.description_en || '',
     description_ar: p.description_ar || '',
     base_price: Number(p.base_price) || 0,
-    main_image_url: p.enhancedImageUrl || '',
+    main_image_url: catalogEnhancedImageUrls(p)[0] || '',
     category: p.category || '',
     status: 'active'
 });
@@ -266,9 +280,23 @@ const fillCatalogMerchantOptions = () => {
 
 window.onCatalogRawImageChange = (event) => {
     const input = event && event.target;
-    const file = input && input.files && input.files[0];
+    const files = input && input.files ? Array.from(input.files) : [];
     const nameEl = document.getElementById('catalogRawImageName');
-    if (nameEl) nameEl.textContent = file ? file.name : 'الكاميرا أو معرض الصور';
+    if (nameEl) nameEl.textContent = files.length ? (files.length + ' صورة') : 'الكاميرا أو معرض الصور';
+    const preview = document.getElementById('catalogRawImagePreviews');
+    if (!preview) return;
+    preview.innerHTML = '';
+    files.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = document.createElement('img');
+            img.src = String(reader.result || '');
+            img.alt = file.name || '';
+            img.className = 'w-16 h-16 rounded-xl object-cover border border-[#FFD700]/50';
+            preview.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+    });
 };
 
 const generateCatalogSku = () => 'KJ-PRD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
@@ -290,8 +318,8 @@ window.stopCatalogBarcodeScan = async () => {
     const reader = document.getElementById('catalogSkuReader');
     const scanner = window._catalogQrScanner;
     window._catalogQrScanner = null;
-    if (scanner && typeof scanner.clear === 'function') {
-        try { await scanner.clear(); } catch (_) { /* ignore */ }
+    if (scanner && typeof scanner.stop === 'function') {
+        try { await scanner.stop(); } catch (_) { /* ignore */ }
     }
     if (reader) {
         reader.classList.add('hidden');
@@ -302,7 +330,7 @@ window.stopCatalogBarcodeScan = async () => {
 window.startCatalogBarcodeScan = async () => {
     const reader = document.getElementById('catalogSkuReader');
     if (!reader) return;
-    if (typeof Html5QrcodeScanner !== 'function') {
+    if (typeof Html5Qrcode !== 'function') {
         if (window.showToast) window.showToast('ماسح الباركود غير متاح حالياً', false);
         return;
     }
@@ -310,19 +338,27 @@ window.startCatalogBarcodeScan = async () => {
         await window.stopCatalogBarcodeScan();
         return;
     }
+    reader.innerHTML = '';
     reader.classList.remove('hidden');
-    const scanner = new Html5QrcodeScanner('catalogSkuReader', {
-        fps: 10,
-        qrbox: { width: 220, height: 220 },
-        rememberLastUsedCamera: true
-    }, false);
+    const scanner = new Html5Qrcode('catalogSkuReader');
     window._catalogQrScanner = scanner;
-    scanner.render((decodedText) => {
-        const skuEl = document.getElementById('catalogSku');
-        if (skuEl) skuEl.value = String(decodedText || '').trim();
-        window.stopCatalogBarcodeScan();
-        if (window.showToast) window.showToast('تم قراءة الباركود');
-    }, () => {});
+    try {
+        await scanner.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 220, height: 220 } },
+            (decodedText) => {
+                const skuEl = document.getElementById('catalogSku');
+                if (skuEl) skuEl.value = String(decodedText || '').trim();
+                window.stopCatalogBarcodeScan();
+                if (window.showToast) window.showToast('تم قراءة الباركود');
+            },
+            () => {}
+        );
+    } catch (err) {
+        console.error('[catalog] barcode scan failed:', err);
+        await window.stopCatalogBarcodeScan();
+        if (window.showToast) window.showToast('تعذر فتح الكاميرا الخلفية', false);
+    }
 };
 
 window.openCatalogProductModal = () => {
@@ -342,6 +378,8 @@ window.openCatalogProductModal = () => {
     if (fileEl) fileEl.value = '';
     const nameHint = document.getElementById('catalogRawImageName');
     if (nameHint) nameHint.textContent = 'الكاميرا أو معرض الصور';
+    const preview = document.getElementById('catalogRawImagePreviews');
+    if (preview) preview.innerHTML = '';
     resetCatalogVariations();
     window.stopCatalogBarcodeScan();
     const modal = document.getElementById('catalogProductModal');
@@ -379,7 +417,7 @@ window.submitCatalogProduct = async (event) => {
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = resolveMerchantCategory(merchant);
     const fileInput = document.getElementById('catalogRawImage');
-    const file = fileInput && fileInput.files && fileInput.files[0];
+    const files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
     const btn = document.getElementById('catalogProductSubmitBtn');
 
     if (!merchant || !merchantId) return window.showToast('اختر تاجراً باتفاق نهائي', false);
@@ -404,8 +442,9 @@ window.submitCatalogProduct = async (event) => {
     } else if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) {
         return window.showToast('أدخل سعراً صحيحاً', false);
     }
-    if (!file) return window.showToast('ارفع صورة المنتج الأصلية', false);
-    if (file.size > CATALOG_MAX_IMAGE_BYTES) return window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
+    if (!files.length) return window.showToast('ارفع صورة المنتج الأصلية', false);
+    if (files.length > 12) return window.showToast('الحد الأقصى 12 صورة للمنتج', false);
+    if (files.some((f) => f.size > CATALOG_MAX_IMAGE_BYTES)) return window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
 
     const prevHtml = btn ? btn.innerHTML : '';
     if (btn) {
@@ -413,14 +452,20 @@ window.submitCatalogProduct = async (event) => {
         btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الرفع والحفظ...';
     }
     try {
-        const fileContent = await fileToBase64(file);
-        const rawImageUrl = await uploadCatalogImageToGas({
-            merchantName: merchant.merchantName,
-            imageType: 'raw',
-            fileName: file.name || 'product-raw.jpg',
-            fileContent,
-            mimeType: file.type || 'image/jpeg'
-        });
+        const rawImageUrls = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileContent = await fileToBase64(file);
+            const uploadedUrl = await uploadCatalogImageToGas({
+                merchantName: merchant.merchantName,
+                imageType: 'raw',
+                fileName: file.name || ('product-raw-' + (i + 1) + '.jpg'),
+                fileContent,
+                mimeType: file.type || 'image/jpeg'
+            });
+            rawImageUrls.push(uploadedUrl);
+        }
+        const rawImageUrl = rawImageUrls[0] || '';
         const payload = {
             merchantId: merchant.merchantId,
             merchantName: merchant.merchantName,
@@ -433,7 +478,9 @@ window.submitCatalogProduct = async (event) => {
             base_price: basePrice,
             category,
             rawImageUrl,
+            rawImageUrls,
             enhancedImageUrl: '',
+            enhancedImageUrls: [],
             status: 'pending',
             createdAt: new Date(),
             createdBy: (window.currentUser && window.currentUser.name) || ''
@@ -456,9 +503,11 @@ window.submitCatalogProduct = async (event) => {
     }
 };
 
-window.downloadCatalogRawImage = async (productId) => {
+window.downloadCatalogRawImage = async (productId, imageIndex) => {
     const product = (window.merchantProductsCache || []).find((p) => p.id === productId);
-    const url = product && product.rawImageUrl;
+    const urls = catalogRawImageUrls(product);
+    const idx = Number.isInteger(imageIndex) ? imageIndex : 0;
+    const url = urls[idx] || urls[0];
     if (!url) return window.showToast('لا يوجد رابط للصورة الأصلية', false);
     try {
         const res = await fetch(url);
@@ -467,7 +516,7 @@ window.downloadCatalogRawImage = async (productId) => {
         const obj = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = obj;
-        a.download = (product.name_ar || 'product') + '-raw';
+        a.download = (product.name_ar || 'product') + '-raw-' + (idx + 1);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -491,10 +540,15 @@ window.triggerCatalogEnhancedUpload = (productId) => {
 
 window.handleCatalogEnhancedFile = async (event) => {
     const input = event && event.target;
-    const file = input && input.files && input.files[0];
+    const files = input && input.files ? Array.from(input.files) : [];
     const productId = window._catalogEnhancedProductId;
-    if (!file || !productId) return;
-    if (file.size > CATALOG_MAX_IMAGE_BYTES) {
+    if (!files.length || !productId) return;
+    if (files.length > 12) {
+        window.showToast('الحد الأقصى 12 صورة للمنتج', false);
+        input.value = '';
+        return;
+    }
+    if (files.some((f) => f.size > CATALOG_MAX_IMAGE_BYTES)) {
         window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
         input.value = '';
         return;
@@ -512,16 +566,23 @@ window.handleCatalogEnhancedFile = async (event) => {
         cardBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
     }
     try {
-        const fileContent = await fileToBase64(file);
-        const enhancedImageUrl = await uploadCatalogImageToGas({
-            merchantName: product.merchantName || '',
-            imageType: 'enhanced',
-            fileName: file.name || 'product-enhanced.jpg',
-            fileContent,
-            mimeType: file.type || 'image/jpeg'
-        });
+        const enhancedImageUrls = [];
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileContent = await fileToBase64(file);
+            const uploadedUrl = await uploadCatalogImageToGas({
+                merchantName: product.merchantName || '',
+                imageType: 'enhanced',
+                fileName: file.name || ('product-enhanced-' + (i + 1) + '.jpg'),
+                fileContent,
+                mimeType: file.type || 'image/jpeg'
+            });
+            enhancedImageUrls.push(uploadedUrl);
+        }
+        const enhancedImageUrl = enhancedImageUrls[0] || '';
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), {
             enhancedImageUrl,
+            enhancedImageUrls,
             status: 'done',
             updatedAt: new Date(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
@@ -570,11 +631,20 @@ const renderCatalogPendingCards = () => {
         const merchant = catalogEscapeHtml(p.merchantName);
         const category = catalogEscapeHtml(p.category);
         const price = catalogEscapeHtml(p.base_price);
-        const thumb = catalogEscapeHtml(p.rawImageUrl);
+        const rawUrls = catalogRawImageUrls(p);
+        const thumbs = rawUrls.map((u, i) => {
+            const src = catalogEscapeHtml(u);
+            return `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="w-16 h-16 rounded-xl overflow-hidden bg-[#230535]/5 border border-[#FFD700]/40 shrink-0">
+                <img src="${src}" alt="" class="w-full h-full object-cover">
+            </button>`;
+        }).join('');
+        const downloadBtns = rawUrls.map((_, i) => `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="flex-1 min-w-[120px] bg-white border border-[#230535]/15 text-[#230535] px-3 py-2 rounded-xl text-xs font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-download"></i> تحميل ${rawUrls.length > 1 ? (i + 1) : 'الأصلية'}
+                </button>`).join('');
         return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
             <div class="flex gap-3 items-start">
-                <div class="w-20 h-20 rounded-xl overflow-hidden bg-[#230535]/5 border border-[#FFD700]/40 shrink-0">
-                    ${thumb ? `<img src="${thumb}" alt="" class="w-full h-full object-cover">` : `<div class="w-full h-full grid place-items-center text-[#230535]"><i class="fa-solid fa-image"></i></div>`}
+                <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[150px]">
+                    ${thumbs || `<div class="w-20 h-20 rounded-xl grid place-items-center text-[#230535] bg-[#230535]/5 border border-[#FFD700]/40"><i class="fa-solid fa-image"></i></div>`}
                 </div>
                 <div class="min-w-0 flex-1">
                     <div class="font-black text-sm text-[#230535]">${name}</div>
@@ -586,9 +656,7 @@ const renderCatalogPendingCards = () => {
                 </div>
             </div>
             <div class="flex flex-wrap gap-2">
-                <button type="button" onclick="downloadCatalogRawImage('${id}')" class="flex-1 min-w-[140px] bg-white border border-[#230535]/15 text-[#230535] px-3 py-2 rounded-xl text-xs font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-download"></i> تحميل الأصلية
-                </button>
+                ${downloadBtns}
                 <button type="button" id="catalogEnhanceBtn-${id}" onclick="triggerCatalogEnhancedUpload('${id}')" class="flex-1 min-w-[140px] bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-xs font-black hover:opacity-90 transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة
                 </button>

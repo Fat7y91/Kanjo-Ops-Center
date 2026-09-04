@@ -108,7 +108,9 @@ service cloud.firestore {
     //   base_price (number, required, >= 0)
     //   category (string, required)
     //   rawImageUrl (https URL, required on create)
+    //   rawImageUrls (optional list of https URLs)
     //   enhancedImageUrl (string URL or empty)
+    //   enhancedImageUrls (optional list of https URLs)
     //   status: 'pending' | 'done' (default pending)
     // Auth is anonymous + PIN, so identity RBAC lives in the client;
     // rules still require sign-in, typed fields, size limits, and
@@ -140,6 +142,24 @@ service cloud.firestore {
           && item.keys().hasOnly(['name', 'price'])
           && item.name is string && item.name.size() > 0 && item.name.size() <= 80
           && item.price is number && item.price >= 0 && item.price <= 100000000;
+      }
+
+      function isValidHttpsUrlList(list, minSize) {
+        return list is list
+          && list.size() >= minSize
+          && list.size() <= 12
+          && (list.size() < 1 || isValidHttpsUrl(list[0]))
+          && (list.size() < 2 || isValidHttpsUrl(list[1]))
+          && (list.size() < 3 || isValidHttpsUrl(list[2]))
+          && (list.size() < 4 || isValidHttpsUrl(list[3]))
+          && (list.size() < 5 || isValidHttpsUrl(list[4]))
+          && (list.size() < 6 || isValidHttpsUrl(list[5]))
+          && (list.size() < 7 || isValidHttpsUrl(list[6]))
+          && (list.size() < 8 || isValidHttpsUrl(list[7]))
+          && (list.size() < 9 || isValidHttpsUrl(list[8]))
+          && (list.size() < 10 || isValidHttpsUrl(list[9]))
+          && (list.size() < 11 || isValidHttpsUrl(list[10]))
+          && (list.size() < 12 || isValidHttpsUrl(list[11]));
       }
 
       function isValidVariationsList(list) {
@@ -177,7 +197,8 @@ service cloud.firestore {
             'merchantId', 'merchantName', 'name_ar', 'description_ar',
             'name_en', 'description_en', 'sku', 'product_type',
             'variations',
-            'base_price', 'category', 'rawImageUrl', 'enhancedImageUrl', 'status',
+            'base_price', 'category', 'rawImageUrl', 'rawImageUrls',
+            'enhancedImageUrl', 'enhancedImageUrls', 'status',
             'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
           && d.merchantId is string && d.merchantId.size() > 0 && d.merchantId.size() <= 80
@@ -192,7 +213,12 @@ service cloud.firestore {
           && d.base_price is number && d.base_price >= 0 && d.base_price <= 100000000
           && d.category is string && d.category.size() > 0 && d.category.size() <= 120
           && isValidHttpsUrl(d.rawImageUrl)
+          && (!('rawImageUrls' in d) || isValidHttpsUrlList(d.rawImageUrls, 1))
           && isValidOptionalUrl(d.enhancedImageUrl)
+          && (!('enhancedImageUrls' in d)
+              || (d.status == 'pending'
+                  ? (d.enhancedImageUrls is list && d.enhancedImageUrls.size() == 0)
+                  : isValidHttpsUrlList(d.enhancedImageUrls, 1)))
           && d.status in ['pending', 'done']
           && (!('createdBy' in d) || (d.createdBy is string && d.createdBy.size() <= 120))
           && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120))
@@ -221,8 +247,11 @@ service cloud.firestore {
         return isAdmin()
           || (resource.data.status == 'pending'
               && request.resource.data.status == 'done'
-              && changed.hasOnly(['enhancedImageUrl', 'status', 'updatedAt', 'updatedBy'])
-              && isValidHttpsUrl(request.resource.data.enhancedImageUrl));
+              && changed.hasOnly(['enhancedImageUrl', 'enhancedImageUrls', 'status', 'updatedAt', 'updatedBy'])
+              && isValidHttpsUrl(request.resource.data.enhancedImageUrl)
+              && ('enhancedImageUrls' in request.resource.data
+                  ? isValidHttpsUrlList(request.resource.data.enhancedImageUrls, 1)
+                  : true));
       }
 
       allow read: if isSignedIn();
