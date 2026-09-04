@@ -110,7 +110,10 @@ const listFinalizedMerchants = () => {
         if (!baseName) return;
         if (map.has(baseName)) return;
         const mid = (window.findMerchantIdForBase && window.findMerchantIdForBase(baseName)) || t.merchantId || baseName;
-        const cat = (t.cat && t.cat !== 'متابعة' && t.cat !== 'متابعه') ? t.cat : '';
+        const rec = window.merchantsById && window.merchantsById.get(mid);
+        const recCat = rec && String(rec.cat || rec.category || '').trim();
+        const taskCat = (t.cat && t.cat !== 'متابعة' && t.cat !== 'متابعه') ? t.cat : '';
+        const cat = ((recCat && recCat !== 'متابعة' && recCat !== 'متابعه') ? recCat : '') || taskCat;
         map.set(baseName, {
             merchantId: mid,
             merchantName: baseName,
@@ -121,15 +124,120 @@ const listFinalizedMerchants = () => {
     return Array.from(map.values()).sort((a, b) => String(a.merchantName).localeCompare(String(b.merchantName), 'ar'));
 };
 
-const fillCatalogCategoryOptions = (selected) => {
-    const select = document.getElementById('catalogCategory');
-    if (!select) return;
-    const cats = Array.isArray(window.categories) ? window.categories.slice().sort() : [];
-    select.innerHTML = '<option value="">الفئة...</option>' + cats.map((c) => {
-        const safe = catalogEscapeHtml(c);
-        const isSel = selected && selected === c ? ' selected' : '';
-        return `<option value="${safe}"${isSel}>${safe}</option>`;
-    }).join('');
+const resolveMerchantCategory = (merchant) => {
+    const isRealCat = (value) => {
+        const cat = String(value || '').trim();
+        return cat && cat !== 'متابعة' && cat !== 'متابعه' ? cat : '';
+    };
+    if (merchant) {
+        const fromMerchant = isRealCat(merchant.category);
+        if (fromMerchant) return fromMerchant;
+    }
+    const baseName = merchant && merchant.merchantName;
+    if (baseName && window.merchantsById) {
+        for (const rec of window.merchantsById.values()) {
+            if (!rec || rec.archived === true || !rec.name) continue;
+            const recBase = window.getBaseName ? window.getBaseName(rec.name) : String(rec.name || '');
+            if (recBase !== baseName) continue;
+            const recCat = isRealCat(rec.cat || rec.category);
+            if (recCat) return recCat;
+        }
+    }
+    if (baseName) {
+        const taskSource = (window.allTasksCache && window.allTasksCache.length)
+            ? window.allTasksCache
+            : Array.from((window.tasksMemory || new Map()).values());
+        for (const t of taskSource) {
+            const tBase = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '');
+            if (tBase !== baseName) continue;
+            const taskCat = isRealCat(t.cat);
+            if (taskCat) return taskCat;
+        }
+    }
+    return '';
+};
+
+const csvEscapeCell = (value) => {
+    const s = String(value == null ? '' : value);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+};
+
+const downloadKanjoCsv = (rows, fileName) => {
+    const lines = [CATALOG_EXPORT_COLUMNS.join(',')].concat(
+        rows.map((row) => CATALOG_EXPORT_COLUMNS.map((col) => csvEscapeCell(row[col])).join(','))
+    );
+    const csv = '\uFEFF' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const mapCatalogProductToExportRow = (p) => ({
+    product_key: '',
+    product_type: p.product_type || '',
+    sku: p.sku || '',
+    name_en: p.name_en || '',
+    name_ar: p.name_ar || '',
+    description_en: p.description_en || '',
+    description_ar: p.description_ar || '',
+    base_price: Number(p.base_price) || 0,
+    main_image_url: p.enhancedImageUrl || '',
+    category: p.category || '',
+    status: 'active'
+});
+
+let catalogVariationSeq = 0;
+
+window.addCatalogVariationRow = (name, price) => {
+    const list = document.getElementById('catalogVariationsList');
+    if (!list) return;
+    const id = 'catalogVar-' + (++catalogVariationSeq);
+    const row = document.createElement('div');
+    row.className = 'flex gap-2 items-center catalog-variation-row';
+    row.id = id;
+    row.innerHTML = `<input type="text" class="catalog-variation-name flex-1 min-w-0 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="المقاس / اللون" value="${catalogEscapeHtml(name || '')}">
+        <input type="number" min="0" step="0.01" class="catalog-variation-price w-28 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="السعر" value="${catalogEscapeHtml(price == null ? '' : price)}">
+        <button type="button" onclick="removeCatalogVariationRow('${id}')" class="shrink-0 w-10 h-10 rounded-xl bg-red-50 text-red-500 font-black hover:bg-red-100">×</button>`;
+    list.appendChild(row);
+};
+
+window.removeCatalogVariationRow = (id) => {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+};
+
+window.onCatalogProductTypeChange = () => {
+    const typeEl = document.getElementById('catalogProductType');
+    const section = document.getElementById('catalogVariationsSection');
+    const list = document.getElementById('catalogVariationsList');
+    const isVariable = !!(typeEl && typeEl.value === 'variable');
+    if (section) section.classList.toggle('hidden', !isVariable);
+    if (isVariable && list && list.children.length === 0) window.addCatalogVariationRow();
+};
+
+const resetCatalogVariations = () => {
+    const list = document.getElementById('catalogVariationsList');
+    if (list) list.innerHTML = '';
+    catalogVariationSeq = 0;
+    window.onCatalogProductTypeChange();
+};
+
+const collectCatalogVariations = () => {
+    const rows = document.querySelectorAll('#catalogVariationsList .catalog-variation-row');
+    const items = [];
+    rows.forEach((row) => {
+        const name = String((row.querySelector('.catalog-variation-name') || {}).value || '').trim();
+        const priceRaw = String((row.querySelector('.catalog-variation-price') || {}).value || '').trim();
+        items.push({ name, priceRaw, price: Number(priceRaw) });
+    });
+    return items;
 };
 
 const fillCatalogMerchantOptions = () => {
@@ -149,13 +257,6 @@ const fillCatalogMerchantOptions = () => {
     }).join('');
 };
 
-window.onCatalogMerchantChange = () => {
-    const select = document.getElementById('catalogMerchantSelect');
-    if (!select) return;
-    const merchant = window._catalogMerchantMap && window._catalogMerchantMap[select.value];
-    if (merchant && merchant.category) fillCatalogCategoryOptions(merchant.category);
-};
-
 window.onCatalogRawImageChange = (event) => {
     const input = event && event.target;
     const file = input && input.files && input.files[0];
@@ -169,7 +270,6 @@ window.openCatalogProductModal = () => {
         return;
     }
     fillCatalogMerchantOptions();
-    fillCatalogCategoryOptions('');
     const ids = ['catalogNameAr', 'catalogNameEn', 'catalogDescriptionAr', 'catalogDescriptionEn', 'catalogSku', 'catalogBasePrice'];
     ids.forEach((id) => {
         const el = document.getElementById(id);
@@ -181,6 +281,7 @@ window.openCatalogProductModal = () => {
     if (fileEl) fileEl.value = '';
     const nameHint = document.getElementById('catalogRawImageName');
     if (nameHint) nameHint.textContent = 'الكاميرا أو معرض الصور';
+    resetCatalogVariations();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
@@ -205,7 +306,7 @@ window.submitCatalogProduct = async (event) => {
     const sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
     const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
-    const category = String((document.getElementById('catalogCategory') || {}).value || '').trim();
+    const category = resolveMerchantCategory(merchant);
     const fileInput = document.getElementById('catalogRawImage');
     const file = fileInput && fileInput.files && fileInput.files[0];
     const btn = document.getElementById('catalogProductSubmitBtn');
@@ -219,7 +320,17 @@ window.submitCatalogProduct = async (event) => {
     if (!productType) return window.showToast('اختر نوع المنتج', false);
     const basePrice = Number(priceRaw);
     if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) return window.showToast('أدخل سعراً صحيحاً', false);
-    if (!category) return window.showToast('اختر فئة المنتج', false);
+    if (!category) return window.showToast('لا توجد فئة مسجّلة لهذا التاجر', false);
+    let variations = [];
+    if (productType === 'variable') {
+        const rawVars = collectCatalogVariations();
+        if (rawVars.length === 0) return window.showToast('أضف خياراً واحداً على الأقل للمنتج المتغير', false);
+        for (const v of rawVars) {
+            if (!v.name) return window.showToast('أدخل اسم كل خيار (مقاس / لون)', false);
+            if (v.priceRaw === '' || Number.isNaN(v.price) || v.price < 0) return window.showToast('أدخل سعراً صحيحاً لكل خيار', false);
+            variations.push({ name: v.name, price: v.price });
+        }
+    }
     if (!file) return window.showToast('ارفع صورة المنتج الأصلية', false);
     if (file.size > CATALOG_MAX_IMAGE_BYTES) return window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
 
@@ -237,7 +348,7 @@ window.submitCatalogProduct = async (event) => {
             fileContent,
             mimeType: file.type || 'image/jpeg'
         });
-        await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), {
+        const payload = {
             merchantId: merchant.merchantId,
             merchantName: merchant.merchantName,
             name_ar: nameAr,
@@ -253,7 +364,9 @@ window.submitCatalogProduct = async (event) => {
             status: 'pending',
             createdAt: new Date(),
             createdBy: (window.currentUser && window.currentUser.name) || ''
-        });
+        };
+        if (productType === 'variable') payload.variations = variations;
+        await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
         window.showToast('تم حفظ المنتج بنجاح');
         window.closeCatalogProductModal();
     } catch (err) {
@@ -421,7 +534,21 @@ window.renderCatalogWidgets = () => {
     const exportBtn = document.getElementById('catalogExportBtn');
     if (exportBtn) exportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
 
+    const mpExportBtn = document.getElementById('mpCatalogExportBtn');
+    const mpModal = document.getElementById('merchantProfileModal');
+    if (mpExportBtn && mpModal && !mpModal.classList.contains('hidden')) {
+        mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
+    }
+
     if (window.isCatalogContentUser()) renderCatalogPendingCards();
+};
+
+const fetchDoneCatalogProducts = async () => {
+    const qRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'done'));
+    const snap = await window.getDocs(qRef);
+    const items = [];
+    snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    return items;
 };
 
 window.exportDoneCatalogProducts = async () => {
@@ -430,33 +557,39 @@ window.exportDoneCatalogProducts = async () => {
         return;
     }
     try {
-        const qRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'done'));
-        const snap = await window.getDocs(qRef);
-        const exportData = [];
-        snap.forEach((d) => {
-            const p = d.data() || {};
-            exportData.push({
-                product_key: '',
-                product_type: p.product_type || '',
-                sku: p.sku || '',
-                name_en: p.name_en || '',
-                name_ar: p.name_ar || '',
-                description_en: p.description_en || '',
-                description_ar: p.description_ar || '',
-                base_price: Number(p.base_price) || 0,
-                main_image_url: p.enhancedImageUrl || '',
-                category: p.category || '',
-                status: p.status || 'done'
-            });
-        });
+        const exportData = (await fetchDoneCatalogProducts()).map(mapCatalogProductToExportRow);
         if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة للتصدير', false);
-        const ws = XLSX.utils.json_to_sheet(exportData, { header: CATALOG_EXPORT_COLUMNS });
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Kanjo Catalog');
-        XLSX.writeFile(wb, 'Kanjo_Catalog_Done_' + new Date().toISOString().slice(0, 10) + '.xlsx');
-        window.showToast('تم تصدير كتالوج المنتجات بنجاح');
+        downloadKanjoCsv(exportData, 'Kanjo_Catalog_Done_' + new Date().toISOString().slice(0, 10) + '.csv');
+        window.showToast('تم تصدير شيت المنتجات بنجاح');
     } catch (err) {
         console.error('[catalog] export failed:', err);
+        window.showToast('فشل تصدير الكتالوج', false);
+    }
+};
+
+window.exportMerchantKanjoSheet = async () => {
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('تصدير الكتالوج متاح للإدارة فقط', false);
+        return;
+    }
+    const nameEl = document.getElementById('mpMerchantName');
+    const merchantName = String(window.activeMerchantBaseName || (nameEl && nameEl.innerText) || '').trim();
+    if (!merchantName) return window.showToast('افتح بطاقة تاجر أولاً', false);
+    const merchantId = (window.findMerchantIdForBase && window.findMerchantIdForBase(merchantName)) || '';
+    try {
+        const allDone = await fetchDoneCatalogProducts();
+        const filtered = allDone.filter((p) => {
+            const pName = String(p.merchantName || '');
+            const pId = String(p.merchantId || '');
+            return (merchantId && pId === merchantId) || pName === merchantName;
+        });
+        const exportData = filtered.map(mapCatalogProductToExportRow);
+        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة لهذا التاجر', false);
+        const safeName = merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
+        downloadKanjoCsv(exportData, 'Kanjo_Catalog_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
+        window.showToast('تم تصدير شيت المنتجات بنجاح');
+    } catch (err) {
+        console.error('[catalog] merchant export failed:', err);
         window.showToast('فشل تصدير الكتالوج', false);
     }
 };

@@ -104,6 +104,7 @@ service cloud.firestore {
     // Assumed fields:
     //   merchantId, merchantName, name_ar, description_ar (string, required)
     //   name_en, description_en, sku, product_type (string, required)
+    //   variations (optional list of {name, price} when product_type == variable)
     //   base_price (number, required, >= 0)
     //   category (string, required)
     //   rawImageUrl (https URL, required on create)
@@ -134,6 +135,38 @@ service cloud.firestore {
               && request.resource.data[field].size() <= maxLen);
       }
 
+      function isValidVariationItem(item) {
+        return item is map
+          && item.keys().hasOnly(['name', 'price'])
+          && item.name is string && item.name.size() > 0 && item.name.size() <= 80
+          && item.price is number && item.price >= 0 && item.price <= 100000000;
+      }
+
+      function isValidVariationsList(list) {
+        return list is list
+          && list.size() <= 20
+          && (list.size() < 1 || isValidVariationItem(list[0]))
+          && (list.size() < 2 || isValidVariationItem(list[1]))
+          && (list.size() < 3 || isValidVariationItem(list[2]))
+          && (list.size() < 4 || isValidVariationItem(list[3]))
+          && (list.size() < 5 || isValidVariationItem(list[4]))
+          && (list.size() < 6 || isValidVariationItem(list[5]))
+          && (list.size() < 7 || isValidVariationItem(list[6]))
+          && (list.size() < 8 || isValidVariationItem(list[7]))
+          && (list.size() < 9 || isValidVariationItem(list[8]))
+          && (list.size() < 10 || isValidVariationItem(list[9]))
+          && (list.size() < 11 || isValidVariationItem(list[10]))
+          && (list.size() < 12 || isValidVariationItem(list[11]))
+          && (list.size() < 13 || isValidVariationItem(list[12]))
+          && (list.size() < 14 || isValidVariationItem(list[13]))
+          && (list.size() < 15 || isValidVariationItem(list[14]))
+          && (list.size() < 16 || isValidVariationItem(list[15]))
+          && (list.size() < 17 || isValidVariationItem(list[16]))
+          && (list.size() < 18 || isValidVariationItem(list[17]))
+          && (list.size() < 19 || isValidVariationItem(list[18]))
+          && (list.size() < 20 || isValidVariationItem(list[19]));
+      }
+
       function isValidCatalogProduct() {
         let d = request.resource.data;
         return d.keys().hasAll([
@@ -143,6 +176,7 @@ service cloud.firestore {
           && d.keys().hasOnly([
             'merchantId', 'merchantName', 'name_ar', 'description_ar',
             'name_en', 'description_en', 'sku', 'product_type',
+            'variations',
             'base_price', 'category', 'rawImageUrl', 'enhancedImageUrl', 'status',
             'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
@@ -154,6 +188,7 @@ service cloud.firestore {
           && isValidOptionalCatalogString('description_en', 0, 2000)
           && isValidOptionalCatalogString('sku', 0, 80)
           && isValidOptionalCatalogString('product_type', 0, 40)
+          && (!('variations' in d) || isValidVariationsList(d.variations))
           && d.base_price is number && d.base_price >= 0 && d.base_price <= 100000000
           && d.category is string && d.category.size() > 0 && d.category.size() <= 120
           && isValidHttpsUrl(d.rawImageUrl)
@@ -175,7 +210,10 @@ service cloud.firestore {
           && d.name_en is string && d.name_en.size() > 0
           && d.description_en is string && d.description_en.size() > 0
           && d.sku is string && d.sku.size() > 0
-          && d.product_type is string && d.product_type.size() > 0;
+          && d.product_type in ['simple', 'variable', 'bundle']
+          && (d.product_type == 'variable'
+              ? ('variations' in d && isValidVariationsList(d.variations) && d.variations.size() > 0)
+              : !('variations' in d));
       }
 
       function catalogUpdateIsEnhanceOrAdmin() {

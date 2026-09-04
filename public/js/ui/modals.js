@@ -343,6 +343,18 @@ window.openMerchantProfile = (merchantBaseName) => {
 
 
 
+    const mpCatalogExportBtn = document.getElementById('mpCatalogExportBtn');
+
+    if (mpCatalogExportBtn) {
+
+        const canExport = typeof window.isCatalogAdminUser === 'function' && window.isCatalogAdminUser();
+
+        mpCatalogExportBtn.classList.toggle('hidden', !canExport);
+
+    }
+
+
+
     document.getElementById('merchantProfileModal').classList.remove('hidden');
 
 };

@@ -468,6 +468,10 @@
 
 
 
+            <button id="mpCatalogExportBtn" type="button" onclick="exportMerchantKanjoSheet()" class="hidden w-full min-h-[48px] bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-csv"></i> تصدير شيت المنتجات</button>
+
+
+
             <div id="mpActionsContainer" class="flex gap-3 pt-2">
 
                 <button id="mpSaveBtn" onclick="saveMerchantProfile()" class="flex-1 bg-kanjo-primary text-white py-3.5 rounded-xl font-bold hover:bg-violet-800 shadow-md text-xs">حفظ التعديلات وتحديث كل النظام</button>
@@ -1820,7 +1824,7 @@
 
 
 
-            <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="hidden w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير كتالوج المنتجات المكتملة (Excel)</button>
+            <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="hidden w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-csv"></i> تصدير شيت المنتجات</button>
 
             
 
@@ -2002,7 +2006,7 @@
 
                         <label class="block text-[11px] font-black text-[#230535] mb-1">التاجر (اتفاق نهائي)</label>
 
-                        <select id="catalogMerchantSelect" onchange="onCatalogMerchantChange()" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
+                         <select id="catalogMerchantSelect" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
 
                     </div>
 
@@ -2056,13 +2060,13 @@
 
                             <label class="block text-[11px] font-black text-[#230535] mb-1">نوع المنتج</label>
 
-                            <select id="catalogProductType" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+                            <select id="catalogProductType" required onchange="onCatalogProductTypeChange()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
 
-                                <option value="simple" selected>simple</option>
+                                <option value="simple" selected>منتج عادي (Simple)</option>
 
-                                <option value="variable">variable</option>
+                                <option value="variable">منتج متغير - مقاسات/ألوان (Variable)</option>
 
-                                <option value="bundle">bundle</option>
+                                <option value="bundle">مجموعة عروض (Bundle)</option>
 
                             </select>
 
@@ -2070,27 +2074,25 @@
 
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
 
-                        <div>
+                        <label class="block text-[11px] font-black text-[#230535] mb-1">السعر الأساسي</label>
 
-                            <label class="block text-[11px] font-black text-[#230535] mb-1">السعر الأساسي</label>
+                        <input type="number" id="catalogBasePrice" required min="0" step="0.01" placeholder="0.00" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
 
-                            <input type="number" id="catalogBasePrice" required min="0" step="0.01" placeholder="0.00" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+                    </div>
 
-                        </div>
+                    <div id="catalogVariationsSection" class="hidden space-y-2">
 
-                        <div>
+                        <div class="flex items-center justify-between gap-2">
 
-                            <label class="block text-[11px] font-black text-[#230535] mb-1">الفئة</label>
+                            <label class="block text-[11px] font-black text-[#230535]">خيارات المنتج (مقاس / لون)</label>
 
-                            <select id="catalogCategory" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
-
-                                <option value="">الفئة...</option>
-
-                            </select>
+                            <button type="button" onclick="addCatalogVariationRow()" class="shrink-0 min-h-[40px] text-[11px] font-black text-[#230535] bg-[#FFD700]/40 px-3 py-2 rounded-xl hover:bg-[#FFD700]/70 transition">+ إضافة خيار آخر</button>
 
                         </div>
+
+                        <div id="catalogVariationsList" class="space-y-2"></div>
 
                     </div>
 
