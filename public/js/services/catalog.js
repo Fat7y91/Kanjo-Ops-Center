@@ -278,25 +278,70 @@ const fillCatalogMerchantOptions = () => {
     }).join('');
 };
 
+let productImagesState = [];
+
+const revokeCatalogPreviewUrls = () => {
+    productImagesState.forEach((item) => {
+        if (item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+};
+
+const resetCatalogImageState = () => {
+    revokeCatalogPreviewUrls();
+    productImagesState = [];
+    const fileEl = document.getElementById('catalogRawImage');
+    if (fileEl) fileEl.value = '';
+    renderCatalogImagePreviews();
+};
+
+const renderCatalogImagePreviews = () => {
+    const preview = document.getElementById('catalogRawImagePreviews');
+    const nameEl = document.getElementById('catalogRawImageName');
+    if (nameEl) nameEl.textContent = productImagesState.length ? (productImagesState.length + ' صورة') : 'الكاميرا أو معرض الصور';
+    if (!preview) return;
+    preview.innerHTML = '';
+    productImagesState.forEach((item, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'relative w-16 h-16';
+        const img = document.createElement('img');
+        img.src = item.previewUrl;
+        img.alt = (item.file && item.file.name) || '';
+        img.className = 'w-16 h-16 rounded-xl object-cover border border-[#FFD700]/50';
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'absolute -top-1 -left-1 w-6 h-6 rounded-full bg-red-600 text-white text-xs font-black shadow-md leading-none';
+        del.textContent = '×';
+        del.onclick = () => window.removeCatalogProductImage(idx);
+        wrap.appendChild(img);
+        wrap.appendChild(del);
+        preview.appendChild(wrap);
+    });
+};
+
+window.removeCatalogProductImage = (index) => {
+    const item = productImagesState[index];
+    if (item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    productImagesState.splice(index, 1);
+    renderCatalogImagePreviews();
+};
+
 window.onCatalogRawImageChange = (event) => {
     const input = event && event.target;
     const files = input && input.files ? Array.from(input.files) : [];
-    const nameEl = document.getElementById('catalogRawImageName');
-    if (nameEl) nameEl.textContent = files.length ? (files.length + ' صورة') : 'الكاميرا أو معرض الصور';
-    const preview = document.getElementById('catalogRawImagePreviews');
-    if (!preview) return;
-    preview.innerHTML = '';
     files.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const img = document.createElement('img');
-            img.src = String(reader.result || '');
-            img.alt = file.name || '';
-            img.className = 'w-16 h-16 rounded-xl object-cover border border-[#FFD700]/50';
-            preview.appendChild(img);
-        };
-        reader.readAsDataURL(file);
+        if (!file || !String(file.type || '').startsWith('image/')) return;
+        if (productImagesState.length >= 12) return;
+        productImagesState.push({ file, previewUrl: URL.createObjectURL(file) });
     });
+    if (input) input.value = '';
+    if (productImagesState.length > 12) {
+        productImagesState.slice(12).forEach((item) => {
+            if (item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        });
+        productImagesState = productImagesState.slice(0, 12);
+        if (window.showToast) window.showToast('الحد الأقصى 12 صورة للمنتج', false);
+    }
+    renderCatalogImagePreviews();
 };
 
 const generateCatalogSku = () => 'KJ-PRD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
@@ -308,8 +353,7 @@ const isCatalogProductFormDirty = () => {
     if (merchantEl && merchantEl.value) return true;
     const typeEl = document.getElementById('catalogProductType');
     if (typeEl && typeEl.value && typeEl.value !== 'simple') return true;
-    const fileEl = document.getElementById('catalogRawImage');
-    if (fileEl && fileEl.files && fileEl.files.length) return true;
+    if (productImagesState.length) return true;
     const vars = collectCatalogVariations();
     return vars.some((v) => v.name || v.priceRaw);
 };
@@ -340,12 +384,22 @@ window.startCatalogBarcodeScan = async () => {
     }
     reader.innerHTML = '';
     reader.classList.remove('hidden');
-    const scanner = new Html5Qrcode('catalogSkuReader');
+    const formats = (typeof Html5QrcodeSupportedFormats === 'object')
+        ? [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39
+        ]
+        : undefined;
+    const scanner = new Html5Qrcode('catalogSkuReader', { verbose: false, formatsToSupport: formats });
     window._catalogQrScanner = scanner;
     try {
         await scanner.start(
             { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 220, height: 220 } },
+            { fps: 30, qrbox: { width: 250, height: 100 } },
             (decodedText) => {
                 const skuEl = document.getElementById('catalogSku');
                 if (skuEl) skuEl.value = String(decodedText || '').trim();
@@ -374,12 +428,7 @@ window.openCatalogProductModal = () => {
     });
     const typeEl = document.getElementById('catalogProductType');
     if (typeEl) typeEl.value = 'simple';
-    const fileEl = document.getElementById('catalogRawImage');
-    if (fileEl) fileEl.value = '';
-    const nameHint = document.getElementById('catalogRawImageName');
-    if (nameHint) nameHint.textContent = 'الكاميرا أو معرض الصور';
-    const preview = document.getElementById('catalogRawImagePreviews');
-    if (preview) preview.innerHTML = '';
+    resetCatalogImageState();
     resetCatalogVariations();
     window.stopCatalogBarcodeScan();
     const modal = document.getElementById('catalogProductModal');
@@ -388,6 +437,7 @@ window.openCatalogProductModal = () => {
 
 window.closeCatalogProductModal = () => {
     window.stopCatalogBarcodeScan();
+    resetCatalogImageState();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.add('hidden');
 };
@@ -416,8 +466,7 @@ window.submitCatalogProduct = async (event) => {
     const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = resolveMerchantCategory(merchant);
-    const fileInput = document.getElementById('catalogRawImage');
-    const files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+    const files = productImagesState.map((item) => item.file).filter(Boolean);
     const btn = document.getElementById('catalogProductSubmitBtn');
 
     if (!merchant || !merchantId) return window.showToast('اختر تاجراً باتفاق نهائي', false);
