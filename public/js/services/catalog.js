@@ -271,6 +271,60 @@ window.onCatalogRawImageChange = (event) => {
     if (nameEl) nameEl.textContent = file ? file.name : 'الكاميرا أو معرض الصور';
 };
 
+const generateCatalogSku = () => 'KJ-PRD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+const isCatalogProductFormDirty = () => {
+    const ids = ['catalogNameAr', 'catalogNameEn', 'catalogDescriptionAr', 'catalogDescriptionEn', 'catalogSku', 'catalogBasePrice'];
+    if (ids.some((id) => String((document.getElementById(id) || {}).value || '').trim())) return true;
+    const merchantEl = document.getElementById('catalogMerchantSelect');
+    if (merchantEl && merchantEl.value) return true;
+    const typeEl = document.getElementById('catalogProductType');
+    if (typeEl && typeEl.value && typeEl.value !== 'simple') return true;
+    const fileEl = document.getElementById('catalogRawImage');
+    if (fileEl && fileEl.files && fileEl.files.length) return true;
+    const vars = collectCatalogVariations();
+    return vars.some((v) => v.name || v.priceRaw);
+};
+
+window.stopCatalogBarcodeScan = async () => {
+    const reader = document.getElementById('catalogSkuReader');
+    const scanner = window._catalogQrScanner;
+    window._catalogQrScanner = null;
+    if (scanner && typeof scanner.clear === 'function') {
+        try { await scanner.clear(); } catch (_) { /* ignore */ }
+    }
+    if (reader) {
+        reader.classList.add('hidden');
+        reader.innerHTML = '';
+    }
+};
+
+window.startCatalogBarcodeScan = async () => {
+    const reader = document.getElementById('catalogSkuReader');
+    if (!reader) return;
+    if (typeof Html5QrcodeScanner !== 'function') {
+        if (window.showToast) window.showToast('ماسح الباركود غير متاح حالياً', false);
+        return;
+    }
+    if (window._catalogQrScanner) {
+        await window.stopCatalogBarcodeScan();
+        return;
+    }
+    reader.classList.remove('hidden');
+    const scanner = new Html5QrcodeScanner('catalogSkuReader', {
+        fps: 10,
+        qrbox: { width: 220, height: 220 },
+        rememberLastUsedCamera: true
+    }, false);
+    window._catalogQrScanner = scanner;
+    scanner.render((decodedText) => {
+        const skuEl = document.getElementById('catalogSku');
+        if (skuEl) skuEl.value = String(decodedText || '').trim();
+        window.stopCatalogBarcodeScan();
+        if (window.showToast) window.showToast('تم قراءة الباركود');
+    }, () => {});
+};
+
 window.openCatalogProductModal = () => {
     if (!window.isCatalogRepUser()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
@@ -289,13 +343,23 @@ window.openCatalogProductModal = () => {
     const nameHint = document.getElementById('catalogRawImageName');
     if (nameHint) nameHint.textContent = 'الكاميرا أو معرض الصور';
     resetCatalogVariations();
+    window.stopCatalogBarcodeScan();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
 
 window.closeCatalogProductModal = () => {
+    window.stopCatalogBarcodeScan();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.add('hidden');
+};
+
+window.requestCloseCatalogProductModal = () => {
+    if (isCatalogProductFormDirty()) {
+        const ok = window.confirm('هل أنت متأكد من الإغلاق؟ سيتم فقدان البيانات غير المحفوظة.');
+        if (!ok) return;
+    }
+    window.closeCatalogProductModal();
 };
 
 window.submitCatalogProduct = async (event) => {
@@ -310,7 +374,7 @@ window.submitCatalogProduct = async (event) => {
     const nameEn = String((document.getElementById('catalogNameEn') || {}).value || '').trim();
     const descriptionAr = String((document.getElementById('catalogDescriptionAr') || {}).value || '').trim();
     const descriptionEn = String((document.getElementById('catalogDescriptionEn') || {}).value || '').trim();
-    const sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
+    let sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
     const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = resolveMerchantCategory(merchant);
@@ -323,7 +387,7 @@ window.submitCatalogProduct = async (event) => {
     if (!nameEn) return window.showToast('أدخل اسم المنتج بالإنجليزية', false);
     if (!descriptionAr) return window.showToast('أدخل وصف المنتج بالعربية', false);
     if (!descriptionEn) return window.showToast('أدخل وصف المنتج بالإنجليزية', false);
-    if (!sku) return window.showToast('أدخل كود المنتج / الباركود', false);
+    if (!sku) sku = generateCatalogSku();
     if (!productType) return window.showToast('اختر نوع المنتج', false);
     let basePrice = Number(priceRaw);
     if (!category) return window.showToast('لا توجد فئة مسجّلة لهذا التاجر', false);
@@ -626,9 +690,9 @@ window.startCatalogListeners = () => {
     window._appListenerUnsubscribers.push(unsub);
 };
 
-window.addEventListener('click', (ev) => {
-    if (ev.target && ev.target.id === 'catalogProductModal') window.closeCatalogProductModal();
-});
 window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape') window.closeCatalogProductModal();
+    const modal = document.getElementById('catalogProductModal');
+    if (ev.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
+        window.requestCloseCatalogProductModal();
+    }
 });
