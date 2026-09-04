@@ -75,5 +75,6 @@ window.teamMembers = teamMembers;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
 window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
 window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
+window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxKn5WpHIT3N0zoyu1Kb6eTmAOo8jOCh1Jta36bnjvoIZ1jnxt54pdAvK9tN-xUTdYA/exec";
 
 export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };

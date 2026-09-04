@@ -1947,6 +1947,12 @@ window.renderDashboard = (snapshot) => {
 
     }
 
+    if (typeof window.renderCatalogWidgets === 'function') {
+
+        window.renderCatalogWidgets();
+
+    }
+
 
 
     const fragment = document.createDocumentFragment();

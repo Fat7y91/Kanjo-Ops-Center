@@ -26,7 +26,7 @@
 
     <script>
 
-        tailwind.config = { theme: { extend: { colors: { kanjo: { primary: '#6D28D9', dark: '#4C1D95', light: '#F5F3FF', bg: '#F9FAFB' } } } } }
+        tailwind.config = { theme: { extend: { colors: { kanjo: { primary: '#6D28D9', dark: '#4C1D95', light: '#F5F3FF', bg: '#F9FAFB' }, brand: { purple: '#230535', gold: '#FFD700' } } } } }
 
     </script>
 
@@ -1418,6 +1418,34 @@
 
 
 
+            <!-- إدخال منتجات الكتالوج (للمناديب) -->
+
+            <div id="catalogRepBanner" class="hidden bg-gradient-to-r from-[#230535] to-[#4C1D95] p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#FFD700]/20 text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-box-open"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base">كتالوج منتجات التجار</h4>
+
+                        <p class="text-xs text-white/80 font-bold">سجّل منتجاً لتاجر باتفاق نهائي وارفع صورته الأصلية</p>
+
+                    </div>
+
+                </div>
+
+                <button type="button" onclick="openCatalogProductModal()" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-md flex items-center gap-2">
+
+                    <i class="fa-solid fa-plus"></i> إضافة منتج
+
+                </button>
+
+            </div>
+
+
+
             <!-- زر وشريط محفظة استكمال بيانات السوشيال ميديا (للمناديب) -->
 
             <div id="quickLinksWalletBanner" class="hidden bg-gradient-to-r from-purple-600 to-indigo-700 p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">
@@ -1897,6 +1925,98 @@
                 <span class="text-xs font-black text-kanjo-primary bg-purple-100 px-3 py-1.5 rounded-full" id="pendingUploadsCount">0</span>
 
             </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div id="catalogProductModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[137]">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-box-open"></i></div>
+
+                    <div>
+
+                        <h3 class="font-black text-lg text-[#230535]">إضافة منتج للكتالوج</h3>
+
+                        <p class="text-xs text-slate-500 font-bold">للتاجر المتعاقد نهائياً فقط</p>
+
+                    </div>
+
+                </div>
+
+                <button type="button" onclick="closeCatalogProductModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <form onsubmit="submitCatalogProduct(event)" class="space-y-3">
+
+                <div>
+
+                    <label class="block text-[11px] font-black text-[#230535] mb-1">التاجر (اتفاق نهائي)</label>
+
+                    <select id="catalogMerchantSelect" onchange="onCatalogMerchantChange()" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
+
+                </div>
+
+                <div>
+
+                    <label class="block text-[11px] font-black text-[#230535] mb-1">اسم المنتج بالعربية</label>
+
+                    <input type="text" id="catalogNameAr" required placeholder="اسم المنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                </div>
+
+                <div>
+
+                    <label class="block text-[11px] font-black text-[#230535] mb-1">وصف المنتج بالعربية</label>
+
+                    <textarea id="catalogDescriptionAr" required rows="3" placeholder="وصف مختصر للمنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></textarea>
+
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-[#230535] mb-1">السعر الأساسي</label>
+
+                        <input type="number" id="catalogBasePrice" required min="0" step="0.01" placeholder="0.00" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                    </div>
+
+                    <div>
+
+                        <label class="block text-[11px] font-black text-[#230535] mb-1">الفئة</label>
+
+                        <select id="catalogCategory" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                            <option value="">الفئة...</option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+                <div>
+
+                    <label class="block text-[11px] font-black text-[#230535] mb-1">الصورة الأصلية</label>
+
+                    <input type="file" id="catalogRawImage" accept="image/*" required class="w-full p-3 bg-white border border-dashed border-[#FFD700] rounded-xl text-xs font-bold text-slate-600 file:ml-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-[#230535] file:text-[#FFD700] file:font-black">
+
+                </div>
+
+                <button type="submit" id="catalogProductSubmitBtn" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md">حفظ المنتج</button>
+
+            </form>
 
         </div>
 

@@ -99,6 +99,82 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // ───────────────────────────────────────────────────────────────
+    // Product catalog pipeline (`merchant_products`).
+    // Assumed fields:
+    //   merchantId, merchantName, name_ar, description_ar (string, required)
+    //   base_price (number, required, >= 0)
+    //   category (string, required)
+    //   rawImageUrl (https URL, required on create)
+    //   enhancedImageUrl (string URL or empty)
+    //   status: 'pending' | 'done' (default pending)
+    // Auth is anonymous + PIN, so identity RBAC lives in the client;
+    // rules still require sign-in, typed fields, size limits, and
+    // restrict status transitions (pending -> done) plus URL shapes.
+    // ───────────────────────────────────────────────────────────────
+    match /merchant_products/{docId} {
+      function isValidHttpsUrl(value) {
+        return value is string
+          && value.size() > 8
+          && value.size() <= 2048
+          && value.matches('^https://.*');
+      }
+
+      function isValidOptionalUrl(value) {
+        return value is string
+          && value.size() <= 2048
+          && (value.size() == 0 || value.matches('^https://.*'));
+      }
+
+      function isValidCatalogProduct() {
+        let d = request.resource.data;
+        return d.keys().hasAll([
+            'merchantId', 'merchantName', 'name_ar', 'description_ar',
+            'base_price', 'category', 'rawImageUrl', 'enhancedImageUrl', 'status'
+          ])
+          && d.keys().hasOnly([
+            'merchantId', 'merchantName', 'name_ar', 'description_ar',
+            'base_price', 'category', 'rawImageUrl', 'enhancedImageUrl', 'status',
+            'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
+          ])
+          && d.merchantId is string && d.merchantId.size() > 0 && d.merchantId.size() <= 80
+          && d.merchantName is string && d.merchantName.size() > 0 && d.merchantName.size() <= 200
+          && d.name_ar is string && d.name_ar.size() > 0 && d.name_ar.size() <= 200
+          && d.description_ar is string && d.description_ar.size() > 0 && d.description_ar.size() <= 2000
+          && d.base_price is number && d.base_price >= 0 && d.base_price <= 100000000
+          && d.category is string && d.category.size() > 0 && d.category.size() <= 120
+          && isValidHttpsUrl(d.rawImageUrl)
+          && isValidOptionalUrl(d.enhancedImageUrl)
+          && d.status in ['pending', 'done']
+          && (!('createdBy' in d) || (d.createdBy is string && d.createdBy.size() <= 120))
+          && (!('updatedBy' in d) || (d.updatedBy is string && d.updatedBy.size() <= 120))
+          && (!('createdAt' in d) || d.createdAt is timestamp)
+          && (!('updatedAt' in d) || d.updatedAt is timestamp)
+          && (d.status == 'pending'
+              ? d.enhancedImageUrl.size() == 0
+              : isValidHttpsUrl(d.enhancedImageUrl));
+      }
+
+      function catalogCreateIsPending() {
+        return request.resource.data.status == 'pending'
+          && request.resource.data.enhancedImageUrl.size() == 0;
+      }
+
+      function catalogUpdateIsEnhanceOrAdmin() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        return isAdmin()
+          || (resource.data.status == 'pending'
+              && request.resource.data.status == 'done'
+              && changed.hasOnly(['enhancedImageUrl', 'status', 'updatedAt', 'updatedBy'])
+              && isValidHttpsUrl(request.resource.data.enhancedImageUrl));
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidCatalogProduct() && catalogCreateIsPending();
+      allow update: if isSignedIn() && isValidCatalogProduct() && catalogUpdateIsEnhanceOrAdmin();
+      allow delete: if isAdmin();
+    }
+
     // 4) Admin allowlist bootstrap.
     match /app_security/{docId} {
       allow read: if isAdmin();

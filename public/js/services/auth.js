@@ -129,6 +129,10 @@ function applyThemeAndShowDashboard() {
             financialProfileBanner.classList.toggle('hidden', !isRep);
         }
 
+        if (typeof window.renderCatalogWidgets === 'function') {
+            window.renderCatalogWidgets();
+        }
+
         if (isRep && window.refreshFinancialProfileBanner) {
             window.refreshFinancialProfileBanner();
         }
