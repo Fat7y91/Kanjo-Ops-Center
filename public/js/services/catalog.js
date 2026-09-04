@@ -24,6 +24,26 @@ window.isCatalogContentUser = () => {
     return name.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
 };
 
+window.isCatalogAdminUser = () => {
+    const u = window.currentUser;
+    if (!u) return false;
+    return u.role === 'admin' || u.role === 'founder' || (typeof window.canManageContracts === 'function' && window.canManageContracts());
+};
+
+const CATALOG_EXPORT_COLUMNS = [
+    'product_key',
+    'product_type',
+    'sku',
+    'name_en',
+    'name_ar',
+    'description_en',
+    'description_ar',
+    'base_price',
+    'main_image_url',
+    'category',
+    'status'
+];
+
 const catalogScriptUrl = () => (window.KANJO_CATALOG_SCRIPT_URL || CATALOG_GAS_URL || '').trim();
 
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
@@ -136,6 +156,13 @@ window.onCatalogMerchantChange = () => {
     if (merchant && merchant.category) fillCatalogCategoryOptions(merchant.category);
 };
 
+window.onCatalogRawImageChange = (event) => {
+    const input = event && event.target;
+    const file = input && input.files && input.files[0];
+    const nameEl = document.getElementById('catalogRawImageName');
+    if (nameEl) nameEl.textContent = file ? file.name : 'الكاميرا أو معرض الصور';
+};
+
 window.openCatalogProductModal = () => {
     if (!window.isCatalogRepUser()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
@@ -143,14 +170,17 @@ window.openCatalogProductModal = () => {
     }
     fillCatalogMerchantOptions();
     fillCatalogCategoryOptions('');
-    const nameEl = document.getElementById('catalogNameAr');
-    const descEl = document.getElementById('catalogDescriptionAr');
-    const priceEl = document.getElementById('catalogBasePrice');
+    const ids = ['catalogNameAr', 'catalogNameEn', 'catalogDescriptionAr', 'catalogDescriptionEn', 'catalogSku', 'catalogBasePrice'];
+    ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const typeEl = document.getElementById('catalogProductType');
+    if (typeEl) typeEl.value = 'simple';
     const fileEl = document.getElementById('catalogRawImage');
-    if (nameEl) nameEl.value = '';
-    if (descEl) descEl.value = '';
-    if (priceEl) priceEl.value = '';
     if (fileEl) fileEl.value = '';
+    const nameHint = document.getElementById('catalogRawImageName');
+    if (nameHint) nameHint.textContent = 'الكاميرا أو معرض الصور';
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
@@ -169,7 +199,11 @@ window.submitCatalogProduct = async (event) => {
     const merchantId = (document.getElementById('catalogMerchantSelect') || {}).value || '';
     const merchant = window._catalogMerchantMap && window._catalogMerchantMap[merchantId];
     const nameAr = String((document.getElementById('catalogNameAr') || {}).value || '').trim();
+    const nameEn = String((document.getElementById('catalogNameEn') || {}).value || '').trim();
     const descriptionAr = String((document.getElementById('catalogDescriptionAr') || {}).value || '').trim();
+    const descriptionEn = String((document.getElementById('catalogDescriptionEn') || {}).value || '').trim();
+    const sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
+    const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = String((document.getElementById('catalogCategory') || {}).value || '').trim();
     const fileInput = document.getElementById('catalogRawImage');
@@ -178,7 +212,11 @@ window.submitCatalogProduct = async (event) => {
 
     if (!merchant || !merchantId) return window.showToast('اختر تاجراً باتفاق نهائي', false);
     if (!nameAr) return window.showToast('أدخل اسم المنتج بالعربية', false);
+    if (!nameEn) return window.showToast('أدخل اسم المنتج بالإنجليزية', false);
     if (!descriptionAr) return window.showToast('أدخل وصف المنتج بالعربية', false);
+    if (!descriptionEn) return window.showToast('أدخل وصف المنتج بالإنجليزية', false);
+    if (!sku) return window.showToast('أدخل كود المنتج / الباركود', false);
+    if (!productType) return window.showToast('اختر نوع المنتج', false);
     const basePrice = Number(priceRaw);
     if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) return window.showToast('أدخل سعراً صحيحاً', false);
     if (!category) return window.showToast('اختر فئة المنتج', false);
@@ -203,7 +241,11 @@ window.submitCatalogProduct = async (event) => {
             merchantId: merchant.merchantId,
             merchantName: merchant.merchantName,
             name_ar: nameAr,
+            name_en: nameEn,
             description_ar: descriptionAr,
+            description_en: descriptionEn,
+            sku,
+            product_type: productType,
             base_price: basePrice,
             category,
             rawImageUrl,
@@ -376,7 +418,47 @@ window.renderCatalogWidgets = () => {
     const contentWidget = document.getElementById('catalogContentWidget');
     if (contentWidget) contentWidget.classList.toggle('hidden', !window.isCatalogContentUser());
 
+    const exportBtn = document.getElementById('catalogExportBtn');
+    if (exportBtn) exportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
+
     if (window.isCatalogContentUser()) renderCatalogPendingCards();
+};
+
+window.exportDoneCatalogProducts = async () => {
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('تصدير الكتالوج متاح للإدارة فقط', false);
+        return;
+    }
+    try {
+        const qRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'done'));
+        const snap = await window.getDocs(qRef);
+        const exportData = [];
+        snap.forEach((d) => {
+            const p = d.data() || {};
+            exportData.push({
+                product_key: '',
+                product_type: p.product_type || '',
+                sku: p.sku || '',
+                name_en: p.name_en || '',
+                name_ar: p.name_ar || '',
+                description_en: p.description_en || '',
+                description_ar: p.description_ar || '',
+                base_price: Number(p.base_price) || 0,
+                main_image_url: p.enhancedImageUrl || '',
+                category: p.category || '',
+                status: p.status || 'done'
+            });
+        });
+        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة للتصدير', false);
+        const ws = XLSX.utils.json_to_sheet(exportData, { header: CATALOG_EXPORT_COLUMNS });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Kanjo Catalog');
+        XLSX.writeFile(wb, 'Kanjo_Catalog_Done_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+        window.showToast('تم تصدير كتالوج المنتجات بنجاح');
+    } catch (err) {
+        console.error('[catalog] export failed:', err);
+        window.showToast('فشل تصدير الكتالوج', false);
+    }
 };
 
 window.startCatalogListeners = () => {

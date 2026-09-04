@@ -103,6 +103,7 @@ service cloud.firestore {
     // Product catalog pipeline (`merchant_products`).
     // Assumed fields:
     //   merchantId, merchantName, name_ar, description_ar (string, required)
+    //   name_en, description_en, sku, product_type (string, required)
     //   base_price (number, required, >= 0)
     //   category (string, required)
     //   rawImageUrl (https URL, required on create)
@@ -126,6 +127,13 @@ service cloud.firestore {
           && (value.size() == 0 || value.matches('^https://.*'));
       }
 
+      function isValidOptionalCatalogString(field, minLen, maxLen) {
+        return !(field in request.resource.data)
+          || (request.resource.data[field] is string
+              && request.resource.data[field].size() >= minLen
+              && request.resource.data[field].size() <= maxLen);
+      }
+
       function isValidCatalogProduct() {
         let d = request.resource.data;
         return d.keys().hasAll([
@@ -134,6 +142,7 @@ service cloud.firestore {
           ])
           && d.keys().hasOnly([
             'merchantId', 'merchantName', 'name_ar', 'description_ar',
+            'name_en', 'description_en', 'sku', 'product_type',
             'base_price', 'category', 'rawImageUrl', 'enhancedImageUrl', 'status',
             'createdAt', 'createdBy', 'updatedAt', 'updatedBy'
           ])
@@ -141,6 +150,10 @@ service cloud.firestore {
           && d.merchantName is string && d.merchantName.size() > 0 && d.merchantName.size() <= 200
           && d.name_ar is string && d.name_ar.size() > 0 && d.name_ar.size() <= 200
           && d.description_ar is string && d.description_ar.size() > 0 && d.description_ar.size() <= 2000
+          && isValidOptionalCatalogString('name_en', 0, 200)
+          && isValidOptionalCatalogString('description_en', 0, 2000)
+          && isValidOptionalCatalogString('sku', 0, 80)
+          && isValidOptionalCatalogString('product_type', 0, 40)
           && d.base_price is number && d.base_price >= 0 && d.base_price <= 100000000
           && d.category is string && d.category.size() > 0 && d.category.size() <= 120
           && isValidHttpsUrl(d.rawImageUrl)
@@ -156,8 +169,13 @@ service cloud.firestore {
       }
 
       function catalogCreateIsPending() {
-        return request.resource.data.status == 'pending'
-          && request.resource.data.enhancedImageUrl.size() == 0;
+        let d = request.resource.data;
+        return d.status == 'pending'
+          && d.enhancedImageUrl.size() == 0
+          && d.name_en is string && d.name_en.size() > 0
+          && d.description_en is string && d.description_en.size() > 0
+          && d.sku is string && d.sku.size() > 0
+          && d.product_type is string && d.product_type.size() > 0;
       }
 
       function catalogUpdateIsEnhanceOrAdmin() {
