@@ -1,11 +1,11 @@
 /* Kanjo Ops — Product Cataloging Pipeline */
 
 const CATALOG_COLLECTION = 'merchant_products';
-const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbxKn5WpHIT3N0zoyu1Kb6eTmAOo8jOCh1Jta36bnjvoIZ1jnxt54pdAvK9tN-xUTdYA/exec';
+const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzWid4xw-1Vo4y3gNwUPSs9SYYYVEZMVCZyeilNiNyRCkgfLWSjj9s3WmpvX1G4Octv/exec';
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 
 window.merchantProductsCache = window.merchantProductsCache || [];
-window._catalogEnhancedProductId = null;
+window._catalogEnhancedUploads = window._catalogEnhancedUploads || {};
 
 const catalogEscapeHtml = (value) => String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -46,55 +46,121 @@ const CATALOG_EXPORT_COLUMNS = [
 
 const catalogScriptUrl = () => (window.KANJO_CATALOG_SCRIPT_URL || CATALOG_GAS_URL || '').trim();
 
+const catalogDriveFileId = (value) => {
+    const s = String(value || '');
+    if (!s) return '';
+    const idMatch = s.match(/[?&]id=([^&]+)/);
+    if (idMatch && idMatch[1]) return decodeURIComponent(idMatch[1]);
+    const dMatch = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (dMatch && dMatch[1]) return dMatch[1];
+    if (/^[a-zA-Z0-9_-]{10,}$/.test(s)) return s;
+    return '';
+};
+
+const catalogDriveViewUrl = (fileIdOrUrl) => {
+    const id = catalogDriveFileId(fileIdOrUrl);
+    return id ? ('https://drive.google.com/uc?export=view&id=' + id) : '';
+};
+
+const catalogDriveDownloadUrl = (fileIdOrUrl) => {
+    const id = catalogDriveFileId(fileIdOrUrl);
+    if (id) return 'https://drive.google.com/uc?export=download&id=' + id;
+    return String(fileIdOrUrl || '').replace('export=view', 'export=download');
+};
+
+const catalogDirectImageUrl = (urlOrId) => catalogDriveViewUrl(urlOrId) || String(urlOrId || '');
+
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-        const dataUrl = String(reader.result || '');
-        const commaIdx = dataUrl.indexOf(',');
-        resolve(commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl);
-    };
+    reader.onload = () => resolve(String(reader.result || ''));
     reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
     reader.readAsDataURL(file);
 });
 
-const extractCatalogImageUrl = (data) => {
-    if (!data || typeof data !== 'object') return '';
-    if (typeof data.url === 'string' && data.url) return data.url;
-    if (typeof data.imageUrl === 'string' && data.imageUrl) return data.imageUrl;
-    if (data.data && typeof data.data.url === 'string' && data.data.url) return data.data.url;
-    return '';
-};
+const compressImage = (file, maxDimension = 1000, quality = 0.7) => new Promise((resolve, reject) => {
+    if (!file) {
+        reject(new Error('NO_FILE'));
+        return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
+    reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('IMAGE_LOAD_FAILED'));
+        img.onload = () => {
+            let width = img.width || maxDimension;
+            let height = img.height || maxDimension;
+            if (width >= height && width > maxDimension) {
+                height = Math.round(height * (maxDimension / width));
+                width = maxDimension;
+            } else if (height > maxDimension) {
+                width = Math.round(width * (maxDimension / height));
+                height = maxDimension;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, width);
+            canvas.height = Math.max(1, height);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('CANVAS_FAILED'));
+                return;
+            }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            try {
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            } catch (err) {
+                reject(err);
+            }
+        };
+        img.src = String(reader.result || '');
+    };
+    reader.readAsDataURL(file);
+});
 
-const uploadCatalogImageToGas = async ({ merchantName, imageType, fileName, fileContent, mimeType }) => {
-    const url = catalogScriptUrl();
-    if (!url) throw new Error('NO_SCRIPT_URL');
-    if (imageType !== 'raw' && imageType !== 'enhanced') throw new Error('INVALID_IMAGE_TYPE');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90000);
+const compressCatalogImage = async (file) => {
     try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                merchantName,
-                imageType,
-                fileName,
-                fileContent,
-                mimeType
-            }),
-            signal: controller.signal
-        });
-        const text = await res.text();
-        let data = null;
-        try { data = JSON.parse(text); } catch (_) { data = null; }
-        if (!res.ok) throw new Error((data && (data.message || data.error)) || ('HTTP ' + res.status));
-        const imageUrl = extractCatalogImageUrl(data);
-        if (!imageUrl) throw new Error((data && (data.message || data.error)) || 'NO_IMAGE_URL');
-        return imageUrl;
-    } finally {
-        clearTimeout(timer);
+        return await compressImage(file, 1000, 0.7);
+    } catch (_) {
+        return fileToBase64(file);
     }
 };
+
+const catalogJpegFileName = (name, fallback) => {
+    const base = String(name || fallback || 'image').replace(/\.[^.]+$/, '');
+    return (base || fallback || 'image') + '.jpg';
+};
+
+async function uploadCatalogImageToGas(base64Data, fileName, merchantName, imageType) {
+    const GAS_URL = catalogScriptUrl() || CATALOG_GAS_URL;
+    const raw = String(base64Data || '');
+    const base64Content = raw.includes(',') ? raw.split(',')[1] : raw;
+    const mimeMatch = raw.match(/data:(.*?);/);
+    const mimeType = (mimeMatch && mimeMatch[1]) || 'image/jpeg';
+    const payload = JSON.stringify({
+        merchantName: merchantName || 'Unknown',
+        imageType: imageType || 'raw',
+        fileName: fileName || 'image.jpg',
+        fileContent: base64Content,
+        mimeType: mimeType
+    });
+    try {
+        const response = await fetch(GAS_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            body: payload
+        });
+        const result = await response.json();
+        if (result.status === 'success') {
+            const directUrl = catalogDriveViewUrl(result.id || result.url);
+            if (directUrl) return directUrl;
+            throw new Error(result.message || 'GAS API Error');
+        }
+        throw new Error(result.message || 'GAS API Error');
+    } catch (error) {
+        console.error('GAS Upload Failed:', error);
+        throw error;
+    }
+}
 
 const listFinalizedMerchants = () => {
     const map = new Map();
@@ -180,17 +246,26 @@ const downloadKanjoCsv = (rows, fileName) => {
 };
 
 const catalogRawImageUrls = (p) => {
-    if (Array.isArray(p && p.rawImageUrls) && p.rawImageUrls.length) {
-        return p.rawImageUrls.map((u) => String(u || '')).filter(Boolean);
-    }
-    return (p && p.rawImageUrl) ? [String(p.rawImageUrl)] : [];
+    const source = (Array.isArray(p && p.rawImageUrls) && p.rawImageUrls.length)
+        ? p.rawImageUrls
+        : ((p && p.rawImageUrl) ? [p.rawImageUrl] : []);
+    return source.map((u) => catalogDirectImageUrl(u)).filter(Boolean);
 };
 
 const catalogEnhancedImageUrls = (p) => {
-    if (Array.isArray(p && p.enhancedImageUrls) && p.enhancedImageUrls.length) {
-        return p.enhancedImageUrls.map((u) => String(u || '')).filter(Boolean);
-    }
-    return (p && p.enhancedImageUrl) ? [String(p.enhancedImageUrl)] : [];
+    const source = (Array.isArray(p && p.enhancedImageUrls) && p.enhancedImageUrls.length)
+        ? p.enhancedImageUrls
+        : ((p && p.enhancedImageUrl) ? [p.enhancedImageUrl] : []);
+    return source.map((u) => catalogDirectImageUrl(u)).filter(Boolean);
+};
+
+const getCatalogEnhancedLocal = (productId, length) => {
+    const store = window._catalogEnhancedUploads || {};
+    const current = Array.isArray(store[productId]) ? store[productId].slice() : [];
+    while (current.length < length) current.push('');
+    store[productId] = current;
+    window._catalogEnhancedUploads = store;
+    return current;
 };
 
 const mapCatalogProductToExportRow = (p) => ({
@@ -504,14 +579,13 @@ window.submitCatalogProduct = async (event) => {
         const rawImageUrls = [];
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const fileContent = await fileToBase64(file);
-            const uploadedUrl = await uploadCatalogImageToGas({
-                merchantName: merchant.merchantName,
-                imageType: 'raw',
-                fileName: file.name || ('product-raw-' + (i + 1) + '.jpg'),
-                fileContent,
-                mimeType: file.type || 'image/jpeg'
-            });
+            const base64Data = await compressCatalogImage(file);
+            const uploadedUrl = await uploadCatalogImageToGas(
+                base64Data,
+                catalogJpegFileName(file.name, 'product-raw-' + (i + 1)),
+                merchant.merchantName,
+                'raw'
+            );
             rawImageUrls.push(uploadedUrl);
         }
         const rawImageUrl = rawImageUrls[0] || '';
@@ -552,52 +626,66 @@ window.submitCatalogProduct = async (event) => {
     }
 };
 
-window.downloadCatalogRawImage = async (productId, imageIndex) => {
+window.downloadCatalogRawImage = (productId, imageIndex) => {
     const product = (window.merchantProductsCache || []).find((p) => p.id === productId);
     const urls = catalogRawImageUrls(product);
-    const idx = Number.isInteger(imageIndex) ? imageIndex : 0;
-    const url = urls[idx] || urls[0];
+    const idx = Number(imageIndex) || 0;
+    const url = catalogDriveDownloadUrl(urls[idx] || urls[0]);
     if (!url) return window.showToast('لا يوجد رابط للصورة الأصلية', false);
-    try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error('FETCH_FAILED');
-        const blob = await res.blob();
-        const obj = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = obj;
-        a.download = (product.name_ar || 'product') + '-raw-' + (idx + 1);
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(obj), 2500);
-    } catch (_) {
-        window.open(url, '_blank', 'noopener');
-    }
+    window.open(url, '_blank', 'noopener');
 };
 
-window.triggerCatalogEnhancedUpload = (productId) => {
+window.triggerCatalogEnhancedSlot = (productId, imageIndex) => {
     if (!window.isCatalogContentUser()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         return;
     }
-    window._catalogEnhancedProductId = productId;
-    const input = document.getElementById('catalogEnhancedFileInput');
+    const input = document.getElementById('catalogEnhanceInput-' + productId + '-' + imageIndex);
     if (!input) return;
     input.value = '';
     input.click();
 };
 
-window.handleCatalogEnhancedFile = async (event) => {
+const markCatalogPendingEmpty = (list) => {
+    if (!list) return;
+    list.innerHTML = `<div class="text-center py-8 text-slate-400 font-bold">
+        <i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i>
+        <div>لا توجد منتجات بانتظار التحسين</div>
+    </div>`;
+};
+
+const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount) => {
+    const filled = enhancedUrls.filter(Boolean);
+    if (filled.length !== rawCount) return false;
+    await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), {
+        enhancedImageUrl: filled[0] || '',
+        enhancedImageUrls: enhancedUrls.slice(0, rawCount),
+        status: 'done',
+        updatedAt: new Date(),
+        updatedBy: (window.currentUser && window.currentUser.name) || ''
+    });
+    delete window._catalogEnhancedUploads[productId];
+    const card = document.getElementById('catalogPendingCard-' + productId);
+    if (card) card.remove();
+    const remaining = (window.merchantProductsCache || []).filter((p) => p.id !== productId && p.status === 'pending');
+    const countEl = document.getElementById('catalogPendingCount');
+    if (countEl) countEl.textContent = String(remaining.length);
+    const list = document.getElementById('catalogPendingList');
+    if (list && remaining.length === 0) markCatalogPendingEmpty(list);
+    window.showToast('تم اعتماد المنتج بعد رفع كل الصور المحسّنة');
+    return true;
+};
+
+window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
     const input = event && event.target;
-    const files = input && input.files ? Array.from(input.files) : [];
-    const productId = window._catalogEnhancedProductId;
-    if (!files.length || !productId) return;
-    if (files.length > 12) {
-        window.showToast('الحد الأقصى 12 صورة للمنتج', false);
+    const file = input && input.files && input.files[0];
+    if (!file || !productId) return;
+    if (!window.isCatalogContentUser()) {
+        if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         input.value = '';
         return;
     }
-    if (files.some((f) => f.size > CATALOG_MAX_IMAGE_BYTES)) {
+    if (file.size > CATALOG_MAX_IMAGE_BYTES) {
         window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
         input.value = '';
         return;
@@ -607,56 +695,38 @@ window.handleCatalogEnhancedFile = async (event) => {
         window.showToast('تعذر العثور على المنتج', false);
         return;
     }
-    const card = document.getElementById('catalogPendingCard-' + productId);
-    const cardBtn = document.getElementById('catalogEnhanceBtn-' + productId);
-    const prevHtml = cardBtn ? cardBtn.innerHTML : '';
-    if (cardBtn) {
-        cardBtn.disabled = true;
-        cardBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    const rawUrls = catalogRawImageUrls(product);
+    const idx = Number(imageIndex) || 0;
+    const slotBtn = document.getElementById('catalogEnhanceBtn-' + productId + '-' + idx);
+    const prevHtml = slotBtn ? slotBtn.innerHTML : '';
+    if (slotBtn) {
+        slotBtn.disabled = true;
+        slotBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
     }
     try {
-        const enhancedImageUrls = [];
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const fileContent = await fileToBase64(file);
-            const uploadedUrl = await uploadCatalogImageToGas({
-                merchantName: product.merchantName || '',
-                imageType: 'enhanced',
-                fileName: file.name || ('product-enhanced-' + (i + 1) + '.jpg'),
-                fileContent,
-                mimeType: file.type || 'image/jpeg'
-            });
-            enhancedImageUrls.push(uploadedUrl);
-        }
-        const enhancedImageUrl = enhancedImageUrls[0] || '';
-        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), {
-            enhancedImageUrl,
-            enhancedImageUrls,
-            status: 'done',
-            updatedAt: new Date(),
-            updatedBy: (window.currentUser && window.currentUser.name) || ''
-        });
-        window.showToast('تم رفع الصورة المحسّنة واعتماد المنتج');
-        if (card) card.remove();
-        const countEl = document.getElementById('catalogPendingCount');
-        const remaining = (window.merchantProductsCache || []).filter((p) => p.id !== productId && p.status === 'pending');
-        if (countEl) countEl.textContent = String(remaining.length);
-        const list = document.getElementById('catalogPendingList');
-        if (list && remaining.length === 0) {
-            list.innerHTML = `<div class="text-center py-8 text-slate-400 font-bold">
-                <i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i>
-                <div>لا توجد منتجات بانتظار التحسين</div>
-            </div>`;
+        const base64Data = await compressCatalogImage(file);
+        const uploadedUrl = await uploadCatalogImageToGas(
+            base64Data,
+            catalogJpegFileName(file.name, 'product-enhanced-' + (idx + 1)),
+            product.merchantName || '',
+            'enhanced'
+        );
+        const enhancedUrls = getCatalogEnhancedLocal(productId, rawUrls.length);
+        enhancedUrls[idx] = uploadedUrl;
+        window._catalogEnhancedUploads[productId] = enhancedUrls;
+        const done = await completeCatalogProductIfReady(productId, product, enhancedUrls, rawUrls.length);
+        if (!done) {
+            window.showToast('تم رفع الصورة المحسّنة (' + enhancedUrls.filter(Boolean).length + '/' + rawUrls.length + ')');
+            renderCatalogPendingCards();
         }
     } catch (err) {
         console.error('[catalog] enhance failed:', err);
         window.showToast('فشل رفع الصورة المحسّنة', false);
-        if (cardBtn) {
-            cardBtn.disabled = false;
-            cardBtn.innerHTML = prevHtml || '<i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة';
+        if (slotBtn) {
+            slotBtn.disabled = false;
+            slotBtn.innerHTML = prevHtml || '<i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة';
         }
     } finally {
-        window._catalogEnhancedProductId = null;
         if (input) input.value = '';
     }
 };
@@ -681,35 +751,43 @@ const renderCatalogPendingCards = () => {
         const category = catalogEscapeHtml(p.category);
         const price = catalogEscapeHtml(p.base_price);
         const rawUrls = catalogRawImageUrls(p);
-        const thumbs = rawUrls.map((u, i) => {
+        const enhancedUrls = getCatalogEnhancedLocal(p.id, rawUrls.length);
+        const doneCount = enhancedUrls.filter(Boolean).length;
+        const slots = rawUrls.map((u, i) => {
             const src = catalogEscapeHtml(u);
-            return `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="w-16 h-16 rounded-xl overflow-hidden bg-[#230535]/5 border border-[#FFD700]/40 shrink-0">
-                <img src="${src}" alt="" class="w-full h-full object-cover">
-            </button>`;
-        }).join('');
-        const downloadBtns = rawUrls.map((_, i) => `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="flex-1 min-w-[120px] bg-white border border-[#230535]/15 text-[#230535] px-3 py-2 rounded-xl text-xs font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-download"></i> تحميل ${rawUrls.length > 1 ? (i + 1) : 'الأصلية'}
-                </button>`).join('');
-        return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
-            <div class="flex gap-3 items-start">
-                <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[150px]">
-                    ${thumbs || `<div class="w-20 h-20 rounded-xl grid place-items-center text-[#230535] bg-[#230535]/5 border border-[#FFD700]/40"><i class="fa-solid fa-image"></i></div>`}
+            const done = !!enhancedUrls[i];
+            const status = done
+                ? '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>'
+                : `<button type="button" id="catalogEnhanceBtn-${id}-${i}" onclick="triggerCatalogEnhancedSlot('${id}', ${i})" class="bg-[#230535] text-[#FFD700] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:opacity-90 transition flex items-center justify-center gap-1">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة
+                </button>
+                <input type="file" id="catalogEnhanceInput-${id}-${i}" accept="image/*" class="hidden" onchange="handleCatalogEnhancedFile(event, '${id}', ${i})">`;
+            return `<div class="flex items-center gap-2 bg-[#230535]/5 border border-[#FFD700]/30 rounded-xl p-2">
+                <img src="${src}" alt="" class="w-14 h-14 rounded-lg object-cover border border-[#FFD700]/40 shrink-0">
+                <div class="min-w-0 flex-1 space-y-1.5">
+                    <div class="text-[10px] font-black text-[#230535]">صورة ${i + 1}</div>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-download"></i> تحميل
+                        </button>
+                        ${status}
+                    </div>
                 </div>
-                <div class="min-w-0 flex-1">
+            </div>`;
+        }).join('');
+        return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
                     <div class="font-black text-sm text-[#230535]">${name}</div>
                     <div class="text-[11px] font-bold text-slate-500 mt-0.5">${merchant}</div>
                     <div class="flex flex-wrap gap-1.5 mt-1.5">
                         <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                         ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
+                        <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${doneCount}/${rawUrls.length || 0}</span>
                     </div>
                 </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-                ${downloadBtns}
-                <button type="button" id="catalogEnhanceBtn-${id}" onclick="triggerCatalogEnhancedUpload('${id}')" class="flex-1 min-w-[140px] bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-xs font-black hover:opacity-90 transition flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة
-                </button>
-            </div>
+            <div class="grid grid-cols-1 gap-2">${slots || `<div class="w-20 h-20 rounded-xl grid place-items-center text-[#230535] bg-[#230535]/5 border border-[#FFD700]/40"><i class="fa-solid fa-image"></i></div>`}</div>
         </div>`;
     }).join('');
 };
