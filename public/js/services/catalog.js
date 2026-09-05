@@ -70,6 +70,13 @@ const catalogDriveDownloadUrl = (fileIdOrUrl) => {
 
 const catalogDirectImageUrl = (urlOrId) => catalogDriveViewUrl(urlOrId) || String(urlOrId || '');
 
+const catalogDriveThumbnailUrl = (fileIdOrUrl) => {
+    const id = catalogDriveFileId(fileIdOrUrl);
+    return id ? ('https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w200-h200') : '';
+};
+
+const catalogMerchantDomId = (name) => 'm-' + encodeURIComponent(String(name || 'unknown')).replace(/[^a-zA-Z0-9]/g, '_');
+
 const fileToBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
@@ -654,6 +661,27 @@ const markCatalogPendingEmpty = (list) => {
     </div>`;
 };
 
+const removeCatalogPendingProductFromUi = (productId, merchantName) => {
+    const card = document.getElementById('catalogPendingCard-' + productId);
+    const accordion = (card && card.closest('[data-catalog-merchant]'))
+        || document.getElementById('catalogMerchantAccordion-' + catalogMerchantDomId(merchantName));
+    if (card) card.remove();
+    if (accordion) {
+        const left = accordion.querySelectorAll('[id^="catalogPendingCard-"]').length;
+        const badge = accordion.querySelector('[data-catalog-merchant-count]');
+        if (badge) badge.textContent = left + ' منتجات';
+        if (left === 0) {
+            if (window._catalogPendingOpenMerchants) delete window._catalogPendingOpenMerchants[merchantName];
+            accordion.remove();
+        }
+    }
+    const remaining = (window.merchantProductsCache || []).filter((p) => p.id !== productId && p.status === 'pending');
+    const countEl = document.getElementById('catalogPendingCount');
+    if (countEl) countEl.textContent = String(remaining.length);
+    const list = document.getElementById('catalogPendingList');
+    if (list && remaining.length === 0) markCatalogPendingEmpty(list);
+};
+
 const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount) => {
     const filled = enhancedUrls.filter(Boolean);
     if (filled.length !== rawCount) return false;
@@ -665,13 +693,7 @@ const completeCatalogProductIfReady = async (productId, product, enhancedUrls, r
         updatedBy: (window.currentUser && window.currentUser.name) || ''
     });
     delete window._catalogEnhancedUploads[productId];
-    const card = document.getElementById('catalogPendingCard-' + productId);
-    if (card) card.remove();
-    const remaining = (window.merchantProductsCache || []).filter((p) => p.id !== productId && p.status === 'pending');
-    const countEl = document.getElementById('catalogPendingCount');
-    if (countEl) countEl.textContent = String(remaining.length);
-    const list = document.getElementById('catalogPendingList');
-    if (list && remaining.length === 0) markCatalogPendingEmpty(list);
+    removeCatalogPendingProductFromUi(productId, (product && product.merchantName) || '');
     window.showToast('تم اعتماد المنتج بعد رفع كل الصور المحسّنة');
     return true;
 };
@@ -731,6 +753,65 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
     }
 };
 
+window.toggleCatalogMerchantAccordion = (domId) => {
+    const accordion = document.getElementById('catalogMerchantAccordion-' + String(domId || ''));
+    if (!accordion) return;
+    const body = accordion.querySelector('[data-catalog-merchant-body]');
+    const chevron = accordion.querySelector('[data-catalog-merchant-chevron]');
+    if (!body) return;
+    const merchantName = accordion.getAttribute('data-catalog-merchant') || '';
+    const openMap = window._catalogPendingOpenMerchants || {};
+    const willOpen = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !willOpen);
+    if (chevron) chevron.classList.toggle('rotate-180', willOpen);
+    if (willOpen) openMap[merchantName] = true;
+    else delete openMap[merchantName];
+    window._catalogPendingOpenMerchants = openMap;
+};
+
+const renderCatalogPendingProductCard = (p) => {
+    const id = catalogEscapeHtml(p.id);
+    const name = catalogEscapeHtml(p.name_ar);
+    const category = catalogEscapeHtml(p.category);
+    const price = catalogEscapeHtml(p.base_price);
+    const rawUrls = catalogRawImageUrls(p);
+    const enhancedUrls = getCatalogEnhancedLocal(p.id, rawUrls.length);
+    const doneCount = enhancedUrls.filter(Boolean).length;
+    const slots = rawUrls.map((u, i) => {
+        const thumb = catalogEscapeHtml(catalogDriveThumbnailUrl(u) || u);
+        const done = !!enhancedUrls[i];
+        const status = done
+            ? '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>'
+            : `<button type="button" id="catalogEnhanceBtn-${id}-${i}" onclick="triggerCatalogEnhancedSlot('${id}', ${i})" class="bg-[#230535] text-[#FFD700] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:opacity-90 transition flex items-center justify-center gap-1">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة
+            </button>
+            <input type="file" id="catalogEnhanceInput-${id}-${i}" accept="image/*" class="hidden" onchange="handleCatalogEnhancedFile(event, '${id}', ${i})">`;
+        return `<div class="flex items-center gap-2 bg-[#230535]/5 border border-[#FFD700]/30 rounded-xl p-2">
+            <img src="${thumb}" alt="" class="w-14 h-14 rounded-lg object-cover border border-[#FFD700]/40 shrink-0" onerror="this.style.display='none'">
+            <div class="min-w-0 flex-1 space-y-1.5">
+                <div class="text-[10px] font-black text-[#230535]">صورة ${i + 1}</div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-download"></i> تحميل
+                    </button>
+                    ${status}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+    return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
+        <div class="min-w-0">
+            <div class="font-black text-sm text-[#230535]">${name}</div>
+            <div class="flex flex-wrap gap-1.5 mt-1.5">
+                <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+                ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
+                <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${doneCount}/${rawUrls.length || 0}</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-2">${slots || `<div class="w-20 h-20 rounded-xl grid place-items-center text-[#230535] bg-[#230535]/5 border border-[#FFD700]/40"><i class="fa-solid fa-image"></i></div>`}</div>
+    </div>`;
+};
+
 const renderCatalogPendingCards = () => {
     const list = document.getElementById('catalogPendingList');
     const countEl = document.getElementById('catalogPendingCount');
@@ -738,56 +819,33 @@ const renderCatalogPendingCards = () => {
     if (countEl) countEl.textContent = String(pending.length);
     if (!list) return;
     if (pending.length === 0) {
-        list.innerHTML = `<div class="text-center py-8 text-slate-400 font-bold">
-            <i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i>
-            <div>لا توجد منتجات بانتظار التحسين</div>
-        </div>`;
+        markCatalogPendingEmpty(list);
         return;
     }
-    list.innerHTML = pending.map((p) => {
-        const id = catalogEscapeHtml(p.id);
-        const name = catalogEscapeHtml(p.name_ar);
-        const merchant = catalogEscapeHtml(p.merchantName);
-        const category = catalogEscapeHtml(p.category);
-        const price = catalogEscapeHtml(p.base_price);
-        const rawUrls = catalogRawImageUrls(p);
-        const enhancedUrls = getCatalogEnhancedLocal(p.id, rawUrls.length);
-        const doneCount = enhancedUrls.filter(Boolean).length;
-        const slots = rawUrls.map((u, i) => {
-            const src = catalogEscapeHtml(u);
-            const done = !!enhancedUrls[i];
-            const status = done
-                ? '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>'
-                : `<button type="button" id="catalogEnhanceBtn-${id}-${i}" onclick="triggerCatalogEnhancedSlot('${id}', ${i})" class="bg-[#230535] text-[#FFD700] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:opacity-90 transition flex items-center justify-center gap-1">
-                    <i class="fa-solid fa-wand-magic-sparkles"></i> رفع المحسّنة
-                </button>
-                <input type="file" id="catalogEnhanceInput-${id}-${i}" accept="image/*" class="hidden" onchange="handleCatalogEnhancedFile(event, '${id}', ${i})">`;
-            return `<div class="flex items-center gap-2 bg-[#230535]/5 border border-[#FFD700]/30 rounded-xl p-2">
-                <img src="${src}" alt="" class="w-14 h-14 rounded-lg object-cover border border-[#FFD700]/40 shrink-0">
-                <div class="min-w-0 flex-1 space-y-1.5">
-                    <div class="text-[10px] font-black text-[#230535]">صورة ${i + 1}</div>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-download"></i> تحميل
-                        </button>
-                        ${status}
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-        return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
-            <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                    <div class="font-black text-sm text-[#230535]">${name}</div>
-                    <div class="text-[11px] font-bold text-slate-500 mt-0.5">${merchant}</div>
-                    <div class="flex flex-wrap gap-1.5 mt-1.5">
-                        <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
-                        ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
-                        <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${doneCount}/${rawUrls.length || 0}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="grid grid-cols-1 gap-2">${slots || `<div class="w-20 h-20 rounded-xl grid place-items-center text-[#230535] bg-[#230535]/5 border border-[#FFD700]/40"><i class="fa-solid fa-image"></i></div>`}</div>
+    const grouped = pending.reduce((acc, p) => {
+        const key = String(p.merchantName || 'تاجر غير معروف');
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(p);
+        return acc;
+    }, {});
+    const openMap = window._catalogPendingOpenMerchants || {};
+    window._catalogPendingOpenMerchants = openMap;
+    const merchantNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar'));
+    list.innerHTML = merchantNames.map((merchantName) => {
+        const products = grouped[merchantName];
+        const safeName = catalogEscapeHtml(merchantName);
+        const accordionId = catalogMerchantDomId(merchantName);
+        const isOpen = !!openMap[merchantName];
+        const cards = products.map(renderCatalogPendingProductCard).join('');
+        return `<div id="catalogMerchantAccordion-${accordionId}" data-catalog-merchant="${safeName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
+            <button type="button" onclick="toggleCatalogMerchantAccordion('${accordionId}')" class="w-full bg-[#230535] text-white px-4 py-3 flex items-center justify-between gap-3">
+                <span class="font-black text-sm truncate">${safeName}</span>
+                <span class="flex items-center gap-2 shrink-0">
+                    <span data-catalog-merchant-count class="text-[11px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${products.length} منتجات</span>
+                    <i data-catalog-merchant-chevron class="fa-solid fa-chevron-down text-[#FFD700] text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
+                </span>
+            </button>
+            <div data-catalog-merchant-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
         </div>`;
     }).join('');
 };
