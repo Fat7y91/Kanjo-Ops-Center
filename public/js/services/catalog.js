@@ -850,6 +850,17 @@ const renderCatalogPendingCards = () => {
     }).join('');
 };
 
+window.toggleCatalogContentWidget = () => {
+    const body = document.getElementById('catalogContentBody');
+    const chevron = document.getElementById('catalogContentChevron');
+    if (!body) return;
+    const willOpen = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !willOpen);
+    if (chevron) chevron.classList.toggle('rotate-180', willOpen);
+    window._catalogContentWidgetOpen = willOpen;
+    if (willOpen && window.isCatalogContentUser()) renderCatalogPendingCards();
+};
+
 window.renderCatalogWidgets = () => {
     const repBanner = document.getElementById('catalogRepBanner');
     if (repBanner) repBanner.classList.toggle('hidden', !window.isCatalogRepUser());
@@ -866,7 +877,15 @@ window.renderCatalogWidgets = () => {
         mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
     }
 
-    if (window.isCatalogContentUser()) renderCatalogPendingCards();
+    if (window.isCatalogContentUser()) {
+        const body = document.getElementById('catalogContentBody');
+        if (body && !body.classList.contains('hidden')) renderCatalogPendingCards();
+        else {
+            const countEl = document.getElementById('catalogPendingCount');
+            const pending = (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
+            if (countEl) countEl.textContent = String(pending.length);
+        }
+    }
 };
 
 const fetchDoneCatalogProducts = async () => {
