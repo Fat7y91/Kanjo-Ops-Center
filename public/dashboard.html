@@ -24,6 +24,8 @@
 
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+
     <link rel="stylesheet" href="style.css">
 
     <script>
@@ -1436,7 +1438,7 @@
 
                         <h4 class="font-black text-base">كتالوج منتجات التجار</h4>
 
-                        <p class="text-xs text-white/80 font-bold">سجّل منتجاً لتاجر باتفاق نهائي وارفع صورته الأصلية</p>
+                        <p class="text-xs text-white/80 font-bold">أدخل بالعربية بسرعة، والصورة اختيارية، ثم ارفع المسودات دفعة واحدة</p>
 
                     </div>
 
@@ -1445,6 +1447,34 @@
                 <button type="button" onclick="openCatalogProductModal()" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-md flex items-center gap-2">
 
                     <i class="fa-solid fa-plus"></i> إضافة منتج
+
+                </button>
+
+            </div>
+
+
+
+            <!-- مسودات المنتجات غير المرفوعة (للمناديب) -->
+
+            <div id="catalogDraftsWidget" class="hidden bg-white p-4 rounded-3xl shadow-sm border border-[#FFD700]/50 flex flex-wrap justify-between items-center gap-3">
+
+                <div class="flex items-center gap-3 min-w-0">
+
+                    <div class="bg-amber-50 text-amber-600 p-3 rounded-2xl text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+
+                    <div class="min-w-0">
+
+                        <h4 id="catalogDraftsCountLabel" class="font-black text-base text-[#230535]">لديك 0 منتج في المسودة</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">الحفظ فوري بدون انتظار الرفع — ارفع الكل عند توفر الاتصال</p>
+
+                    </div>
+
+                </div>
+
+                <button type="button" id="catalogSyncAllBtn" onclick="syncAllCatalogDrafts()" class="bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-md flex items-center gap-2">
+
+                    <i class="fa-solid fa-cloud-arrow-up"></i> رفع الكل الآن
 
                 </button>
 
@@ -1466,7 +1496,7 @@
 
                             <h3 class="font-black text-base text-[#230535]">مهام معالجة الصور</h3>
 
-                            <p class="text-xs text-slate-500 font-bold">حمّل الصورة الأصلية ثم ارفع النسخة المحسّنة</p>
+                            <p class="text-xs text-slate-500 font-bold">حمّل الصورة الأصلية أو ارفع صورة المنتج إن لم يرسلها المندوب</p>
 
                         </div>
 
@@ -2022,23 +2052,11 @@
 
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
 
-                        <div>
+                        <label class="block text-[11px] font-black text-[#230535] mb-1">اسم المنتج بالعربية</label>
 
-                            <label class="block text-[11px] font-black text-[#230535] mb-1">اسم المنتج بالعربية</label>
-
-                            <input type="text" id="catalogNameAr" required placeholder="اسم المنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
-
-                        </div>
-
-                        <div>
-
-                            <label class="block text-[11px] font-black text-[#230535] mb-1">اسم المنتج بالإنجليزية</label>
-
-                            <input type="text" id="catalogNameEn" required placeholder="Product name" dir="ltr" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
-
-                        </div>
+                        <input type="text" id="catalogNameAr" required placeholder="اسم المنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
 
                     </div>
 
@@ -2047,14 +2065,6 @@
                         <label class="block text-[11px] font-black text-[#230535] mb-1">وصف المنتج بالعربية</label>
 
                         <textarea id="catalogDescriptionAr" required rows="3" placeholder="وصف مختصر للمنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></textarea>
-
-                    </div>
-
-                    <div>
-
-                        <label class="block text-[11px] font-black text-[#230535] mb-1">وصف المنتج بالإنجليزية</label>
-
-                        <textarea id="catalogDescriptionEn" required rows="3" placeholder="Short product description" dir="ltr" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></textarea>
 
                     </div>
 
@@ -2122,7 +2132,7 @@
 
                     <div>
 
-                        <label class="block text-[11px] font-black text-[#230535] mb-1">الصور الأصلية</label>
+                        <label class="block text-[11px] font-black text-[#230535] mb-1">الصور الأصلية (اختياري)</label>
 
                         <input type="file" id="catalogRawImage" accept="image/*" multiple class="sr-only" onchange="onCatalogRawImageChange(event)">
 
@@ -2140,9 +2150,11 @@
 
                 </div>
 
-                <div class="shrink-0 border-t border-purple-100 px-5 sm:px-7 py-4 bg-white">
+                <div class="shrink-0 border-t border-purple-100 px-5 sm:px-7 py-4 bg-white space-y-2">
 
-                    <button type="submit" id="catalogProductSubmitBtn" class="w-full min-h-[48px] bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md">حفظ المنتج</button>
+                    <button type="submit" id="catalogProductSubmitBtn" class="w-full min-h-[48px] bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md">حفظ وإضافة منتج آخر</button>
+
+                    <button type="button" id="catalogProductSaveCloseBtn" onclick="submitCatalogProduct(event, { closeAfterSave: true })" class="w-full min-h-[44px] bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition">حفظ وإغلاق</button>
 
                 </div>
 
