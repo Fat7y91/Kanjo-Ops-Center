@@ -245,7 +245,7 @@ const resolveMerchantCategory = (merchant) => {
     return '';
 };
 
-const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/[\r\n]+/g, ' - ').replace(/"/g, '""') + '"').join(',');
+const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/[\r\n]+/g, ' - ').replace(/"/g, '""') + '"').join(';');
 
 const downloadKanjoCsv = (rows, fileName) => {
     const headersString = formatCsvRow(CATALOG_EXPORT_COLUMNS);
