@@ -245,13 +245,13 @@ const resolveMerchantCategory = (merchant) => {
     return '';
 };
 
-const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/"/g, '""') + '"').join(',');
+const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/[\r\n]+/g, ' - ').replace(/"/g, '""') + '"').join(',');
 
 const downloadKanjoCsv = (rows, fileName) => {
     const headersString = formatCsvRow(CATALOG_EXPORT_COLUMNS);
     const rowsString = rows.map((row) => formatCsvRow(CATALOG_EXPORT_COLUMNS.map((col) => row[col]))).join('\r\n');
-    const csv = '\uFEFF' + 'sep=,\r\n' + headersString + '\r\n' + rowsString;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const csvString = headersString + '\r\n' + rowsString;
+    const blob = new Blob(['\uFEFF', csvString], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
