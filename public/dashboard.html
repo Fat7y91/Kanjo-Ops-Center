@@ -2136,6 +2136,16 @@
 
 
 
+    <div id="imageLightbox" class="hidden fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4" onclick="closeImageLightbox()">
+
+        <button type="button" aria-label="Close" onclick="event.stopPropagation(); closeImageLightbox();" class="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/50 text-white text-2xl font-black leading-none hover:bg-black/70">×</button>
+
+        <img id="imageLightboxImg" src="" alt="" class="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+
+    </div>
+
+
+
     <div id="catalogProductModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[137]">
 
         <div class="bg-white rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">

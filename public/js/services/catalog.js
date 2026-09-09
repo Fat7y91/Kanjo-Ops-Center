@@ -388,6 +388,48 @@ const catalogProductFullImageUrls = (p) => {
     return catalogRawImageUrls(p);
 };
 
+const findCatalogProductById = (productId) => {
+    const caches = [
+        window.allCatalogProductsCache,
+        window.repCatalogProductsCache,
+        window.catalogDeleteRequestsCache
+    ];
+    for (let i = 0; i < caches.length; i++) {
+        const cache = caches[i];
+        if (!Array.isArray(cache)) continue;
+        const found = cache.find((p) => p.id === productId);
+        if (found) return found;
+    }
+    return null;
+};
+
+const catalogClickableThumbHtml = (p) => {
+    const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
+    const id = catalogEscapeHtml(p && p.id);
+    if (!thumb) {
+        return `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+    }
+    return `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer" onclick="openImageLightbox('${id}')" onerror="this.style.display='none'">`;
+};
+
+window.openImageLightbox = (productId) => {
+    const product = findCatalogProductById(productId);
+    const url = product ? (catalogProductFullImageUrls(product)[0] || '') : '';
+    if (!url) return;
+    const overlay = document.getElementById('imageLightbox');
+    const img = document.getElementById('imageLightboxImg');
+    if (!overlay || !img) return;
+    img.src = url;
+    overlay.classList.remove('hidden');
+};
+
+window.closeImageLightbox = () => {
+    const overlay = document.getElementById('imageLightbox');
+    const img = document.getElementById('imageLightboxImg');
+    if (overlay) overlay.classList.add('hidden');
+    if (img) img.src = '';
+};
+
 const hideCatalogSavedImages = () => {
     const wrap = document.getElementById('catalogCurrentImagesWrap');
     const box = document.getElementById('catalogCurrentImages');
@@ -1028,13 +1070,10 @@ const renderCatalogMyProductsList = () => {
         const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
         const merchant = catalogEscapeHtml(p.merchantName || '');
         const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
-        const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
         const pendingDelete = !!p.deleteRequested;
         const status = pendingDelete ? 'في انتظار الموافقة على الحذف' : (String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة');
         const statusClass = pendingDelete ? 'bg-red-50 text-red-700' : (String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700');
-        const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
-            : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        const thumbHtml = catalogClickableThumbHtml(p);
         const actions = pendingDelete
             ? `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">تعديل</button><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">طلب حذف</button></div>`
             : `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" onclick="openCatalogProductEditor('${id}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition">تعديل</button><button type="button" onclick="requestCatalogProductDeletion('${id}')" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition">طلب حذف</button></div>`;
@@ -1091,12 +1130,9 @@ const renderCatalogAllProductsList = () => {
         const merchant = catalogEscapeHtml(p.merchantName || '');
         const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
         const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
-        const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
         const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
         const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
-        const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
-            : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        const thumbHtml = catalogClickableThumbHtml(p);
         return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
             ${thumbHtml}
             <div class="min-w-0 flex-1">
@@ -1759,6 +1795,11 @@ window.startCatalogListeners = () => {
 };
 
 window.addEventListener('keydown', (ev) => {
+    const lightbox = document.getElementById('imageLightbox');
+    if (ev.key === 'Escape' && lightbox && !lightbox.classList.contains('hidden')) {
+        window.closeImageLightbox();
+        return;
+    }
     const modal = document.getElementById('catalogProductModal');
     if (ev.key === 'Escape' && modal && !modal.classList.contains('hidden')) {
         window.requestCloseCatalogProductModal();
