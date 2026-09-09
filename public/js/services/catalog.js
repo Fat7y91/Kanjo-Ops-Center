@@ -1303,6 +1303,8 @@ window.rejectCatalogProductDeletion = async (productId) => {
     }
 };
 
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
 const catalogHasArabicScript = (value) => /[\u0600-\u06FF]/.test(String(value || ''));
 
 const catalogResolvedEnglish = (englishValue, arabicValue) => {
@@ -1360,10 +1362,10 @@ const catalogEnhanceTargetCount = (product) => {
 const syncOneCatalogDraft = async (draft) => {
     const nameAr = String((draft && draft.name_ar) || '').trim();
     const descriptionAr = String((draft && draft.description_ar) || '').trim();
-    const [nameEn, descriptionEn] = await Promise.all([
-        translateArToEn(nameAr),
-        translateArToEn(descriptionAr)
-    ]);
+    await delay(1500);
+    const nameEn = await translateArToEn(nameAr);
+    await delay(1500);
+    const descriptionEn = await translateArToEn(descriptionAr);
     const images = Array.isArray(draft && draft.images) ? draft.images : [];
     const rawImageUrls = [];
     for (let i = 0; i < images.length; i++) {
@@ -1426,15 +1428,17 @@ window.syncAllCatalogDrafts = async () => {
     const remaining = [];
     let uploaded = 0;
     try {
-        for (let i = 0; i < drafts.length; i++) {
-            setSyncLabel(i, drafts.length);
+        let done = 0;
+        for (const draft of drafts) {
+            setSyncLabel(done, drafts.length);
             try {
-                await syncOneCatalogDraft(drafts[i]);
+                await syncOneCatalogDraft(draft);
                 uploaded++;
             } catch (err) {
                 console.error('[catalog] draft sync failed:', err);
-                remaining.push(drafts[i]);
+                remaining.push(draft);
             }
+            done++;
         }
         await writeCatalogDrafts(remaining);
         if (remaining.length === 0) {
