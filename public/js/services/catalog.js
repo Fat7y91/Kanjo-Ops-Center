@@ -47,6 +47,7 @@ window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || win
 
 const CATALOG_EXPORT_COLUMNS = [
     'product_key',
+    'merchant_name',
     'product_type',
     'sku',
     'name_en',
@@ -287,6 +288,7 @@ const getCatalogEnhancedLocal = (productId, length) => {
 
 const mapCatalogProductToExportRow = (p) => ({
     product_key: '',
+    merchant_name: (p && (p.merchantName || p.merchant || p.merchant_name)) || '',
     product_type: p.product_type || '',
     sku: p.sku || '',
     name_en: p.name_en || '',
