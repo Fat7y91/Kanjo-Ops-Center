@@ -8,6 +8,7 @@ const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 window.merchantProductsCache = window.merchantProductsCache || [];
 window.repCatalogProductsCache = window.repCatalogProductsCache || [];
 window.catalogDeleteRequestsCache = window.catalogDeleteRequestsCache || [];
+window.allCatalogProductsCache = window.allCatalogProductsCache || [];
 window._catalogEnhancedUploads = window._catalogEnhancedUploads || {};
 window._catalogEditingProduct = null;
 
@@ -33,6 +34,16 @@ window.isCatalogAdminUser = () => {
     if (!u) return false;
     return u.role === 'admin' || u.role === 'founder' || (typeof window.canManageContracts === 'function' && window.canManageContracts());
 };
+
+window.isMahmoudUser = () => {
+    const u = window.currentUser;
+    if (!u) return false;
+    return String(u.name || '').includes('محمود');
+};
+
+window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.role === 'founder');
+
+window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser());
 
 const CATALOG_EXPORT_COLUMNS = [
     'product_key',
@@ -237,10 +248,9 @@ const resolveMerchantCategory = (merchant) => {
 const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/"/g, '""') + '"').join(',');
 
 const downloadKanjoCsv = (rows, fileName) => {
-    const lines = [formatCsvRow(CATALOG_EXPORT_COLUMNS)].concat(
-        rows.map((row) => formatCsvRow(CATALOG_EXPORT_COLUMNS.map((col) => row[col])))
-    );
-    const csv = '\uFEFF' + lines.join('\r\n');
+    const headersString = formatCsvRow(CATALOG_EXPORT_COLUMNS);
+    const rowsString = rows.map((row) => formatCsvRow(CATALOG_EXPORT_COLUMNS.map((col) => row[col]))).join('\r\n');
+    const csv = '\uFEFF' + 'sep=,\r\n' + headersString + '\r\n' + rowsString;
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1054,6 +1064,65 @@ window.renderCatalogMyProductsWidget = () => {
     if (isRep && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
 };
 
+window.toggleCatalogAllProductsWidget = () => {
+    if (!window.canViewAllCatalogProducts()) return;
+    const body = document.getElementById('catalogAllProductsBody');
+    const chevron = document.getElementById('catalogAllProductsChevron');
+    if (!body) return;
+    const willOpen = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !willOpen);
+    if (chevron) chevron.classList.toggle('rotate-180', willOpen);
+    window._catalogAllProductsOpen = willOpen;
+    if (willOpen) renderCatalogAllProductsList();
+};
+
+const renderCatalogAllProductsList = () => {
+    const list = document.getElementById('catalogAllProductsList');
+    const countEl = document.getElementById('catalogAllProductsCount');
+    const products = window.allCatalogProductsCache || [];
+    if (countEl) countEl.textContent = String(products.length);
+    if (!list) return;
+    if (!products.length) {
+        list.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
+        return;
+    }
+    list.innerHTML = products.map((p) => {
+        const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
+        const merchant = catalogEscapeHtml(p.merchantName || '');
+        const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
+        const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
+        const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
+        const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
+        const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
+        const thumbHtml = thumb
+            ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+            : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
+            ${thumbHtml}
+            <div class="min-w-0 flex-1">
+                <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+                <div class="text-[11px] font-bold text-slate-500 truncate">${merchant}</div>
+                <div class="flex flex-wrap gap-1.5 mt-1">
+                    <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+                    ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full">${repName}</span>` : ''}
+                    <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+};
+
+window.renderCatalogAllProductsWidget = () => {
+    const widget = document.getElementById('catalogAllProductsWidget');
+    if (!widget) return;
+    const canView = window.canViewAllCatalogProducts();
+    widget.classList.toggle('hidden', !canView);
+    const countEl = document.getElementById('catalogAllProductsCount');
+    if (countEl) countEl.textContent = String((window.allCatalogProductsCache || []).length);
+    const body = document.getElementById('catalogAllProductsBody');
+    if (canView && body && !body.classList.contains('hidden')) renderCatalogAllProductsList();
+};
+
 window.requestCatalogProductDeletion = async (productId) => {
     if (!window.isCatalogRepUser()) {
         if (window.showToast) window.showToast('طلب الحذف متاح للمناديب فقط', false);
@@ -1084,6 +1153,7 @@ window.requestCatalogProductDeletion = async (productId) => {
 };
 
 window.toggleCatalogDeleteRequestsWidget = () => {
+    if (!window.isMahmoudUser()) return;
     const body = document.getElementById('catalogDeleteRequestsBody');
     const chevron = document.getElementById('catalogDeleteRequestsChevron');
     if (!body) return;
@@ -1134,18 +1204,21 @@ const renderCatalogDeleteRequestsList = () => {
 
 window.renderCatalogDeleteRequestsWidget = () => {
     const widget = document.getElementById('catalogDeleteRequestsWidget');
+    if (!window.isMahmoudUser()) {
+        if (widget) widget.remove();
+        return;
+    }
     if (!widget) return;
-    const isManager = window.isCatalogAdminUser();
-    widget.classList.toggle('hidden', !isManager);
+    widget.classList.remove('hidden');
     const countEl = document.getElementById('catalogDeleteRequestsCount');
     if (countEl) countEl.textContent = String((window.catalogDeleteRequestsCache || []).length);
     const body = document.getElementById('catalogDeleteRequestsBody');
-    if (isManager && body && !body.classList.contains('hidden')) renderCatalogDeleteRequestsList();
+    if (body && !body.classList.contains('hidden')) renderCatalogDeleteRequestsList();
 };
 
 window.approveCatalogProductDeletion = async (productId) => {
-    if (!window.isCatalogAdminUser()) {
-        if (window.showToast) window.showToast('الموافقة على الحذف متاحة للإدارة فقط', false);
+    if (!window.isMahmoudUser()) {
+        if (window.showToast) window.showToast('الموافقة على الحذف متاحة لمحمود فقط', false);
         return;
     }
     const ok = window.confirm('سيتم حذف المنتج نهائياً. هل أنت متأكد؟');
@@ -1160,8 +1233,8 @@ window.approveCatalogProductDeletion = async (productId) => {
 };
 
 window.rejectCatalogProductDeletion = async (productId) => {
-    if (!window.isCatalogAdminUser()) {
-        if (window.showToast) window.showToast('رفض طلب الحذف متاح للإدارة فقط', false);
+    if (!window.isMahmoudUser()) {
+        if (window.showToast) window.showToast('رفض طلب الحذف متاح لمحمود فقط', false);
         return;
     }
     try {
@@ -1536,6 +1609,7 @@ window.renderCatalogWidgets = () => {
     if (repBanner) repBanner.classList.toggle('hidden', !window.isCatalogRepUser());
     if (typeof window.renderCatalogDraftsWidget === 'function') window.renderCatalogDraftsWidget();
     if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
 
     const contentWidget = document.getElementById('catalogContentWidget');
@@ -1628,6 +1702,7 @@ window.startCatalogListeners = () => {
     window.merchantProductsCache = [];
     window.repCatalogProductsCache = [];
     window.catalogDeleteRequestsCache = [];
+    window.allCatalogProductsCache = [];
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
     const pendingRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending'));
     const unsubPending = window.onSnapshot(pendingRef, (snap) => {
@@ -1654,7 +1729,20 @@ window.startCatalogListeners = () => {
         window._appListenerUnsubscribers.push(unsubMine);
     }
 
-    if (window.isCatalogAdminUser()) {
+    if (window.canViewAllCatalogProducts()) {
+        const allRef = window.collection(window.db, CATALOG_COLLECTION);
+        const unsubAll = window.onSnapshot(allRef, (snap) => {
+            const items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+            window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+            if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+        }, (err) => {
+            console.error('[catalog] all products listener failed:', err);
+        });
+        window._appListenerUnsubscribers.push(unsubAll);
+    }
+
+    if (window.isMahmoudUser()) {
         const deleteReqRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true));
         const unsubDeleteReq = window.onSnapshot(deleteReqRef, (snap) => {
             const items = [];
@@ -1665,6 +1753,8 @@ window.startCatalogListeners = () => {
             console.error('[catalog] delete requests listener failed:', err);
         });
         window._appListenerUnsubscribers.push(unsubDeleteReq);
+    } else if (typeof window.renderCatalogDeleteRequestsWidget === 'function') {
+        window.renderCatalogDeleteRequestsWidget();
     }
 };
 
