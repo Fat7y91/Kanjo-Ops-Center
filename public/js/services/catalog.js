@@ -287,7 +287,7 @@ const getCatalogEnhancedLocal = (productId, length) => {
 };
 
 const mapCatalogProductToExportRow = (p) => ({
-    product_key: '',
+    product_key: (p && p.id) || '',
     merchant_name: (p && (p.merchantName || p.merchant || p.merchant_name)) || '',
     product_type: p.product_type || '',
     sku: p.sku || '',
@@ -945,15 +945,17 @@ const updateCatalogProductDirect = async () => {
     try {
         const nameChanged = form.nameAr !== String(editing.name_ar || '').trim();
         const descChanged = form.descriptionAr !== String(editing.description_ar || '').trim();
-        let nameEn = editing.name_en || '';
-        let descriptionEn = editing.description_en || '';
-        if (nameChanged || descChanged) {
+        let nameEn = catalogResolvedEnglish(editing.name_en, editing.name_ar);
+        let descriptionEn = catalogResolvedEnglish(editing.description_en, editing.description_ar);
+        const nameNeedsTranslation = nameChanged || !nameEn;
+        const descNeedsTranslation = descChanged || !descriptionEn;
+        if (nameNeedsTranslation || descNeedsTranslation) {
             const [translatedName, translatedDesc] = await Promise.all([
-                nameChanged ? translateArToEn(form.nameAr) : Promise.resolve(nameEn),
-                descChanged ? translateArToEn(form.descriptionAr) : Promise.resolve(descriptionEn)
+                nameNeedsTranslation ? translateArToEn(form.nameAr) : Promise.resolve(nameEn),
+                descNeedsTranslation ? translateArToEn(form.descriptionAr) : Promise.resolve(descriptionEn)
             ]);
-            if (nameChanged) nameEn = translatedName || form.nameAr;
-            if (descChanged) descriptionEn = translatedDesc || form.descriptionAr;
+            if (nameNeedsTranslation) nameEn = translatedName;
+            if (descNeedsTranslation) descriptionEn = translatedDesc;
         }
         let rawImageUrls = catalogRawImageUrls(editing);
         let rawImageUrl = editing.rawImageUrl || rawImageUrls[0] || '';
@@ -976,9 +978,9 @@ const updateCatalogProductDirect = async () => {
             merchantId: form.merchant.merchantId,
             merchantName: form.merchant.merchantName,
             name_ar: form.nameAr,
-            name_en: nameEn || form.nameAr,
+            name_en: nameEn,
             description_ar: form.descriptionAr,
-            description_en: descriptionEn || form.descriptionAr,
+            description_en: descriptionEn,
             sku: form.sku,
             product_type: form.productType,
             base_price: form.basePrice,
@@ -1301,20 +1303,53 @@ window.rejectCatalogProductDeletion = async (productId) => {
     }
 };
 
+const catalogHasArabicScript = (value) => /[\u0600-\u06FF]/.test(String(value || ''));
+
+const catalogResolvedEnglish = (englishValue, arabicValue) => {
+    const en = String(englishValue || '').trim();
+    const ar = String(arabicValue || '').trim();
+    if (!en) return '';
+    if (ar && en === ar) return '';
+    if (catalogHasArabicScript(en)) return '';
+    return en;
+};
+
+const parseGoogleTranslateResponse = (data) => {
+    if (!Array.isArray(data) || !Array.isArray(data[0])) return '';
+    return data[0].map((chunk) => (Array.isArray(chunk) ? String(chunk[0] || '') : '')).join('').trim();
+};
+
+const translateViaGoogle = async (text) => {
+    const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=' + encodeURIComponent(text);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('GOOGLE_TRANSLATE_HTTP_' + response.status);
+    return parseGoogleTranslateResponse(await response.json());
+};
+
+const translateViaMyMemory = async (text) => {
+    const url = 'https://api.mymemory.translated.net/get?langpair=ar|en&q=' + encodeURIComponent(text);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('MYMEMORY_HTTP_' + response.status);
+    const data = await response.json();
+    return String((data && data.responseData && data.responseData.translatedText) || '').trim();
+};
+
 const translateArToEn = async (arabicText) => {
     const text = String(arabicText || '').trim();
     if (!text) return '';
-    try {
-        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=' + encodeURIComponent(text);
-        const response = await fetch(url);
-        if (!response.ok) return '';
-        const data = await response.json();
-        if (!Array.isArray(data) || !Array.isArray(data[0])) return '';
-        return data[0].map((chunk) => (Array.isArray(chunk) ? String(chunk[0] || '') : '')).join('').trim();
-    } catch (err) {
-        console.error('[catalog] translate failed:', err);
-        return '';
+    const attempts = [translateViaGoogle, translateViaGoogle, translateViaMyMemory];
+    for (let i = 0; i < attempts.length; i++) {
+        try {
+            const translated = String(await attempts[i](text) || '').trim();
+            if (!translated) continue;
+            if (translated === text) continue;
+            if (catalogHasArabicScript(translated)) continue;
+            return translated;
+        } catch (err) {
+            console.error('[catalog] translate attempt failed:', err);
+        }
     }
+    return '';
 };
 
 const catalogEnhanceTargetCount = (product) => {
@@ -1346,9 +1381,9 @@ const syncOneCatalogDraft = async (draft) => {
         merchantId: draft.merchantId,
         merchantName: draft.merchantName,
         name_ar: nameAr,
-        name_en: nameEn || nameAr,
+        name_en: nameEn,
         description_ar: descriptionAr,
-        description_en: descriptionEn || descriptionAr,
+        description_en: descriptionEn,
         sku: draft.sku || generateCatalogSku(),
         product_type: draft.product_type || 'simple',
         base_price: Number(draft.base_price) || 0,
