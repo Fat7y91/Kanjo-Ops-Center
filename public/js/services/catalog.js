@@ -47,7 +47,6 @@ window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || win
 
 const CATALOG_EXPORT_COLUMNS = [
     'product_key',
-    'merchant_name',
     'product_type',
     'sku',
     'name_en',
@@ -288,7 +287,6 @@ const getCatalogEnhancedLocal = (productId, length) => {
 
 const mapCatalogProductToExportRow = (p) => ({
     product_key: (p && p.id) || '',
-    merchant_name: (p && (p.merchantName || p.merchant || p.merchant_name)) || '',
     product_type: p.product_type || '',
     sku: p.sku || '',
     name_en: p.name_en || '',
@@ -1703,8 +1701,14 @@ window.renderCatalogWidgets = () => {
     const contentWidget = document.getElementById('catalogContentWidget');
     if (contentWidget) contentWidget.classList.toggle('hidden', !window.isCatalogContentUser());
 
+    const exportSection = document.getElementById('catalogExportSection');
+    const isAdmin = window.isCatalogAdminUser();
+    if (exportSection) exportSection.classList.toggle('hidden', !isAdmin);
     const exportBtn = document.getElementById('catalogExportBtn');
-    if (exportBtn) exportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
+    if (exportBtn) exportBtn.classList.toggle('hidden', !isAdmin);
+    const fixBtn = document.getElementById('catalogFixTranslationsBtn');
+    if (fixBtn) fixBtn.classList.toggle('hidden', !isAdmin);
+    if (isAdmin) populateMerchantExportFilter();
 
     const mpExportBtn = document.getElementById('mpCatalogExportBtn');
     const mpModal = document.getElementById('merchantProfileModal');
@@ -1731,19 +1735,111 @@ const fetchDoneCatalogProducts = async () => {
     return items;
 };
 
+const catalogProductMerchantName = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
+
+const populateMerchantExportFilter = async () => {
+    const select = document.getElementById('merchantExportFilter');
+    if (!select) return;
+    const previous = String(select.value || '').trim();
+    let products = window.allCatalogProductsCache || [];
+    if (!products.length) {
+        try {
+            products = await fetchDoneCatalogProducts();
+        } catch (err) {
+            console.error('[catalog] merchant filter load failed:', err);
+            products = [];
+        }
+    }
+    const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
+        .sort((a, b) => a.localeCompare(b, 'ar'));
+    select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
+        const safe = catalogEscapeHtml(name);
+        return `<option value="${safe}">${safe}</option>`;
+    }).join('');
+    if (previous && names.indexOf(previous) !== -1) select.value = previous;
+};
+
 window.exportDoneCatalogProducts = async () => {
     if (!window.isCatalogAdminUser()) {
         if (window.showToast) window.showToast('تصدير الكتالوج متاح للإدارة فقط', false);
         return;
     }
+    const select = document.getElementById('merchantExportFilter');
+    const merchantName = String((select && select.value) || '').trim();
+    if (!merchantName) {
+        window.alert('اختر التاجر للتصدير...');
+        if (window.showToast) window.showToast('اختر التاجر للتصدير...', false);
+        return;
+    }
     try {
-        const exportData = (await fetchDoneCatalogProducts()).map(mapCatalogProductToExportRow);
-        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة للتصدير', false);
-        downloadKanjoCsv(exportData, 'Kanjo_Catalog_Done_' + new Date().toISOString().slice(0, 10) + '.csv');
+        const allDone = await fetchDoneCatalogProducts();
+        const filtered = allDone.filter((p) => catalogProductMerchantName(p) === merchantName);
+        const exportData = filtered.map(mapCatalogProductToExportRow);
+        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة لهذا التاجر', false);
+        const safeName = merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
+        downloadKanjoCsv(exportData, 'Kanjo_Catalog_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
         window.showToast('تم تصدير شيت المنتجات بنجاح');
     } catch (err) {
         console.error('[catalog] export failed:', err);
         window.showToast('فشل تصدير الكتالوج', false);
+    }
+};
+
+const fetchAllCatalogProducts = async () => {
+    const snap = await window.getDocs(window.collection(window.db, CATALOG_COLLECTION));
+    const items = [];
+    snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    return items;
+};
+
+window.fixCatalogProductTranslations = async () => {
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('إصلاح الترجمة متاح للإدارة فقط', false);
+        return;
+    }
+    if (window._catalogFixingTranslations) return;
+    const fixBtn = document.getElementById('catalogFixTranslationsBtn');
+    window._catalogFixingTranslations = true;
+    if (fixBtn) {
+        fixBtn.disabled = true;
+        fixBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري إصلاح الترجمة...';
+    }
+    try {
+        let products = window.allCatalogProductsCache || [];
+        if (!products.length) products = await fetchAllCatalogProducts();
+        const broken = products.filter((p) => {
+            const nameAr = String(p.name_ar || '').trim();
+            const nameEn = String(p.name_en || '').trim();
+            return !!nameAr && nameAr === nameEn;
+        });
+        if (!broken.length) {
+            window.showToast('جميع المنتجات مترجمة بشكل صحيح');
+            return;
+        }
+        window.showToast('جاري ترجمة ' + broken.length + ' منتج... برجاء عدم إغلاق الصفحة');
+        for (const product of broken) {
+            await new Promise((r) => setTimeout(r, 2000));
+            const nameEn = await translateArToEn(product.name_ar);
+            await new Promise((r) => setTimeout(r, 2000));
+            const descriptionEn = await translateArToEn(product.description_ar);
+            const patch = {};
+            if (nameEn) patch.name_en = nameEn;
+            if (descriptionEn) patch.description_en = descriptionEn;
+            if (!Object.keys(patch).length) continue;
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, product.id), patch);
+        }
+        window.showToast('تم إصلاح ترجمة المنتجات بنجاح');
+        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+        if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    } catch (err) {
+        console.error('[catalog] fix translations failed:', err);
+        window.showToast('فشل إصلاح ترجمة المنتجات', false);
+    } finally {
+        window._catalogFixingTranslations = false;
+        if (fixBtn) {
+            fixBtn.disabled = false;
+            fixBtn.innerHTML = '<i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات';
+        }
     }
 };
 
@@ -1824,6 +1920,7 @@ window.startCatalogListeners = () => {
             snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
             window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
             if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+            if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
         }, (err) => {
             console.error('[catalog] all products listener failed:', err);
         });

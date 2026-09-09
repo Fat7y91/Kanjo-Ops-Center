@@ -1986,7 +1986,19 @@
 
 
 
-            <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="hidden w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-csv"></i> تصدير شيت المنتجات</button>
+            <div id="catalogExportSection" class="hidden space-y-3">
+
+                <select id="merchantExportFilter" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
+
+                    <option value="" disabled selected>اختر التاجر للتصدير...</option>
+
+                </select>
+
+                <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-csv"></i> تصدير شيت المنتجات</button>
+
+                <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
+
+            </div>
 
             
 
