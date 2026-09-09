@@ -234,12 +234,11 @@ const resolveMerchantCategory = (merchant) => {
     return '';
 };
 
-const csvEscapeCell = (value) => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/"/g, '""') + '"').join(',');
 
 const downloadKanjoCsv = (rows, fileName) => {
-    const header = CATALOG_EXPORT_COLUMNS.map((col) => csvEscapeCell(col)).join(',');
-    const lines = [header].concat(
-        rows.map((row) => CATALOG_EXPORT_COLUMNS.map((col) => csvEscapeCell(row[col])).join(','))
+    const lines = [formatCsvRow(CATALOG_EXPORT_COLUMNS)].concat(
+        rows.map((row) => formatCsvRow(CATALOG_EXPORT_COLUMNS.map((col) => row[col])))
     );
     const csv = '\uFEFF' + lines.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
