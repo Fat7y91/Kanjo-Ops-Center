@@ -2136,11 +2136,11 @@
 
 
 
-    <div id="imageLightbox" class="hidden fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4" onclick="closeImageLightbox()">
+    <div id="imageLightbox" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4" style="z-index: 10000;" onclick="closeImageLightbox()">
 
-        <button type="button" aria-label="Close" onclick="event.stopPropagation(); closeImageLightbox();" class="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/50 text-white text-2xl font-black leading-none hover:bg-black/70">×</button>
+        <button type="button" aria-label="Close" onclick="event.stopPropagation(); closeImageLightbox();" class="absolute top-4 left-4 w-10 h-10 rounded-full bg-black/50 text-white text-2xl font-black leading-none hover:bg-black/70" style="z-index: 10002;">×</button>
 
-        <img id="imageLightboxImg" src="" alt="" class="max-w-[90vw] max-h-[90vh] object-contain rounded-xl shadow-2xl" onclick="event.stopPropagation()">
+        <img id="imageLightboxImg" src="" alt="" onclick="event.stopPropagation()" style="display: block; max-width: 90vw; max-height: 90vh; margin: auto; object-fit: contain; position: relative; z-index: 10001;">
 
     </div>
 

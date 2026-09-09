@@ -403,22 +403,33 @@ const findCatalogProductById = (productId) => {
     return null;
 };
 
-const catalogClickableThumbHtml = (p) => {
-    const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
-    const id = catalogEscapeHtml(p && p.id);
-    if (!thumb) {
-        return `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
-    }
-    return `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer" onclick="openImageLightbox('${id}')" onerror="this.style.display='none'">`;
+const catalogProductLightboxUrl = (p) => {
+    const full = catalogProductFullImageUrls(p)[0] || '';
+    if (!full) return '';
+    const id = catalogDriveFileId(full);
+    if (id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w2000';
+    return full;
 };
 
-window.openImageLightbox = (productId) => {
-    const product = findCatalogProductById(productId);
-    const url = product ? (catalogProductFullImageUrls(product)[0] || '') : '';
+const catalogClickableThumbHtml = (p) => {
+    const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
+    const full = catalogEscapeHtml(catalogProductLightboxUrl(p));
+    if (!thumb || !full) {
+        return `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+    }
+    return `<img src="${thumb}" data-full-img="${full}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer" onclick="openImageLightbox(this)" onerror="this.style.display='none'">`;
+};
+
+window.openImageLightbox = (el) => {
+    if (el && typeof el.stopPropagation === 'function') el.stopPropagation();
+    const node = (el && el.getAttribute) ? el : null;
+    const url = node ? String(node.getAttribute('data-full-img') || '').trim() : '';
     if (!url) return;
     const overlay = document.getElementById('imageLightbox');
     const img = document.getElementById('imageLightboxImg');
     if (!overlay || !img) return;
+    img.removeAttribute('hidden');
+    img.style.display = 'block';
     img.src = url;
     overlay.classList.remove('hidden');
 };
