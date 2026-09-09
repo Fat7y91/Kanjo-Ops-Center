@@ -1482,6 +1482,46 @@
 
 
 
+            <!-- منتجاتي (للمناديب) -->
+
+            <div id="catalogMyProductsWidget" class="hidden bg-white rounded-3xl shadow-sm border border-[#230535]/15 overflow-hidden">
+
+                <button type="button" id="catalogMyProductsToggle" onclick="toggleCatalogMyProductsWidget()" class="w-full bg-[#230535] text-white px-4 py-3 flex flex-wrap justify-between items-center gap-2">
+
+                    <div class="flex items-center gap-3 min-w-0">
+
+                        <div class="bg-[#FFD700]/20 text-[#FFD700] p-2.5 rounded-2xl text-lg"><i class="fa-solid fa-boxes-stacked"></i></div>
+
+                        <div class="text-right min-w-0">
+
+                            <h3 class="font-black text-base">منتجاتي</h3>
+
+                            <p class="text-[11px] text-white/70 font-bold">تعديل المنتجات المرفوعة (قيد المعالجة والمكتملة)</p>
+
+                        </div>
+
+                    </div>
+
+                    <span class="flex items-center gap-2 shrink-0">
+
+                        <span id="catalogMyProductsCount" class="text-xs font-black text-[#230535] bg-[#FFD700] px-3 py-1.5 rounded-full">0</span>
+
+                        <i id="catalogMyProductsChevron" class="fa-solid fa-chevron-down text-[#FFD700] text-sm transition-transform duration-200"></i>
+
+                    </span>
+
+                </button>
+
+                <div id="catalogMyProductsBody" class="hidden bg-slate-50 p-3">
+
+                    <div id="catalogMyProductsList" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+
+                </div>
+
+            </div>
+
+
+
             <!-- مهام معالجة الصور (ليوسف / فريق المحتوى) -->
 
             <div id="catalogContentWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/40">
@@ -2028,9 +2068,9 @@
 
                     <div>
 
-                        <h3 class="font-black text-lg text-[#230535]">إضافة منتج للكتالوج</h3>
+                        <h3 id="catalogProductModalTitle" class="font-black text-lg text-[#230535]">إضافة منتج للكتالوج</h3>
 
-                        <p class="text-xs text-slate-500 font-bold">للتاجر المتعاقد نهائياً فقط</p>
+                        <p id="catalogProductModalSubtitle" class="text-xs text-slate-500 font-bold">للتاجر المتعاقد نهائياً فقط</p>
 
                     </div>
 
@@ -2127,6 +2167,16 @@
                         </div>
 
                         <div id="catalogVariationsList" class="space-y-2"></div>
+
+                    </div>
+
+                    <div id="catalogCurrentImagesWrap" class="hidden space-y-2">
+
+                        <label class="block text-[11px] font-black text-[#230535]">الصورة الحالية في قاعدة البيانات</label>
+
+                        <div id="catalogCurrentImages" class="flex flex-wrap gap-2"></div>
+
+                        <p class="text-[11px] font-bold text-slate-500">اختيار صور جديدة يستبدل الصورة الحالية عند الحفظ</p>
 
                     </div>
 
