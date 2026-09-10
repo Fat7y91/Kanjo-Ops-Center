@@ -2017,8 +2017,87 @@ window.renderStagingCatalogWidgets = () => {
     const canUse = window.canUseStagingCatalog();
     const importer = document.getElementById('stagingCatalogImporterWidget');
     const exporter = document.getElementById('stagingCatalogExportWidget');
+    const parser = document.getElementById('stagingRawTextParserWidget');
     if (importer) importer.classList.toggle('hidden', !canUse);
     if (exporter) exporter.classList.toggle('hidden', !canUse);
+    if (parser) parser.classList.toggle('hidden', !canUse);
+};
+
+const saveStagingCatalogItems = async (items) => {
+    const colRef = window.collection(window.db, STAGING_CATALOGS_COLLECTION);
+    let saved = 0;
+    for (let i = 0; i < items.length; i += 400) {
+        const chunk = items.slice(i, i + 400);
+        const batch = window.writeBatch(window.db);
+        chunk.forEach((item) => batch.set(window.doc(colRef), item));
+        await batch.commit();
+        saved += chunk.length;
+    }
+    return saved;
+};
+
+window.parseRawTextCatalog = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('تحليل النصوص متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    if (window._rawTextParsing) return;
+    const textEl = document.getElementById('rawTextInput');
+    const categoryEl = document.getElementById('rawTextCategory');
+    const parseBtn = document.getElementById('rawTextParseBtn');
+    const rawText = String((textEl && textEl.value) || '');
+    const category = String((categoryEl && categoryEl.value) || '').trim();
+    if (!rawText.trim()) {
+        window.showToast('الصق النص الخام أولاً', false);
+        return;
+    }
+    if (!category) {
+        window.showToast('أدخل اسم الفئة', false);
+        return;
+    }
+    const pattern = /"imageUrl":"([^"]+)".*?"productName":"([^"]+)".*?"sellingPrice":([0-9.]+)/g;
+    const unique = new Map();
+    let match;
+    while ((match = pattern.exec(rawText)) !== null) {
+        const name = String(match[2] || '').trim();
+        if (!name || unique.has(name)) continue;
+        const price = parseFloat(match[3]);
+        unique.set(name, {
+            name,
+            name_ar: name,
+            name_en: name,
+            price: Number.isFinite(price) ? price : 0,
+            image_url: String(match[1] || '').trim(),
+            category,
+            sku: '',
+            scraped_at: new Date(),
+            uploaded_at: new Date()
+        });
+    }
+    const items = Array.from(unique.values());
+    if (!items.length) {
+        window.showToast('لم يتم العثور على منتجات في النص', false);
+        return;
+    }
+    window._rawTextParsing = true;
+    if (parseBtn) {
+        parseBtn.disabled = true;
+        parseBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري التحليل...';
+    }
+    try {
+        const saved = await saveStagingCatalogItems(items);
+        if (textEl) textEl.value = '';
+        window.showToast('تم استخراج وحفظ ' + saved + ' منتج');
+    } catch (err) {
+        console.error('[staging] raw text parse failed:', err);
+        window.showToast('فشل حفظ البيانات المستخرجة', false);
+    } finally {
+        window._rawTextParsing = false;
+        if (parseBtn) {
+            parseBtn.disabled = false;
+            parseBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> تحليل وحفظ البيانات';
+        }
+    }
 };
 
 window.onStagingCatalogFileChange = (event) => {
@@ -2072,15 +2151,7 @@ window.processStagingCatalogJson = async () => {
             window.showToast('لا توجد عناصر صالحة في الملف', false);
             return;
         }
-        const colRef = window.collection(window.db, STAGING_CATALOGS_COLLECTION);
-        let saved = 0;
-        for (let i = 0; i < items.length; i += 400) {
-            const chunk = items.slice(i, i + 400);
-            const batch = window.writeBatch(window.db);
-            chunk.forEach((item) => batch.set(window.doc(colRef), item));
-            await batch.commit();
-            saved += chunk.length;
-        }
+        const saved = await saveStagingCatalogItems(items);
         window.showToast('تم حفظ ' + saved + ' منتج في البيانات المرحلية');
         if (fileInput) fileInput.value = '';
         const label = document.getElementById('stagingCatalogFileName');

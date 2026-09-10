@@ -1466,6 +1466,36 @@
 
 
 
+            <div id="stagingRawTextParserWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-align-left"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">مستخرج البيانات من النصوص</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">لصق بيانات الأنظمة القديمة وتحليلها محلياً ثم حفظها في البيانات المرحلية</p>
+
+                    </div>
+
+                </div>
+
+                <input type="text" id="rawTextCategory" placeholder="اسم الفئة" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                <textarea id="rawTextInput" rows="8" placeholder="الصق النص الخام هنا" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535] min-h-[160px]"></textarea>
+
+                <button type="button" id="rawTextParseBtn" onclick="parseRawTextCatalog()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> تحليل وحفظ البيانات
+
+                </button>
+
+            </div>
+
+
+
             <div id="stagingCatalogExportWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#230535]/15 space-y-4">
 
                 <div class="flex items-center gap-3">
