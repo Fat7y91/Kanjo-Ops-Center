@@ -2055,10 +2055,11 @@ window.parseRawTextCatalog = async () => {
         window.showToast('أدخل اسم الفئة', false);
         return;
     }
-    const pattern = /"imageUrl":"([^"]+)".*?"productName":"([^"]+)".*?"sellingPrice":([0-9.]+)/g;
+    const cleanText = rawText.replace(/\\"/g, '"');
+    const regex = /"imageUrl"\s*:\s*"([^"]+)"[\s\S]*?"productName"\s*:\s*"([^"]+)"[\s\S]*?"sellingPrice"\s*:\s*([0-9.]+)/g;
     const unique = new Map();
     let match;
-    while ((match = pattern.exec(rawText)) !== null) {
+    while ((match = regex.exec(cleanText)) !== null) {
         const name = String(match[2] || '').trim();
         if (!name || unique.has(name)) continue;
         const price = parseFloat(match[3]);
