@@ -105,6 +105,12 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // JSON catalog importer staging (`staging_catalogs`).
+    // Auth is anonymous + PIN; identity RBAC lives in the client (data_entry / founder / محمود).
+    match /staging_catalogs/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
     // 4) Admin allowlist bootstrap.
     match /app_security/{docId} {
       allow read: if isAdmin();
