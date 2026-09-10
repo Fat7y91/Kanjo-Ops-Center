@@ -1958,6 +1958,8 @@ window.startCatalogListeners = () => {
 };
 
 const STAGING_CATALOGS_COLLECTION = 'staging_catalogs';
+const MASTER_CATALOG_COLLECTION = 'master_catalog';
+const MASTER_CATALOG_DRIVE_FOLDER = 'Kanjo Products Data/Master_Catalog_Images';
 const STAGING_EXPORT_COLUMNS = ['name', 'price', 'image_url', 'category', 'sku', 'uploaded_at'];
 
 const downloadGenericKanjoCsv = (headers, rows, fileName) => {
@@ -2018,9 +2020,11 @@ window.renderStagingCatalogWidgets = () => {
     const importer = document.getElementById('stagingCatalogImporterWidget');
     const exporter = document.getElementById('stagingCatalogExportWidget');
     const parser = document.getElementById('stagingRawTextParserWidget');
+    const master = document.getElementById('masterCatalogImporterWidget');
     if (importer) importer.classList.toggle('hidden', !canUse);
     if (exporter) exporter.classList.toggle('hidden', !canUse);
     if (parser) parser.classList.toggle('hidden', !canUse);
+    if (master) master.classList.toggle('hidden', !canUse);
 };
 
 const saveStagingCatalogItems = async (items) => {
@@ -2097,6 +2101,133 @@ window.parseRawTextCatalog = async () => {
         if (parseBtn) {
             parseBtn.disabled = false;
             parseBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> تحليل وحفظ البيانات';
+        }
+    }
+};
+
+const readLocalJsonFile = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
+    reader.readAsText(file);
+});
+
+const masterCatalogDedupeKey = (item) => {
+    const image = String((item && item.image_url) || '').trim().toLowerCase();
+    if (image) return 'img:' + image;
+    const name = String((item && item.name) || '').trim().toLowerCase();
+    return name ? 'name:' + name : '';
+};
+
+const saveMasterCatalogItems = async (items) => {
+    const colRef = window.collection(window.db, MASTER_CATALOG_COLLECTION);
+    let saved = 0;
+    for (let i = 0; i < items.length; i += 400) {
+        const chunk = items.slice(i, i + 400);
+        const batch = window.writeBatch(window.db);
+        chunk.forEach((item) => batch.set(window.doc(colRef), item));
+        await batch.commit();
+        saved += chunk.length;
+    }
+    return saved;
+};
+
+window.onMasterCatalogFileChange = (event) => {
+    const files = event && event.target && event.target.files ? Array.from(event.target.files) : [];
+    const label = document.getElementById('masterCatalogFileName');
+    if (!label) return;
+    if (!files.length) {
+        label.textContent = 'اختر ملفات JSON (يمكن اختيار أكثر من ملف)';
+        return;
+    }
+    label.textContent = files.length === 1 ? files[0].name : (files.length + ' ملفات JSON');
+};
+
+window.processMasterCatalogJson = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('رفع الكتالوج الرئيسي متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    if (window._masterCatalogSaving) return;
+    const fileInput = document.getElementById('masterCatalogFile');
+    const categoryEl = document.getElementById('masterCatalogCategory');
+    const saveBtn = document.getElementById('masterCatalogSaveBtn');
+    const files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+    const category = String((categoryEl && categoryEl.value) || '').trim();
+    if (!files.length) {
+        window.showToast('اختر ملفات JSON أولاً', false);
+        return;
+    }
+    if (!category) {
+        window.showToast('أدخل اسم الفئة', false);
+        return;
+    }
+    window._masterCatalogSaving = true;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري المعالجة...';
+    }
+    try {
+        const combined = [];
+        for (let i = 0; i < files.length; i++) {
+            const text = await readLocalJsonFile(files[i]);
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (_) {
+                window.showToast('ملف JSON غير صالح: ' + files[i].name, false);
+                return;
+            }
+            extractStagingCatalogArray(parsed)
+                .map((item) => mapStagingCatalogItem(item, category))
+                .filter((item) => item.name)
+                .forEach((item) => combined.push(item));
+        }
+        const uniqueIncoming = new Map();
+        combined.forEach((item) => {
+            const key = masterCatalogDedupeKey(item);
+            if (!key || uniqueIncoming.has(key)) return;
+            uniqueIncoming.set(key, item);
+        });
+        const existingSnap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
+        const existingKeys = new Set();
+        existingSnap.forEach((d) => {
+            const data = d.data() || {};
+            const key = masterCatalogDedupeKey(data);
+            if (key) existingKeys.add(key);
+        });
+        const items = [];
+        uniqueIncoming.forEach((item, key) => {
+            if (existingKeys.has(key)) return;
+            items.push({
+                name: item.name,
+                price: item.price,
+                image_url: item.image_url,
+                category: item.category || category,
+                sku: item.sku || '',
+                uploaded_at: new Date(),
+                drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
+                image_migration_status: item.image_url ? 'queued' : 'none',
+                source_files: files.map((f) => f.name)
+            });
+        });
+        if (!items.length) {
+            window.showToast('لا توجد منتجات جديدة للإلحاق', false);
+            return;
+        }
+        const saved = await saveMasterCatalogItems(items);
+        window.showToast('تم إلحاق ' + saved + ' منتج فريد في الكتالوج الرئيسي');
+        if (fileInput) fileInput.value = '';
+        const label = document.getElementById('masterCatalogFileName');
+        if (label) label.textContent = 'اختر ملفات JSON (يمكن اختيار أكثر من ملف)';
+    } catch (err) {
+        console.error('[master] import failed:', err);
+        window.showToast('فشل حفظ الكتالوج الرئيسي', false);
+    } finally {
+        window._masterCatalogSaving = false;
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> معالجة وإلحاق البيانات';
         }
     }
 };

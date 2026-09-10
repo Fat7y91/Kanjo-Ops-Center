@@ -1426,6 +1426,46 @@
 
 
 
+            <!-- رفع الكتالوج الرئيسي متعدد الملفات (لإدخال البيانات والمؤسسين ومحمود) -->
+
+            <div id="masterCatalogImporterWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-layer-group"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">رفع الكتالوج الرئيسي</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">رفع عدة ملفات JSON محلية وإلحاق المنتجات الفريدة دون استبدال الفئات السابقة</p>
+
+                    </div>
+
+                </div>
+
+                <input type="text" id="masterCatalogCategory" placeholder="اسم الفئة (مثال: مشروبات)" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                <label for="masterCatalogFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+
+                    <i class="fa-solid fa-files"></i>
+
+                    <span id="masterCatalogFileName" class="text-[11px] font-bold text-slate-500">اختر ملفات JSON (يمكن اختيار أكثر من ملف)</span>
+
+                </label>
+
+                <input type="file" id="masterCatalogFile" accept=".json,application/json" multiple class="sr-only" onchange="onMasterCatalogFileChange(event)">
+
+                <button type="button" id="masterCatalogSaveBtn" onclick="processMasterCatalogJson()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                    <i class="fa-solid fa-floppy-disk"></i> معالجة وإلحاق البيانات
+
+                </button>
+
+            </div>
+
+
+
             <!-- رفع كتالوج JSON (لإدخال البيانات والمؤسسين ومحمود) -->
 
             <div id="stagingCatalogImporterWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">

@@ -111,6 +111,12 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Master catalog import (`master_catalog`).
+    // Auth is anonymous + PIN; identity RBAC lives in the client (data_entry / founder / محمود).
+    match /master_catalog/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
     // 4) Admin allowlist bootstrap.
     match /app_security/{docId} {
       allow read: if isAdmin();
