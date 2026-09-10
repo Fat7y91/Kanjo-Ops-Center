@@ -99,34 +99,42 @@ function applyThemeAndShowDashboard() {
     const isMahmoud = (window.canManageContracts ? window.canManageContracts() : false);
     const isAdmin = (currentUser.role === 'admin');
     const isRep = (currentUser.role === 'rep');
-    const canViewLive = (isMahmoud || isFounder);
+    const isDataEntry = (currentUser.role === 'data_entry');
+    const canViewLive = !isDataEntry && (isMahmoud || isFounder);
     
     if (!isAccounting) {
         document.getElementById('advancedDashboard').classList.toggle('hidden', !canViewLive);
         document.getElementById('liveFeedToggle').classList.toggle('hidden', !canViewLive);
-        document.getElementById('taskFormWrapper').classList.toggle('hidden', !isMahmoud);
-        document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin);
+        document.getElementById('taskFormWrapper').classList.toggle('hidden', !isMahmoud || isDataEntry);
+        document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin || isDataEntry);
         document.getElementById('exportBtn').classList.toggle('hidden', !canViewLive);
         document.getElementById('notificationsWrapper').classList.toggle('hidden', !canViewLive);
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput && searchInput.closest) {
+            const searchWrap = searchInput.closest('.sticky');
+            if (searchWrap) searchWrap.classList.toggle('hidden', isDataEntry);
+        }
+        const tasksContainer = document.getElementById('tasksContainer');
+        if (tasksContainer) tasksContainer.classList.toggle('hidden', isDataEntry);
         
         const founderPayrollSummaryBox = document.getElementById('founderPayrollSummaryBox');
         if (founderPayrollSummaryBox) {
-            founderPayrollSummaryBox.classList.toggle('hidden', !isFounder);
+            founderPayrollSummaryBox.classList.toggle('hidden', !isFounder || isDataEntry);
         }
 
         const quickLinksWalletBanner = document.getElementById('quickLinksWalletBanner');
         if (quickLinksWalletBanner) {
-            quickLinksWalletBanner.classList.toggle('hidden', !isRep);
+            quickLinksWalletBanner.classList.toggle('hidden', !isRep || isDataEntry);
         }
 
         const financialProfileBtnWrapper = document.getElementById('financialProfileBtnWrapper');
         if (financialProfileBtnWrapper) {
-            financialProfileBtnWrapper.classList.toggle('hidden', !isRep);
+            financialProfileBtnWrapper.classList.toggle('hidden', !isRep || isDataEntry);
         }
 
         const financialProfileBanner = document.getElementById('financialProfileBanner');
         if (financialProfileBanner) {
-            financialProfileBanner.classList.toggle('hidden', !isRep);
+            financialProfileBanner.classList.toggle('hidden', !isRep || isDataEntry);
         }
 
         if (typeof window.renderCatalogWidgets === 'function') {
@@ -139,17 +147,17 @@ function applyThemeAndShowDashboard() {
         
         const adminTransferNavBtnWrapper = document.getElementById('adminTransferNavBtnWrapper');
         if (adminTransferNavBtnWrapper) {
-            adminTransferNavBtnWrapper.classList.toggle('hidden', !isMahmoud);
+            adminTransferNavBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
         }
 
         const contractsNavBtnWrapper = document.getElementById('contractsNavBtnWrapper');
         if (contractsNavBtnWrapper) {
-            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoud);
+            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
         }
 
         const archivedReportsBtnWrapper = document.getElementById('archivedReportsBtnWrapper');
         if (archivedReportsBtnWrapper) {
-            archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoud);
+            archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
         }
         
         if(canViewLive && window.setupAdvancedFilterElements) {
@@ -176,7 +184,7 @@ function applyThemeAndShowDashboard() {
             }
         }
 
-        if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
+        if (!isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
             const unsub = onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending"), limit(50)), (snap) => {
                 if(window.pendingTransferTaskIds) window.pendingTransferTaskIds.clear();
                 snap.forEach(docSnap => {
@@ -203,7 +211,7 @@ function applyThemeAndShowDashboard() {
            Keeps window.merchantsById fresh so the merchant card / profile can
            render the "ملفات التاجر الرسمية" Drive button from the permanent
            merchantId instead of a raw URL. */
-        if (typeof onSnapshot !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined') {
+        if (!isDataEntry && typeof onSnapshot !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined') {
             window.merchantsById = window.merchantsById || new Map();
             const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
                 window._merchantsLoaded = true;
@@ -222,9 +230,10 @@ function applyThemeAndShowDashboard() {
             window._appListenerUnsubscribers.push(unsub);
         }
 
-        if (typeof window.startCatalogListeners === 'function') window.startCatalogListeners();
-        if(typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
-        if(typeof listenToTasks !== 'undefined') listenToTasks();
+        if (!isDataEntry && typeof window.startCatalogListeners === 'function') window.startCatalogListeners();
+        if (!isDataEntry && typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
+        if (!isDataEntry && typeof listenToTasks !== 'undefined') listenToTasks();
+        if (isDataEntry && typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
     });
 }
 

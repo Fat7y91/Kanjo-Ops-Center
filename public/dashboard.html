@@ -1426,6 +1426,72 @@
 
 
 
+            <!-- رفع كتالوج JSON (لإدخال البيانات والمؤسسين ومحمود) -->
+
+            <div id="stagingCatalogImporterWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-arrow-up"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">رفع كتالوج JSON</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">رفع ملف JSON محلي إلى قاعدة البيانات المرحلية للمراجعة</p>
+
+                    </div>
+
+                </div>
+
+                <input type="text" id="stagingCatalogCategory" placeholder="اسم الفئة (مثال: ألبان)" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                <label for="stagingCatalogFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+
+                    <i class="fa-solid fa-file-code text-[#230535]"></i>
+
+                    <span id="stagingCatalogFileName" class="text-[11px] font-bold text-slate-500">اختر ملف JSON</span>
+
+                </label>
+
+                <input type="file" id="stagingCatalogFile" accept=".json,application/json" class="sr-only" onchange="onStagingCatalogFileChange(event)">
+
+                <button type="button" id="stagingCatalogSaveBtn" onclick="processStagingCatalogJson()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                    <i class="fa-solid fa-floppy-disk"></i> معالجة وحفظ البيانات
+
+                </button>
+
+            </div>
+
+
+
+            <div id="stagingCatalogExportWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#230535]/15 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-csv"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">تصدير الكتالوجات المرفوعة</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">تصدير بيانات staging_catalogs بصيغة Excel</p>
+
+                    </div>
+
+                </div>
+
+                <button type="button" id="stagingCatalogExportBtn" onclick="exportStagingCatalogs()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                    <i class="fa-solid fa-download"></i> تصدير البيانات المرحلية
+
+                </button>
+
+            </div>
+
+
+
             <!-- إدخال منتجات الكتالوج (للمناديب) -->
 
             <div id="catalogRepBanner" class="hidden bg-gradient-to-r from-[#230535] to-[#4C1D95] p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">

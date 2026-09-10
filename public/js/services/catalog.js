@@ -19,7 +19,7 @@ const catalogEscapeHtml = (value) => String(value == null ? '' : value)
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-window.isCatalogRepUser = () => !!(window.currentUser && window.currentUser.role === 'rep');
+window.isCatalogRepUser = () => !!(window.currentUser && window.currentUser.role === 'rep' && window.currentUser.role !== 'data_entry');
 
 window.isCatalogContentUser = () => {
     const u = window.currentUser;
@@ -44,6 +44,10 @@ window.isMahmoudUser = () => {
 window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.role === 'founder');
 
 window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser());
+
+window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
+
+window.canUseStagingCatalog = () => !!(window.isDataEntryUser() || window.isCatalogFounderUser() || window.isMahmoudUser());
 
 const CATALOG_EXPORT_COLUMNS = [
     'product_key',
@@ -1691,6 +1695,14 @@ window.toggleCatalogContentWidget = () => {
 };
 
 window.renderCatalogWidgets = () => {
+    if (window.isDataEntryUser()) {
+        ['catalogRepBanner', 'catalogDraftsWidget', 'catalogMyProductsWidget', 'catalogAllProductsWidget', 'catalogDeleteRequestsWidget', 'catalogContentWidget', 'catalogExportSection'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+        if (typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
+        return;
+    }
     const repBanner = document.getElementById('catalogRepBanner');
     if (repBanner) repBanner.classList.toggle('hidden', !window.isCatalogRepUser());
     if (typeof window.renderCatalogDraftsWidget === 'function') window.renderCatalogDraftsWidget();
@@ -1725,6 +1737,8 @@ window.renderCatalogWidgets = () => {
             if (countEl) countEl.textContent = String(pending.length);
         }
     }
+
+    if (typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
 };
 
 const fetchDoneCatalogProducts = async () => {
@@ -1940,6 +1954,175 @@ window.startCatalogListeners = () => {
         window._appListenerUnsubscribers.push(unsubDeleteReq);
     } else if (typeof window.renderCatalogDeleteRequestsWidget === 'function') {
         window.renderCatalogDeleteRequestsWidget();
+    }
+};
+
+const STAGING_CATALOGS_COLLECTION = 'staging_catalogs';
+const STAGING_EXPORT_COLUMNS = ['name', 'price', 'image_url', 'category', 'sku', 'uploaded_at'];
+
+const downloadGenericKanjoCsv = (headers, rows, fileName) => {
+    const headersString = formatCsvRow(headers);
+    const rowsString = rows.map((row) => formatCsvRow(headers.map((col) => row[col]))).join('\r\n');
+    const csvString = headersString + '\r\n' + rowsString;
+    const blob = new Blob(['\uFEFF', csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const stagingPick = (item, keys) => {
+    if (!item || typeof item !== 'object') return '';
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (item[key] !== undefined && item[key] !== null && String(item[key]).trim() !== '') {
+            return item[key];
+        }
+    }
+    return '';
+};
+
+const extractStagingCatalogArray = (parsed) => {
+    if (Array.isArray(parsed)) return parsed;
+    if (!parsed || typeof parsed !== 'object') return [];
+    const keys = ['products', 'items', 'data', 'results', 'catalog', 'records'];
+    for (let i = 0; i < keys.length; i++) {
+        if (Array.isArray(parsed[keys[i]])) return parsed[keys[i]];
+    }
+    return [];
+};
+
+const mapStagingCatalogItem = (item, category) => {
+    const name = String(stagingPick(item, ['name', 'title', 'product_name', 'productName', 'name_ar', 'original_name']) || '').trim();
+    const priceRaw = stagingPick(item, ['price', 'current_price', 'currentPrice', 'base_price', 'sale_price', 'amount']);
+    const image = String(stagingPick(item, ['image_url', 'imageUrl', 'main_image', 'mainImage', 'image', 'thumbnail', 'img']) || '').trim();
+    const sku = String(stagingPick(item, ['sku', 'barcode', 'gtin', 'ean', 'id']) || '').trim();
+    const itemCategory = String(stagingPick(item, ['category', 'cat']) || category || '').trim();
+    const priceNum = Number(String(priceRaw).replace(/[^\d.]/g, ''));
+    return {
+        name,
+        price: Number.isFinite(priceNum) ? priceNum : (priceRaw || ''),
+        image_url: image,
+        category: itemCategory,
+        sku,
+        uploaded_at: new Date()
+    };
+};
+
+window.renderStagingCatalogWidgets = () => {
+    const canUse = window.canUseStagingCatalog();
+    const importer = document.getElementById('stagingCatalogImporterWidget');
+    const exporter = document.getElementById('stagingCatalogExportWidget');
+    if (importer) importer.classList.toggle('hidden', !canUse);
+    if (exporter) exporter.classList.toggle('hidden', !canUse);
+};
+
+window.onStagingCatalogFileChange = (event) => {
+    const file = event && event.target && event.target.files && event.target.files[0];
+    const label = document.getElementById('stagingCatalogFileName');
+    if (label) label.textContent = file ? file.name : 'اختر ملف JSON';
+};
+
+window.processStagingCatalogJson = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('رفع الكتالوج متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    if (window._stagingCatalogSaving) return;
+    const fileInput = document.getElementById('stagingCatalogFile');
+    const categoryEl = document.getElementById('stagingCatalogCategory');
+    const saveBtn = document.getElementById('stagingCatalogSaveBtn');
+    const file = fileInput && fileInput.files && fileInput.files[0];
+    const category = String((categoryEl && categoryEl.value) || '').trim();
+    if (!file) {
+        window.showToast('اختر ملف JSON أولاً', false);
+        return;
+    }
+    if (!category) {
+        window.showToast('أدخل اسم الفئة', false);
+        return;
+    }
+    window._stagingCatalogSaving = true;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري المعالجة...';
+    }
+    try {
+        const text = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
+            reader.readAsText(file);
+        });
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (_) {
+            window.showToast('ملف JSON غير صالح', false);
+            return;
+        }
+        const items = extractStagingCatalogArray(parsed)
+            .map((item) => mapStagingCatalogItem(item, category))
+            .filter((item) => item.name);
+        if (!items.length) {
+            window.showToast('لا توجد عناصر صالحة في الملف', false);
+            return;
+        }
+        const colRef = window.collection(window.db, STAGING_CATALOGS_COLLECTION);
+        let saved = 0;
+        for (let i = 0; i < items.length; i += 400) {
+            const chunk = items.slice(i, i + 400);
+            const batch = window.writeBatch(window.db);
+            chunk.forEach((item) => batch.set(window.doc(colRef), item));
+            await batch.commit();
+            saved += chunk.length;
+        }
+        window.showToast('تم حفظ ' + saved + ' منتج في البيانات المرحلية');
+        if (fileInput) fileInput.value = '';
+        const label = document.getElementById('stagingCatalogFileName');
+        if (label) label.textContent = 'اختر ملف JSON';
+    } catch (err) {
+        console.error('[staging] import failed:', err);
+        window.showToast('فشل حفظ بيانات الكتالوج', false);
+    } finally {
+        window._stagingCatalogSaving = false;
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> معالجة وحفظ البيانات';
+        }
+    }
+};
+
+window.exportStagingCatalogs = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('تصدير البيانات المرحلية متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    try {
+        const snap = await window.getDocs(window.collection(window.db, STAGING_CATALOGS_COLLECTION));
+        const rows = [];
+        snap.forEach((d) => {
+            const data = d.data() || {};
+            const uploaded = data.uploaded_at && data.uploaded_at.toDate ? data.uploaded_at.toDate() : data.uploaded_at;
+            rows.push({
+                name: data.name || '',
+                price: data.price == null ? '' : data.price,
+                image_url: data.image_url || '',
+                category: data.category || '',
+                sku: data.sku || '',
+                uploaded_at: uploaded ? new Date(uploaded).toISOString() : ''
+            });
+        });
+        if (!rows.length) return window.showToast('لا توجد بيانات مرحلية للتصدير', false);
+        downloadGenericKanjoCsv(STAGING_EXPORT_COLUMNS, rows, 'Kanjo_Staging_Catalogs_' + new Date().toISOString().slice(0, 10) + '.csv');
+        window.showToast('تم تصدير البيانات المرحلية بنجاح');
+    } catch (err) {
+        console.error('[staging] export failed:', err);
+        window.showToast('فشل تصدير البيانات المرحلية', false);
     }
 };
 

@@ -357,7 +357,7 @@ window.renderMerchantDocsAudit = () => {
 
     if (!banner) return;
 
-    const isAllowed = window.canManageContracts ? window.canManageContracts() : false;
+    const isAllowed = (window.canManageContracts ? window.canManageContracts() : false) && !(window.currentUser && window.currentUser.role === 'data_entry');
 
     if (!isAllowed) {
 
@@ -1370,6 +1370,14 @@ window.hasRenderedData = false;
 window.renderDashboard = (snapshot) => {
 
     if (!snapshot) return;
+
+    if (window.currentUser && window.currentUser.role === 'data_entry') {
+
+        if (typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
+
+        return;
+
+    }
 
     /* While a missing-index error box is displayed, keep it on screen instead of
        letting an empty re-render (e.g. handleSlowNetwork fallback) wipe it. Only a

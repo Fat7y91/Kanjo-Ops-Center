@@ -40,7 +40,9 @@ const users = {
 
     '4827': { name: 'أحمد جمعه', role: 'rep', team: 'Power Team' }, 
 
-    '7591': { name: 'يوسف', role: 'rep', team: 'Power Team' } 
+    '7591': { name: 'يوسف', role: 'rep', team: 'Power Team' },
+
+    '2468': { name: 'يوزر إدخال البيانات', role: 'data_entry' }
 
 };
 
