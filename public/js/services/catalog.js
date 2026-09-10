@@ -2217,8 +2217,11 @@ window.clearStagingCatalogs = async () => {
         const snap = await window.getDocs(window.collection(window.db, STAGING_CATALOGS_COLLECTION));
         const docs = [];
         snap.forEach((d) => docs.push(d));
-        for (let i = 0; i < docs.length; i++) {
-            await window.deleteDoc(window.doc(window.db, STAGING_CATALOGS_COLLECTION, docs[i].id));
+        for (let i = 0; i < docs.length; i += 400) {
+            const chunk = docs.slice(i, i + 400);
+            const batch = window.writeBatch(window.db);
+            chunk.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
         }
         window.showToast('تم مسح جميع البيانات بنجاح.');
     } catch (err) {
