@@ -2198,6 +2198,41 @@ window.exportStagingCatalogs = async () => {
     }
 };
 
+window.clearStagingCatalogs = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('مسح البيانات المرحلية متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    if (window._stagingCatalogClearing) return;
+    const ok = window.confirm('هل أنت متأكد من مسح جميع البيانات المرحلية؟ لا يمكن التراجع عن هذا الإجراء.');
+    if (!ok) return;
+    const clearBtn = document.getElementById('stagingCatalogClearBtn');
+    window._stagingCatalogClearing = true;
+    if (clearBtn) {
+        clearBtn.disabled = true;
+        clearBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري المسح...';
+    }
+    window.showToast('جاري مسح البيانات...');
+    try {
+        const snap = await window.getDocs(window.collection(window.db, STAGING_CATALOGS_COLLECTION));
+        const docs = [];
+        snap.forEach((d) => docs.push(d));
+        for (let i = 0; i < docs.length; i++) {
+            await window.deleteDoc(window.doc(window.db, STAGING_CATALOGS_COLLECTION, docs[i].id));
+        }
+        window.showToast('تم مسح جميع البيانات بنجاح.');
+    } catch (err) {
+        console.error('[staging] clear failed:', err);
+        window.showToast('فشل مسح البيانات المرحلية', false);
+    } finally {
+        window._stagingCatalogClearing = false;
+        if (clearBtn) {
+            clearBtn.disabled = false;
+            clearBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i> مسح جميع البيانات';
+        }
+    }
+};
+
 window.addEventListener('keydown', (ev) => {
     const lightbox = document.getElementById('imageLightbox');
     if (ev.key === 'Escape' && lightbox && !lightbox.classList.contains('hidden')) {
