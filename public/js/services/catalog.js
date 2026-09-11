@@ -315,7 +315,7 @@ window.addCatalogVariationRow = (name, price, imageUrl) => {
     const preview = imageUrl ? catalogEscapeHtml(catalogDirectImageUrl(imageUrl) || imageUrl) : '';
     row.innerHTML = `<input type="text" class="catalog-variation-name flex-1 min-w-0 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="الحجم (وسط، كبير) / اللون" value="${catalogEscapeHtml(name || '')}">
         <input type="number" min="0" step="0.01" class="catalog-variation-price w-24 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="السعر" value="${catalogEscapeHtml(price == null ? '' : price)}">
-        <input type="file" accept="image/*" id="${id}-img" class="catalog-variation-image-input sr-only">
+        <input type="file" id="${id}-img" accept="image/*" class="catalog-variation-image-input sr-only" aria-label="صورة الخيار - الكاميرا أو معرض الصور">
         <label for="${id}-img" title="صورة الخيار (اختياري)" class="catalog-variation-image-btn shrink-0 w-11 h-11 rounded-xl border-2 border-dashed border-[#FFD700] grid place-items-center overflow-hidden cursor-pointer bg-white text-[#230535] hover:bg-[#FFD700]/10 transition">
             ${preview ? `<img src="${preview}" class="w-full h-full object-cover" alt="" onerror="this.style.display='none'">` : '<i class="fa-regular fa-image"></i>'}
         </label>
@@ -357,6 +357,49 @@ window.removeCatalogVariationRow = (id) => {
     }
 };
 
+const catalogLocalDateKey = () => {
+    const d = new Date();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + month + '-' + day;
+};
+
+const VARIANT_GUIDE_DATE_KEY = 'variantGuide_date';
+const VARIANT_GUIDE_COUNT_KEY = 'variantGuide_count';
+const VARIANT_GUIDE_DAILY_MAX = 2;
+
+const readVariantGuideDailyCount = () => {
+    try {
+        const today = catalogLocalDateKey();
+        const storedDate = localStorage.getItem(VARIANT_GUIDE_DATE_KEY);
+        let count = parseInt(localStorage.getItem(VARIANT_GUIDE_COUNT_KEY) || '0', 10) || 0;
+        if (storedDate !== today) {
+            count = 0;
+            try {
+                localStorage.setItem(VARIANT_GUIDE_DATE_KEY, today);
+                localStorage.setItem(VARIANT_GUIDE_COUNT_KEY, '0');
+            } catch (_) { /* ignore */ }
+        }
+        return count;
+    } catch (_) {
+        return 0;
+    }
+};
+
+const canShowVariantGuideToday = () => readVariantGuideDailyCount() < VARIANT_GUIDE_DAILY_MAX;
+
+const markVariantGuideShownToday = () => {
+    try {
+        const today = catalogLocalDateKey();
+        const storedDate = localStorage.getItem(VARIANT_GUIDE_DATE_KEY);
+        let count = parseInt(localStorage.getItem(VARIANT_GUIDE_COUNT_KEY) || '0', 10) || 0;
+        if (storedDate !== today) count = 0;
+        count += 1;
+        localStorage.setItem(VARIANT_GUIDE_DATE_KEY, today);
+        localStorage.setItem(VARIANT_GUIDE_COUNT_KEY, String(count));
+    } catch (_) { /* ignore */ }
+};
+
 window.showCatalogVariableGuide = () => {
     const modal = document.getElementById('catalogVariableGuideModal');
     if (!modal) return;
@@ -386,7 +429,6 @@ window.showCatalogVariableGuide = () => {
 window.closeCatalogVariableGuide = () => {
     const modal = document.getElementById('catalogVariableGuideModal');
     if (modal) modal.classList.add('hidden');
-    window._catalogVariableGuideSeen = true;
     if (window._catalogGuideTimer) {
         clearInterval(window._catalogGuideTimer);
         window._catalogGuideTimer = null;
@@ -407,8 +449,8 @@ window.onCatalogProductTypeChange = () => {
         else priceEl.setAttribute('required', 'required');
     }
     if (isVariable && list && list.children.length === 0) window.addCatalogVariationRow();
-    if (isVariable && !window._catalogVariableGuideSeen && !window._catalogEditingProduct) {
-        window._catalogVariableGuideSeen = true;
+    if (isVariable && !window._catalogEditingProduct && canShowVariantGuideToday()) {
+        markVariantGuideShownToday();
         window.showCatalogVariableGuide();
     }
 };
