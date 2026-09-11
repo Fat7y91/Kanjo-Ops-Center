@@ -515,6 +515,90 @@ window.closeMasterCatalogSearchModal = () => {
     if (modal) modal.classList.add('hidden');
 };
 
+const MASTER_CATALOG_SEARCH_SYNONYMS = {
+    'قهوه': ['كوفي', 'coffee'],
+    'كوفي': ['قهوه', 'coffee'],
+    coffee: ['قهوه', 'كوفي'],
+    'حليب': ['لبن', 'milk'],
+    'لبن': ['حليب', 'milk'],
+    milk: ['حليب', 'لبن'],
+    'شاي': ['شاهي', 'tea'],
+    'شاهي': ['شاي', 'tea'],
+    tea: ['شاي', 'شاهي'],
+    'زبادي': ['زبادى', 'yogurt', 'yoghurt'],
+    'زبادى': ['زبادي', 'yogurt', 'yoghurt']
+};
+
+const normalizeArabicSearchText = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/گ/g, 'ك')
+    .replace(/[^\u0600-\u06FFa-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const masterCatalogSearchHaystack = (item) => normalizeArabicSearchText([
+    item && item.name,
+    item && item.name_ar,
+    item && item.name_en,
+    item && item.category,
+    item && item.sku,
+    item && item.id,
+    item && item.kanjo_id
+].filter(Boolean).join(' '));
+
+const masterCatalogSearchTokens = (query) => normalizeArabicSearchText(query).split(' ').filter(Boolean);
+
+const tokenSearchAliases = (token) => {
+    const aliases = [token];
+    (MASTER_CATALOG_SEARCH_SYNONYMS[token] || []).forEach((alias) => {
+        const norm = normalizeArabicSearchText(alias);
+        if (norm) aliases.push(norm);
+    });
+    return aliases;
+};
+
+const masterCatalogSearchScore = (item, tokens) => {
+    const hay = item._searchHay || masterCatalogSearchHaystack(item);
+    const nameHay = normalizeArabicSearchText(item.name || item.name_ar || item.name_en || '');
+    let score = 0;
+    const allMatch = tokens.every((token) => {
+        const aliases = tokenSearchAliases(token);
+        const hit = aliases.some((alias) => hay.includes(alias));
+        if (!hit) return false;
+        if (aliases.some((alias) => nameHay === alias)) score += 100;
+        else if (aliases.some((alias) => nameHay.startsWith(alias))) score += 40;
+        else if (aliases.some((alias) => nameHay.includes(alias))) score += 20;
+        else score += 8;
+        return true;
+    });
+    return allMatch ? score : 0;
+};
+
+const isMasterCatalogImageUrl = (url) => {
+    const s = String(url || '');
+    if (!s) return false;
+    if (s.indexOf(MASTER_CATALOG_IMAGES_DIR + '/') !== -1) return true;
+    return isKanjoDriveImageUrl(s);
+};
+
+const masterCatalogThumbUrl = (url) => {
+    if (isKanjoDriveImageUrl(url)) return catalogDriveThumbnailUrl(url) || url;
+    return String(url || '');
+};
+
+const hydrateMasterCatalogItem = (docId, data) => {
+    const item = { ...(data || {}) };
+    item.id = String(item.id || item.kanjo_id || docId || '').trim();
+    item._searchHay = masterCatalogSearchHaystack(item);
+    return item;
+};
+
 window.openMasterCatalogSearchModal = async () => {
     if (!window.isCatalogRepUser()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
@@ -534,7 +618,7 @@ window.openMasterCatalogSearchModal = async () => {
         if (!Array.isArray(window._masterCatalogCache) || !window._masterCatalogCache.length) {
             const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
             const items = [];
-            snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+            snap.forEach((d) => items.push(hydrateMasterCatalogItem(d.id, d.data() || {})));
             window._masterCatalogCache = items;
         }
     } catch (err) {
@@ -547,25 +631,26 @@ window.searchMasterCatalog = () => {
     const input = document.getElementById('masterCatalogSearchInput');
     const results = document.getElementById('masterCatalogSearchResults');
     if (!results) return;
-    const q = String((input && input.value) || '').trim().toLowerCase();
-    if (!q) {
+    const tokens = masterCatalogSearchTokens((input && input.value) || '');
+    if (!tokens.length) {
         results.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold">اكتب كلمة للبحث</div>';
         return;
     }
-    const items = (window._masterCatalogCache || []).filter((item) => {
-        const name = String(item.name || item.name_ar || item.name_en || '').toLowerCase();
-        const sku = String(item.sku || '').toLowerCase();
-        return name.includes(q) || sku.includes(q);
-    }).slice(0, 40);
-    if (!items.length) {
+    const scored = (window._masterCatalogCache || []).map((item) => ({ item, score: masterCatalogSearchScore(item, tokens) }))
+        .filter((row) => row.score > 0)
+        .sort((a, b) => b.score - a.score || String(a.item.name || '').localeCompare(String(b.item.name || ''), 'ar'))
+        .slice(0, 40);
+    if (!scored.length) {
         results.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold">لا توجد نتائج</div>';
         return;
     }
-    results.innerHTML = items.map((item) => {
+    results.innerHTML = scored.map((row) => {
+        const item = row.item;
         const id = catalogEscapeHtml(item.id);
         const name = catalogEscapeHtml(item.name || item.name_ar || 'بدون اسم');
         const price = catalogEscapeHtml(item.price == null ? '' : item.price);
-        const driveUrl = isKanjoDriveImageUrl(item.image_url) ? catalogEscapeHtml(catalogDriveThumbnailUrl(item.image_url) || item.image_url) : '';
+        const category = catalogEscapeHtml(item.category || '');
+        const driveUrl = isMasterCatalogImageUrl(item.image_url) ? catalogEscapeHtml(masterCatalogThumbUrl(item.image_url)) : '';
         const thumb = driveUrl
             ? `<img src="${driveUrl}" alt="" class="w-14 h-14 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
             : `<div class="w-14 h-14 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
@@ -574,6 +659,7 @@ window.searchMasterCatalog = () => {
             <div class="min-w-0 flex-1">
                 <div class="font-black text-sm text-[#230535] truncate">${name}</div>
                 <div class="text-[11px] font-black bg-[#FFD700]/20 text-[#230535] inline-block px-2 py-0.5 rounded-full mt-1">${price} ج.م</div>
+                ${category ? `<div class="text-[10px] text-slate-400 font-bold mt-1 truncate">${category}</div>` : ''}
             </div>
         </button>`;
     }).join('');
@@ -596,7 +682,7 @@ window.selectMasterCatalogItem = (itemId) => {
     const typeEl = document.getElementById('catalogProductType');
     if (typeEl) typeEl.value = 'simple';
     window.onCatalogProductTypeChange();
-    if (isKanjoDriveImageUrl(item.image_url)) {
+    if (isMasterCatalogImageUrl(item.image_url)) {
         renderCatalogSavedImages({ rawImageUrls: [item.image_url], enhancedImageUrls: [item.image_url] });
     } else {
         hideCatalogSavedImages();
@@ -2247,11 +2333,30 @@ const saveMasterCatalogItems = async (items) => {
     for (let i = 0; i < items.length; i += 400) {
         const chunk = items.slice(i, i + 400);
         const batch = window.writeBatch(window.db);
-        chunk.forEach((item) => batch.set(window.doc(colRef), item));
+        chunk.forEach((item) => {
+            const kanjoId = String(item.id || item.kanjo_id || '').trim();
+            const ref = kanjoId ? window.doc(window.db, MASTER_CATALOG_COLLECTION, kanjoId) : window.doc(colRef);
+            batch.set(ref, item);
+        });
         await batch.commit();
         saved += chunk.length;
+        if (i + 400 < items.length) await delay(300);
     }
     return saved;
+};
+
+const clearMasterCatalogCollection = async () => {
+    const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
+    const docs = [];
+    snap.forEach((d) => docs.push(d));
+    for (let i = 0; i < docs.length; i += 400) {
+        const chunk = docs.slice(i, i + 400);
+        const batch = window.writeBatch(window.db);
+        chunk.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        if (i + 400 < docs.length) await delay(300);
+    }
+    return docs.length;
 };
 
 const parseCsvRecords = (text) => {
@@ -2310,23 +2415,42 @@ const parseCsvRecords = (text) => {
     return records;
 };
 
-const masterCatalogNameKey = (name) => String(name || '').trim();
-
 const masterCatalogDriveImagePath = (kanjoId) => {
     const id = String(kanjoId || '').trim();
     if (!id) return '';
     return 'https://drive.google.com/' + MASTER_CATALOG_IMAGES_DIR + '/' + id + '.jpg';
 };
 
+const mapMasterCatalogCsvRow = (row, idx) => {
+    const kanjoId = String(row.id || row.Id || row.ID || '').trim();
+    const name = String(row.name || row.name_ar || '').trim();
+    const priceRaw = row.price;
+    const priceNum = Number(String(priceRaw == null ? '' : priceRaw).replace(/[^\d.]/g, ''));
+    return {
+        id: kanjoId,
+        kanjo_id: kanjoId,
+        name,
+        price: Number.isFinite(priceNum) ? priceNum : (priceRaw || ''),
+        image_url: masterCatalogDriveImagePath(kanjoId),
+        image_file_name: kanjoId ? (kanjoId + '.jpg') : '',
+        category: String(row.category || '').trim(),
+        sku: String(row.sku || '').trim(),
+        drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
+        image_migration_status: kanjoId ? 'drive_linked' : 'none',
+        source_row: idx + 2,
+        uploaded_at: new Date()
+    };
+};
+
 window.onMasterCatalogMigrateCsvChange = (event) => {
     const file = event && event.target && event.target.files && event.target.files[0];
     const label = document.getElementById('masterCatalogMigrateCsvName');
-    if (label) label.textContent = file ? file.name : 'اختر ملف CSV المحدث (عمود Id)';
+    if (label) label.textContent = file ? file.name : 'اختر ملف CSV (عمود Id)';
 };
 
 window.migrateMasterCatalogFromCsv = async () => {
     if (!window.canUseStagingCatalog()) {
-        if (window.showToast) window.showToast('ترحيل الكتالوج متاح لإدخال البيانات فقط', false);
+        if (window.showToast) window.showToast('رفع الكتالوج متاح لإدخال البيانات فقط', false);
         return;
     }
     if (window._masterCatalogMigrating) return;
@@ -2337,12 +2461,14 @@ window.migrateMasterCatalogFromCsv = async () => {
         window.showToast('اختر ملف CSV أولاً', false);
         return;
     }
+    const ok = window.confirm('سيتم مسح الكتالوج الرئيسي بالكامل واستبداله ببيانات الملف. هل تريد المتابعة؟');
+    if (!ok) return;
     window._masterCatalogMigrating = true;
     if (migrateBtn) {
         migrateBtn.disabled = true;
-        migrateBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الترحيل...';
+        migrateBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الاستبدال...';
     }
-    const report = { csvRows: 0, firestoreDocs: 0, matched: 0, updated: 0, unmatchedNames: [], duplicateCsvNames: [], duplicateFirestoreNames: [], errors: [] };
+    const report = { csvRows: 0, imported: 0, skipped: [], duplicates: [], cleared: 0, errors: [] };
     try {
         const text = await readLocalJsonFile(file);
         const records = parseCsvRecords(text);
@@ -2351,90 +2477,47 @@ window.migrateMasterCatalogFromCsv = async () => {
             return;
         }
         report.csvRows = records.length;
-        const csvByName = new Map();
+        const seenIds = new Set();
+        const items = [];
         records.forEach((row, idx) => {
-            const kanjoId = String(row.id || row.Id || row.ID || '').trim();
-            const name = masterCatalogNameKey(row.name || row.name_ar || '');
-            if (!name) {
-                report.unmatchedNames.push({ row: idx + 2, reason: 'missing_name', id: kanjoId });
+            const item = mapMasterCatalogCsvRow(row, idx);
+            if (!item.id || !item.name) {
+                report.skipped.push({ row: idx + 2, id: item.id, name: item.name, reason: !item.id ? 'missing_id' : 'missing_name' });
                 return;
             }
-            if (!kanjoId) {
-                report.unmatchedNames.push({ row: idx + 2, reason: 'missing_id', name });
+            if (seenIds.has(item.id)) {
+                report.duplicates.push({ row: idx + 2, id: item.id, name: item.name });
                 return;
             }
-            if (csvByName.has(name)) {
-                report.duplicateCsvNames.push({ name, rows: [csvByName.get(name).row, idx + 2] });
-                return;
-            }
-            csvByName.set(name, { kanjoId, name, row: idx + 2 });
+            seenIds.add(item.id);
+            items.push(item);
         });
-        const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
-        report.firestoreDocs = snap.size;
-        const firestoreByName = new Map();
-        snap.forEach((d) => {
-            const data = d.data() || {};
-            const name = masterCatalogNameKey(data.name || data.name_ar);
-            if (!name) return;
-            if (!firestoreByName.has(name)) firestoreByName.set(name, []);
-            firestoreByName.get(name).push({ ref: d.ref, docId: d.id, name });
-        });
-        const updates = [];
-        const matchedNames = new Set();
-        csvByName.forEach((csvRow, name) => {
-            const docs = firestoreByName.get(name);
-            if (!docs || !docs.length) {
-                report.unmatchedNames.push({ row: csvRow.row, id: csvRow.kanjoId, name });
-                return;
-            }
-            if (docs.length > 1) report.duplicateFirestoreNames.push({ name, docIds: docs.map((d) => d.docId) });
-            matchedNames.add(name);
-            const kanjoId = csvRow.kanjoId;
-            docs.forEach((docItem) => {
-                report.matched++;
-                updates.push({
-                    ref: docItem.ref,
-                    payload: {
-                        id: kanjoId,
-                        kanjo_id: kanjoId,
-                        image_url: masterCatalogDriveImagePath(kanjoId),
-                        image_file_name: kanjoId + '.jpg',
-                        drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
-                        image_migration_status: 'drive_linked',
-                        migrated_at: new Date()
-                    }
-                });
-            });
-        });
-        firestoreByName.forEach((docs, name) => {
-            if (!matchedNames.has(name)) report.unmatchedNames.push({ reason: 'firestore_only', name, docIds: docs.map((d) => d.docId) });
-        });
-        for (let i = 0; i < updates.length; i += 400) {
-            const chunk = updates.slice(i, i + 400);
-            const batch = window.writeBatch(window.db);
-            chunk.forEach((item) => batch.update(item.ref, item.payload));
-            await batch.commit();
-            report.updated += chunk.length;
-            if (i + 400 < updates.length) await delay(500);
+        if (!items.length) {
+            window.showToast('لا توجد صفوف صالحة في الملف', false);
+            return;
         }
-        const unmatchedNameList = report.unmatchedNames.map((item) => item.name).filter(Boolean);
-        console.log('[master-catalog-migration] matched', report.matched, 'updated', report.updated, 'csv', report.csvRows, 'firestore', report.firestoreDocs);
-        if (unmatchedNameList.length) console.warn('[master-catalog-migration] unmatched names', unmatchedNameList, report.unmatchedNames);
-        if (report.duplicateCsvNames.length) console.warn('[master-catalog-migration] duplicate csv names', report.duplicateCsvNames);
-        if (report.duplicateFirestoreNames.length) console.warn('[master-catalog-migration] duplicate firestore names', report.duplicateFirestoreNames);
-        console.log('[master-catalog-migration] report', report);
-        window.showToast('تم ترحيل ' + report.updated + ' منتج. غير المطابق: ' + report.unmatchedNames.length);
+        report.cleared = await clearMasterCatalogCollection();
+        report.imported = await saveMasterCatalogItems(items);
+        window._masterCatalogCache = items.map((item) => hydrateMasterCatalogItem(item.id, item));
+        console.log('[master-catalog-overwrite] imported', report.imported, 'of', report.csvRows, 'cleared', report.cleared);
+        if (report.skipped.length) console.warn('[master-catalog-overwrite] skipped rows', report.skipped);
+        if (report.duplicates.length) console.warn('[master-catalog-overwrite] duplicate ids', report.duplicates);
+        console.log('[master-catalog-overwrite] report', report);
+        window.showToast('تم استبدال الكتالوج بـ ' + report.imported + ' منتج');
+        if (fileInput) fileInput.value = '';
+        const label = document.getElementById('masterCatalogMigrateCsvName');
+        if (label) label.textContent = 'اختر ملف CSV (عمود Id)';
     } catch (err) {
-        console.error('[master-catalog-migration] failed:', err);
+        console.error('[master-catalog-overwrite] failed:', err);
         report.errors.push(String(err && err.message ? err.message : err));
-        window.showToast('فشل ترحيل الكتالوج الرئيسي', false);
+        window.showToast('فشل استبدال الكتالوج الرئيسي', false);
     } finally {
         window._masterCatalogMigrating = false;
         if (migrateBtn) {
             migrateBtn.disabled = false;
-            migrateBtn.innerHTML = '<i class="fa-solid fa-database"></i> ترحيل المعرفات وصور Drive';
+            migrateBtn.innerHTML = '<i class="fa-solid fa-database"></i> استبدال الكتالوج بالكامل';
         }
-        console.log('[master-catalog-migration] finished', report);
+        console.log('[master-catalog-overwrite] finished', report);
     }
 };
 
