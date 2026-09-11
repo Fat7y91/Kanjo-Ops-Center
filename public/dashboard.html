@@ -2300,6 +2300,38 @@
 
 
 
+    <div id="masterCatalogSearchModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[138]">
+
+        <div class="bg-white rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+
+            <div class="flex justify-between items-center border-b border-purple-100 px-5 pt-5 pb-3 shrink-0">
+
+                <div>
+
+                    <h3 class="font-black text-lg text-[#230535]">بحث من الكتالوج المرجعي</h3>
+
+                    <p class="text-xs text-slate-500 font-bold">للبحث في منتجات السوبر ماركت المرجعية وتعبئة النموذج</p>
+
+                </div>
+
+                <button type="button" onclick="closeMasterCatalogSearchModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div class="px-5 py-3 shrink-0">
+
+                <input type="text" id="masterCatalogSearchInput" oninput="searchMasterCatalog()" placeholder="ابحث باسم المنتج (مثال: قهوة)" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+            </div>
+
+            <div id="masterCatalogSearchResults" class="flex-1 overflow-y-auto hide-scrollbar px-5 pb-5 space-y-2 min-h-[200px]"></div>
+
+        </div>
+
+    </div>
+
+
+
     <div id="catalogProductModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[137]">
 
         <div class="bg-white rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
@@ -2332,7 +2364,17 @@
 
                         <label class="block text-[11px] font-black text-[#230535] mb-1">التاجر (اتفاق نهائي)</label>
 
-                         <select id="catalogMerchantSelect" required class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
+                         <select id="catalogMerchantSelect" required onchange="onCatalogMerchantChange()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
+
+                    </div>
+
+                    <div id="masterCatalogSearchWrap" class="hidden">
+
+                        <button type="button" id="masterCatalogSearchBtn" onclick="openMasterCatalogSearchModal()" class="w-full min-h-[44px] bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
+
+                            <i class="fa-solid fa-magnifying-glass"></i> بحث من الكتالوج المرجعي
+
+                        </button>
 
                     </div>
 

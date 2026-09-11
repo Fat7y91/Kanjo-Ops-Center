@@ -485,6 +485,124 @@ const resetCatalogEditState = () => {
     window._catalogEditingProduct = null;
     hideCatalogSavedImages();
     setCatalogModalChrome();
+    if (typeof window.updateMasterCatalogSearchVisibility === 'function') window.updateMasterCatalogSearchVisibility();
+};
+
+const isSupermarketMerchant = (merchant) => {
+    const cat = String((merchant && (merchant.category || merchant.cat)) || resolveMerchantCategory(merchant) || '').trim();
+    return cat.includes('سوبر ماركت') || cat.toLowerCase().includes('supermarket');
+};
+
+const selectedCatalogMerchant = () => {
+    const merchantId = (document.getElementById('catalogMerchantSelect') || {}).value || '';
+    return (window._catalogMerchantMap && window._catalogMerchantMap[merchantId]) || null;
+};
+
+const isKanjoDriveImageUrl = (url) => !!catalogDriveFileId(url);
+
+window.updateMasterCatalogSearchVisibility = () => {
+    const wrap = document.getElementById('masterCatalogSearchWrap');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', !isSupermarketMerchant(selectedCatalogMerchant()));
+};
+
+window.onCatalogMerchantChange = () => {
+    window.updateMasterCatalogSearchVisibility();
+};
+
+window.closeMasterCatalogSearchModal = () => {
+    const modal = document.getElementById('masterCatalogSearchModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.openMasterCatalogSearchModal = async () => {
+    if (!window.isCatalogRepUser()) {
+        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
+        return;
+    }
+    if (!isSupermarketMerchant(selectedCatalogMerchant())) {
+        if (window.showToast) window.showToast('البحث المرجعي متاح لتجار السوبر ماركت فقط', false);
+        return;
+    }
+    const modal = document.getElementById('masterCatalogSearchModal');
+    const input = document.getElementById('masterCatalogSearchInput');
+    const results = document.getElementById('masterCatalogSearchResults');
+    if (input) input.value = '';
+    if (results) results.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold">اكتب كلمة للبحث</div>';
+    if (modal) modal.classList.remove('hidden');
+    try {
+        if (!Array.isArray(window._masterCatalogCache) || !window._masterCatalogCache.length) {
+            const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
+            const items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+            window._masterCatalogCache = items;
+        }
+    } catch (err) {
+        console.error('[master] search load failed:', err);
+        if (results) results.innerHTML = '<div class="text-center py-8 text-red-500 font-bold">تعذر تحميل الكتالوج المرجعي</div>';
+    }
+};
+
+window.searchMasterCatalog = () => {
+    const input = document.getElementById('masterCatalogSearchInput');
+    const results = document.getElementById('masterCatalogSearchResults');
+    if (!results) return;
+    const q = String((input && input.value) || '').trim().toLowerCase();
+    if (!q) {
+        results.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold">اكتب كلمة للبحث</div>';
+        return;
+    }
+    const items = (window._masterCatalogCache || []).filter((item) => {
+        const name = String(item.name || item.name_ar || item.name_en || '').toLowerCase();
+        const sku = String(item.sku || '').toLowerCase();
+        return name.includes(q) || sku.includes(q);
+    }).slice(0, 40);
+    if (!items.length) {
+        results.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold">لا توجد نتائج</div>';
+        return;
+    }
+    results.innerHTML = items.map((item) => {
+        const id = catalogEscapeHtml(item.id);
+        const name = catalogEscapeHtml(item.name || item.name_ar || 'بدون اسم');
+        const price = catalogEscapeHtml(item.price == null ? '' : item.price);
+        const driveUrl = isKanjoDriveImageUrl(item.image_url) ? catalogEscapeHtml(catalogDriveThumbnailUrl(item.image_url) || item.image_url) : '';
+        const thumb = driveUrl
+            ? `<img src="${driveUrl}" alt="" class="w-14 h-14 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+            : `<div class="w-14 h-14 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        return `<button type="button" onclick="selectMasterCatalogItem('${id}')" class="w-full bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3 text-right hover:bg-[#FFD700]/10 transition">
+            ${thumb}
+            <div class="min-w-0 flex-1">
+                <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+                <div class="text-[11px] font-black bg-[#FFD700]/20 text-[#230535] inline-block px-2 py-0.5 rounded-full mt-1">${price} ج.م</div>
+            </div>
+        </button>`;
+    }).join('');
+};
+
+window.selectMasterCatalogItem = (itemId) => {
+    const item = (window._masterCatalogCache || []).find((p) => p.id === itemId);
+    if (!item) return;
+    const name = String(item.name || item.name_ar || '').trim();
+    const price = item.price == null ? '' : item.price;
+    const sku = String(item.sku || '').trim();
+    const nameEl = document.getElementById('catalogNameAr');
+    const descEl = document.getElementById('catalogDescriptionAr');
+    const priceEl = document.getElementById('catalogBasePrice');
+    const skuEl = document.getElementById('catalogSku');
+    if (nameEl) nameEl.value = name;
+    if (descEl && !String(descEl.value || '').trim()) descEl.value = name;
+    if (priceEl) priceEl.value = price;
+    if (skuEl && sku) skuEl.value = sku;
+    const typeEl = document.getElementById('catalogProductType');
+    if (typeEl) typeEl.value = 'simple';
+    window.onCatalogProductTypeChange();
+    if (isKanjoDriveImageUrl(item.image_url)) {
+        renderCatalogSavedImages({ rawImageUrls: [item.image_url], enhancedImageUrls: [item.image_url] });
+    } else {
+        hideCatalogSavedImages();
+    }
+    window.closeMasterCatalogSearchModal();
+    if (window.showToast) window.showToast('تم تعبئة بيانات المنتج. يمكنك تعديل السعر أو رفع صورة محلية');
 };
 
 let productImagesState = [];
@@ -630,6 +748,7 @@ const clearCatalogProductFields = (keepMerchant) => {
         const merchantEl = document.getElementById('catalogMerchantSelect');
         if (merchantEl) merchantEl.value = '';
     }
+    if (typeof window.updateMasterCatalogSearchVisibility === 'function') window.updateMasterCatalogSearchVisibility();
     const typeEl = document.getElementById('catalogProductType');
     if (typeEl) typeEl.value = 'simple';
     resetCatalogImageState();
@@ -716,6 +835,7 @@ window.openCatalogProductModal = () => {
     fillCatalogMerchantOptions();
     clearCatalogProductFields(false);
     setCatalogModalChrome();
+    window.updateMasterCatalogSearchVisibility();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
@@ -1057,6 +1177,7 @@ window.openCatalogProductEditor = (productId) => {
     }
     renderCatalogSavedImages(product);
     setCatalogModalChrome();
+    window.updateMasterCatalogSearchVisibility();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
@@ -2371,6 +2492,11 @@ window.addEventListener('keydown', (ev) => {
     const lightbox = document.getElementById('imageLightbox');
     if (ev.key === 'Escape' && lightbox && !lightbox.classList.contains('hidden')) {
         window.closeImageLightbox();
+        return;
+    }
+    const searchModal = document.getElementById('masterCatalogSearchModal');
+    if (ev.key === 'Escape' && searchModal && !searchModal.classList.contains('hidden')) {
+        window.closeMasterCatalogSearchModal();
         return;
     }
     const modal = document.getElementById('catalogProductModal');
