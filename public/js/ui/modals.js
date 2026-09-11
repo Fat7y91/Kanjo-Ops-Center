@@ -922,6 +922,14 @@ window.confirmArchiveReport = async () => {
 
 window.openViewArchivedReportsModal = async () => {
 
+    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
+
+        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
+
+        return;
+
+    }
+
     const container = document.getElementById('archivedReportsListContainer');
 
     container.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل التقارير المستبعدة...</div>';
@@ -1258,6 +1266,14 @@ window.submitTransferRequest = async () => {
 
 window.openAdminTransferModal = async () => {
 
+    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
+
+        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
+
+        return;
+
+    }
+
     const listContainer = document.getElementById('adminTransferList');
 
     listContainer.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل الطلبات...</div>';
@@ -1565,6 +1581,14 @@ window.refreshContractPreview = () => {
 window.searchContracts = () => window.openContractsManagerModal();
 
 window.openContractsManagerModal = () => {
+
+    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
+
+        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
+
+        return;
+
+    }
 
     const modal = document.getElementById('contractsManagerModal');
 

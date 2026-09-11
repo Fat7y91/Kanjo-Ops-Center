@@ -2,6 +2,16 @@
 
 window.closeStatModal = () => document.getElementById('detailsModal').classList.add('hidden');
 
+window.isMahmoudOpsUser = () => {
+
+    const u = window.currentUser;
+
+    if (!u) return false;
+
+    return String(u.name || '').includes('محمود');
+
+};
+
 window.canManageContracts = () => {
 
     const u = window.currentUser;

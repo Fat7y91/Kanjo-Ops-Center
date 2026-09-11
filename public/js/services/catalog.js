@@ -47,7 +47,7 @@ window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || win
 
 window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
 
-window.canUseStagingCatalog = () => !!(window.isDataEntryUser() || window.isCatalogFounderUser() || window.isMahmoudUser());
+window.canUseStagingCatalog = () => !!window.isDataEntryUser();
 
 const CATALOG_EXPORT_COLUMNS = [
     'product_key',

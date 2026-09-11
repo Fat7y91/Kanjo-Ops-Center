@@ -145,19 +145,23 @@ function applyThemeAndShowDashboard() {
             window.refreshFinancialProfileBanner();
         }
         
+        const isMahmoudOps = (typeof window.isMahmoudOpsUser === 'function')
+            ? window.isMahmoudOpsUser()
+            : String((currentUser && currentUser.name) || '').includes('محمود');
+
         const adminTransferNavBtnWrapper = document.getElementById('adminTransferNavBtnWrapper');
         if (adminTransferNavBtnWrapper) {
-            adminTransferNavBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
+            adminTransferNavBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
         }
 
         const contractsNavBtnWrapper = document.getElementById('contractsNavBtnWrapper');
         if (contractsNavBtnWrapper) {
-            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
+            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
         }
 
         const archivedReportsBtnWrapper = document.getElementById('archivedReportsBtnWrapper');
         if (archivedReportsBtnWrapper) {
-            archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoud || isDataEntry);
+            archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
         }
         
         if(canViewLive && window.setupAdvancedFilterElements) {
@@ -193,7 +197,10 @@ function applyThemeAndShowDashboard() {
                 });
 
                 const transferBadge = document.getElementById('transferBadge');
-                if (transferBadge && isMahmoud) {
+                const showTransferBadge = (typeof window.isMahmoudOpsUser === 'function')
+                    ? window.isMahmoudOpsUser()
+                    : String((currentUser && currentUser.name) || '').includes('محمود');
+                if (transferBadge && showTransferBadge) {
                     if (snap.size > 0) {
                         transferBadge.classList.remove('hidden');
                     } else {
