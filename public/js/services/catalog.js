@@ -2567,64 +2567,21 @@ const parseCsvRecords = (text) => {
     return records;
 };
 
-const masterCatalogImageFileKey = (name) => String(name || '')
-    .replace(/\.[^.]+$/, '')
-    .trim()
-    .toLowerCase();
-
-const fetchMasterCatalogDriveFileMap = async () => {
-    const url = (window.KANJO_DRIVE_SCRIPT_URL || '').trim();
-    const token = (window.KANJO_DRIVE_SCRIPT_TOKEN || '').trim();
-    if (!url || !token) throw new Error('NO_DRIVE_SCRIPT');
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ token, action: 'listMasterCatalogImages' })
-    });
-    const text = await res.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch (_) {}
-    if (!data || data.success !== true) throw new Error((data && data.message) || 'DRIVE_LIST_FAILED');
-    const map = new Map();
-    (data.files || []).forEach((file) => {
-        const key = masterCatalogImageFileKey(file && file.name);
-        if (key && file.id) map.set(key, String(file.id));
-    });
-    return { folderId: data.folderId || '', files: map, count: map.size };
-};
-
-const resolveMasterCatalogDriveFileId = (kanjoId, fileMap, csvImageUrl) => {
-    const fromCsv = catalogDriveFileId(csvImageUrl);
-    if (fromCsv) return fromCsv;
-    const id = String(kanjoId || '').trim();
-    if (!id || !fileMap) return '';
-    const candidates = [id, id.toLowerCase(), id.toUpperCase()];
-    for (let i = 0; i < candidates.length; i++) {
-        const key = masterCatalogImageFileKey(candidates[i]);
-        if (fileMap.has(key)) return fileMap.get(key);
-    }
-    return '';
-};
-
-const mapMasterCatalogCsvRow = (row, idx, fileMap) => {
+const mapMasterCatalogCsvRow = (row, idx) => {
     const kanjoId = String(row.id || row.Id || row.ID || '').trim();
     const name = String(row.name || row.name_ar || '').trim();
     const priceRaw = row.price;
     const priceNum = Number(String(priceRaw == null ? '' : priceRaw).replace(/[^\d.]/g, ''));
     const csvImage = String(row.image_url || row.imageurl || '').trim();
-    const driveFileId = resolveMasterCatalogDriveFileId(kanjoId, fileMap, csvImage);
     return {
         id: kanjoId,
         kanjo_id: kanjoId,
         name,
         price: Number.isFinite(priceNum) ? priceNum : (priceRaw || ''),
-        image_url: driveFileId ? catalogDriveViewUrl(driveFileId) : '',
-        drive_file_id: driveFileId,
-        image_file_name: kanjoId ? (kanjoId + '.jpg') : '',
+        image_url: csvImage,
         category: String(row.category || '').trim(),
         sku: String(row.sku || '').trim(),
         drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
-        image_migration_status: driveFileId ? 'drive_linked' : 'missing_drive_file',
         source_row: idx + 2,
         uploaded_at: new Date()
     };
@@ -2656,10 +2613,8 @@ window.migrateMasterCatalogFromCsv = async () => {
         migrateBtn.disabled = true;
         migrateBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الاستبدال...';
     }
-    const report = { csvRows: 0, imported: 0, linked: 0, missingImages: [], skipped: [], duplicates: [], cleared: 0, driveFiles: 0, errors: [] };
+    const report = { csvRows: 0, imported: 0, skipped: [], duplicates: [], cleared: 0, errors: [] };
     try {
-        const drive = await fetchMasterCatalogDriveFileMap();
-        report.driveFiles = drive.count;
         const text = await readLocalJsonFile(file);
         const records = parseCsvRecords(text);
         if (!records.length) {
@@ -2670,7 +2625,7 @@ window.migrateMasterCatalogFromCsv = async () => {
         const seenIds = new Set();
         const items = [];
         records.forEach((row, idx) => {
-            const item = mapMasterCatalogCsvRow(row, idx, drive.files);
+            const item = mapMasterCatalogCsvRow(row, idx);
             if (!item.id || !item.name) {
                 report.skipped.push({ row: idx + 2, id: item.id, name: item.name, reason: !item.id ? 'missing_id' : 'missing_name' });
                 return;
@@ -2680,8 +2635,6 @@ window.migrateMasterCatalogFromCsv = async () => {
                 return;
             }
             seenIds.add(item.id);
-            if (item.drive_file_id) report.linked++;
-            else report.missingImages.push({ row: idx + 2, id: item.id, name: item.name });
             items.push(item);
         });
         if (!items.length) {
@@ -2691,12 +2644,11 @@ window.migrateMasterCatalogFromCsv = async () => {
         report.cleared = await clearMasterCatalogCollection();
         report.imported = await saveMasterCatalogItems(items);
         window._masterCatalogCache = items.map((item) => hydrateMasterCatalogItem(item.id, item));
-        console.log('[master-catalog-overwrite] imported', report.imported, 'linked', report.linked, 'driveFiles', report.driveFiles);
+        console.log('[master-catalog-overwrite] imported', report.imported);
         if (report.skipped.length) console.warn('[master-catalog-overwrite] skipped rows', report.skipped);
         if (report.duplicates.length) console.warn('[master-catalog-overwrite] duplicate ids', report.duplicates);
-        if (report.missingImages.length) console.warn('[master-catalog-overwrite] missing drive images', report.missingImages);
         console.log('[master-catalog-overwrite] report', report);
-        window.showToast('تم استبدال الكتالوج بـ ' + report.imported + ' منتج. صور مربوطة: ' + report.linked);
+        window.showToast('تم استبدال الكتالوج بـ ' + report.imported + ' منتج');
         if (fileInput) fileInput.value = '';
         const label = document.getElementById('masterCatalogMigrateCsvName');
         if (label) label.textContent = 'اختر ملف CSV (عمود Id)';
@@ -2711,70 +2663,6 @@ window.migrateMasterCatalogFromCsv = async () => {
             migrateBtn.innerHTML = '<i class="fa-solid fa-database"></i> استبدال الكتالوج بالكامل';
         }
         console.log('[master-catalog-overwrite] finished', report);
-    }
-};
-
-window.relinkMasterCatalogDriveImages = async () => {
-    if (!window.canUseStagingCatalog()) {
-        if (window.showToast) window.showToast('ربط الصور متاح لإدخال البيانات فقط', false);
-        return;
-    }
-    if (window._masterCatalogRelinking) return;
-    const btn = document.getElementById('masterCatalogRelinkBtn');
-    window._masterCatalogRelinking = true;
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري ربط الصور...';
-    }
-    const report = { updated: 0, missing: [], driveFiles: 0, errors: [] };
-    try {
-        const drive = await fetchMasterCatalogDriveFileMap();
-        report.driveFiles = drive.count;
-        const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
-        const updates = [];
-        snap.forEach((d) => {
-            const data = d.data() || {};
-            const kanjoId = String(data.id || data.kanjo_id || d.id || '').trim();
-            const driveFileId = resolveMasterCatalogDriveFileId(kanjoId, drive.files, data.image_url);
-            if (!driveFileId) {
-                report.missing.push({ docId: d.id, id: kanjoId, name: data.name || '' });
-                return;
-            }
-            const imageUrl = catalogDriveViewUrl(driveFileId);
-            if (data.image_url === imageUrl && data.drive_file_id === driveFileId) return;
-            updates.push({
-                ref: d.ref,
-                payload: {
-                    image_url: imageUrl,
-                    drive_file_id: driveFileId,
-                    image_file_name: kanjoId + '.jpg',
-                    image_migration_status: 'drive_linked'
-                }
-            });
-        });
-        for (let i = 0; i < updates.length; i += 400) {
-            const chunk = updates.slice(i, i + 400);
-            const batch = window.writeBatch(window.db);
-            chunk.forEach((item) => batch.update(item.ref, item.payload));
-            await batch.commit();
-            report.updated += chunk.length;
-            if (i + 400 < updates.length) await delay(300);
-        }
-        window._masterCatalogCache = [];
-        console.log('[master-catalog-relink] updated', report.updated, 'driveFiles', report.driveFiles);
-        if (report.missing.length) console.warn('[master-catalog-relink] missing drive images', report.missing);
-        window.showToast('تم ربط ' + report.updated + ' صورة. غير الموجود: ' + report.missing.length);
-    } catch (err) {
-        console.error('[master-catalog-relink] failed:', err);
-        report.errors.push(String(err && err.message ? err.message : err));
-        window.showToast('فشل ربط صور Drive. تأكد من نشر سكربت Drive بعد التحديث', false);
-    } finally {
-        window._masterCatalogRelinking = false;
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-link"></i> ربط صور Drive للمنتجات الحالية';
-        }
-        console.log('[master-catalog-relink] finished', report);
     }
 };
 
@@ -2800,7 +2688,7 @@ window.uploadMasterCatalogDriveLinks = async () => {
     window._masterCatalogDriveLinksUploading = true;
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الربط...';
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري التحديث...';
     }
     const report = { csvRows: 0, updated: 0, unmatched: [], skipped: [], duplicates: [], errors: [] };
     try {
@@ -2842,16 +2730,12 @@ window.uploadMasterCatalogDriveLinks = async () => {
             const csvRow = csvById.get(kanjoId);
             if (!csvRow) return;
             matchedIds.add(kanjoId);
-            const driveFileId = catalogDriveFileId(csvRow.imageUrl);
-            const imageUrl = driveFileId ? catalogDriveViewUrl(driveFileId) : csvRow.imageUrl;
+            if (data.image_url === csvRow.imageUrl) return;
             updates.push({
                 ref: d.ref,
                 payload: {
-                    image_url: imageUrl,
-                    drive_file_id: driveFileId || '',
-                    image_file_name: kanjoId + '.jpg',
-                    image_migration_status: 'drive_linked',
-                    linked_at: new Date()
+                    image_url: csvRow.imageUrl,
+                    updated_at: new Date()
                 }
             });
         });
@@ -2869,19 +2753,19 @@ window.uploadMasterCatalogDriveLinks = async () => {
         window._masterCatalogCache = [];
         console.log('[master-catalog-drive-links] updated', report.updated, 'of', report.csvRows, report);
         if (report.unmatched.length) console.warn('[master-catalog-drive-links] unmatched ids', report.unmatched);
-        window.showToast('تم ربط ' + report.updated + ' منتج بنجاح. غير المطابق: ' + report.unmatched.length);
+        window.showToast('تم تحديث ' + report.updated + ' رابط صورة. غير المطابق: ' + report.unmatched.length);
         if (fileInput) fileInput.value = '';
         const label = document.getElementById('masterCatalogDriveLinksCsvName');
         if (label) label.textContent = 'اختر ملف CSV (Id, image_url)';
     } catch (err) {
         console.error('[master-catalog-drive-links] failed:', err);
         report.errors.push(String(err && err.message ? err.message : err));
-        window.showToast('فشل رفع روابط صور جوجل درايف', false);
+        window.showToast('فشل تحديث روابط الصور من CSV', false);
     } finally {
         window._masterCatalogDriveLinksUploading = false;
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> رفع وربط الروابط';
+            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> تحديث روابط الصور من CSV';
         }
         console.log('[master-catalog-drive-links] finished', report);
     }
@@ -2962,7 +2846,6 @@ window.processMasterCatalogJson = async () => {
                 sku: item.sku || '',
                 uploaded_at: new Date(),
                 drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
-                image_migration_status: item.image_url ? 'queued' : 'none',
                 source_files: files.map((f) => f.name)
             });
         });

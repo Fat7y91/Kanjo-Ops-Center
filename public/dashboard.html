@@ -1438,7 +1438,7 @@
 
                         <h4 class="font-black text-base text-[#230535]">رفع الكتالوج الرئيسي</h4>
 
-                        <p class="text-xs text-slate-500 font-bold">رفع ملف CSV لاستبدال الكتالوج بالكامل وربط صور Google Drive</p>
+                        <p class="text-xs text-slate-500 font-bold">رفع ملف CSV لاستبدال الكتالوج بالكامل</p>
 
                     </div>
 
@@ -1464,7 +1464,7 @@
 
                 <div class="border-t border-purple-100 pt-3 space-y-3">
 
-                    <p class="text-[11px] font-bold text-slate-500">رفع CSV يستبدل الكتالوج ويربط كل منتج بمعرف ملف Drive الحقيقي لصورة {Id}.jpg داخل master_catalog_images</p>
+                    <p class="text-[11px] font-bold text-slate-500">رفع CSV يستبدل الكتالوج بالكامل. لتحديث الصور استخدم أداة تحديث روابط الصور</p>
 
                     <label for="masterCatalogMigrateCsv" class="flex flex-col items-center justify-center gap-1 w-full min-h-[48px] px-4 py-3 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
 
@@ -1477,12 +1477,6 @@
                     <button type="button" id="masterCatalogMigrateBtn" onclick="migrateMasterCatalogFromCsv()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
 
                         <i class="fa-solid fa-database"></i> استبدال الكتالوج بالكامل
-
-                    </button>
-
-                    <button type="button" id="masterCatalogRelinkBtn" onclick="relinkMasterCatalogDriveImages()" class="w-full bg-white text-[#230535] border border-[#230535]/40 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
-
-                        <i class="fa-solid fa-link"></i> ربط صور Drive للمنتجات الحالية
 
                     </button>
 
@@ -1500,9 +1494,9 @@
 
                     <div>
 
-                        <h4 class="font-black text-base text-[#230535]">رفع روابط صور جوجل درايف</h4>
+                        <h4 class="font-black text-base text-[#230535]">تحديث روابط الصور من CSV</h4>
 
-                        <p class="text-xs text-slate-500 font-bold">ملف CSV بعمودين فقط: Id و image_url لتحديث روابط الصور في الكتالوج الرئيسي</p>
+                        <p class="text-xs text-slate-500 font-bold">ملف CSV بعمودين فقط: Id و image_url — يحدّث image_url مباشرة في الكتالوج الرئيسي</p>
 
                     </div>
 
@@ -1520,7 +1514,7 @@
 
                 <button type="button" id="masterCatalogDriveLinksBtn" onclick="uploadMasterCatalogDriveLinks()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
 
-                    <i class="fa-solid fa-cloud-arrow-up"></i> رفع وربط الروابط
+                    <i class="fa-solid fa-cloud-arrow-up"></i> تحديث روابط الصور من CSV
 
                 </button>
 
