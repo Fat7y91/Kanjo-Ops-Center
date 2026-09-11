@@ -2560,6 +2560,98 @@
 
 
 
+    <div id="catalogVariableGuideModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 z-[160]">
+
+        <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl border-4 border-[#FFD700]">
+
+            <div class="bg-[#230535] px-5 sm:px-7 py-4 shrink-0">
+
+                <h3 class="font-black text-lg sm:text-xl text-[#FFD700] flex items-center gap-2">
+
+                    <i class="fa-solid fa-triangle-exclamation text-[#E57723]"></i> تنبيه هام: كيف تضيف خيارات المنتج بشكل صحيح؟
+
+                </h3>
+
+                <p class="text-xs sm:text-sm text-white/80 font-bold mt-2 leading-relaxed">إضافة الأصناف كخيارات يقلل من عدد منتجات المتجر ويضر المبيعات. الخيارات مخصصة للأحجام فقط وليس للأنواع.</p>
+
+            </div>
+
+            <div class="flex-1 overflow-y-auto hide-scrollbar px-5 sm:px-7 py-4 space-y-4">
+
+                <div class="rounded-2xl border border-purple-100 overflow-hidden">
+
+                    <div class="bg-[#230535] text-[#FFD700] px-4 py-2 text-xs font-black">المثال الأول: المطاعم</div>
+
+                    <div class="grid sm:grid-cols-2">
+
+                        <div class="bg-red-50 sm:border-l border-b sm:border-b-0 border-red-100 p-4">
+
+                            <div class="flex items-center gap-2 text-red-600 font-black text-sm mb-2"><i class="fa-solid fa-circle-xmark"></i> خطأ</div>
+
+                            <p class="text-xs font-bold text-slate-700 leading-relaxed">منتج رئيسي "بيتزا" ← خيارات: (فراخ، لحمة، جبنة). <span class="text-red-600 font-black">"المطعم سيظهر فارغاً!"</span></p>
+
+                        </div>
+
+                        <div class="bg-emerald-50 p-4">
+
+                            <div class="flex items-center gap-2 text-emerald-600 font-black text-sm mb-2"><i class="fa-solid fa-circle-check"></i> صح</div>
+
+                            <p class="text-xs font-bold text-slate-700 leading-relaxed">منتج رئيسي "بيتزا دجاج رانش" ← خيارات: (صغير، وسط، كبير).</p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="rounded-2xl border border-purple-100 overflow-hidden">
+
+                    <div class="bg-[#230535] text-[#FFD700] px-4 py-2 text-xs font-black">المثال الثاني: السوبر ماركت</div>
+
+                    <div class="grid sm:grid-cols-2">
+
+                        <div class="bg-red-50 sm:border-l border-b sm:border-b-0 border-red-100 p-4">
+
+                            <div class="flex items-center gap-2 text-red-600 font-black text-sm mb-2"><i class="fa-solid fa-circle-xmark"></i> خطأ</div>
+
+                            <p class="text-xs font-bold text-slate-700 leading-relaxed">منتج رئيسي "شيبسي" ← خيارات: (ملح، طماطم، شطة).</p>
+
+                        </div>
+
+                        <div class="bg-emerald-50 p-4">
+
+                            <div class="flex items-center gap-2 text-emerald-600 font-black text-sm mb-2"><i class="fa-solid fa-circle-check"></i> صح</div>
+
+                            <p class="text-xs font-bold text-slate-700 leading-relaxed">منتج رئيسي "شيبسي طماطم" ← خيارات: (حجم صغير 50جم، عائلي 100جم).</p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="rounded-2xl bg-[#FFD700]/15 border border-[#FFD700] p-4 flex items-start gap-3">
+
+                    <i class="fa-solid fa-lightbulb text-[#E57723] text-lg mt-0.5"></i>
+
+                    <p class="text-xs font-bold text-[#230535] leading-relaxed">يمكنك الآن إضافة صورة مختلفة لكل خيار (مثال: صورة لبرجر سنجل، وصورة أخرى لبرجر دبل في نفس المنتج).</p>
+
+                </div>
+
+            </div>
+
+            <div class="shrink-0 border-t border-purple-100 px-5 sm:px-7 py-4 bg-white">
+
+                <button type="button" id="catalogVariableGuideContinueBtn" onclick="closeCatalogVariableGuide()" disabled class="w-full min-h-[52px] bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black text-base transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md">فهمت ذلك، استمرار</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
     <div id="merchantDocsAuditModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[136]">
 
         <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">

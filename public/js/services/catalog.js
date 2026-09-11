@@ -305,22 +305,92 @@ const mapCatalogProductToExportRow = (p) => ({
 
 let catalogVariationSeq = 0;
 
-window.addCatalogVariationRow = (name, price) => {
+window.addCatalogVariationRow = (name, price, imageUrl) => {
     const list = document.getElementById('catalogVariationsList');
     if (!list) return;
     const id = 'catalogVar-' + (++catalogVariationSeq);
     const row = document.createElement('div');
     row.className = 'flex gap-2 items-center catalog-variation-row';
     row.id = id;
+    const preview = imageUrl ? catalogEscapeHtml(catalogDirectImageUrl(imageUrl) || imageUrl) : '';
     row.innerHTML = `<input type="text" class="catalog-variation-name flex-1 min-w-0 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="الحجم (وسط، كبير) / اللون" value="${catalogEscapeHtml(name || '')}">
-        <input type="number" min="0" step="0.01" class="catalog-variation-price w-28 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="السعر" value="${catalogEscapeHtml(price == null ? '' : price)}">
+        <input type="number" min="0" step="0.01" class="catalog-variation-price w-24 p-3 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]" placeholder="السعر" value="${catalogEscapeHtml(price == null ? '' : price)}">
+        <input type="file" accept="image/*" id="${id}-img" class="catalog-variation-image-input sr-only">
+        <label for="${id}-img" title="صورة الخيار (اختياري)" class="catalog-variation-image-btn shrink-0 w-11 h-11 rounded-xl border-2 border-dashed border-[#FFD700] grid place-items-center overflow-hidden cursor-pointer bg-white text-[#230535] hover:bg-[#FFD700]/10 transition">
+            ${preview ? `<img src="${preview}" class="w-full h-full object-cover" alt="" onerror="this.style.display='none'">` : '<i class="fa-regular fa-image"></i>'}
+        </label>
         <button type="button" onclick="removeCatalogVariationRow('${id}')" class="shrink-0 w-10 h-10 rounded-xl bg-red-50 text-red-500 font-black hover:bg-red-100">×</button>`;
+    row.dataset.existingImageUrl = imageUrl ? String(imageUrl) : '';
     list.appendChild(row);
+    const input = row.querySelector('.catalog-variation-image-input');
+    if (input) input.addEventListener('change', (e) => window.onCatalogVariationImageChange(e, id));
+};
+
+window.onCatalogVariationImageChange = (event, rowId) => {
+    const input = event && event.target;
+    const file = input && input.files && input.files[0];
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    if (!file || !String(file.type || '').startsWith('image/')) {
+        if (input) input.value = '';
+        return;
+    }
+    if (file.size > CATALOG_MAX_IMAGE_BYTES) {
+        if (window.showToast) window.showToast('حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)', false);
+        if (input) input.value = '';
+        return;
+    }
+    if (row._variantPreviewUrl) URL.revokeObjectURL(row._variantPreviewUrl);
+    const previewUrl = URL.createObjectURL(file);
+    row._variantImageFile = file;
+    row._variantPreviewUrl = previewUrl;
+    row.dataset.existingImageUrl = '';
+    const btn = row.querySelector('.catalog-variation-image-btn');
+    if (btn) btn.innerHTML = `<img src="${previewUrl}" class="w-full h-full object-cover" alt="">`;
 };
 
 window.removeCatalogVariationRow = (id) => {
     const el = document.getElementById(id);
-    if (el) el.remove();
+    if (el) {
+        if (el._variantPreviewUrl) URL.revokeObjectURL(el._variantPreviewUrl);
+        el.remove();
+    }
+};
+
+window.showCatalogVariableGuide = () => {
+    const modal = document.getElementById('catalogVariableGuideModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    const btn = document.getElementById('catalogVariableGuideContinueBtn');
+    if (!btn) return;
+    if (window._catalogGuideTimer) {
+        clearInterval(window._catalogGuideTimer);
+        window._catalogGuideTimer = null;
+    }
+    let remaining = 3;
+    btn.disabled = true;
+    btn.textContent = 'فهمت ذلك، استمرار (' + remaining + ')';
+    window._catalogGuideTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+            clearInterval(window._catalogGuideTimer);
+            window._catalogGuideTimer = null;
+            btn.disabled = false;
+            btn.textContent = 'فهمت ذلك، استمرار';
+        } else {
+            btn.textContent = 'فهمت ذلك، استمرار (' + remaining + ')';
+        }
+    }, 1000);
+};
+
+window.closeCatalogVariableGuide = () => {
+    const modal = document.getElementById('catalogVariableGuideModal');
+    if (modal) modal.classList.add('hidden');
+    window._catalogVariableGuideSeen = true;
+    if (window._catalogGuideTimer) {
+        clearInterval(window._catalogGuideTimer);
+        window._catalogGuideTimer = null;
+    }
 };
 
 window.onCatalogProductTypeChange = () => {
@@ -337,11 +407,20 @@ window.onCatalogProductTypeChange = () => {
         else priceEl.setAttribute('required', 'required');
     }
     if (isVariable && list && list.children.length === 0) window.addCatalogVariationRow();
+    if (isVariable && !window._catalogVariableGuideSeen && !window._catalogEditingProduct) {
+        window._catalogVariableGuideSeen = true;
+        window.showCatalogVariableGuide();
+    }
 };
 
 const resetCatalogVariations = () => {
     const list = document.getElementById('catalogVariationsList');
-    if (list) list.innerHTML = '';
+    if (list) {
+        Array.from(list.children).forEach((row) => {
+            if (row._variantPreviewUrl) URL.revokeObjectURL(row._variantPreviewUrl);
+        });
+        list.innerHTML = '';
+    }
     catalogVariationSeq = 0;
     window.onCatalogProductTypeChange();
 };
@@ -352,7 +431,13 @@ const collectCatalogVariations = () => {
     rows.forEach((row) => {
         const name = String((row.querySelector('.catalog-variation-name') || {}).value || '').trim();
         const priceRaw = String((row.querySelector('.catalog-variation-price') || {}).value || '').trim();
-        items.push({ name, priceRaw, price: Number(priceRaw) });
+        items.push({
+            name,
+            priceRaw,
+            price: Number(priceRaw),
+            imageFile: row._variantImageFile || null,
+            existingImageUrl: String(row.dataset.existingImageUrl || '')
+        });
     });
     return items;
 };
@@ -850,7 +935,7 @@ const isCatalogProductFormDirty = () => {
     if (typeEl && typeEl.value && typeEl.value !== 'simple') return true;
     if (productImagesState.length) return true;
     const vars = collectCatalogVariations();
-    return vars.some((v) => v.name || v.priceRaw);
+    return vars.some((v) => v.name || v.priceRaw || v.imageFile);
 };
 
 window.stopCatalogBarcodeScan = async () => {
@@ -989,7 +1074,14 @@ const collectCatalogFormDraft = async () => {
                 window.showToast('أدخل سعراً صحيحاً لكل خيار', false);
                 return null;
             }
-            variations.push({ name: v.name, price: v.price });
+            const variation = { name: v.name, price: v.price };
+            if (v.imageFile) {
+                variation.imageBase64 = await compressCatalogImage(v.imageFile);
+                variation.imageFileName = catalogJpegFileName(v.imageFile.name, 'variant');
+            } else if (v.existingImageUrl) {
+                variation.image_url = v.existingImageUrl;
+            }
+            variations.push(variation);
         }
         basePrice = Math.min(...variations.map((v) => v.price));
     } else if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) {
@@ -1119,7 +1211,12 @@ const collectCatalogFormPayload = () => {
                 window.showToast('أدخل سعراً صحيحاً لكل خيار', false);
                 return null;
             }
-            variations.push({ name: v.name, price: v.price });
+            variations.push({
+                name: v.name,
+                price: v.price,
+                imageFile: v.imageFile,
+                existingImageUrl: v.existingImageUrl
+            });
         }
         basePrice = Math.min(...variations.map((v) => v.price));
     } else if (priceRaw === '' || Number.isNaN(basePrice) || basePrice < 0) {
@@ -1196,8 +1293,31 @@ const updateCatalogProductDirect = async () => {
             updatedAt: new Date(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
         };
-        if (form.productType === 'variable') payload.variations = form.variations;
-        else payload.variations = [];
+        if (form.productType === 'variable') {
+            const variantPayload = [];
+            for (const v of form.variations) {
+                let variantImageUrl = '';
+                if (v.imageFile) {
+                    const base64Data = await compressCatalogImage(v.imageFile);
+                    variantImageUrl = await uploadCatalogImageToGas(
+                        base64Data,
+                        catalogJpegFileName(v.imageFile.name, 'variant'),
+                        form.merchant.merchantName,
+                        'variant'
+                    );
+                } else if (v.existingImageUrl) {
+                    variantImageUrl = v.existingImageUrl;
+                }
+                variantPayload.push({
+                    name: v.name,
+                    price: v.price,
+                    image_url: variantImageUrl || rawImageUrl || ''
+                });
+            }
+            payload.variations = variantPayload;
+        } else {
+            payload.variations = [];
+        }
         if (form.files.length) {
             payload.enhancedImageUrl = '';
             payload.enhancedImageUrls = [];
@@ -1255,7 +1375,7 @@ window.openCatalogProductEditor = (productId) => {
         const list = document.getElementById('catalogVariationsList');
         if (list) list.innerHTML = '';
         const vars = Array.isArray(product.variations) ? product.variations : [];
-        if (vars.length) vars.forEach((v) => window.addCatalogVariationRow(v.name, v.price));
+        if (vars.length) vars.forEach((v) => window.addCatalogVariationRow(v.name, v.price, v.image_url));
         else window.addCatalogVariationRow();
         window.onCatalogProductTypeChange();
     }
@@ -1759,7 +1879,26 @@ const syncOneCatalogDraft = async (draft) => {
         syncedFromDraft: true
     };
     if (draft.product_type === 'variable' && Array.isArray(draft.variations)) {
-        payload.variations = draft.variations;
+        const variantPayload = [];
+        for (const v of draft.variations) {
+            let variantImageUrl = '';
+            if (v && v.imageBase64) {
+                variantImageUrl = await uploadCatalogImageToGas(
+                    v.imageBase64,
+                    v.imageFileName || catalogJpegFileName('', 'variant'),
+                    draft.merchantName || 'Unknown',
+                    'variant'
+                );
+            } else if (v && v.image_url) {
+                variantImageUrl = v.image_url;
+            }
+            variantPayload.push({
+                name: v && v.name,
+                price: v && v.price,
+                image_url: variantImageUrl || rawImageUrls[0] || ''
+            });
+        }
+        payload.variations = variantPayload;
     }
     await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
 };
