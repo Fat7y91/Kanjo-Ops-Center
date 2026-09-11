@@ -1636,12 +1636,74 @@ window.backCatalogAllProductsMerchants = () => {
     renderCatalogAllProductsList();
 };
 
+const catalogRepDisplayName = (p) => String((p && (p.createdBy || p.added_by || p.addedBy || p.repName || p.created_by)) || '').trim() || 'غير معروف';
+
+const aggregateCatalogProductsByRep = (products) => {
+    const counts = new Map();
+    (products || []).forEach((p) => {
+        const name = catalogRepDisplayName(p);
+        counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => (b.count - a.count) || a.name.localeCompare(b.name, 'ar'));
+};
+
+window.renderCatalogRepLeaderboard = (products) => {
+    const wrap = document.getElementById('catalogRepLeaderboard');
+    if (!wrap) return;
+    const canView = window.canViewAllCatalogProducts() && !window.isDataEntryUser();
+    if (!canView) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    const list = products || window.allCatalogProductsCache || [];
+    const reps = aggregateCatalogProductsByRep(list);
+    const total = list.length;
+    const maxCount = reps.length ? reps[0].count : 0;
+    wrap.classList.remove('hidden');
+    const medals = ['fa-crown', 'fa-medal', 'fa-award'];
+    const cards = reps.map((rep, idx) => {
+        const pct = maxCount ? Math.round((rep.count / maxCount) * 100) : 0;
+        const medal = idx < 3
+            ? `<i class="fa-solid ${medals[idx]} text-[#E57723]"></i>`
+            : `<span class="text-[10px] font-black text-slate-400">#${idx + 1}</span>`;
+        return `<div class="bg-white border border-[#FFD700]/40 rounded-2xl p-3 shadow-sm min-w-[150px] flex-1">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-black text-[#230535] truncate">${catalogEscapeHtml(rep.name)}</span>
+                ${medal}
+            </div>
+            <div class="mt-1 flex items-baseline gap-1">
+                <span class="text-2xl font-black text-[#E57723]">${rep.count}</span>
+                <span class="text-[10px] font-bold text-slate-500">منتج</span>
+            </div>
+            <div class="mt-2 h-1.5 rounded-full bg-[#230535]/10 overflow-hidden">
+                <div class="h-full rounded-full bg-[#FFD700]" style="width:${pct}%"></div>
+            </div>
+        </div>`;
+    }).join('');
+    wrap.innerHTML = `<div class="bg-[#230535] rounded-2xl p-3 sm:p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-ranking-star text-[#FFD700]"></i>
+                <h4 class="font-black text-sm text-[#FFD700]">أداء فريق المبيعات (إجمالي المنتجات المضافة)</h4>
+            </div>
+            <span class="text-[10px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${total} منتج إجمالي</span>
+        </div>
+        ${reps.length
+            ? `<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:overflow-visible">${cards}</div>`
+            : '<div class="text-center py-4 text-[#FFD700]/70 font-bold text-xs">لا توجد بيانات بعد</div>'}
+    </div>`;
+};
+
 const renderCatalogAllProductsList = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
     const products = window.allCatalogProductsCache || [];
     if (countEl) countEl.textContent = String(products.length);
+    window.renderCatalogRepLeaderboard(products);
     if (!list) return;
     if (!products.length) {
         if (toolbar) {
@@ -1689,6 +1751,7 @@ window.renderCatalogAllProductsWidget = () => {
     widget.classList.toggle('hidden', !canView);
     const countEl = document.getElementById('catalogAllProductsCount');
     if (countEl) countEl.textContent = String((window.allCatalogProductsCache || []).length);
+    window.renderCatalogRepLeaderboard(window.allCatalogProductsCache || []);
     const body = document.getElementById('catalogAllProductsBody');
     if (canView && body && !body.classList.contains('hidden')) renderCatalogAllProductsList();
 };
