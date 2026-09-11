@@ -2310,19 +2310,12 @@ const parseCsvRecords = (text) => {
     return records;
 };
 
-const masterCatalogExactKey = (name, price, imageUrl, category) => {
-    const n = String(name || '').trim();
-    const img = String(imageUrl || '').trim();
-    const cat = String(category || '').trim();
-    const priceNum = Number(String(price == null ? '' : price).replace(/[^\d.]/g, ''));
-    const p = Number.isFinite(priceNum) ? String(priceNum) : String(price == null ? '' : price).trim();
-    return [n, p, img, cat].join('\u0001');
-};
+const masterCatalogNameKey = (name) => String(name || '').trim();
 
 const masterCatalogDriveImagePath = (kanjoId) => {
     const id = String(kanjoId || '').trim();
     if (!id) return '';
-    return MASTER_CATALOG_DRIVE_FOLDER + '/' + MASTER_CATALOG_IMAGES_DIR + '/' + id + '.jpg';
+    return 'https://drive.google.com/' + MASTER_CATALOG_IMAGES_DIR + '/' + id + '.jpg';
 };
 
 window.onMasterCatalogMigrateCsvChange = (event) => {
@@ -2349,7 +2342,7 @@ window.migrateMasterCatalogFromCsv = async () => {
         migrateBtn.disabled = true;
         migrateBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الترحيل...';
     }
-    const report = { matched: 0, updated: 0, unmatched: [], duplicates: [], errors: [] };
+    const report = { csvRows: 0, firestoreDocs: 0, matched: 0, updated: 0, unmatchedNames: [], duplicateCsvNames: [], duplicateFirestoreNames: [], errors: [] };
     try {
         const text = await readLocalJsonFile(file);
         const records = parseCsvRecords(text);
@@ -2357,50 +2350,64 @@ window.migrateMasterCatalogFromCsv = async () => {
             window.showToast('ملف CSV فارغ أو غير صالح', false);
             return;
         }
-        const csvByKey = new Map();
+        report.csvRows = records.length;
+        const csvByName = new Map();
         records.forEach((row, idx) => {
             const kanjoId = String(row.id || row.Id || row.ID || '').trim();
-            const name = row.name || row.name_ar || '';
-            const price = row.price;
-            const imageUrl = row.image_url || row.imageurl || '';
-            const category = row.category || '';
-            if (!kanjoId) {
-                report.unmatched.push({ row: idx + 2, reason: 'missing_id', name });
+            const name = masterCatalogNameKey(row.name || row.name_ar || '');
+            if (!name) {
+                report.unmatchedNames.push({ row: idx + 2, reason: 'missing_name', id: kanjoId });
                 return;
             }
-            const key = masterCatalogExactKey(name, price, imageUrl, category);
-            if (!csvByKey.has(key)) csvByKey.set(key, []);
-            csvByKey.get(key).push({ kanjoId, name, price, imageUrl, category, row: idx + 2 });
+            if (!kanjoId) {
+                report.unmatchedNames.push({ row: idx + 2, reason: 'missing_id', name });
+                return;
+            }
+            if (csvByName.has(name)) {
+                report.duplicateCsvNames.push({ name, rows: [csvByName.get(name).row, idx + 2] });
+                return;
+            }
+            csvByName.set(name, { kanjoId, name, row: idx + 2 });
         });
         const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
-        const updates = [];
+        report.firestoreDocs = snap.size;
+        const firestoreByName = new Map();
         snap.forEach((d) => {
             const data = d.data() || {};
-            const key = masterCatalogExactKey(data.name || data.name_ar, data.price, data.image_url, data.category);
-            const matches = csvByKey.get(key);
-            if (!matches || !matches.length) return;
-            report.matched++;
-            if (matches.length > 1) report.duplicates.push({ docId: d.id, csvRows: matches.map((m) => m.row) });
-            const kanjoId = matches[0].kanjoId;
-            updates.push({
-                ref: d.ref,
-                payload: {
-                    id: kanjoId,
-                    kanjo_id: kanjoId,
-                    image_url: masterCatalogDriveImagePath(kanjoId),
-                    image_file_name: kanjoId + '.jpg',
-                    drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
-                    image_migration_status: 'drive_linked',
-                    migrated_at: new Date()
-                }
+            const name = masterCatalogNameKey(data.name || data.name_ar);
+            if (!name) return;
+            if (!firestoreByName.has(name)) firestoreByName.set(name, []);
+            firestoreByName.get(name).push({ ref: d.ref, docId: d.id, name });
+        });
+        const updates = [];
+        const matchedNames = new Set();
+        csvByName.forEach((csvRow, name) => {
+            const docs = firestoreByName.get(name);
+            if (!docs || !docs.length) {
+                report.unmatchedNames.push({ row: csvRow.row, id: csvRow.kanjoId, name });
+                return;
+            }
+            if (docs.length > 1) report.duplicateFirestoreNames.push({ name, docIds: docs.map((d) => d.docId) });
+            matchedNames.add(name);
+            const kanjoId = csvRow.kanjoId;
+            docs.forEach((docItem) => {
+                report.matched++;
+                updates.push({
+                    ref: docItem.ref,
+                    payload: {
+                        id: kanjoId,
+                        kanjo_id: kanjoId,
+                        image_url: masterCatalogDriveImagePath(kanjoId),
+                        image_file_name: kanjoId + '.jpg',
+                        drive_folder: MASTER_CATALOG_DRIVE_FOLDER,
+                        image_migration_status: 'drive_linked',
+                        migrated_at: new Date()
+                    }
+                });
             });
         });
-        records.forEach((row, idx) => {
-            const kanjoId = String(row.id || row.Id || row.ID || '').trim();
-            if (!kanjoId) return;
-            const key = masterCatalogExactKey(row.name || row.name_ar, row.price, row.image_url || row.imageurl, row.category);
-            const found = updates.some((u) => u.payload.id === kanjoId);
-            if (!found) report.unmatched.push({ row: idx + 2, id: kanjoId, name: row.name || '' });
+        firestoreByName.forEach((docs, name) => {
+            if (!matchedNames.has(name)) report.unmatchedNames.push({ reason: 'firestore_only', name, docIds: docs.map((d) => d.docId) });
         });
         for (let i = 0; i < updates.length; i += 400) {
             const chunk = updates.slice(i, i + 400);
@@ -2410,8 +2417,13 @@ window.migrateMasterCatalogFromCsv = async () => {
             report.updated += chunk.length;
             if (i + 400 < updates.length) await delay(500);
         }
+        const unmatchedNameList = report.unmatchedNames.map((item) => item.name).filter(Boolean);
+        console.log('[master-catalog-migration] matched', report.matched, 'updated', report.updated, 'csv', report.csvRows, 'firestore', report.firestoreDocs);
+        if (unmatchedNameList.length) console.warn('[master-catalog-migration] unmatched names', unmatchedNameList, report.unmatchedNames);
+        if (report.duplicateCsvNames.length) console.warn('[master-catalog-migration] duplicate csv names', report.duplicateCsvNames);
+        if (report.duplicateFirestoreNames.length) console.warn('[master-catalog-migration] duplicate firestore names', report.duplicateFirestoreNames);
         console.log('[master-catalog-migration] report', report);
-        window.showToast('تم ترحيل ' + report.updated + ' منتج. غير المطابق: ' + report.unmatched.length);
+        window.showToast('تم ترحيل ' + report.updated + ' منتج. غير المطابق: ' + report.unmatchedNames.length);
     } catch (err) {
         console.error('[master-catalog-migration] failed:', err);
         report.errors.push(String(err && err.message ? err.message : err));
