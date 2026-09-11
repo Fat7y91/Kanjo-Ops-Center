@@ -1492,6 +1492,42 @@
 
 
 
+            <div id="masterCatalogDriveLinksWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-link"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">رفع روابط صور جوجل درايف</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">ملف CSV بعمودين فقط: Id و image_url لتحديث روابط الصور في الكتالوج الرئيسي</p>
+
+                    </div>
+
+                </div>
+
+                <label for="masterCatalogDriveLinksCsv" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+
+                    <i class="fa-solid fa-file-csv"></i>
+
+                    <span id="masterCatalogDriveLinksCsvName" class="text-[11px] font-bold text-slate-500">اختر ملف CSV (Id, image_url)</span>
+
+                </label>
+
+                <input type="file" id="masterCatalogDriveLinksCsv" accept=".csv,text/csv" class="sr-only" onchange="onMasterCatalogDriveLinksCsvChange(event)">
+
+                <button type="button" id="masterCatalogDriveLinksBtn" onclick="uploadMasterCatalogDriveLinks()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                    <i class="fa-solid fa-cloud-arrow-up"></i> رفع وربط الروابط
+
+                </button>
+
+            </div>
+
+
+
             <!-- رفع كتالوج JSON (لإدخال البيانات فقط) -->
 
             <div id="stagingCatalogImporterWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
@@ -1704,7 +1740,7 @@
 
                             <h3 class="font-black text-base">جميع منتجات المناديب</h3>
 
-                            <p class="text-[11px] text-white/70 font-bold">منتجات مجمعة حسب التاجر — اضغط للتوسيع</p>
+                            <p class="text-[11px] text-white/70 font-bold">بطاقات التجار — اضغط لعرض المنتجات</p>
 
                         </div>
 
@@ -1720,9 +1756,11 @@
 
                 </button>
 
-                <div id="catalogAllProductsBody" class="hidden bg-slate-50 p-3">
+                <div id="catalogAllProductsBody" class="hidden bg-slate-50 p-3 space-y-3">
 
-                    <div id="catalogAllProductsList" class="space-y-3"></div>
+                    <div id="catalogAllProductsToolbar" class="hidden"></div>
+
+                    <div id="catalogAllProductsList" class="catalog-card-grid"></div>
 
                 </div>
 

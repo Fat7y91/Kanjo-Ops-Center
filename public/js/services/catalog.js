@@ -415,13 +415,15 @@ const catalogProductLightboxUrl = (p) => {
     return full;
 };
 
-const catalogClickableThumbHtml = (p) => {
+const catalogClickableThumbHtml = (p, opts) => {
     const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
     const full = catalogEscapeHtml(catalogProductLightboxUrl(p));
+    const imgClass = (opts && opts.imgClass) || 'w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer';
+    const boxClass = (opts && opts.boxClass) || 'w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0';
     if (!thumb || !full) {
-        return `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        return `<div class="${boxClass}"><i class="fa-regular fa-image"></i></div>`;
     }
-    return `<img src="${thumb}" data-full-img="${full}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer" onclick="openImageLightbox(this)" onerror="this.style.display='none'">`;
+    return `<img src="${thumb}" data-full-img="${full}" alt="" loading="lazy" class="${imgClass}" onclick="event.stopPropagation();openImageLightbox(this)" onerror="this.style.display='none'">`;
 };
 
 window.openImageLightbox = (el) => {
@@ -1397,39 +1399,125 @@ window.toggleCatalogAllProductsWidget = () => {
     if (willOpen) renderCatalogAllProductsList();
 };
 
+const catalogMerchantLogoUrl = (merchantName) => {
+    const name = String(merchantName || '').trim();
+    if (!name || !Array.isArray(window.allTasksCache)) return '';
+    const getBase = window.getBaseName;
+    const baseName = getBase ? getBase(name) : name;
+    const logoTask = window.allTasksCache.find((t) => {
+        if (!t || !t.merchantLogo) return false;
+        const taskBase = getBase ? getBase(t.name) : String(t.name || '');
+        return taskBase === baseName || String(t.name || '') === name;
+    });
+    return logoTask && logoTask.merchantLogo ? String(logoTask.merchantLogo) : '';
+};
+
+const catalogProductStatusCounts = (products) => {
+    let approved = 0;
+    let pending = 0;
+    (products || []).forEach((p) => {
+        if (String(p.status || '') === 'done') approved += 1;
+        else pending += 1;
+    });
+    return { total: (products || []).length, approved, pending };
+};
+
+const renderCatalogMerchantFolderCard = (group) => {
+    const name = catalogEscapeHtml(group.merchantName);
+    const encoded = encodeURIComponent(group.merchantName);
+    const counts = catalogProductStatusCounts(group.products);
+    const logo = catalogMerchantLogoUrl(group.merchantName);
+    const logoHtml = logo
+        ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
+        : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
+    return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}')" class="catalog-merchant-card">
+        <div class="flex justify-center mb-3">${logoHtml}</div>
+        <div class="font-black text-sm text-[#230535] leading-snug line-clamp-2 min-h-[2.5rem]">${name}</div>
+        <div class="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+            <span class="text-[10px] font-black bg-[#230535] text-[#FFD700] px-2.5 py-0.5 rounded-full">${counts.total} منتجات</span>
+            <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${counts.approved} مكتمل</span>
+            <span class="text-[10px] font-black bg-[#E57723]/15 text-[#E57723] px-2 py-0.5 rounded-full">${counts.pending} قيد المعالجة</span>
+        </div>
+    </button>`;
+};
+
 const renderCatalogAllProductCard = (p) => {
     const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
     const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
     const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
     const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
-    const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
-    const thumbHtml = catalogClickableThumbHtml(p);
-    return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
+    const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#E57723]/15 text-[#E57723]';
+    const thumbHtml = catalogClickableThumbHtml(p, {
+        imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100',
+        boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60'
+    });
+    return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
         ${thumbHtml}
-        <div class="min-w-0 flex-1">
-            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
-            <div class="flex flex-wrap gap-1.5 mt-1">
-                <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
-                ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full">${repName}</span>` : ''}
-                <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
-            </div>
+        <div class="font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem]">${name}</div>
+        <div class="flex flex-wrap gap-1.5">
+            <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+            <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
+            ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full truncate max-w-full">${repName}</span>` : ''}
         </div>
     </div>`;
 };
 
+const catalogAllProductsEmptyHtml = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
+
+window.openCatalogAllProductsMerchant = (encodedName) => {
+    window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
+    renderCatalogAllProductsList();
+};
+
+window.backCatalogAllProductsMerchants = () => {
+    window._catalogAllProductsSelectedMerchant = '';
+    renderCatalogAllProductsList();
+};
+
 const renderCatalogAllProductsList = () => {
     const list = document.getElementById('catalogAllProductsList');
+    const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
     const products = window.allCatalogProductsCache || [];
     if (countEl) countEl.textContent = String(products.length);
-    renderCatalogMerchantAccordionList(
-        list,
-        products,
-        '_catalogAllProductsOpenMerchants',
-        'catalogAllMerchantAccordion',
-        renderCatalogAllProductCard,
-        '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>'
-    );
+    if (!list) return;
+    if (!products.length) {
+        if (toolbar) {
+            toolbar.classList.add('hidden');
+            toolbar.innerHTML = '';
+        }
+        list.className = 'catalog-card-grid';
+        list.innerHTML = catalogAllProductsEmptyHtml;
+        return;
+    }
+    const groups = groupCatalogProductsByMerchant(products);
+    const selected = String(window._catalogAllProductsSelectedMerchant || '');
+    const selectedGroup = selected ? groups.find((g) => g.merchantName === selected) : null;
+    if (selected && selectedGroup) {
+        const counts = catalogProductStatusCounts(selectedGroup.products);
+        if (toolbar) {
+            toolbar.classList.remove('hidden');
+            toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
+                <button type="button" onclick="backCatalogAllProductsMerchants()" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-right"></i> كل التجار
+                </button>
+                <div class="min-w-0 text-center flex-1">
+                    <div class="font-black text-sm text-[#230535] truncate">${catalogEscapeHtml(selectedGroup.merchantName)}</div>
+                    <div class="text-[10px] font-bold text-slate-500">${counts.total} منتجات — ${counts.approved} مكتمل — ${counts.pending} قيد المعالجة</div>
+                </div>
+            </div>`;
+        }
+        list.className = 'catalog-card-grid catalog-product-grid';
+        list.innerHTML = selectedGroup.products.map(renderCatalogAllProductCard).join('');
+        return;
+    }
+    window._catalogAllProductsSelectedMerchant = '';
+    if (toolbar) {
+        toolbar.classList.add('hidden');
+        toolbar.innerHTML = '';
+    }
+    list.className = 'catalog-card-grid';
+    list.innerHTML = groups.map(renderCatalogMerchantFolderCard).join('');
 };
 
 window.renderCatalogAllProductsWidget = () => {
@@ -2291,10 +2379,12 @@ window.renderStagingCatalogWidgets = () => {
     const exporter = document.getElementById('stagingCatalogExportWidget');
     const parser = document.getElementById('stagingRawTextParserWidget');
     const master = document.getElementById('masterCatalogImporterWidget');
+    const driveLinks = document.getElementById('masterCatalogDriveLinksWidget');
     if (importer) importer.classList.toggle('hidden', !canUse);
     if (exporter) exporter.classList.toggle('hidden', !canUse);
     if (parser) parser.classList.toggle('hidden', !canUse);
     if (master) master.classList.toggle('hidden', !canUse);
+    if (driveLinks) driveLinks.classList.toggle('hidden', !canUse);
 };
 
 const saveStagingCatalogItems = async (items) => {
@@ -2685,6 +2775,115 @@ window.relinkMasterCatalogDriveImages = async () => {
             btn.innerHTML = '<i class="fa-solid fa-link"></i> ربط صور Drive للمنتجات الحالية';
         }
         console.log('[master-catalog-relink] finished', report);
+    }
+};
+
+window.onMasterCatalogDriveLinksCsvChange = (event) => {
+    const file = event && event.target && event.target.files && event.target.files[0];
+    const label = document.getElementById('masterCatalogDriveLinksCsvName');
+    if (label) label.textContent = file ? file.name : 'اختر ملف CSV (Id, image_url)';
+};
+
+window.uploadMasterCatalogDriveLinks = async () => {
+    if (!window.canUseStagingCatalog()) {
+        if (window.showToast) window.showToast('رفع الروابط متاح لإدخال البيانات فقط', false);
+        return;
+    }
+    if (window._masterCatalogDriveLinksUploading) return;
+    const fileInput = document.getElementById('masterCatalogDriveLinksCsv');
+    const btn = document.getElementById('masterCatalogDriveLinksBtn');
+    const file = fileInput && fileInput.files && fileInput.files[0];
+    if (!file) {
+        window.showToast('اختر ملف CSV أولاً', false);
+        return;
+    }
+    window._masterCatalogDriveLinksUploading = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الربط...';
+    }
+    const report = { csvRows: 0, updated: 0, unmatched: [], skipped: [], duplicates: [], errors: [] };
+    try {
+        const text = await readLocalJsonFile(file);
+        const records = parseCsvRecords(text);
+        if (!records.length) {
+            window.showToast('ملف CSV فارغ أو غير صالح', false);
+            return;
+        }
+        report.csvRows = records.length;
+        const csvById = new Map();
+        records.forEach((row, idx) => {
+            const kanjoId = String(row.id || row.Id || row.ID || '').trim();
+            const imageUrl = String(row.image_url || row.imageurl || row.url || '').trim();
+            if (!kanjoId) {
+                report.skipped.push({ row: idx + 2, reason: 'missing_id' });
+                return;
+            }
+            if (!imageUrl) {
+                report.skipped.push({ row: idx + 2, id: kanjoId, reason: 'missing_image_url' });
+                return;
+            }
+            if (csvById.has(kanjoId)) {
+                report.duplicates.push({ row: idx + 2, id: kanjoId });
+                return;
+            }
+            csvById.set(kanjoId, { imageUrl, row: idx + 2 });
+        });
+        if (!csvById.size) {
+            window.showToast('لا توجد صفوف صالحة في الملف', false);
+            return;
+        }
+        const snap = await window.getDocs(window.collection(window.db, MASTER_CATALOG_COLLECTION));
+        const matchedIds = new Set();
+        const updates = [];
+        snap.forEach((d) => {
+            const data = d.data() || {};
+            const kanjoId = String(data.id || data.kanjo_id || d.id || '').trim();
+            const csvRow = csvById.get(kanjoId);
+            if (!csvRow) return;
+            matchedIds.add(kanjoId);
+            const driveFileId = catalogDriveFileId(csvRow.imageUrl);
+            const imageUrl = driveFileId ? catalogDriveViewUrl(driveFileId) : csvRow.imageUrl;
+            updates.push({
+                ref: d.ref,
+                payload: {
+                    image_url: imageUrl,
+                    drive_file_id: driveFileId || '',
+                    image_file_name: kanjoId + '.jpg',
+                    image_migration_status: 'drive_linked',
+                    linked_at: new Date()
+                }
+            });
+        });
+        csvById.forEach((csvRow, kanjoId) => {
+            if (!matchedIds.has(kanjoId)) report.unmatched.push({ row: csvRow.row, id: kanjoId });
+        });
+        for (let i = 0; i < updates.length; i += 400) {
+            const chunk = updates.slice(i, i + 400);
+            const batch = window.writeBatch(window.db);
+            chunk.forEach((item) => batch.update(item.ref, item.payload));
+            await batch.commit();
+            report.updated += chunk.length;
+            if (i + 400 < updates.length) await delay(300);
+        }
+        window._masterCatalogCache = [];
+        console.log('[master-catalog-drive-links] updated', report.updated, 'of', report.csvRows, report);
+        if (report.unmatched.length) console.warn('[master-catalog-drive-links] unmatched ids', report.unmatched);
+        window.showToast('تم ربط ' + report.updated + ' منتج بنجاح. غير المطابق: ' + report.unmatched.length);
+        if (fileInput) fileInput.value = '';
+        const label = document.getElementById('masterCatalogDriveLinksCsvName');
+        if (label) label.textContent = 'اختر ملف CSV (Id, image_url)';
+    } catch (err) {
+        console.error('[master-catalog-drive-links] failed:', err);
+        report.errors.push(String(err && err.message ? err.message : err));
+        window.showToast('فشل رفع روابط صور جوجل درايف', false);
+    } finally {
+        window._masterCatalogDriveLinksUploading = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> رفع وربط الروابط';
+        }
+        console.log('[master-catalog-drive-links] finished', report);
     }
 };
 
