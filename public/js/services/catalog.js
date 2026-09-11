@@ -1669,7 +1669,7 @@ window.renderCatalogRepLeaderboard = (products) => {
         const medal = idx < 3
             ? `<i class="fa-solid ${medals[idx]} text-[#E57723]"></i>`
             : `<span class="text-[10px] font-black text-slate-400">#${idx + 1}</span>`;
-        return `<div class="bg-white border border-[#FFD700]/40 rounded-2xl p-3 shadow-sm min-w-[150px] flex-1">
+        return `<div class="bg-white border border-[#FFD700]/40 rounded-2xl p-2.5 shadow-sm min-w-[130px] flex-1">
             <div class="flex items-center justify-between gap-2">
                 <span class="text-[11px] font-black text-[#230535] truncate">${catalogEscapeHtml(rep.name)}</span>
                 ${medal}
@@ -1692,7 +1692,7 @@ window.renderCatalogRepLeaderboard = (products) => {
             <span class="text-[10px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${total} منتج إجمالي</span>
         </div>
         ${reps.length
-            ? `<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:overflow-visible">${cards}</div>`
+            ? `<div class="flex flex-row flex-nowrap gap-2 overflow-x-auto hide-scrollbar pb-1">${cards}</div>`
             : '<div class="text-center py-4 text-[#FFD700]/70 font-bold text-xs">لا توجد بيانات بعد</div>'}
     </div>`;
 };
