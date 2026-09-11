@@ -1275,41 +1275,103 @@ window.toggleCatalogMyProductsWidget = () => {
     if (willOpen) renderCatalogMyProductsList();
 };
 
+const catalogGroupMerchantKey = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim() || 'تاجر غير معروف';
+
+const groupCatalogProductsByMerchant = (products) => {
+    const grouped = {};
+    (products || []).forEach((p) => {
+        const key = catalogGroupMerchantKey(p);
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(p);
+    });
+    return Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar')).map((merchantName) => ({
+        merchantName,
+        products: grouped[merchantName]
+    }));
+};
+
+window.toggleCatalogGroupedAccordion = (elId) => {
+    const accordion = document.getElementById(elId);
+    if (!accordion) return;
+    const body = accordion.querySelector('[data-catalog-group-body]');
+    const chevron = accordion.querySelector('[data-catalog-group-chevron]');
+    if (!body) return;
+    const mapName = accordion.getAttribute('data-open-map') || '';
+    const merchantName = accordion.getAttribute('data-catalog-merchant') || '';
+    const willOpen = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !willOpen);
+    if (chevron) chevron.classList.toggle('rotate-180', willOpen);
+    if (!mapName) return;
+    const openMap = window[mapName] || {};
+    if (willOpen) openMap[merchantName] = true;
+    else delete openMap[merchantName];
+    window[mapName] = openMap;
+};
+
+const renderCatalogMerchantAccordionList = (list, products, openMapName, idPrefix, renderCard, emptyHtml) => {
+    if (!list) return;
+    if (!products.length) {
+        list.innerHTML = emptyHtml;
+        return;
+    }
+    const openMap = window[openMapName] || {};
+    window[openMapName] = openMap;
+    list.innerHTML = groupCatalogProductsByMerchant(products).map((group) => {
+        const accordionId = catalogMerchantDomId(group.merchantName);
+        const elId = idPrefix + '-' + accordionId;
+        const safeName = catalogEscapeHtml(group.merchantName);
+        const isOpen = !!openMap[group.merchantName];
+        const cards = group.products.map(renderCard).join('');
+        return `<div id="${elId}" data-catalog-merchant="${safeName}" data-open-map="${openMapName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
+            <button type="button" onclick="toggleCatalogGroupedAccordion('${elId}')" class="w-full bg-white text-[#230535] px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FFD700]/10 transition">
+                <span class="font-black text-sm truncate">${safeName}</span>
+                <span class="flex items-center gap-2 shrink-0">
+                    <span class="text-[11px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${group.products.length} منتجات</span>
+                    <i data-catalog-group-chevron class="fa-solid fa-chevron-down text-[#230535] text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
+                </span>
+            </button>
+            <div data-catalog-group-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>
+        </div>`;
+    }).join('');
+};
+
+const renderCatalogMyProductCard = (p) => {
+    const id = catalogEscapeHtml(p.id);
+    const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
+    const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
+    const pendingDelete = !!p.deleteRequested;
+    const status = pendingDelete ? 'في انتظار الموافقة على الحذف' : (String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة');
+    const statusClass = pendingDelete ? 'bg-red-50 text-red-700' : (String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700');
+    const thumbHtml = catalogClickableThumbHtml(p);
+    const actions = pendingDelete
+        ? `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">تعديل</button><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">طلب حذف</button></div>`
+        : `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" onclick="openCatalogProductEditor('${id}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition">تعديل</button><button type="button" onclick="requestCatalogProductDeletion('${id}')" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition">طلب حذف</button></div>`;
+    return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
+        ${thumbHtml}
+        <div class="min-w-0 flex-1">
+            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+            <div class="flex flex-wrap gap-1.5 mt-1">
+                <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+                <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
+            </div>
+        </div>
+        ${actions}
+    </div>`;
+};
+
 const renderCatalogMyProductsList = () => {
     const list = document.getElementById('catalogMyProductsList');
     const countEl = document.getElementById('catalogMyProductsCount');
     const products = window.repCatalogProductsCache || [];
     if (countEl) countEl.textContent = String(products.length);
-    if (!list) return;
-    if (!products.length) {
-        list.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
-        return;
-    }
-    list.innerHTML = products.map((p) => {
-        const id = catalogEscapeHtml(p.id);
-        const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
-        const merchant = catalogEscapeHtml(p.merchantName || '');
-        const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
-        const pendingDelete = !!p.deleteRequested;
-        const status = pendingDelete ? 'في انتظار الموافقة على الحذف' : (String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة');
-        const statusClass = pendingDelete ? 'bg-red-50 text-red-700' : (String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700');
-        const thumbHtml = catalogClickableThumbHtml(p);
-        const actions = pendingDelete
-            ? `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">تعديل</button><button type="button" disabled class="bg-slate-200 text-slate-400 px-3 py-2 rounded-xl text-[11px] font-black cursor-not-allowed">طلب حذف</button></div>`
-            : `<div class="shrink-0 flex flex-col gap-1.5"><button type="button" onclick="openCatalogProductEditor('${id}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition">تعديل</button><button type="button" onclick="requestCatalogProductDeletion('${id}')" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition">طلب حذف</button></div>`;
-        return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
-            ${thumbHtml}
-            <div class="min-w-0 flex-1">
-                <div class="font-black text-sm text-[#230535] truncate">${name}</div>
-                <div class="text-[11px] font-bold text-slate-500 truncate">${merchant}</div>
-                <div class="flex flex-wrap gap-1.5 mt-1">
-                    <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
-                    <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
-                </div>
-            </div>
-            ${actions}
-        </div>`;
-    }).join('');
+    renderCatalogMerchantAccordionList(
+        list,
+        products,
+        '_catalogMyProductsOpenMerchants',
+        'catalogMyMerchantAccordion',
+        renderCatalogMyProductCard,
+        '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>'
+    );
 };
 
 window.renderCatalogMyProductsWidget = () => {
@@ -1335,37 +1397,39 @@ window.toggleCatalogAllProductsWidget = () => {
     if (willOpen) renderCatalogAllProductsList();
 };
 
+const renderCatalogAllProductCard = (p) => {
+    const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
+    const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
+    const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
+    const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
+    const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
+    const thumbHtml = catalogClickableThumbHtml(p);
+    return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
+        ${thumbHtml}
+        <div class="min-w-0 flex-1">
+            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+            <div class="flex flex-wrap gap-1.5 mt-1">
+                <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+                ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full">${repName}</span>` : ''}
+                <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
+            </div>
+        </div>
+    </div>`;
+};
+
 const renderCatalogAllProductsList = () => {
     const list = document.getElementById('catalogAllProductsList');
     const countEl = document.getElementById('catalogAllProductsCount');
     const products = window.allCatalogProductsCache || [];
     if (countEl) countEl.textContent = String(products.length);
-    if (!list) return;
-    if (!products.length) {
-        list.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
-        return;
-    }
-    list.innerHTML = products.map((p) => {
-        const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
-        const merchant = catalogEscapeHtml(p.merchantName || '');
-        const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
-        const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
-        const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
-        const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700';
-        const thumbHtml = catalogClickableThumbHtml(p);
-        return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
-            ${thumbHtml}
-            <div class="min-w-0 flex-1">
-                <div class="font-black text-sm text-[#230535] truncate">${name}</div>
-                <div class="text-[11px] font-bold text-slate-500 truncate">${merchant}</div>
-                <div class="flex flex-wrap gap-1.5 mt-1">
-                    <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
-                    ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full">${repName}</span>` : ''}
-                    <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
+    renderCatalogMerchantAccordionList(
+        list,
+        products,
+        '_catalogAllProductsOpenMerchants',
+        'catalogAllMerchantAccordion',
+        renderCatalogAllProductCard,
+        '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>'
+    );
 };
 
 window.renderCatalogAllProductsWidget = () => {
@@ -1420,42 +1484,44 @@ window.toggleCatalogDeleteRequestsWidget = () => {
     if (willOpen) renderCatalogDeleteRequestsList();
 };
 
+const renderCatalogDeleteRequestCard = (p) => {
+    const id = catalogEscapeHtml(p.id);
+    const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
+    const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
+    const requestedBy = catalogEscapeHtml(p.deleteRequestedBy || p.createdBy || '');
+    const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
+    const thumbHtml = thumb
+        ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+        : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+    return `<div class="bg-white border border-red-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
+        ${thumbHtml}
+        <div class="min-w-0 flex-1">
+            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+            <div class="flex flex-wrap gap-1.5 mt-1">
+                <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
+                ${requestedBy ? `<span class="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${requestedBy}</span>` : ''}
+            </div>
+        </div>
+        <div class="shrink-0 flex flex-col gap-1.5">
+            <button type="button" onclick="approveCatalogProductDeletion('${id}')" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition">موافقة</button>
+            <button type="button" onclick="rejectCatalogProductDeletion('${id}')" class="bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-[11px] font-black hover:bg-slate-300 transition">رفض</button>
+        </div>
+    </div>`;
+};
+
 const renderCatalogDeleteRequestsList = () => {
     const list = document.getElementById('catalogDeleteRequestsList');
     const countEl = document.getElementById('catalogDeleteRequestsCount');
     const products = window.catalogDeleteRequestsCache || [];
     if (countEl) countEl.textContent = String(products.length);
-    if (!list) return;
-    if (!products.length) {
-        list.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i><div>لا توجد طلبات حذف معلقة</div></div>';
-        return;
-    }
-    list.innerHTML = products.map((p) => {
-        const id = catalogEscapeHtml(p.id);
-        const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
-        const merchant = catalogEscapeHtml(p.merchantName || '');
-        const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
-        const requestedBy = catalogEscapeHtml(p.deleteRequestedBy || p.createdBy || '');
-        const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
-        const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
-            : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
-        return `<div class="bg-white border border-red-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
-            ${thumbHtml}
-            <div class="min-w-0 flex-1">
-                <div class="font-black text-sm text-[#230535] truncate">${name}</div>
-                <div class="text-[11px] font-bold text-slate-500 truncate">${merchant}</div>
-                <div class="flex flex-wrap gap-1.5 mt-1">
-                    <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
-                    ${requestedBy ? `<span class="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${requestedBy}</span>` : ''}
-                </div>
-            </div>
-            <div class="shrink-0 flex flex-col gap-1.5">
-                <button type="button" onclick="approveCatalogProductDeletion('${id}')" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition">موافقة</button>
-                <button type="button" onclick="rejectCatalogProductDeletion('${id}')" class="bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-[11px] font-black hover:bg-slate-300 transition">رفض</button>
-            </div>
-        </div>`;
-    }).join('');
+    renderCatalogMerchantAccordionList(
+        list,
+        products,
+        '_catalogDeleteOpenMerchants',
+        'catalogDeleteMerchantAccordion',
+        renderCatalogDeleteRequestCard,
+        '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i><div>لا توجد طلبات حذف معلقة</div></div>'
+    );
 };
 
 window.renderCatalogDeleteRequestsWidget = () => {
