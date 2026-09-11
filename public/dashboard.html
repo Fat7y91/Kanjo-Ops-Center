@@ -1464,7 +1464,7 @@
 
                 <div class="border-t border-purple-100 pt-3 space-y-3">
 
-                    <p class="text-[11px] font-bold text-slate-500">رفع CSV نظيف يستبدل كل منتجات الكتالوج الرئيسي ويربط الصور بـ master_catalog_images/{Id}.jpg</p>
+                    <p class="text-[11px] font-bold text-slate-500">رفع CSV يستبدل الكتالوج ويربط كل منتج بمعرف ملف Drive الحقيقي لصورة {Id}.jpg داخل master_catalog_images</p>
 
                     <label for="masterCatalogMigrateCsv" class="flex flex-col items-center justify-center gap-1 w-full min-h-[48px] px-4 py-3 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
 
@@ -1477,6 +1477,12 @@
                     <button type="button" id="masterCatalogMigrateBtn" onclick="migrateMasterCatalogFromCsv()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
 
                         <i class="fa-solid fa-database"></i> استبدال الكتالوج بالكامل
+
+                    </button>
+
+                    <button type="button" id="masterCatalogRelinkBtn" onclick="relinkMasterCatalogDriveImages()" class="w-full bg-white text-[#230535] border border-[#230535]/40 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-link"></i> ربط صور Drive للمنتجات الحالية
 
                     </button>
 

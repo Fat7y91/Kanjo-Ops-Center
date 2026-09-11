@@ -152,6 +152,53 @@ function getRootFolder_() {
 /* Folders are bound to the immutable merchantId. The human-readable name is
    kept in the folder name purely for easy browsing in Drive:
        "مطعم القاهرة (KJ-123456)"   */
+function findMasterCatalogImagesFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var stored = String(props.getProperty('MASTER_CATALOG_IMAGES_FOLDER_ID') || '').trim();
+  if (stored) return DriveApp.getFolderById(stored);
+
+  var names = ['master_catalog_images', 'Master_Catalog_Images'];
+  var i;
+  for (i = 0; i < names.length; i++) {
+    var byName = DriveApp.getFoldersByName(names[i]);
+    if (byName.hasNext()) return byName.next();
+  }
+
+  var parentIt = DriveApp.getFoldersByName('Kanjo Products Data');
+  if (parentIt.hasNext()) {
+    var parent = parentIt.next();
+    for (i = 0; i < names.length; i++) {
+      var nested = parent.getFoldersByName(names[i]);
+      if (nested.hasNext()) return nested.next();
+    }
+    var mid = parent.getFoldersByName('Master_Catalog_Images');
+    if (mid.hasNext()) {
+      var midFolder = mid.next();
+      var inner = midFolder.getFoldersByName('master_catalog_images');
+      if (inner.hasNext()) return inner.next();
+      return midFolder;
+    }
+  }
+  return null;
+}
+
+function listMasterCatalogImageFiles_() {
+  var folder = findMasterCatalogImagesFolder_();
+  if (!folder) return null;
+  var files = [];
+  var it = folder.getFiles();
+  while (it.hasNext()) {
+    var file = it.next();
+    files.push({ name: file.getName(), id: file.getId() });
+  }
+  return {
+    folderId: folder.getId(),
+    folderName: folder.getName(),
+    count: files.length,
+    files: files
+  };
+}
+
 function getOrCreateMerchantFolder_(root, merchantId, merchantName) {
   var safeName = sanitizeName_(merchantName, 'Merchant', 80);
   var folderName = safeName + ' (' + merchantId + ')';
@@ -222,7 +269,7 @@ function tokensMatch_(a, b) {
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
+  if (!lock.tryLock(120000)) {
     return respond(false, 'BUSY');
   }
   try {
@@ -238,6 +285,13 @@ function doPost(e) {
     var cfg = getScriptConfig_();
     if (!data || typeof data !== 'object' || !tokensMatch_(data.token, cfg.token)) {
       return respond(false, 'UNAUTHORIZED');
+    }
+
+    var action = String(data.action || '').trim();
+    if (action === 'listMasterCatalogImages') {
+      var listed = listMasterCatalogImageFiles_();
+      if (!listed) return respond(false, 'MASTER_CATALOG_FOLDER_NOT_FOUND');
+      return respond(true, 'DONE', listed);
     }
 
     var merchantId = String(data.merchantId || '').trim();
