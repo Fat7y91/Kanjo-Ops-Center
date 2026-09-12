@@ -357,49 +357,6 @@ window.removeCatalogVariationRow = (id) => {
     }
 };
 
-const catalogLocalDateKey = () => {
-    const d = new Date();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return d.getFullYear() + '-' + month + '-' + day;
-};
-
-const VARIANT_GUIDE_DATE_KEY = 'variantGuide_date';
-const VARIANT_GUIDE_COUNT_KEY = 'variantGuide_count';
-const VARIANT_GUIDE_DAILY_MAX = 2;
-
-const readVariantGuideDailyCount = () => {
-    try {
-        const today = catalogLocalDateKey();
-        const storedDate = localStorage.getItem(VARIANT_GUIDE_DATE_KEY);
-        let count = parseInt(localStorage.getItem(VARIANT_GUIDE_COUNT_KEY) || '0', 10) || 0;
-        if (storedDate !== today) {
-            count = 0;
-            try {
-                localStorage.setItem(VARIANT_GUIDE_DATE_KEY, today);
-                localStorage.setItem(VARIANT_GUIDE_COUNT_KEY, '0');
-            } catch (_) { /* ignore */ }
-        }
-        return count;
-    } catch (_) {
-        return 0;
-    }
-};
-
-const canShowVariantGuideToday = () => readVariantGuideDailyCount() < VARIANT_GUIDE_DAILY_MAX;
-
-const markVariantGuideShownToday = () => {
-    try {
-        const today = catalogLocalDateKey();
-        const storedDate = localStorage.getItem(VARIANT_GUIDE_DATE_KEY);
-        let count = parseInt(localStorage.getItem(VARIANT_GUIDE_COUNT_KEY) || '0', 10) || 0;
-        if (storedDate !== today) count = 0;
-        count += 1;
-        localStorage.setItem(VARIANT_GUIDE_DATE_KEY, today);
-        localStorage.setItem(VARIANT_GUIDE_COUNT_KEY, String(count));
-    } catch (_) { /* ignore */ }
-};
-
 window.showCatalogVariableGuide = () => {
     const modal = document.getElementById('catalogVariableGuideModal');
     if (!modal) return;
@@ -449,8 +406,7 @@ window.onCatalogProductTypeChange = () => {
         else priceEl.setAttribute('required', 'required');
     }
     if (isVariable && list && list.children.length === 0) window.addCatalogVariationRow();
-    if (isVariable && !window._catalogEditingProduct && canShowVariantGuideToday()) {
-        markVariantGuideShownToday();
+    if (isVariable && !window._catalogEditingProduct) {
         window.showCatalogVariableGuide();
     }
 };
