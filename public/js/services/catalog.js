@@ -1631,8 +1631,7 @@ window.openCatalogAllProductsMerchant = (encodedName, event) => {
     window._catalogMerchantNavLock = now;
 
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
-    renderCatalogAllProductsList();
-    scrollCatalogAllProductsAnchor('merchant');
+    transitionCatalogAllProductsView(() => renderCatalogAllProductsList());
 };
 
 window.backCatalogAllProductsMerchants = (event) => {
@@ -1641,26 +1640,31 @@ window.backCatalogAllProductsMerchants = (event) => {
         event.stopPropagation();
     }
     window._catalogAllProductsSelectedMerchant = '';
-    renderCatalogAllProductsList();
-    scrollCatalogAllProductsAnchor('grid');
+    transitionCatalogAllProductsView(() => renderCatalogAllProductsList());
 };
 
-/* After the products grid has been injected, smoothly bring the merchant
-   title/toolbar to a comfortable position at the top of the viewport. The
-   150ms timeout gives the browser time to inject the cards and recompute the
-   container height before scrolling, avoiding glitchy jump calculations. */
-const scrollCatalogAllProductsAnchor = (mode) => {
-    setTimeout(() => {
-        const toolbar = document.getElementById('catalogAllProductsToolbar');
-        const list = document.getElementById('catalogAllProductsList');
-        let target = null;
-        if (mode === 'merchant') {
-            target = (toolbar && !toolbar.classList.contains('hidden') && toolbar.innerHTML.trim()) ? toolbar : list;
-        } else {
-            target = list || toolbar;
-        }
-        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 150);
+/* Fade the products view out, swap its DOM, then fade it back in using
+   requestAnimationFrame. Setting opacity-0 BEFORE the innerHTML swap hides the
+   transient frame where the old grid is gone but the new one has not painted
+   yet — this was the source of the harsh white flash on mobile. The wrapper
+   keeps a min-height so the page never collapses to 0px during the swap. */
+const transitionCatalogAllProductsView = (render) => {
+    const view = document.getElementById('catalogAllProductsView');
+    if (!view) {
+        render();
+        return;
+    }
+    view.classList.remove('transition-opacity', 'duration-300', 'opacity-100');
+    view.classList.add('opacity-0');
+    render();
+    requestAnimationFrame(() => {
+        view.classList.add('transition-opacity', 'duration-300', 'opacity-100');
+        view.classList.remove('opacity-0');
+        /* Smooth window scroll (instead of scrollIntoView) to the products view.
+           offset by 90px so the sticky search bar never covers the toolbar. */
+        const viewTop = Math.max(0, view.getBoundingClientRect().top + window.pageYOffset - 90);
+        window.scrollTo({ top: viewTop, behavior: 'smooth' });
+    });
 };
 
 const catalogRepDisplayName = (p) => String((p && (p.createdBy || p.added_by || p.addedBy || p.repName || p.created_by)) || '').trim() || 'غير معروف';
