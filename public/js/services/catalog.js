@@ -9,6 +9,7 @@ window.merchantProductsCache = window.merchantProductsCache || [];
 window.repCatalogProductsCache = window.repCatalogProductsCache || [];
 window.catalogDeleteRequestsCache = window.catalogDeleteRequestsCache || [];
 window.allCatalogProductsCache = window.allCatalogProductsCache || [];
+window._catalogSelectedRep = window._catalogSelectedRep || '';
 window._catalogEnhancedUploads = window._catalogEnhancedUploads || {};
 window._catalogEditingProduct = null;
 
@@ -43,7 +44,12 @@ window.isMahmoudUser = () => {
 
 window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.role === 'founder');
 
-window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser());
+window.isDesoukOpsManager = () => {
+    if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
+    return !!window.isMahmoudUser();
+};
+
+window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager());
 
 window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
 
@@ -1618,6 +1624,7 @@ window.renderCatalogRepLeaderboard = (products) => {
     const reps = aggregateCatalogProductsByRep(list);
     const total = list.length;
     const maxCount = reps.length ? reps[0].count : 0;
+    const selectedRep = String(window._catalogSelectedRep || '');
     wrap.classList.remove('hidden');
     const medals = ['fa-crown', 'fa-medal', 'fa-award'];
     const cards = reps.map((rep, idx) => {
@@ -1625,9 +1632,16 @@ window.renderCatalogRepLeaderboard = (products) => {
         const medal = idx < 3
             ? `<i class="fa-solid ${medals[idx]} text-[#E57723]"></i>`
             : `<span class="text-[10px] font-black text-slate-400">#${idx + 1}</span>`;
-        return `<div class="bg-white border border-[#FFD700]/40 rounded-2xl p-2.5 shadow-sm min-w-[130px] flex-1">
+        const isActive = !!selectedRep && selectedRep === rep.name;
+        const isDimmed = !!selectedRep && selectedRep !== rep.name;
+        const encoded = encodeURIComponent(rep.name).replace(/'/g, '%27');
+        const stateClass = isActive
+            ? 'bg-[#E57723]/15 border-[#E57723] ring-2 ring-[#E57723] shadow-md'
+            : 'bg-white border-[#FFD700]/40 hover:shadow-md';
+        const dimClass = isDimmed ? 'opacity-40' : '';
+        return `<button type="button" onclick="toggleCatalogRepFilter('${encoded}')" title="${isActive ? 'إلغاء التصفية' : 'عرض منتجات هذا المندوب'}" class="text-right ${stateClass} ${dimClass} border rounded-2xl p-2.5 shadow-sm min-w-[130px] flex-1 transition-all duration-200 cursor-pointer">
             <div class="flex items-center justify-between gap-2">
-                <span class="text-[11px] font-black text-[#230535] truncate">${catalogEscapeHtml(rep.name)}</span>
+                <span class="text-[11px] font-black ${isActive ? 'text-[#E57723]' : 'text-[#230535]'} truncate">${catalogEscapeHtml(rep.name)}</span>
                 ${medal}
             </div>
             <div class="mt-1 flex items-baseline gap-1">
@@ -1637,7 +1651,8 @@ window.renderCatalogRepLeaderboard = (products) => {
             <div class="mt-2 h-1.5 rounded-full bg-[#230535]/10 overflow-hidden">
                 <div class="h-full rounded-full bg-[#FFD700]" style="width:${pct}%"></div>
             </div>
-        </div>`;
+            ${isActive ? '<div class="mt-1 text-[10px] font-black text-[#E57723] text-center"><i class="fa-solid fa-filter"></i> مفعّل</div>' : ''}
+        </button>`;
     }).join('');
     wrap.innerHTML = `<div class="bg-[#230535] rounded-2xl p-3 sm:p-4 space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1645,7 +1660,10 @@ window.renderCatalogRepLeaderboard = (products) => {
                 <i class="fa-solid fa-ranking-star text-[#FFD700]"></i>
                 <h4 class="font-black text-sm text-[#FFD700]">أداء فريق المبيعات (إجمالي المنتجات المضافة)</h4>
             </div>
-            <span class="text-[10px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${total} منتج إجمالي</span>
+            <div class="flex items-center gap-2">
+                ${selectedRep ? `<button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="text-[10px] font-black bg-[#E57723] text-white px-2.5 py-1 rounded-full hover:opacity-90 transition"><i class="fa-solid fa-xmark"></i> إلغاء تصفية: ${catalogEscapeHtml(selectedRep)}</button>` : ''}
+                <span class="text-[10px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${total} منتج إجمالي</span>
+            </div>
         </div>
         ${reps.length
             ? `<div class="flex flex-row flex-nowrap gap-2 overflow-x-auto hide-scrollbar pb-1">${cards}</div>`
@@ -1653,18 +1671,50 @@ window.renderCatalogRepLeaderboard = (products) => {
     </div>`;
 };
 
+window.toggleCatalogRepFilter = (encodedName) => {
+    if (!window.canViewAllCatalogProducts() || window.isDataEntryUser()) return;
+    const name = decodeURIComponent(String(encodedName || ''));
+    if (!name) return;
+    const current = String(window._catalogSelectedRep || '');
+    window._catalogSelectedRep = current === name ? '' : name;
+    window._catalogAllProductsSelectedMerchant = '';
+    window.renderCatalogRepLeaderboard(window.allCatalogProductsCache || []);
+    const body = document.getElementById('catalogAllProductsBody');
+    if (window._catalogSelectedRep && body && body.classList.contains('hidden')) {
+        window.toggleCatalogAllProductsWidget();
+    } else {
+        renderCatalogAllProductsList();
+    }
+};
+
 const renderCatalogAllProductsList = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
-    const products = window.allCatalogProductsCache || [];
+    const allProducts = window.allCatalogProductsCache || [];
+    const selectedRep = String(window._catalogSelectedRep || '');
+    const products = selectedRep
+        ? allProducts.filter((p) => catalogRepDisplayName(p) === selectedRep)
+        : allProducts;
     if (countEl) countEl.textContent = String(products.length);
-    window.renderCatalogRepLeaderboard(products);
+    window.renderCatalogRepLeaderboard(allProducts);
     if (!list) return;
     if (!products.length) {
         if (toolbar) {
-            toolbar.classList.add('hidden');
-            toolbar.innerHTML = '';
+            if (selectedRep) {
+                toolbar.classList.remove('hidden');
+                toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
+                <button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <i class="fa-solid fa-xmark"></i> إلغاء التصفية
+                </button>
+                <div class="min-w-0 text-center flex-1">
+                    <div class="font-black text-sm text-[#230535] truncate">لا توجد منتجات للمندوب: ${catalogEscapeHtml(selectedRep)}</div>
+                </div>
+            </div>`;
+            } else {
+                toolbar.classList.add('hidden');
+                toolbar.innerHTML = '';
+            }
         }
         list.className = 'catalog-card-grid';
         list.innerHTML = catalogAllProductsEmptyHtml;
@@ -1678,9 +1728,12 @@ const renderCatalogAllProductsList = () => {
         if (toolbar) {
             toolbar.classList.remove('hidden');
             toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
-                <button type="button" onclick="backCatalogAllProductsMerchants()" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
-                    <i class="fa-solid fa-arrow-right"></i> كل التجار
-                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="backCatalogAllProductsMerchants()" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-right"></i> كل التجار
+                    </button>
+                    ${selectedRep ? `<button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#E57723] text-white px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2"><i class="fa-solid fa-xmark"></i> إلغاء تصفية المندوب</button>` : ''}
+                </div>
                 <div class="min-w-0 text-center flex-1">
                     <div class="font-black text-sm text-[#230535] truncate">${catalogEscapeHtml(selectedGroup.merchantName)}</div>
                     <div class="text-[10px] font-bold text-slate-500">${counts.total} منتجات — ${counts.approved} مكتمل — ${counts.pending} قيد المعالجة</div>
@@ -1692,7 +1745,20 @@ const renderCatalogAllProductsList = () => {
         return;
     }
     window._catalogAllProductsSelectedMerchant = '';
-    if (toolbar) {
+    if (selectedRep) {
+        if (toolbar) {
+            toolbar.classList.remove('hidden');
+            toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#E57723]/40 rounded-2xl px-3 py-2.5">
+                <button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#E57723] text-white px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <i class="fa-solid fa-xmark"></i> إلغاء التصفية
+                </button>
+                <div class="min-w-0 text-center flex-1">
+                    <div class="font-black text-sm text-[#230535] truncate"><i class="fa-solid fa-filter text-[#E57723]"></i> منتجات المندوب: ${catalogEscapeHtml(selectedRep)}</div>
+                    <div class="text-[10px] font-bold text-slate-500">${products.length} منتج — ${groups.length} تاجر</div>
+                </div>
+            </div>`;
+        }
+    } else if (toolbar) {
         toolbar.classList.add('hidden');
         toolbar.innerHTML = '';
     }
