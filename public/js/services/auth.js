@@ -116,6 +116,8 @@ function applyThemeAndShowDashboard() {
         }
         const tasksContainer = document.getElementById('tasksContainer');
         if (tasksContainer) tasksContainer.classList.toggle('hidden', isDataEntry);
+        const tasksDateNav = document.getElementById('tasksDateNav');
+        if (tasksDateNav) tasksDateNav.classList.toggle('hidden', isDataEntry);
         
         const founderPayrollSummaryBox = document.getElementById('founderPayrollSummaryBox');
         if (founderPayrollSummaryBox) {

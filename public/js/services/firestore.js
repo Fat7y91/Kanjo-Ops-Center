@@ -85,17 +85,138 @@ const updateNotificationsUI = (notifs) => {
     });
 };
 
-window.goToTask = (taskId, taskDate) => {
-    const detailsElements = document.querySelectorAll('details');
-    detailsElements.forEach(d => { if (d.innerHTML.includes(taskDate)) d.open = true; });
+const taskQuickViewEscape = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+window.closeTaskQuickView = () => {
+    const modal = document.getElementById('taskQuickViewModal');
+    if (modal) modal.classList.add('hidden');
+    window._taskQuickViewTaskId = '';
+};
+
+window.openTaskQuickView = (task) => {
+    if (!task) return;
+    const modal = document.getElementById('taskQuickViewModal');
+    const body = document.getElementById('taskQuickViewBody');
+    const titleEl = document.getElementById('taskQuickViewTitle');
+    const subtitleEl = document.getElementById('taskQuickViewSubtitle');
+    if (!modal || !body) return;
+    window._taskQuickViewTaskId = task.id || '';
+
+    const name = task.name || 'مهمة غير معروفة';
+    const team = task.team || '-';
+    const date = task.time || 'غير محدد';
+    const cat = task.cat || 'غير محدد';
+    const target = Number(task.target) || 0;
+    const achieved = Number(task.achieved) || 0;
+    const isSigned = task.isSigned && achieved > 0;
+    const isProvisional = task.isProvisional || (task.isSigned && achieved === 0);
+
+    let statusBadge = '<span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-[11px] font-black">بدون تعاقد</span>';
+    if (isSigned) statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full text-[11px] font-black">متعاقد نهائي</span>';
+    else if (isProvisional) statusBadge = '<span class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full text-[11px] font-black">اتفاق مبدئي</span>';
+
+    let progressHtml = '';
+    if ((isSigned || isProvisional) && target > 0) {
+        const percentage = Math.round((achieved / target) * 100);
+        const colorClass = percentage >= 100 ? 'text-green-600' : (percentage >= 50 ? 'text-orange-500' : 'text-red-500');
+        progressHtml = `<div class="text-xs sm:text-sm font-black ${colorClass}">نسبة الإنجاز: ${percentage}% (محقق ${achieved}% من مستهدف ${target}%)</div>`;
+    }
+
+    const attendances = Array.isArray(task.attendances) ? task.attendances : [];
+    const visitsHtml = attendances.length
+        ? attendances.map((a) => `<div class="flex items-center justify-between gap-2 text-[11px] font-bold ${a.type === 'start' ? 'text-green-700' : 'text-red-600'} bg-white border border-purple-100 rounded-xl px-2.5 py-1.5"><span>${taskQuickViewEscape(a.user)} — ${a.type === 'start' ? 'بدء زيارة' : 'إنهاء زيارة'} ${taskQuickViewEscape(a.time || '')}</span>${a.loc ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.loc)}" target="_blank" class="underline text-blue-600 whitespace-nowrap">الخريطة</a>` : ''}</div>`).join('')
+        : '<div class="text-[11px] font-bold text-slate-400">لا توجد زيارات مسجلة</div>';
+
+    const reports = Array.isArray(task.reports) ? task.reports : [];
+    const reportsHtml = reports.length
+        ? reports.map((r) => `<div class="bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
+            <div class="flex items-center justify-between gap-2">
+                <span class="font-black text-xs text-kanjo-dark">${taskQuickViewEscape(r.name)}</span>
+                <span class="text-[10px] font-bold text-slate-400">${taskQuickViewEscape(r.date || '')} ${taskQuickViewEscape(r.time || '')}</span>
+            </div>
+            ${r.general ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات عامة: ${taskQuickViewEscape(r.general)}</div>` : ''}
+            ${r.merchant ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات التاجر: ${taskQuickViewEscape(r.merchant)}</div>` : ''}
+            ${r.next ? `<div class="text-[11px] text-purple-800 font-black">القادم: ${taskQuickViewEscape(r.next)}</div>` : ''}
+        </div>`).join('')
+        : '<div class="text-[11px] font-bold text-slate-400">لا توجد تقارير</div>';
+
+    if (titleEl) titleEl.textContent = name;
+    if (subtitleEl) subtitleEl.textContent = `${team} • ${cat} • يوم ${date}`;
+
+    body.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2">${statusBadge}</div>
+        ${progressHtml}
+        ${task.notes ? `<div class="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs text-slate-700"><span class="font-black text-amber-800 block mb-0.5">ملاحظات توجيهية:</span>${taskQuickViewEscape(task.notes)}</div>` : ''}
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-kanjo-light rounded-xl p-2.5"><div class="text-[10px] font-black text-slate-500">الفئة</div><div class="font-black text-kanjo-dark">${taskQuickViewEscape(cat)}</div></div>
+            <div class="bg-kanjo-light rounded-xl p-2.5"><div class="text-[10px] font-black text-slate-500">التارجت</div><div class="font-black text-kanjo-primary">${target ? target + '%' : '-'}</div></div>
+        </div>
+        <div class="bg-slate-50 border border-purple-100 rounded-2xl p-3 space-y-2">
+            <div class="font-black text-xs text-kanjo-dark"><i class="fa-solid fa-location-dot text-kanjo-primary"></i> الزيارات (${attendances.length})</div>
+            <div class="space-y-1.5">${visitsHtml}</div>
+        </div>
+        <div class="bg-slate-50 border border-purple-100 rounded-2xl p-3 space-y-2">
+            <div class="font-black text-xs text-kanjo-dark"><i class="fa-solid fa-file-lines text-kanjo-primary"></i> التقارير (${reports.length})</div>
+            <div class="space-y-1.5">${reportsHtml}</div>
+        </div>`;
+
+    modal.classList.remove('hidden');
+};
+
+window.goToTaskInList = () => {
+    const taskId = window._taskQuickViewTaskId;
+    let task = (window.allTasksCache || []).find((t) => t.id === taskId) || null;
+    if (!task && window.tasksMemory && typeof window.tasksMemory.get === 'function' && window.tasksMemory.get(taskId)) {
+        task = { id: taskId, ...window.tasksMemory.get(taskId) };
+    }
+    if (!task) {
+        if (window.showToast) window.showToast('تعذر تحديد موقع المهمة في القائمة', false);
+        return;
+    }
+    window._tasksSelectedDate = task.time || window.getTasksSelectedDate();
+    window.closeTaskQuickView();
+    if (window.lastSnapshot) window.renderDashboard(window.lastSnapshot);
     setTimeout(() => {
-        const taskDiv = document.getElementById(`task-card-${taskId}`);
+        const taskDiv = document.getElementById(`task-card-${task.id}`);
         if (taskDiv) {
             taskDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
             taskDiv.classList.add('highlight-task');
-            setTimeout(() => { taskDiv.classList.remove('highlight-task'); }, 2000);
-        } else { showToast("قد تكون هذه المهمة مخفية حالياً", false); }
-    }, 300);
+            setTimeout(() => taskDiv.classList.remove('highlight-task'), 2000);
+        }
+    }, 350);
+};
+
+window.goToTask = async (taskId, taskDate) => {
+    if (!taskId) return;
+    const dropdown = document.getElementById('notificationsDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+
+    let task = null;
+    if (window.tasksMemory && typeof window.tasksMemory.get === 'function') {
+        const mem = window.tasksMemory.get(taskId);
+        if (mem) task = { id: taskId, ...mem };
+    }
+    if (!task && Array.isArray(window.allTasksCache)) {
+        task = window.allTasksCache.find((t) => t.id === taskId) || null;
+    }
+    if (!task) {
+        try {
+            const snap = await window.getDoc(window.doc(window.db, 'tasks', taskId));
+            if (snap && snap.exists && snap.exists()) task = { id: snap.id, ...snap.data() };
+        } catch (err) {
+            console.error('[tasks] quick view fetch failed:', err);
+        }
+    }
+    if (!task) {
+        if (window.showToast) window.showToast('تعذر العثور على بيانات المهمة', false);
+        return;
+    }
+    window.openTaskQuickView(task);
 };
 
 window.notifyManager = async (title, body, type, taskId, taskDate) => {

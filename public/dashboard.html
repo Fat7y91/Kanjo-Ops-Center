@@ -2204,6 +2204,42 @@
 
             
 
+            <!-- شريط التنقل بين أيام المهام (عرض يوم واحد لتقليل الضغط على الصفحة) -->
+
+            <div id="tasksDateNav" class="bg-white border border-purple-100 rounded-2xl shadow-sm p-2.5">
+
+                <div class="flex items-center justify-between gap-2">
+
+                    <button type="button" onclick="tasksNavDay(-1)" title="اليوم السابق" class="bg-kanjo-light hover:bg-purple-100 text-kanjo-primary w-10 h-10 rounded-xl flex items-center justify-center font-black transition shrink-0">
+
+                        <i class="fa-solid fa-chevron-right"></i>
+
+                    </button>
+
+                    <div class="flex-1 flex items-center justify-center gap-2 min-w-0">
+
+                        <i class="fa-regular fa-calendar-days text-kanjo-primary"></i>
+
+                        <input type="date" id="tasksDatePicker" onchange="tasksDateChange(this.value)" class="p-2 text-xs bg-white border border-purple-100 rounded-xl font-black text-kanjo-dark outline-none focus:border-kanjo-primary">
+
+                        <button type="button" onclick="tasksGoToday()" class="text-[10px] font-black bg-kanjo-primary text-white px-3 py-2 rounded-xl hover:bg-violet-800 transition whitespace-nowrap">اليوم</button>
+
+                    </div>
+
+                    <button type="button" onclick="tasksNavDay(1)" title="اليوم التالي" class="bg-kanjo-light hover:bg-purple-100 text-kanjo-primary w-10 h-10 rounded-xl flex items-center justify-center font-black transition shrink-0">
+
+                        <i class="fa-solid fa-chevron-left"></i>
+
+                    </button>
+
+                </div>
+
+                <div id="tasksDateSummary" class="text-center text-[10px] font-bold text-slate-500 mt-1"></div>
+
+            </div>
+
+
+
             <div id="tasksContainer" class="space-y-4"></div>
 
         </div>
@@ -2795,6 +2831,45 @@
 
 
     <script type="module" src="js/main.js"></script>
+
+    <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
+
+        <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-4">
+
+                <div class="flex items-center gap-3 min-w-0">
+
+                    <div class="bg-kanjo-light text-kanjo-primary p-3 rounded-2xl text-xl shrink-0"><i class="fa-solid fa-store"></i></div>
+
+                    <div class="min-w-0">
+
+                        <h3 id="taskQuickViewTitle" class="font-black text-lg text-kanjo-dark truncate">تفاصيل المهمة</h3>
+
+                        <p id="taskQuickViewSubtitle" class="text-xs text-slate-500 font-bold">-</p>
+
+                    </div>
+
+                </div>
+
+                <button type="button" onclick="closeTaskQuickView()" class="text-slate-400 hover:text-red-500 p-1 shrink-0"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div id="taskQuickViewBody" class="space-y-3"></div>
+
+            <div class="mt-4 flex flex-wrap gap-2 sticky bottom-0 bg-white pt-2">
+
+                <button type="button" onclick="goToTaskInList()" class="bg-kanjo-primary text-white px-4 py-2.5 rounded-xl text-xs font-black hover:bg-violet-800 transition flex items-center gap-2"><i class="fa-solid fa-list"></i> عرض في قائمة اليوم</button>
+
+                <button type="button" onclick="closeTaskQuickView()" class="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl text-xs font-black hover:bg-slate-200 transition">إغلاق</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
 
     <div id="contract-template-container" class="hidden"></div>
 

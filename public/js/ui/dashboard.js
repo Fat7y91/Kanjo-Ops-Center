@@ -1377,6 +1377,47 @@ window.hasRenderedData = false;
     maybeShowLoading();
 })();
 
+/* ─── Single-day tasks view ───
+   Managers navigate one day at a time (default: today) so the tasks container
+   only ever holds a single date's cards instead of the entire historical
+   archive, eliminating the long accordion list and its DOM overload. */
+window.getTasksSelectedDate = () => {
+    if (window._tasksSelectedDate) return window._tasksSelectedDate;
+    const d = new Date();
+    window._tasksSelectedDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return window._tasksSelectedDate;
+};
+
+const shiftTasksDateStr = (dateStr, deltaDays) => {
+    const parts = String(dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return dateStr;
+    const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+    dt.setDate(dt.getDate() + deltaDays);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+
+window.renderTasksDateNav = (summaryHtml) => {
+    const picker = document.getElementById('tasksDatePicker');
+    const selected = window.getTasksSelectedDate();
+    if (picker && picker.value !== selected) picker.value = selected;
+    const summary = document.getElementById('tasksDateSummary');
+    if (summary && typeof summaryHtml === 'string') summary.innerHTML = summaryHtml;
+};
+
+window.tasksDateChange = (value) => {
+    if (!value) return;
+    window._tasksSelectedDate = value;
+    window.renderTasksDateNav();
+    if (window.lastSnapshot) window.renderDashboard(window.lastSnapshot);
+};
+
+window.tasksNavDay = (delta) => window.tasksDateChange(shiftTasksDateStr(window.getTasksSelectedDate(), delta));
+
+window.tasksGoToday = () => {
+    const d = new Date();
+    window.tasksDateChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+};
+
 window.renderDashboard = (snapshot) => {
 
     if (!snapshot) return;
@@ -1980,6 +2021,19 @@ window.renderDashboard = (snapshot) => {
 
     const fragment = document.createDocumentFragment();
 
+    /* Single-day restriction: keep only the selected date's buckets so the DOM
+       never grows with the full historical archive. Live view keeps all dates. */
+    const tasksSelectedDate = isLiveView ? '' : window.getTasksSelectedDate();
+    const visibleGroupedByTeam = {};
+    ['Fox Team', 'Power Team'].forEach((team) => {
+        const byDate = groupedByTeam[team] || {};
+        if (!tasksSelectedDate) {
+            visibleGroupedByTeam[team] = byDate;
+        } else {
+            visibleGroupedByTeam[team] = byDate[tasksSelectedDate] ? { [tasksSelectedDate]: byDate[tasksSelectedDate] } : {};
+        }
+    });
+
     
 
     if (crossTeamSearchAlertHtml) {
@@ -2009,7 +2063,7 @@ window.renderDashboard = (snapshot) => {
 
         ['Fox Team', 'Power Team'].forEach(team => { 
 
-            if(groupedByTeam[team] && Object.keys(groupedByTeam[team]).length > 0) {
+            if(visibleGroupedByTeam[team] && Object.keys(visibleGroupedByTeam[team]).length > 0) {
 
                 const details = document.createElement('details');
 
@@ -2017,7 +2071,9 @@ window.renderDashboard = (snapshot) => {
 
                 details.open = true;
 
-                details.innerHTML = `<summary class="font-black text-sm sm:text-base text-kanjo-dark cursor-pointer select-none">${isLiveView ? '🔴 المهام الجارية الآن' : 'فريق ' + team} (${teamMembers[team] || ''})</summary><div class="mt-4 space-y-3 h-auto">${window.renderTasks(groupedByTeam[team])}</div>`;
+                const dayLabel = tasksSelectedDate ? ` — يوم ${tasksSelectedDate}` : '';
+
+                details.innerHTML = `<summary class="font-black text-sm sm:text-base text-kanjo-dark cursor-pointer select-none">${isLiveView ? '🔴 المهام الجارية الآن' : 'فريق ' + team} (${teamMembers[team] || ''})${dayLabel}</summary><div class="mt-4 space-y-3 h-auto">${window.renderTasks(visibleGroupedByTeam[team])}</div>`;
 
                 fragment.appendChild(details);
 
@@ -2033,13 +2089,26 @@ window.renderDashboard = (snapshot) => {
 
         let repHtml = '';
 
-        repHtml += window.renderTasks(groupedByTeam[currentUser.team] || {});
+        repHtml += window.renderTasks(visibleGroupedByTeam[currentUser.team] || {});
 
         wrapper.innerHTML = repHtml;
 
         fragment.appendChild(wrapper);
 
     }
+
+    const renderedTeams = (currentUser.role === 'admin' || currentUser.role === 'founder') ? ['Fox Team', 'Power Team'] : [currentUser.team];
+    let renderedTaskCount = 0;
+    renderedTeams.forEach((team) => {
+        Object.values(visibleGroupedByTeam[team] || {}).forEach((arr) => { renderedTaskCount += arr.length; });
+    });
+    if (renderedTaskCount === 0 && !crossTeamSearchAlertHtml) {
+        const empty = document.createElement('div');
+        empty.className = 'text-center py-10 text-slate-400 font-bold bg-white rounded-3xl border border-purple-100';
+        empty.innerHTML = `<i class="fa-regular fa-calendar-xmark text-4xl text-[#230535]/20 mb-2"></i><div>لا توجد مهام في يوم ${tasksSelectedDate || ''}</div>`;
+        fragment.appendChild(empty);
+    }
+    window.renderTasksDateNav(tasksSelectedDate ? `${renderedTaskCount} مهمة في يوم ${tasksSelectedDate}` : 'عرض المهام الجارية الآن');
 
     window.hasRenderedData = true;
 
@@ -2301,6 +2370,10 @@ window.renderTasks = (grouped) => {
 
     let html = ''; const todayStr = new Date().toISOString().slice(0, 10);
 
+    /* In the single-day view there is only one date bucket, so keep it expanded
+       automatically (no extra click needed to reveal the day's tasks). */
+    const singleDateView = Object.keys(grouped).length === 1;
+
     /* Precompute merchant → Drive-folder map once per render so every card can
        render the "ملفات التاجر الرسمية" button from the permanent merchantId
        without scanning all tasks for each card. */
@@ -2308,7 +2381,7 @@ window.renderTasks = (grouped) => {
 
     Object.keys(grouped).sort().forEach(date => { 
 
-        const isToday = (date === todayStr); const isOpen = isToday ? 'open' : '';
+        const isToday = (date === todayStr); const isOpen = (isToday || singleDateView) ? 'open' : '';
 
         html += `<details class="mb-3 bg-white rounded-3xl shadow-sm border border-purple-100 group h-auto" ${isOpen}>
 
