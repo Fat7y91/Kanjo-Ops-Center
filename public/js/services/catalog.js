@@ -1457,13 +1457,11 @@ window.toggleCatalogGroupedAccordion = (elId, event) => {
     });
 
     /* Keep the clicked merchant comfortably at the top after the injected
-       product cards have been laid out. */
+       product cards have been laid out (150ms lets the DOM settle first). */
     if (willOpen) {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            });
-        });
+        setTimeout(() => {
+            accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
     }
 };
 
@@ -1581,7 +1579,7 @@ const catalogProductStatusCounts = (products) => {
 
 const renderCatalogMerchantFolderCard = (group) => {
     const name = catalogEscapeHtml(group.merchantName);
-    const encoded = encodeURIComponent(group.merchantName);
+    const encoded = encodeURIComponent(group.merchantName).replace(/'/g, '%27');
     const counts = catalogProductStatusCounts(group.products);
     const logo = catalogMerchantLogoUrl(group.merchantName);
     const logoHtml = logo
@@ -1649,21 +1647,20 @@ window.backCatalogAllProductsMerchants = (event) => {
 
 /* After the products grid has been injected, smoothly bring the merchant
    title/toolbar to a comfortable position at the top of the viewport. The
-   double rAF waits for the browser to finish layout before measuring. */
+   150ms timeout gives the browser time to inject the cards and recompute the
+   container height before scrolling, avoiding glitchy jump calculations. */
 const scrollCatalogAllProductsAnchor = (mode) => {
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            const toolbar = document.getElementById('catalogAllProductsToolbar');
-            const list = document.getElementById('catalogAllProductsList');
-            let target = null;
-            if (mode === 'merchant') {
-                target = (toolbar && !toolbar.classList.contains('hidden') && toolbar.innerHTML.trim()) ? toolbar : list;
-            } else {
-                target = list || toolbar;
-            }
-            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    });
+    setTimeout(() => {
+        const toolbar = document.getElementById('catalogAllProductsToolbar');
+        const list = document.getElementById('catalogAllProductsList');
+        let target = null;
+        if (mode === 'merchant') {
+            target = (toolbar && !toolbar.classList.contains('hidden') && toolbar.innerHTML.trim()) ? toolbar : list;
+        } else {
+            target = list || toolbar;
+        }
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 150);
 };
 
 const catalogRepDisplayName = (p) => String((p && (p.createdBy || p.added_by || p.addedBy || p.repName || p.created_by)) || '').trim() || 'غير معروف';
