@@ -1416,22 +1416,55 @@ const groupCatalogProductsByMerchant = (products) => {
     }));
 };
 
-window.toggleCatalogGroupedAccordion = (elId) => {
+window.toggleCatalogGroupedAccordion = (elId, event) => {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+        event.stopPropagation();
+    }
     const accordion = document.getElementById(elId);
     if (!accordion) return;
     const body = accordion.querySelector('[data-catalog-group-body]');
     const chevron = accordion.querySelector('[data-catalog-group-chevron]');
     if (!body) return;
+
+    /* Prevent ghost/double taps on touch screens from firing the toggle twice. */
+    window._catalogAccordionLocks = window._catalogAccordionLocks || {};
+    const now = Date.now();
+    if (window._catalogAccordionLocks[elId] && (now - window._catalogAccordionLocks[elId]) < 350) return;
+    window._catalogAccordionLocks[elId] = now;
+
     const mapName = accordion.getAttribute('data-open-map') || '';
     const merchantName = accordion.getAttribute('data-catalog-merchant') || '';
     const willOpen = body.classList.contains('hidden');
+
+    /* Freeze the accordion's current height before mutating the DOM so the
+       surrounding grid cannot collapse/reflow mid-interaction (prevents CLS). */
+    const prevHeight = accordion.getBoundingClientRect().height;
+    if (prevHeight > 0) accordion.style.minHeight = prevHeight + 'px';
+
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
-    if (!mapName) return;
-    const openMap = window[mapName] || {};
-    if (willOpen) openMap[merchantName] = true;
-    else delete openMap[merchantName];
-    window[mapName] = openMap;
+    if (mapName) {
+        const openMap = window[mapName] || {};
+        if (willOpen) openMap[merchantName] = true;
+        else delete openMap[merchantName];
+        window[mapName] = openMap;
+    }
+
+    /* Release the height lock once the browser has laid out the new content. */
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => { accordion.style.minHeight = ''; });
+    });
+
+    /* Keep the clicked merchant comfortably at the top after the injected
+       product cards have been laid out. */
+    if (willOpen) {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+    }
 };
 
 const renderCatalogMerchantAccordionList = (list, products, openMapName, idPrefix, renderCard, emptyHtml) => {
@@ -1449,7 +1482,7 @@ const renderCatalogMerchantAccordionList = (list, products, openMapName, idPrefi
         const isOpen = !!openMap[group.merchantName];
         const cards = group.products.map(renderCard).join('');
         return `<div id="${elId}" data-catalog-merchant="${safeName}" data-open-map="${openMapName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
-            <button type="button" onclick="toggleCatalogGroupedAccordion('${elId}')" class="w-full bg-white text-[#230535] px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FFD700]/10 transition">
+            <button type="button" onclick="toggleCatalogGroupedAccordion('${elId}', event)" class="w-full bg-white text-[#230535] px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FFD700]/10 transition">
                 <span class="font-black text-sm truncate">${safeName}</span>
                 <span class="flex items-center gap-2 shrink-0">
                     <span class="text-[11px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${group.products.length} منتجات</span>
@@ -1554,7 +1587,7 @@ const renderCatalogMerchantFolderCard = (group) => {
     const logoHtml = logo
         ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
         : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
-    return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}')" class="catalog-merchant-card">
+    return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card">
         <div class="flex justify-center mb-3">${logoHtml}</div>
         <div class="font-black text-sm text-[#230535] leading-snug line-clamp-2 min-h-[2.5rem]">${name}</div>
         <div class="mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -1588,14 +1621,49 @@ const renderCatalogAllProductCard = (p) => {
 
 const catalogAllProductsEmptyHtml = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
 
-window.openCatalogAllProductsMerchant = (encodedName) => {
+window.openCatalogAllProductsMerchant = (encodedName, event) => {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    /* Guard against ghost/double taps on touch devices: ignore a second
+       invocation that lands within the same 350ms window. */
+    const now = Date.now();
+    if (window._catalogMerchantNavLock && (now - window._catalogMerchantNavLock) < 350) return;
+    window._catalogMerchantNavLock = now;
+
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
     renderCatalogAllProductsList();
+    scrollCatalogAllProductsAnchor('merchant');
 };
 
-window.backCatalogAllProductsMerchants = () => {
+window.backCatalogAllProductsMerchants = (event) => {
+    if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault();
+        event.stopPropagation();
+    }
     window._catalogAllProductsSelectedMerchant = '';
     renderCatalogAllProductsList();
+    scrollCatalogAllProductsAnchor('grid');
+};
+
+/* After the products grid has been injected, smoothly bring the merchant
+   title/toolbar to a comfortable position at the top of the viewport. The
+   double rAF waits for the browser to finish layout before measuring. */
+const scrollCatalogAllProductsAnchor = (mode) => {
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const toolbar = document.getElementById('catalogAllProductsToolbar');
+            const list = document.getElementById('catalogAllProductsList');
+            let target = null;
+            if (mode === 'merchant') {
+                target = (toolbar && !toolbar.classList.contains('hidden') && toolbar.innerHTML.trim()) ? toolbar : list;
+            } else {
+                target = list || toolbar;
+            }
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
 };
 
 const catalogRepDisplayName = (p) => String((p && (p.createdBy || p.added_by || p.addedBy || p.repName || p.created_by)) || '').trim() || 'غير معروف';
@@ -1729,7 +1797,7 @@ const renderCatalogAllProductsList = () => {
             toolbar.classList.remove('hidden');
             toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
                 <div class="flex items-center gap-2">
-                    <button type="button" onclick="backCatalogAllProductsMerchants()" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <button type="button" onclick="backCatalogAllProductsMerchants(event)" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
                         <i class="fa-solid fa-arrow-right"></i> كل التجار
                     </button>
                     ${selectedRep ? `<button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#E57723] text-white px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2"><i class="fa-solid fa-xmark"></i> إلغاء تصفية المندوب</button>` : ''}
