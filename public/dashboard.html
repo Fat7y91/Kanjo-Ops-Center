@@ -2478,11 +2478,13 @@
 
                     </div>
 
-                    <div>
+                    <div class="relative">
 
                         <label class="block text-[11px] font-black text-[#230535] mb-1">اسم المنتج بالعربية</label>
 
-                        <input type="text" id="catalogNameAr" required placeholder="اسم المنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+                        <input type="text" id="catalogNameAr" required autocomplete="off" placeholder="اسم المنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                        <div id="catalogNameArAutocomplete" class="hidden absolute left-0 right-0 top-full mt-1 z-[145] bg-white border border-purple-100 rounded-2xl shadow-2xl max-h-72 overflow-y-auto hide-scrollbar"></div>
 
                     </div>
 

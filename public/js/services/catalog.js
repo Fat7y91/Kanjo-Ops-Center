@@ -599,6 +599,8 @@ window.updateMasterCatalogSearchVisibility = () => {
 
 window.onCatalogMerchantChange = () => {
     window.updateMasterCatalogSearchVisibility();
+    window.hideCatalogNameSuggestions();
+    fetchCatalogAutocompleteCache();
 };
 
 window.closeMasterCatalogSearchModal = () => {
@@ -632,6 +634,41 @@ const normalizeArabicSearchText = (value) => String(value || '')
     .replace(/[^\u0600-\u06FFa-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+/* Standalone Arabic normalization helper used by the "Add Product" smart
+   autocomplete. Removes tashkeel/tatweel, unifies alef forms, normalizes
+   taa marbuta and alef maqsura so morphological variations collapse to the
+   same searchable string. */
+const normalizeArabic = (str) => String(str || '')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .toLowerCase()
+    .trim();
+window.normalizeArabic = normalizeArabic;
+
+/* Egyptian e-commerce synonym dictionary. Keys/values are normalized lazily
+   below so lookups work regardless of the spelling the user typed. */
+const searchSynonyms = {
+    'فراخ': ['فرخه', 'دجاج'],
+    'فرخه': ['فراخ', 'دجاج'],
+    'دجاج': ['فراخ', 'فرخه'],
+    'برجر': ['برغر', 'همبرجر', 'burger'],
+    'شاورما': ['شاورمه'],
+    'بطاطس': ['بطاطا', 'فرايز']
+};
+
+const normalizedSearchSynonyms = (() => {
+    const map = {};
+    Object.keys(searchSynonyms).forEach((key) => {
+        const normKey = normalizeArabic(key);
+        if (!normKey) return;
+        const aliases = (map[normKey] || []).concat((searchSynonyms[key] || []).map(normalizeArabic));
+        map[normKey] = aliases.filter((alias, i) => alias && aliases.indexOf(alias) === i);
+    });
+    return map;
+})();
 
 const masterCatalogSearchHaystack = (item) => normalizeArabicSearchText([
     item && item.name,
@@ -777,6 +814,195 @@ window.selectMasterCatalogItem = (itemId) => {
     window.closeMasterCatalogSearchModal();
     if (window.showToast) window.showToast('تم تعبئة بيانات المنتج. يمكنك تعديل السعر أو رفع صورة محلية');
 };
+
+/* ---------------------------------------------------------------------------
+   Smart Auto-fill (autocomplete) for the "Add Product" form
+   ---------------------------------------------------------------------------
+   Caches existing products for the selected merchant's category, normalizes
+   Arabic input, expands it through the synonym dictionary and renders a
+   prefix-first / infix-second suggestion dropdown. */
+window._catalogAutocompleteCache = window._catalogAutocompleteCache || [];
+window._catalogAutocompleteCategory = window._catalogAutocompleteCategory || '';
+
+const hideCatalogNameSuggestions = () => {
+    const box = document.getElementById('catalogNameArAutocomplete');
+    if (!box) return;
+    box.classList.add('hidden');
+    box.innerHTML = '';
+};
+window.hideCatalogNameSuggestions = hideCatalogNameSuggestions;
+
+const fetchCatalogAutocompleteCache = async () => {
+    const merchant = selectedCatalogMerchant();
+    const category = resolveMerchantCategory(merchant);
+    window._catalogAutocompleteCategory = category || '';
+    if (!category || typeof window.getDocs !== 'function' || !window.db) {
+        window._catalogAutocompleteCache = [];
+        return;
+    }
+    try {
+        const ref = window.query(
+            window.collection(window.db, CATALOG_COLLECTION),
+            window.where('category', '==', category)
+        );
+        const snap = await window.getDocs(ref);
+        const seen = new Set();
+        const unique = [];
+        snap.forEach((d) => {
+            const data = { id: d.id, ...d.data() };
+            const name = String(data.name_ar || data.name_en || data.name || '').trim();
+            const key = normalizeArabic(name);
+            if (!name || !key || seen.has(key)) return;
+            seen.add(key);
+            unique.push(data);
+        });
+        unique.sort((a, b) => String(a.name_ar || '').localeCompare(String(b.name_ar || ''), 'ar'));
+        window._catalogAutocompleteCache = unique;
+    } catch (err) {
+        console.error('[catalog] autocomplete cache failed:', err);
+        window._catalogAutocompleteCache = [];
+    }
+};
+
+const expandCatalogSearchTerms = (query) => {
+    const norm = normalizeArabic(query);
+    if (!norm) return [];
+    const terms = [norm];
+    (normalizedSearchSynonyms[norm] || []).forEach((alias) => {
+        if (alias && terms.indexOf(alias) === -1) terms.push(alias);
+    });
+    return terms;
+};
+
+const renderCatalogNameSuggestions = () => {
+    const input = document.getElementById('catalogNameAr');
+    const box = document.getElementById('catalogNameArAutocomplete');
+    if (!input || !box) return;
+    const query = String(input.value || '').trim();
+    if (!query) { hideCatalogNameSuggestions(); return; }
+    const terms = expandCatalogSearchTerms(query);
+    if (!terms.length) { hideCatalogNameSuggestions(); return; }
+    const scored = [];
+    (window._catalogAutocompleteCache || []).forEach((product) => {
+        const hay = normalizeArabic(product.name_ar || product.name_en || product.name || '');
+        if (!hay) return;
+        let rank = 99;
+        terms.forEach((term) => {
+            if (!term) return;
+            const idx = hay.indexOf(term);
+            if (idx === -1) return;
+            const r = idx === 0 ? 0 : 1;
+            if (r < rank) rank = r;
+        });
+        if (rank < 99) scored.push({ product, rank });
+    });
+    if (!scored.length) { hideCatalogNameSuggestions(); return; }
+    scored.sort((a, b) => a.rank - b.rank
+        || String(a.product.name_ar || '').localeCompare(String(b.product.name_ar || ''), 'ar'));
+    box.innerHTML = scored.slice(0, 8).map(({ product }) => {
+        const id = catalogEscapeHtml(product.id);
+        const name = catalogEscapeHtml(product.name_ar || product.name_en || 'بدون اسم');
+        const price = (product.base_price == null || product.base_price === '')
+            ? ''
+            : catalogEscapeHtml(product.base_price);
+        const thumb = catalogProductThumbUrl(product);
+        const thumbHtml = thumb
+            ? `<img src="${catalogEscapeHtml(thumb)}" alt="" loading="lazy" class="w-11 h-11 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+            : `<div class="w-11 h-11 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
+        return `<button type="button" data-catalog-suggest-id="${id}" class="w-full flex items-center gap-3 px-3 py-2 text-right hover:bg-[#FFD700]/15 active:bg-[#FFD700]/25 transition border-b border-purple-50 last:border-b-0">
+            ${thumbHtml}
+            <div class="min-w-0 flex-1">
+                <div class="font-black text-[13px] text-[#230535] truncate">${name}</div>
+                ${price === '' ? '' : `<div class="text-[11px] font-bold text-slate-500">${price} ج.م</div>`}
+            </div>
+            <i class="fa-solid fa-wand-magic-sparkles text-[#E57723] text-xs"></i>
+        </button>`;
+    }).join('');
+    box.classList.remove('hidden');
+    box.querySelectorAll('[data-catalog-suggest-id]').forEach((btn) => {
+        btn.addEventListener('click', () => window.applyCatalogNameSuggestion(btn.getAttribute('data-catalog-suggest-id')));
+    });
+};
+window.renderCatalogNameSuggestions = renderCatalogNameSuggestions;
+
+const clearCatalogVariationRows = () => {
+    const list = document.getElementById('catalogVariationsList');
+    if (!list) return;
+    Array.from(list.children).forEach((row) => {
+        if (row._variantPreviewUrl) URL.revokeObjectURL(row._variantPreviewUrl);
+    });
+    list.innerHTML = '';
+    catalogVariationSeq = 0;
+};
+
+window.applyCatalogNameSuggestion = (productId) => {
+    const product = (window._catalogAutocompleteCache || []).find((p) => p.id === productId);
+    if (!product) return;
+    const nameEl = document.getElementById('catalogNameAr');
+    const descEl = document.getElementById('catalogDescriptionAr');
+    const priceEl = document.getElementById('catalogBasePrice');
+    const typeEl = document.getElementById('catalogProductType');
+    const priceWrap = document.getElementById('catalogBasePriceWrap');
+    const section = document.getElementById('catalogVariationsSection');
+    const name = String(product.name_ar || product.name_en || '').trim();
+    const desc = String(product.description_ar || product.description_en || '').trim();
+    const variations = Array.isArray(product.variations)
+        ? product.variations.filter((v) => v && String(v.name || '').trim())
+        : [];
+    const isVariable = variations.length > 0;
+
+    if (nameEl) nameEl.value = name;
+    if (descEl && desc) descEl.value = desc;
+    if (priceEl && product.base_price != null && product.base_price !== '') priceEl.value = product.base_price;
+    if (typeEl) typeEl.value = isVariable ? 'variable' : 'simple';
+    if (section) section.classList.toggle('hidden', !isVariable);
+    if (priceWrap) priceWrap.classList.toggle('hidden', isVariable);
+    if (priceEl) {
+        if (isVariable) priceEl.removeAttribute('required');
+        else priceEl.setAttribute('required', 'required');
+    }
+
+    const imageUrls = catalogProductFullImageUrls(product);
+    if (imageUrls.length) {
+        renderCatalogSavedImages({ rawImageUrls: imageUrls, enhancedImageUrls: [] });
+    } else {
+        hideCatalogSavedImages();
+    }
+
+    clearCatalogVariationRows();
+    if (isVariable) {
+        variations.forEach((v) => window.addCatalogVariationRow(v.name, v.price, v.image_url || ''));
+    }
+
+    hideCatalogNameSuggestions();
+    if (window.showToast) window.showToast('تم تعبئة بيانات المنتج تلقائياً');
+};
+
+const bindCatalogNameAutocomplete = () => {
+    const input = document.getElementById('catalogNameAr');
+    const box = document.getElementById('catalogNameArAutocomplete');
+    if (!input || input._catalogAutocompleteBound) return;
+    input._catalogAutocompleteBound = true;
+    input.addEventListener('input', () => {
+        if (window._catalogAutocompleteTimer) clearTimeout(window._catalogAutocompleteTimer);
+        window._catalogAutocompleteTimer = setTimeout(renderCatalogNameSuggestions, 300);
+    });
+    input.addEventListener('focus', () => {
+        if (String(input.value || '').trim()) renderCatalogNameSuggestions();
+    });
+    input.addEventListener('blur', () => {
+        setTimeout(hideCatalogNameSuggestions, 200);
+    });
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') hideCatalogNameSuggestions();
+    });
+    if (box) {
+        /* preventDefault on mousedown keeps focus on the input so the blur
+           handler doesn't clear the dropdown before the click fires. */
+        box.addEventListener('mousedown', (event) => event.preventDefault());
+    }
+};
+window.bindCatalogNameAutocomplete = bindCatalogNameAutocomplete;
 
 let productImagesState = [];
 
@@ -1009,12 +1235,16 @@ window.openCatalogProductModal = () => {
     clearCatalogProductFields(false);
     setCatalogModalChrome();
     window.updateMasterCatalogSearchVisibility();
+    window.bindCatalogNameAutocomplete();
+    window.hideCatalogNameSuggestions();
+    fetchCatalogAutocompleteCache();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
 };
 
 window.closeCatalogProductModal = () => {
     window.stopCatalogBarcodeScan();
+    window.hideCatalogNameSuggestions();
     resetCatalogImageState();
     resetCatalogEditState();
     const modal = document.getElementById('catalogProductModal');
@@ -1364,6 +1594,8 @@ window.openCatalogProductEditor = (productId) => {
     clearCatalogProductFields(false);
     const merchantEl = document.getElementById('catalogMerchantSelect');
     if (merchantEl) merchantEl.value = product.merchantId || '';
+    window.bindCatalogNameAutocomplete();
+    fetchCatalogAutocompleteCache();
     const nameEl = document.getElementById('catalogNameAr');
     if (nameEl) nameEl.value = product.name_ar || '';
     const descEl = document.getElementById('catalogDescriptionAr');
