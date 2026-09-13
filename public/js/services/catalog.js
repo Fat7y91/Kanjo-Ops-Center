@@ -874,6 +874,43 @@ const expandCatalogSearchTerms = (query) => {
     return terms;
 };
 
+/* Position the suggestion dropdown against the input using document
+   coordinates. The dropdown lives on document.body (position: absolute) so the
+   modal's overflow-y-auto can never clip it, and the visualViewport math keeps
+   it above the virtual keyboard on mobile. */
+const positionCatalogNameSuggestions = () => {
+    const input = document.getElementById('catalogNameAr');
+    const box = document.getElementById('catalogNameArAutocomplete');
+    if (!input || !box || box.classList.contains('hidden')) return;
+    const rect = input.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const viewportWidth = vv ? vv.width : window.innerWidth;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const viewportOffsetLeft = vv ? vv.offsetLeft : 0;
+    const viewportOffsetTop = vv ? vv.offsetTop : 0;
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft || 0;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const gutter = 8;
+    const width = Math.max(160, Math.min(rect.width, viewportWidth - gutter * 2));
+    const clampedLeft = Math.max(viewportOffsetLeft + gutter, Math.min(rect.left, viewportOffsetLeft + viewportWidth - width - gutter));
+    const boxHeight = box.offsetHeight || 0;
+    const viewportBottom = viewportOffsetTop + viewportHeight;
+    const spaceBelow = viewportBottom - rect.bottom;
+    const spaceAbove = rect.top - viewportOffsetTop;
+    const openAbove = (spaceBelow < boxHeight + 12) && (spaceAbove > spaceBelow);
+    const available = openAbove ? (spaceAbove - 6) : (spaceBelow - 6);
+    const topDoc = (openAbove ? rect.top - boxHeight - 6 : rect.bottom + 6) + scrollY;
+    box.style.position = 'absolute';
+    box.style.width = width + 'px';
+    box.style.left = (clampedLeft + scrollX) + 'px';
+    box.style.top = Math.max(viewportOffsetTop + scrollY + 4, topDoc) + 'px';
+    box.style.right = 'auto';
+    box.style.bottom = 'auto';
+    box.style.maxHeight = Math.max(120, Math.min(288, available)) + 'px';
+    box.style.zIndex = '9999';
+};
+window.positionCatalogNameSuggestions = positionCatalogNameSuggestions;
+
 const renderCatalogNameSuggestions = () => {
     const input = document.getElementById('catalogNameAr');
     const box = document.getElementById('catalogNameArAutocomplete');
@@ -919,6 +956,7 @@ const renderCatalogNameSuggestions = () => {
         </button>`;
     }).join('');
     box.classList.remove('hidden');
+    positionCatalogNameSuggestions();
     box.querySelectorAll('[data-catalog-suggest-id]').forEach((btn) => {
         btn.addEventListener('click', () => window.applyCatalogNameSuggestion(btn.getAttribute('data-catalog-suggest-id')));
     });
@@ -983,6 +1021,8 @@ const bindCatalogNameAutocomplete = () => {
     const box = document.getElementById('catalogNameArAutocomplete');
     if (!input || input._catalogAutocompleteBound) return;
     input._catalogAutocompleteBound = true;
+    /* Park the dropdown on <body> so modal scroll containers cannot clip it. */
+    if (box && box.parentNode !== document.body) document.body.appendChild(box);
     input.addEventListener('input', () => {
         if (window._catalogAutocompleteTimer) clearTimeout(window._catalogAutocompleteTimer);
         window._catalogAutocompleteTimer = setTimeout(renderCatalogNameSuggestions, 300);
@@ -991,15 +1031,36 @@ const bindCatalogNameAutocomplete = () => {
         if (String(input.value || '').trim()) renderCatalogNameSuggestions();
     });
     input.addEventListener('blur', () => {
-        setTimeout(hideCatalogNameSuggestions, 200);
+        /* Longer grace period on touch: let the tap on a suggestion land first. */
+        setTimeout(() => {
+            if (window._catalogSuggestionTouching) return;
+            hideCatalogNameSuggestions();
+        }, 250);
     });
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') hideCatalogNameSuggestions();
     });
     if (box) {
-        /* preventDefault on mousedown keeps focus on the input so the blur
-           handler doesn't clear the dropdown before the click fires. */
-        box.addEventListener('mousedown', (event) => event.preventDefault());
+        /* Keep focus on the input so the blur handler doesn't tear the dropdown
+           down before the tap/click is dispatched. On touch we must NOT
+           preventDefault (that can swallow the click), so instead we raise a
+           flag that the blur handler honours. */
+        box.addEventListener('mousedown', (event) => { if (event.cancelable) event.preventDefault(); });
+        box.addEventListener('touchstart', () => { window._catalogSuggestionTouching = true; }, { passive: true });
+        box.addEventListener('touchend', () => { setTimeout(() => { window._catalogSuggestionTouching = false; }, 300); });
+        box.addEventListener('touchcancel', () => { window._catalogSuggestionTouching = false; });
+    }
+    /* Reposition when the on-screen keyboard opens/closes or the page scrolls. */
+    const reposition = () => {
+        /* Don't move the target out from under a finger mid-tap. */
+        if (window._catalogSuggestionTouching) return;
+        if (box && !box.classList.contains('hidden')) positionCatalogNameSuggestions();
+    };
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', reposition);
+        window.visualViewport.addEventListener('scroll', reposition);
     }
 };
 window.bindCatalogNameAutocomplete = bindCatalogNameAutocomplete;
