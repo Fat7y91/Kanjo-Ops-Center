@@ -1558,6 +1558,10 @@ const updateCatalogProductDirect = async () => {
             payload.status = 'pending';
         }
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, editing.id), payload);
+        /* Update the rep list locally instead of re-reading the collection. */
+        if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
+        window._catalogMyProductsSignature = '';
+        if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
         window.showToast('تم حفظ تعديلات المنتج');
         window.closeCatalogProductModal();
     } catch (err) {
@@ -1630,7 +1634,10 @@ window.toggleCatalogMyProductsWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogMyProductsOpen = willOpen;
-    if (willOpen) renderCatalogMyProductsList();
+    if (willOpen) {
+        window._catalogMyProductsSignature = '';
+        renderCatalogMyProductsList();
+    }
 };
 
 const catalogGroupMerchantKey = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim() || 'تاجر غير معروف';
@@ -1748,11 +1755,24 @@ const renderCatalogMyProductCard = (p) => {
     </div>`;
 };
 
+const catalogMyProductsSignature = () => (window.repCatalogProductsCache || [])
+    .map((p) => [p.id, p.status || '', p.deleteRequested ? 'D' : '', p.name_ar || '', p.base_price == null ? '' : p.base_price].join(':'))
+    .join('|');
+
 const renderCatalogMyProductsList = () => {
     const list = document.getElementById('catalogMyProductsList');
     const countEl = document.getElementById('catalogMyProductsCount');
     const products = window.repCatalogProductsCache || [];
     if (countEl) countEl.textContent = String(products.length);
+    if (!list) return;
+    /* Skip redundant repaints: if the underlying data has not changed since the
+       last render, leave the DOM untouched. Replacing the nodes restarts the
+       CSS reveal animation on every unrelated snapshot, which is what makes
+       the rep list flash/blink continuously. */
+    const signature = catalogMyProductsSignature();
+    if (window._catalogMyProductsRendered && signature === window._catalogMyProductsSignature) return;
+    window._catalogMyProductsSignature = signature;
+    window._catalogMyProductsRendered = true;
     renderCatalogMerchantAccordionList(
         list,
         products,
@@ -2101,6 +2121,12 @@ window.requestCatalogProductDeletion = async (productId) => {
             deleteRequestedAt: new Date(),
             deleteRequestedBy: (window.currentUser && window.currentUser.name) || ''
         });
+        /* Reflect the pending deletion locally without re-fetching. */
+        if (window.patchRepCatalogProductLocally) {
+            window.patchRepCatalogProductLocally(productId, { deleteRequested: true });
+        }
+        window._catalogMyProductsSignature = '';
+        if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
         window.showToast('تم إرسال طلب الحذف للموافقة');
     } catch (err) {
         console.error('[catalog] delete request failed:', err);
@@ -2377,6 +2403,9 @@ window.syncAllCatalogDrafts = async () => {
     } finally {
         window._catalogSyncing = false;
         await window.renderCatalogDraftsWidget();
+        /* One static refresh after the bulk upload so "My Products" shows the
+           newly synced items without a continuous listener. */
+        if (typeof window.loadMyCatalogProducts === 'function') await window.loadMyCatalogProducts();
     }
 };
 
@@ -2817,6 +2846,41 @@ const sortCatalogProductsByCreatedAt = (items) => {
     return items;
 };
 
+/* Static (one-shot) loader for the rep's own catalog products. This replaces
+   the previous real-time onSnapshot: overlapping listeners (tasks + catalog)
+   repainted the same list continuously and made the rep dashboard blink. */
+window.loadMyCatalogProducts = async () => {
+    if (!window.isCatalogRepUser()) return;
+    const createdBy = (window.currentUser && window.currentUser.name) || '';
+    if (!createdBy || typeof window.getDocs !== 'function' || !window.db) return;
+    try {
+        const ref = window.query(
+            window.collection(window.db, CATALOG_COLLECTION),
+            window.where('createdBy', '==', createdBy)
+        );
+        const snap = await window.getDocs(ref);
+        const items = [];
+        snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        window.repCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+        window._catalogMyProductsSignature = '';
+        if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    } catch (err) {
+        console.error('[catalog] my products fetch failed:', err);
+    }
+};
+
+/* Patch a single rep product in the in-memory cache so add/edit/delete update
+   the UI locally without re-fetching the whole collection. */
+const patchRepCatalogProductLocally = (productId, patch) => {
+    const cache = window.repCatalogProductsCache || [];
+    const idx = cache.findIndex((p) => p.id === productId);
+    if (idx === -1) return false;
+    cache[idx] = { ...cache[idx], ...patch };
+    window.repCatalogProductsCache = cache;
+    return true;
+};
+window.patchRepCatalogProductLocally = patchRepCatalogProductLocally;
+
 window.startCatalogListeners = () => {
     if (window._catalogListenerStarted) return;
     if (typeof window.onSnapshot !== 'function' || typeof window.collection !== 'function' || !window.db) return;
@@ -2837,19 +2901,9 @@ window.startCatalogListeners = () => {
     });
     window._appListenerUnsubscribers.push(unsubPending);
 
-    const createdBy = (window.currentUser && window.currentUser.name) || '';
-    if (createdBy) {
-        const mineRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('createdBy', '==', createdBy));
-        const unsubMine = window.onSnapshot(mineRef, (snap) => {
-            const items = [];
-            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
-            window.repCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
-            if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
-        }, (err) => {
-            console.error('[catalog] my products listener failed:', err);
-        });
-        window._appListenerUnsubscribers.push(unsubMine);
-    }
+    /* Rep "My Products" is loaded once with a static .get() and then patched
+       locally in memory; no live listener is attached here. */
+    window.loadMyCatalogProducts();
 
     if (window.canViewAllCatalogProducts()) {
         const allRef = window.collection(window.db, CATALOG_COLLECTION);

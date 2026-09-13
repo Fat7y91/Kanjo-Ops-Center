@@ -536,15 +536,23 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Smoothly reveal an expanded merchant's product grid without a hard flash. */
-[data-catalog-group-body],
-.catalog-card-grid.catalog-product-grid {
+/* Smoothly reveal an expanded merchant's product grid without a hard flash.
+   Scoped to accordion bodies only — the manager's product grid and the rep's
+   "My Products" list should NOT replay this on every unrelated re-render. */
+[data-catalog-group-body] {
     animation: catalogGroupReveal 0.22s ease-out;
 }
 
 @keyframes catalogGroupReveal {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-catalog-group-body] { animation: none; }
+    .catalog-merchant-card,
+    .catalog-product-card,
+    #catalogAllProductsView { transition: none !important; animation: none !important; }
 }
 
 @media (hover: none) and (pointer: coarse) {
