@@ -631,6 +631,7 @@ const kpiBuildReport = async () => {
     /* Attribute the global edited-images count to the image editor's own row,
        ensuring the row exists even when he created no products himself. */
     const editorRowName = kpiResolveImageEditorName();
+    const editorRankId = kpiRepId(editorRowName);
     ensureRep(editorRowName).editedImagesCount = editedImagesTotal;
 
     const rows = [];
@@ -652,6 +653,7 @@ const kpiBuildReport = async () => {
         rows.push({
             repId: rep.repId,
             name: rep.name,
+            isEditor: rep.repId === editorRankId,
             totalProducts,
             editedImagesCount: rep.editedImagesCount || 0,
             merchantsCount: rep.merchants.size,
@@ -681,7 +683,49 @@ const kpiBuildReport = async () => {
         });
     }
 
-    rows.sort((a, b) => b.totalProducts - a.totalProducts || a.name.localeCompare(b.name, 'ar'));
+    /* ─────────── Kanjo Weighted Score (out of 100) & competitive ranking ───────────
+       Normalize the absolute counts against the top field performer so counts and
+       percentages can be mixed on one scale:
+         a) Volume   20 pts = (products / maxProducts) * 20
+         b) Effort   10 pts = (net time / maxTime) * 10
+         c) Text     35 pts = valid-descriptions ratio * 35
+         d) Media    35 pts = products-with-images ratio * 35
+       The Media Editor (يوسف) is EXCLUDED from max-product/max-time normalization,
+       scoring and the ranking loop; he only keeps his personal stats card. */
+    const fieldRows = rows.filter((r) => !r.isEditor);
+    const maxProducts = fieldRows.reduce((m, r) => Math.max(m, r.totalProducts), 0);
+    const maxTime = fieldRows.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
+
+    rows.forEach((row) => {
+        if (row.isEditor) {
+            row.kanjoScore = null;
+            row.kanjoBreakdown = null;
+            row.rank = null;
+            return;
+        }
+        const volumeWeight = maxProducts > 0 ? (row.totalProducts / maxProducts) * 20 : 0;
+        const effortWeight = maxTime > 0 ? (row.totalSeconds / maxTime) * 10 : 0;
+        const textWeight = row.validRatioRaw * 35;
+        const mediaWeight = row.imageRatioRaw * 35;
+        row.kanjoBreakdown = { volumeWeight, effortWeight, textWeight, mediaWeight };
+        // RAW 0..100 — rounding happens only at render time.
+        row.kanjoScore = volumeWeight + effortWeight + textWeight + mediaWeight;
+    });
+
+    // Ranking (1st/2nd/3rd…) applies to FIELD REPS ONLY, strictly by Kanjo score.
+    fieldRows
+        .slice()
+        .sort((a, b) => b.kanjoScore - a.kanjoScore || a.name.localeCompare(b.name, 'ar'))
+        .forEach((row, idx) => { row.rank = idx + 1; });
+
+    // Display order: ranked field reps first (score desc), then unranked editor(s).
+    rows.sort((a, b) => {
+        if (a.isEditor !== b.isEditor) return a.isEditor ? 1 : -1;
+        if (a.isEditor && b.isEditor) return a.name.localeCompare(b.name, 'ar');
+        return (b.kanjoScore - a.kanjoScore) || a.name.localeCompare(b.name, 'ar');
+    });
+
+    const topScorer = fieldRows.slice().sort((a, b) => b.kanjoScore - a.kanjoScore)[0] || null;
 
     const totals = rows.reduce((acc, r) => {
         acc.products += r.totalProducts;
@@ -702,7 +746,10 @@ const kpiBuildReport = async () => {
         products: 0, editedImages: 0, merchants: 0, seconds: 0, activeSeconds: 0, imageEditSeconds: 0,
         historicalSeconds: 0, junk: 0, valid: 0, empty: 0, nonEmpty: 0, withImage: 0, withoutImage: 0
     });
-    totals.reps = rows.length;
+    totals.reps = fieldRows.length;
+    totals.editors = rows.length - fieldRows.length;
+    totals.topScorerName = topScorer ? topScorer.name : null;
+    totals.topScorerScore = topScorer ? topScorer.kanjoScore : 0;
     totals.imageRatioRaw = totals.products ? (totals.withImage / totals.products) : 0;
     const globalDescBase = totals.nonEmpty || totals.products;
     totals.validRatioRaw = globalDescBase ? (totals.valid / globalDescBase) : 0;
@@ -890,7 +937,10 @@ const kpiGlobalSummaryHtml = (report) => {
                     <p class="text-[11px] font-bold text-slate-400">أرقام إجمالية محسوبة من البيانات الخام بدون تقريب وسيط</p>
                 </div>
             </div>
-            <span class="kpi-chip">${report.rows.length} مندوب</span>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="kpi-chip">${t.reps} مندوب${t.editors ? ' + ' + t.editors + ' محرر' : ''}</span>
+                ${t.topScorerName ? `<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-crown"></i> المتصدر: ${kpiEscape(t.topScorerName)} — ${Number(t.topScorerScore || 0).toFixed(1)}%</span>` : ''}
+            </div>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 items-start">
             ${kpiMetricCard({ icon: 'fa-box-open', iconBg: '#230535', iconColor: '#FFD700', value: t.products, label: 'إجمالي المنتجات' })}
@@ -908,16 +958,26 @@ const kpiRepCardHtml = (row, selected) => {
         ? `<span class="kpi-junk-badge"><i class="fa-solid fa-triangle-exclamation"></i> ${row.junkDescriptions} وصف وهمي</span>`
         : `<span class="kpi-clean-badge"><i class="fa-solid fa-circle-check"></i> لا يوجد وصف وهمي</span>`;
     const editedPart = row.editedImagesCount ? ' • ' + row.editedImagesCount + ' صورة مُحررة' : '';
+    const scoreHtml = row.isEditor
+        ? `<div class="kpi-rep-score-editor"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</div>`
+        : `<div class="kpi-rep-score"><i class="fa-solid fa-award"></i> التقييم الشامل: ${Number(row.kanjoScore || 0).toFixed(1)}%</div>`;
+    const rankPill = (!row.isEditor && row.rank)
+        ? `<span class="kpi-rank-pill kpi-rank-pill-${row.rank <= 3 ? row.rank : 'x'}">${row.rank === 1 ? '<i class="fa-solid fa-crown"></i> ' : ''}#${row.rank}</span>`
+        : '';
     return `
-    <button type="button" class="kpi-rep-pick ${selected ? 'kpi-rep-pick-active' : ''}" data-kpi-rep="${kpiEscape(row.repId)}" onclick="selectKpiRep('${kpiEscape(row.repId)}')">
+    <button type="button" class="kpi-rep-pick ${selected ? 'kpi-rep-pick-active' : ''} ${row.isEditor ? 'kpi-rep-pick-editor' : ''}" data-kpi-rep="${kpiEscape(row.repId)}" onclick="selectKpiRep('${kpiEscape(row.repId)}')">
         <div class="flex items-center gap-2.5 min-w-0 w-full">
             <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
             <div class="min-w-0 text-right flex-1">
-                <div class="font-black text-[13px] text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
+                <div class="flex items-center justify-between gap-1.5">
+                    <div class="font-black text-[13px] text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
+                    ${rankPill}
+                </div>
                 <div class="text-[10px] font-bold text-slate-400 truncate">${row.merchantsCount} تاجر • ${row.totalProducts} منتج${editedPart}</div>
                 <div class="text-[11px] font-black text-[#6D28D9] mt-0.5">${kpiFormatDurationShort(row.totalSeconds)}</div>
             </div>
         </div>
+        ${scoreHtml}
         <div class="mt-2 w-full flex justify-start">${badge}</div>
     </button>`;
 };
@@ -928,7 +988,7 @@ const kpiRepSelectorHtml = (report) => `
             <div class="flex items-center gap-2">
                 <span class="kpi-panel-icon"><i class="fa-solid fa-users-viewfinder"></i></span>
                 <div>
-                    <h3 class="font-black text-sm text-[#230535]">اختر المندوب لعرض التحليل التفصيلي</h3>
+                    <h3 class="font-black text-sm text-[#230535]">الترتيب حسب التقييم الشامل (Kanjo Score / 100)</h3>
                     <p class="text-[11px] font-bold text-slate-400">اضغط على البطاقة لفتح القسم الثالث (Deep Dive)</p>
                 </div>
             </div>
@@ -955,12 +1015,16 @@ const kpiDeepDiveHtml = (row) => {
                 <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
                 <div class="min-w-0">
                     <h3 class="font-black text-base text-[#230535] truncate">${kpiEscape(row.name)}</h3>
-                    <p class="text-[10px] font-bold text-slate-400">تحليل تفصيلي دقيق — صالح لحساب المكافآت المالية</p>
+                    <p class="text-[10px] font-bold text-slate-400">${row.isEditor ? 'محرر الوسائط - خارج التقييم التنافسي' : 'تحليل تفصيلي دقيق — صالح لحساب المكافآت المالية'}</p>
                 </div>
             </div>
             <div class="flex flex-wrap gap-2">
+                ${row.isEditor
+                    ? '<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</span>'
+                    : `<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-award"></i> التقييم الشامل: ${Number(row.kanjoScore || 0).toFixed(1)}%</span>
+                       ${row.rank ? `<span class="kpi-chip kpi-chip-dark"><i class="fa-solid fa-ranking-star"></i> المركز #${row.rank}</span>` : ''}`}
                 <span class="kpi-chip kpi-chip-dark">الوقت الصافي: ${kpiFormatDurationExact(row.totalSeconds)}</span>
-                <span class="kpi-chip kpi-chip-gold">${(row.minutesPerProductRaw).toFixed(2)} دقيقة / منتج</span>
+                <span class="kpi-chip">${(row.minutesPerProductRaw).toFixed(2)} دقيقة / منتج</span>
             </div>
         </div>
 
@@ -969,6 +1033,14 @@ const kpiDeepDiveHtml = (row) => {
 
             <!-- Column 1 — deep-dive text metrics & precision table -->
             <div class="kpi-col-metrics space-y-3">
+                ${row.isEditor ? '' : `
+                <div class="kpi-kanjo-score-banner">
+                    <div class="kpi-kanjo-score-value">${Number(row.kanjoScore || 0).toFixed(1)}</div>
+                    <div class="kpi-kanjo-score-meta">
+                        <span class="font-black text-[#230535]">التقييم الشامل (Kanjo Score)</span>
+                        <span class="text-slate-400">من 100 نقطة${row.rank ? ' • المركز #' + row.rank : ''}</span>
+                    </div>
+                </div>`}
                 <div class="grid grid-cols-2 gap-2">
                     ${kpiMetricCard({ icon: 'fa-hourglass-half', iconBg: '#230535', iconColor: '#FFD700', value: kpiFormatDurationExact(row.totalSeconds), label: 'الوقت النشط الفعلي (دقيق)' })}
                     ${kpiMetricCard({ icon: 'fa-bolt', iconBg: '#FFD700', iconColor: '#230535', value: (row.minutesPerProductRaw).toFixed(2) + ' د', label: 'الكفاءة الدقيقة / منتج' })}
@@ -990,6 +1062,13 @@ const kpiDeepDiveHtml = (row) => {
                     <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
                     <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>منتجات بخيارات (Variable)</span><span class="kpi-fin-val">${row.variableProducts}</span></div>
+                    ${row.kanjoBreakdown ? `
+                    <div class="kpi-fin-row"><span>وزن الكمية (20 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.volumeWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>وزن الجهد / الوقت (10 نقاط)</span><span class="kpi-fin-val">${row.kanjoBreakdown.effortWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>وزن جودة النص (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.textWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>وزن جودة الوسائط (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.mediaWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span class="text-[#230535]">إجمالي التقييم الشامل (100)</span><span class="kpi-fin-val text-[#230535]">${row.kanjoScore.toFixed(2)}</span></div>
+                    ` : ''}
                 </div>
 
                 <div class="kpi-bars">
@@ -1048,11 +1127,14 @@ window._kpiRepPreviewMode = false;
 const KPI_SPEED_LABEL = 'مؤشر السرعة والدقة (للعلم والإحصاء فقط)';
 
 const kpiPersonalRank = (row, report) => {
-    const idx = (report.rows || []).findIndex((r) => r.repId === row.repId);
-    return { rank: idx >= 0 ? idx + 1 : null, total: (report.rows || []).length };
+    const fieldRows = (report.rows || []).filter((r) => !r.isEditor);
+    return { rank: row.isEditor ? null : (row.rank || null), total: fieldRows.length };
 };
 
 const kpiPersonalSmartTips = (row, report) => {
+    if (row.isEditor) {
+        return [{ tone: 'info', icon: 'fa-wand-magic-sparkles', text: 'أنت مسؤول عن تحرير صور المنتجات — التقييم التنافسي مخصص للمناديب فقط، وتحتفظ شاشتك بإحصائياتك الخاصة.' }];
+    }
     const t = report.totals || {};
     const tips = [];
     const avgProducts = t.reps ? (t.products / t.reps) : 0;
@@ -1093,6 +1175,7 @@ const kpiPersonalPreviewHtml = (report, row) => {
         </div></section>`;
     }
     const rankInfo = kpiPersonalRank(row, report);
+    const isEditor = !!row.isEditor;
     const medalIcon = rankInfo.rank === 1 ? 'fa-crown' : (rankInfo.rank && rankInfo.rank <= 3) ? 'fa-medal' : 'fa-ranking-star';
     const validPct = row.validRatioRaw * 100;
     const imgPct = row.imageRatioRaw * 100;
@@ -1141,18 +1224,27 @@ const kpiPersonalPreviewHtml = (report, row) => {
             <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 flex-wrap">
                     <h4 class="font-black text-lg text-[#FFD700] truncate">${kpiEscape(row.name)}</h4>
-                    <span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>
+                    ${isEditor
+                        ? '<span class="kpi-rank-badge kpi-rank-badge-editor"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</span>'
+                        : `<span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>`}
                 </div>
-                <p class="text-[11px] font-bold text-white/70 mt-1">تابع إنتاجك، حسّن أوصافك، وارتقِ في الترتيب</p>
+                <p class="text-[11px] font-bold text-white/70 mt-1">${isEditor ? 'إحصائياتك الشخصية كاملة بدون تقييم تنافسي' : 'تابع إنتاجك، حسّن أوصافك، وارتقِ في الترتيب'}</p>
             </div>
             <div class="text-center shrink-0">
-                <div class="text-[10px] font-black text-white/60">الوقت الصافي</div>
-                <div class="font-black text-base text-white">${kpiFormatDurationShort(row.totalSeconds)}</div>
+                ${isEditor
+                    ? `<div class="text-[10px] font-black text-white/60">الصور المُحررة</div>
+                       <div class="font-black text-base text-white">${row.editedImagesCount || 0}</div>`
+                    : `<div class="text-[10px] font-black text-white/60">التقييم الشامل</div>
+                       <div class="font-black text-xl text-[#FFD700]">${Number(row.kanjoScore || 0).toFixed(1)}%</div>`}
+                <div class="text-[10px] font-black text-white/60 mt-1">الوقت الصافي</div>
+                <div class="font-black text-xs text-white">${kpiFormatDurationShort(row.totalSeconds)}</div>
             </div>
         </div>
 
         <div class="kpi-personal-cards">
-            ${kpiPersonalCard({ tone: 'purple', icon: 'fa-box-open', value: row.totalProducts, label: 'عدد المنتجات المضافة', foot: diffFoot })}
+            ${isEditor
+                ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'عدد الصور المُحررة', foot: 'إجمالي الصور التي حررتها' })
+                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: row.rank ? 'المركز #' + row.rank + ' من ' + rankInfo.total : diffFoot })}
             ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
             ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })}
             ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: imgPct.toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })}

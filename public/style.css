@@ -1144,3 +1144,91 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 .kpi-fix-save:hover { opacity: 0.9; }
 .kpi-fix-save:disabled { opacity: 0.6; cursor: wait; }
+
+/* ─────────── Kanjo weighted score & rank gamification ─────────── */
+.kpi-rank-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: #230535;
+    color: #FFD700;
+    border-radius: 999px;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.66rem;
+    font-weight: 900;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
+.kpi-rank-pill-1 {
+    background: linear-gradient(135deg, #FFD700, #f0b400);
+    color: #230535;
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.4);
+}
+.kpi-rank-pill-2 { background: #4C1D95; color: #fff; }
+.kpi-rank-pill-3 { background: #6D28D9; color: #fff; }
+.kpi-rank-pill-x { background: #eef1f6; color: #475569; }
+
+.kpi-rep-score {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 900;
+    color: #230535;
+    background: linear-gradient(90deg, rgba(255, 215, 0, 0.22), rgba(255, 215, 0, 0.05));
+    border: 1px solid rgba(255, 215, 0, 0.55);
+    border-radius: 0.65rem;
+    padding: 0.32rem 0.55rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.kpi-rep-score-editor {
+    margin-top: 0.5rem;
+    font-size: 0.64rem;
+    font-weight: 900;
+    color: #4C1D95;
+    background: rgba(109, 40, 217, 0.1);
+    border: 1px dashed rgba(109, 40, 217, 0.5);
+    border-radius: 0.65rem;
+    padding: 0.32rem 0.55rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.kpi-rep-pick-editor {
+    border-style: dashed;
+    border-color: rgba(109, 40, 217, 0.4);
+    background: #fbfaff;
+}
+
+.kpi-rank-badge-editor {
+    background: rgba(109, 40, 217, 0.25);
+    color: #e9d5ff;
+    border-color: rgba(196, 181, 253, 0.6);
+}
+
+.kpi-kanjo-score-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.75rem 1rem;
+    border-radius: 1.1rem;
+    background: linear-gradient(120deg, #230535 0%, #4C1D95 100%);
+    box-shadow: 0 16px 30px -26px rgba(35, 5, 53, 0.85);
+}
+.kpi-kanjo-score-value {
+    font-size: 2rem;
+    font-weight: 900;
+    color: #FFD700;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.kpi-kanjo-score-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #fff;
+    min-width: 0;
+}
+.kpi-kanjo-score-meta .text-slate-400 { color: rgba(255, 255, 255, 0.6) !important; }
