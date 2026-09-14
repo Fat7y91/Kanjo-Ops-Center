@@ -22,7 +22,6 @@ const KPI_IMAGE_EDIT_KEY = 'kanjo_kpi_image_edit_v1';
 const KPI_IDLE_MS = 3 * 60 * 1000;          // pause after 3 minutes of inactivity
 const KPI_SESSION_BREAK_MS = 15 * 60 * 1000; // gap larger than this = new session
 const KPI_STANDARD_ADD_MS = 4 * 60 * 1000;   // assumed time for the first product / new session
-const KPI_IMAGE_EDIT_MAX_SECONDS = 4 * 60 * 60; // clamp a single edit to 4h (anti-gaming)
 
 /* Only real word tokens (Arabic or Latin, 3+ letters) make a description valid. */
 const KPI_WORD_RE = /[a-zA-Z\u0600-\u06FF]{3,}/;
@@ -222,7 +221,22 @@ window.kpiStartActiveTracker = () => {
     window.kpiSyncActiveTime();
 };
 
-/* ─────────────────── image editor time tracker ─────────────────── */
+/* ─────────────────── image editor workflow time tracker ───────────────────
+   The editor (Youssef) edits images in EXTERNAL software (e.g. Photoshop), so
+   the generic UI active-time tracker cannot see that work. This dedicated
+   workflow tracker measures download -> upload per product:
+     - start: localStorage['edit_start_<productId>'] = Date.now()
+     - stop : duration = (now - start) / 1000, capped at 30 minutes; a 5-minute
+              fair average is used when no start time is found (different device
+              / cleared cache). The per-product key is cleared after every stop.
+   The resulting seconds are folded into the day's image-edit total, which the
+   KPI dashboard surfaces inside "وقت تحرير الصور" and the net total time. */
+
+const KPI_EDIT_START_PREFIX = 'edit_start_';
+const KPI_EDIT_DURATION_CAP_SECONDS = 30 * 60; // 1800s cap (lunch break / next-day guard)
+const KPI_EDIT_FALLBACK_SECONDS = 5 * 60;      // 300s fallback average when no start exists
+
+const kpiEditStartKey = (productId) => KPI_EDIT_START_PREFIX + String(productId || '');
 
 const kpiReadImageStore = () => {
     try {
@@ -241,13 +255,10 @@ const kpiWriteImageStore = (store) => {
 const kpiEnsureImageStore = () => {
     const today = kpiLocalDateKey();
     const store = kpiReadImageStore();
-    if (!store || store.date !== today) return { date: today, seconds: 0, open: {} };
-    if (!store.open || typeof store.open !== 'object') store.open = {};
+    if (!store || store.date !== today) return { date: today, seconds: 0 };
     store.seconds = Math.max(0, Number(store.seconds) || 0);
     return store;
 };
-
-const kpiOpenKey = (productId, imageIndex) => String(productId || '') + ':' + (Number(imageIndex) || 0);
 
 function kpiImageEditSecondsToday() {
     const store = kpiReadImageStore();
@@ -255,32 +266,40 @@ function kpiImageEditSecondsToday() {
 }
 window.kpiImageEditSecondsToday = kpiImageEditSecondsToday;
 
-/* Called when the editor opens/downloads a source image. */
+/* Start timer — called when the editor views/downloads the source image.
+   The first start wins so repeated downloads don't keep resetting the clock. */
 window.kpiMarkImageSourceOpened = (productId, imageIndex) => {
     if (!window.isKpiTrackedUser || !window.isKpiTrackedUser()) return;
-    const store = kpiEnsureImageStore();
-    store.open[kpiOpenKey(productId, imageIndex)] = { at: Date.now(), date: kpiLocalDateKey() };
-    kpiWriteImageStore(store);
+    if (!productId) return;
+    try {
+        const key = kpiEditStartKey(productId);
+        if (!localStorage.getItem(key)) localStorage.setItem(key, String(Date.now()));
+    } catch (_) { /* ignore */ }
 };
 
-/* Called when the edited image is uploaded. Adds (upload - open) seconds to the
-   day's image-editing total, but ONLY when both happen on the same calendar day. */
+/* Stop timer — called when the edited image is uploaded/saved. Computes the
+   duration, applies the 30-minute cap / 5-minute fallback, adds it to the
+   day's image-edit total, syncs to Firestore, then clears the per-product key. */
 window.kpiCompleteImageEdit = (productId, imageIndex) => {
     if (!window.isKpiTrackedUser || !window.isKpiTrackedUser()) return 0;
-    const store = kpiEnsureImageStore();
-    const key = kpiOpenKey(productId, imageIndex);
-    const opened = store.open[key];
-    if (!opened) return 0;
-    delete store.open[key];
-    const today = kpiLocalDateKey();
-    if (opened.date !== today) {
-        kpiWriteImageStore(store);
-        return 0;
+    if (!productId) return 0;
+    const key = kpiEditStartKey(productId);
+    let startTime = 0;
+    try { startTime = Number(localStorage.getItem(key)) || 0; } catch (_) { startTime = 0; }
+
+    let seconds;
+    if (startTime > 0 && Number.isFinite(startTime)) {
+        seconds = Math.round((Date.now() - startTime) / 1000);
+        if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+        if (seconds > KPI_EDIT_DURATION_CAP_SECONDS) seconds = KPI_EDIT_DURATION_CAP_SECONDS;
+    } else {
+        seconds = KPI_EDIT_FALLBACK_SECONDS;
     }
-    let seconds = Math.round((Date.now() - Number(opened.at || Date.now())) / 1000);
-    if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
-    if (seconds > KPI_IMAGE_EDIT_MAX_SECONDS) seconds = KPI_IMAGE_EDIT_MAX_SECONDS;
-    store.seconds = (Number(store.seconds) || 0) + seconds;
+
+    try { localStorage.removeItem(key); } catch (_) { /* ignore */ }
+
+    const store = kpiEnsureImageStore();
+    store.seconds = Math.max(0, Number(store.seconds) || 0) + seconds;
     kpiWriteImageStore(store);
     window.kpiSyncActiveTime({ imageEditSeconds: store.seconds });
     return seconds;

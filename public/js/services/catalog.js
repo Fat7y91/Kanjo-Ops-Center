@@ -2490,7 +2490,7 @@ window.downloadCatalogRawImage = (productId, imageIndex) => {
     const url = catalogDriveDownloadUrl(urls[idx] || urls[0]);
     if (!url) return window.showToast('لا يوجد رابط للصورة الأصلية', false);
     if (typeof window.kpiMarkImageSourceOpened === 'function') {
-        window.kpiMarkImageSourceOpened(productId, idx);
+        window.kpiMarkImageSourceOpened(productId);
     }
     window.open(url, '_blank', 'noopener');
 };
@@ -2601,7 +2601,7 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
             'enhanced'
         );
         if (typeof window.kpiCompleteImageEdit === 'function') {
-            window.kpiCompleteImageEdit(productId, idx);
+            window.kpiCompleteImageEdit(productId);
         }
         const enhancedUrls = getCatalogEnhancedLocal(productId, targetCount);
         enhancedUrls[idx] = uploadedUrl;
