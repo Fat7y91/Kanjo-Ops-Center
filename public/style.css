@@ -852,3 +852,51 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .kpi-chart-wide { grid-column: 1 / -1; }
     .kpi-chart-wide .kpi-chart-box { height: 18rem; min-height: 18rem; }
 }
+
+/* ─────────── KPI compact Bento overrides (desktop density pass) ─────────── */
+.kpi-panel {
+    padding: 0.9rem 1rem 1rem;
+    border-radius: 1.25rem;
+    box-shadow: 0 10px 24px -22px rgba(35, 5, 53, 0.5);
+}
+.kpi-panel-head { margin-bottom: 0.75rem; }
+.kpi-panel-icon { width: 2rem; height: 2rem; border-radius: 0.65rem; font-size: 0.85rem; }
+
+.kpi-stat-card {
+    min-height: 4.25rem;
+    padding: 0.6rem 0.7rem;
+    gap: 0.6rem;
+    border-radius: 1rem;
+    align-items: center;
+}
+.kpi-stat-icon { width: 2.35rem; height: 2.35rem; border-radius: 0.75rem; font-size: 0.95rem; }
+.kpi-stat-value { font-size: 1.1rem; }
+.kpi-stat-label { font-size: 0.62rem; }
+.kpi-stat-hint { font-size: 0.58rem; }
+
+.kpi-rep-pick {
+    min-height: 5.75rem;
+    padding: 0.7rem;
+    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.kpi-avatar-ring { width: 2.6rem; height: 2.6rem; }
+
+.kpi-deep-head { padding-bottom: 0.6rem; gap: 0.5rem; }
+
+.kpi-financial-grid {
+    grid-template-columns: 1fr;
+    padding: 0.3rem 0.7rem;
+    border-radius: 0.85rem;
+}
+.kpi-fin-row { font-size: 0.68rem; padding: 0.3rem 0; }
+
+.kpi-chart-card { padding: 0.7rem; border-radius: 1rem; }
+.kpi-chart-title { font-size: 0.68rem; margin-bottom: 0.4rem; }
+
+/* Two-column precision table inside the narrow left column on wide desktops. */
+@media (min-width: 1280px) {
+    .kpi-financial-grid { grid-template-columns: 1fr 1fr; column-gap: 1.25rem; }
+}

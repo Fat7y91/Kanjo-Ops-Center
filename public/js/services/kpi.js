@@ -629,7 +629,7 @@ const kpiRenderQualityChart = (row) => {
     window._kpiCharts.quality = new window.Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
-            labels: ['وصف صحيح', 'وصف وهمي / مرفوض', 'بدون وصف'],
+            labels: ['وصف صحيح', 'وصف وهمي', 'بدون وصف'],
             datasets: [{
                 data: hasData ? [valid, junk, empty] : [1],
                 backgroundColor: hasData
@@ -744,37 +744,32 @@ const kpiGlobalSummaryHtml = (report) => {
             </div>
             <span class="kpi-chip">${report.rows.length} مندوب</span>
         </div>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 items-start">
             ${kpiMetricCard({ icon: 'fa-box-open', iconBg: '#230535', iconColor: '#FFD700', value: t.products, label: 'إجمالي المنتجات' })}
-            ${kpiMetricCard({ icon: 'fa-stopwatch', iconBg: '#FFD700', iconColor: '#230535', value: kpiFormatDurationShort(t.seconds), label: 'إجمالي الوقت الصافي', hint: 'نشط ' + kpiFormatDurationShort(t.activeSeconds) + ' • تاريخي ' + kpiFormatDurationShort(t.historicalSeconds) })}
-            ${kpiMetricCard({ icon: 'fa-gauge-high', iconBg: '#230535', iconColor: '#37d99a', value: t.minutesPerProductRaw.toFixed(2) + ' د', label: 'الكفاءة العامة (دقيقة/منتج)' })}
-            ${kpiMetricCard({ icon: 'fa-triangle-exclamation', iconBg: '#dc2626', iconColor: '#fff', value: t.junk, label: 'أوصاف وهمية / مرفوضة', hint: 'جودة الوصف ' + (t.validRatioRaw * 100).toFixed(1) + '%' })}
-        </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-            <div class="kpi-mini"><span class="kpi-mini-label">التجار المُضافون</span><span class="kpi-mini-value">${t.merchants}</span></div>
-            <div class="kpi-mini"><span class="kpi-mini-label">منتجات بصور</span><span class="kpi-mini-value">${t.withImage} (${(t.imageRatioRaw * 100).toFixed(1)}%)</span></div>
-            <div class="kpi-mini"><span class="kpi-mini-label">أوصاف صحيحة</span><span class="kpi-mini-value">${t.valid}</span></div>
-            <div class="kpi-mini"><span class="kpi-mini-label">بدون وصف</span><span class="kpi-mini-value">${t.empty}</span></div>
+            ${kpiMetricCard({ icon: 'fa-stopwatch', iconBg: '#FFD700', iconColor: '#230535', value: kpiFormatDurationShort(t.seconds), label: 'إجمالي الوقت الصافي', hint: 'نشط ' + kpiFormatDurationShort(t.activeSeconds) })}
+            ${kpiMetricCard({ icon: 'fa-gauge-high', iconBg: '#230535', iconColor: '#37d99a', value: t.minutesPerProductRaw.toFixed(2) + ' د', label: 'الكفاءة (دقيقة/منتج)' })}
+            ${kpiMetricCard({ icon: 'fa-star', iconBg: '#37d99a', iconColor: '#fff', value: (t.validRatioRaw * 100).toFixed(1) + '%', label: 'جودة الأوصاف' })}
+            ${kpiMetricCard({ icon: 'fa-triangle-exclamation', iconBg: '#dc2626', iconColor: '#fff', value: t.junk, label: 'أوصاف وهمية', hint: 'التجار: ' + t.merchants + ' • بصور: ' + (t.imageRatioRaw * 100).toFixed(0) + '%' })}
         </div>
     </section>`;
 };
 
 const kpiRepCardHtml = (row, selected) => {
     const initials = (String(row.name || '').trim().charAt(0)) || '?';
+    const badge = row.junkDescriptions > 0
+        ? `<span class="kpi-junk-badge"><i class="fa-solid fa-triangle-exclamation"></i> ${row.junkDescriptions} وصف وهمي</span>`
+        : `<span class="kpi-clean-badge"><i class="fa-solid fa-circle-check"></i> لا يوجد وصف وهمي</span>`;
     return `
     <button type="button" class="kpi-rep-pick ${selected ? 'kpi-rep-pick-active' : ''}" data-kpi-rep="${kpiEscape(row.repId)}" onclick="selectKpiRep('${kpiEscape(row.repId)}')">
-        <div class="flex items-center gap-3 min-w-0">
+        <div class="flex items-center gap-2.5 min-w-0 w-full">
             <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
-            <div class="min-w-0 text-right">
-                <div class="font-black text-sm text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
-                <div class="text-[10px] font-bold text-slate-400">${row.merchantsCount} تاجر • ${row.activeDays || row.trackedDays || 0} يوم نشاط</div>
+            <div class="min-w-0 text-right flex-1">
+                <div class="font-black text-[13px] text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
+                <div class="text-[10px] font-bold text-slate-400 truncate">${row.merchantsCount} تاجر • ${row.totalProducts} منتج</div>
+                <div class="text-[11px] font-black text-[#6D28D9] mt-0.5">${kpiFormatDurationShort(row.totalSeconds)}</div>
             </div>
         </div>
-        <div class="grid grid-cols-2 gap-2 mt-3">
-            <div class="kpi-mini"><span class="kpi-mini-label">المنتجات</span><span class="kpi-mini-value">${row.totalProducts}</span></div>
-            <div class="kpi-mini"><span class="kpi-mini-label">الوقت الصافي</span><span class="kpi-mini-value">${kpiFormatDurationShort(row.totalSeconds)}</span></div>
-        </div>
-        ${row.junkDescriptions > 0 ? `<div class="mt-2"><span class="kpi-junk-badge"><i class="fa-solid fa-triangle-exclamation"></i> ${row.junkDescriptions} وصف مرفوض</span></div>` : ''}
+        <div class="mt-2 w-full flex justify-start">${badge}</div>
     </button>`;
 };
 
@@ -789,30 +784,29 @@ const kpiRepSelectorHtml = (report) => `
                 </div>
             </div>
         </div>
-        <div id="kpiRepSelectorGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div id="kpiRepSelectorGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 items-start">
             ${report.rows.map((r) => kpiRepCardHtml(r, r.repId === window._kpiSelectedRepId)).join('')}
         </div>
     </section>`;
 
 const kpiDeepDiveHtml = (row) => {
     if (!row) {
-        return `<section class="kpi-panel"><div class="text-center py-14 text-slate-400 font-bold">
-            <i class="fa-solid fa-hand-pointer text-4xl text-[#230535]/20 mb-3"></i>
+        return `<section class="kpi-panel"><div class="text-center py-10 text-slate-400 font-bold">
+            <i class="fa-solid fa-hand-pointer text-3xl text-[#230535]/20 mb-2"></i>
             <div>اختر مندوباً من القائمة أعلاه لعرض التحليل التفصيلي والمخططات</div>
         </div></section>`;
     }
-    const descTotal = row.nonEmptyDescriptions || row.totalProducts || 0;
     const validPct = (row.validRatioRaw * 100);
     const junkPct = (row.junkRatioRaw * 100);
     const emptyPct = (row.emptyRatioRaw * 100);
     return `
     <section class="kpi-panel" id="kpiDeepDivePanel">
         <div class="kpi-deep-head">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="kpi-avatar-ring kpi-avatar-ring-lg">${kpiAvatarHtml(row.name)}</div>
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
                 <div class="min-w-0">
-                    <h3 class="font-black text-lg text-[#230535] truncate">${kpiEscape(row.name)}</h3>
-                    <p class="text-[11px] font-bold text-slate-400">تحليل تفصيلي دقيق — صالح لحساب المكافآت المالية</p>
+                    <h3 class="font-black text-base text-[#230535] truncate">${kpiEscape(row.name)}</h3>
+                    <p class="text-[10px] font-bold text-slate-400">تحليل تفصيلي دقيق — صالح لحساب المكافآت المالية</p>
                 </div>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -821,48 +815,58 @@ const kpiDeepDiveHtml = (row) => {
             </div>
         </div>
 
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-            ${kpiMetricCard({ icon: 'fa-hourglass-half', iconBg: '#230535', iconColor: '#FFD700', value: kpiFormatDurationExact(row.totalSeconds), label: 'الوقت النشط الفعلي (دقيق)' })}
-            ${kpiMetricCard({ icon: 'fa-bolt', iconBg: '#FFD700', iconColor: '#230535', value: (row.minutesPerProductRaw).toFixed(2) + ' د', label: 'الكفاءة الدقيقة / منتج' })}
-            ${kpiMetricCard({ icon: 'fa-circle-xmark', iconBg: '#dc2626', iconColor: '#fff', value: row.junkDescriptions, label: 'خصم: أوصاف وهمية/مرفوضة' })}
-            ${kpiMetricCard({ icon: 'fa-star', iconBg: '#37d99a', iconColor: '#fff', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الفعلية' })}
-        </div>
+        <!-- Bento grid: [exact text metrics] [productivity chart] [doughnuts] -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-4 items-start">
 
-        <div class="kpi-financial-grid mt-4">
-            <div class="kpi-fin-row"><span>عدد المنتجات المُدخلة</span><span class="kpi-fin-val">${row.totalProducts}</span></div>
-            <div class="kpi-fin-row"><span>عدد التجار المُضافين</span><span class="kpi-fin-val">${row.merchantsCount}</span></div>
-            <div class="kpi-fin-row"><span>أيام النشاط الفعلي</span><span class="kpi-fin-val">${row.activeDays || row.trackedDays || 0}</span></div>
-            <div class="kpi-fin-row"><span>وقت إدخال التفاعل (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.activeSeconds)}</span></div>
-            <div class="kpi-fin-row"><span>وقت تحرير الصور (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.imageEditSeconds)}</span></div>
-            <div class="kpi-fin-row"><span>الوقت التاريخي المُحتسب</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.historicalSeconds)}</span></div>
-            <div class="kpi-fin-row"><span>أوصاف صحيحة / منظمة</span><span class="kpi-fin-val text-emerald-600">${row.validDescriptions} (${validPct.toFixed(1)}%)</span></div>
-            <div class="kpi-fin-row"><span>أوصاف مرفوضة (عقوبة)</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
-            <div class="kpi-fin-row"><span>بدون وصف</span><span class="kpi-fin-val text-slate-500">${row.emptyDescriptions} (${emptyPct.toFixed(1)}%)</span></div>
-            <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
-            <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
-            <div class="kpi-fin-row"><span>منتجات بخيارات (Variable)</span><span class="kpi-fin-val">${row.variableProducts}</span></div>
-        </div>
+            <!-- Column 1 — deep-dive text metrics & precision table -->
+            <div class="kpi-col-metrics space-y-3">
+                <div class="grid grid-cols-2 gap-2">
+                    ${kpiMetricCard({ icon: 'fa-hourglass-half', iconBg: '#230535', iconColor: '#FFD700', value: kpiFormatDurationExact(row.totalSeconds), label: 'الوقت النشط الفعلي (دقيق)' })}
+                    ${kpiMetricCard({ icon: 'fa-bolt', iconBg: '#FFD700', iconColor: '#230535', value: (row.minutesPerProductRaw).toFixed(2) + ' د', label: 'الكفاءة الدقيقة / منتج' })}
+                    ${kpiMetricCard({ icon: 'fa-circle-xmark', iconBg: '#dc2626', iconColor: '#fff', value: row.junkDescriptions, label: 'خصم: أوصاف وهمية' })}
+                    ${kpiMetricCard({ icon: 'fa-star', iconBg: '#37d99a', iconColor: '#fff', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الفعلية' })}
+                </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <div class="kpi-chart-card kpi-chart-wide">
+                <div class="kpi-financial-grid">
+                    <div class="kpi-fin-row"><span>عدد المنتجات المُدخلة</span><span class="kpi-fin-val">${row.totalProducts}</span></div>
+                    <div class="kpi-fin-row"><span>عدد التجار المُضافين</span><span class="kpi-fin-val">${row.merchantsCount}</span></div>
+                    <div class="kpi-fin-row"><span>أيام النشاط الفعلي</span><span class="kpi-fin-val">${row.activeDays || row.trackedDays || 0}</span></div>
+                    <div class="kpi-fin-row"><span>وقت إدخال التفاعل (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.activeSeconds)}</span></div>
+                    <div class="kpi-fin-row"><span>وقت تحرير الصور (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.imageEditSeconds)}</span></div>
+                    <div class="kpi-fin-row"><span>الوقت التاريخي المُحتسب</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.historicalSeconds)}</span></div>
+                    <div class="kpi-fin-row"><span>أوصاف صحيحة / منظمة</span><span class="kpi-fin-val text-emerald-600">${row.validDescriptions} (${validPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>أوصاف وهمية (عقوبة)</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>بدون وصف</span><span class="kpi-fin-val text-slate-500">${row.emptyDescriptions} (${emptyPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
+                    <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>منتجات بخيارات (Variable)</span><span class="kpi-fin-val">${row.variableProducts}</span></div>
+                </div>
+
+                <div class="kpi-bars">
+                    <div class="kpi-bar-row"><span>نسبة المنتجات بالصور</span><span class="font-black ${kpiRatioColor(row.imageRatioRaw)}">${(row.imageRatioRaw * 100).toFixed(1)}%</span></div>
+                    <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${(row.imageRatioRaw * 100).toFixed(1)}%;background:${kpiRatioBar(row.imageRatioRaw)};"></div></div>
+                    <div class="kpi-bar-row"><span>نسبة الأوصاف الصحيحة</span><span class="font-black ${kpiRatioColor(row.validRatioRaw)}">${(row.validRatioRaw * 100).toFixed(1)}%</span></div>
+                    <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${(row.validRatioRaw * 100).toFixed(1)}%;background:${kpiRatioBar(row.validRatioRaw)};"></div></div>
+                </div>
+            </div>
+
+            <!-- Column 2 — productivity trend -->
+            <div class="kpi-chart-card">
                 <div class="kpi-chart-title"><i class="fa-solid fa-chart-column text-[#230535]"></i> إنتاجية المندوب يومياً</div>
-                <div class="kpi-chart-box"><canvas id="kpiChartProductivity"></canvas></div>
+                <div class="relative h-64 lg:h-[19rem] w-full"><canvas id="kpiChartProductivity"></canvas></div>
             </div>
-            <div class="kpi-chart-card">
-                <div class="kpi-chart-title"><i class="fa-solid fa-chart-pie text-[#E57723]"></i> جودة الأوصاف</div>
-                <div class="kpi-chart-box"><canvas id="kpiChartQuality"></canvas></div>
-            </div>
-            <div class="kpi-chart-card">
-                <div class="kpi-chart-title"><i class="fa-solid fa-image text-[#6D28D9]"></i> جودة الوسائط (الصور)</div>
-                <div class="kpi-chart-box"><canvas id="kpiChartMedia"></canvas></div>
-            </div>
-        </div>
 
-        <div class="kpi-bars mt-4">
-            <div class="kpi-bar-row"><span>نسبة المنتجات بالصور</span><span class="font-black ${kpiRatioColor(row.imageRatioRaw)}">${(row.imageRatioRaw * 100).toFixed(1)}%</span></div>
-            <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${(row.imageRatioRaw * 100).toFixed(1)}%;background:${kpiRatioBar(row.imageRatioRaw)};"></div></div>
-            <div class="kpi-bar-row"><span>نسبة الأوصاف الصحيحة</span><span class="font-black ${kpiRatioColor(row.validRatioRaw)}">${(row.validRatioRaw * 100).toFixed(1)}%</span></div>
-            <div class="kpi-bar-track"><div class="kpi-bar-fill" style="width:${(row.validRatioRaw * 100).toFixed(1)}%;background:${kpiRatioBar(row.validRatioRaw)};"></div></div>
+            <!-- Column 3 — compact stacked doughnuts -->
+            <div class="space-y-3">
+                <div class="kpi-chart-card">
+                    <div class="kpi-chart-title"><i class="fa-solid fa-chart-pie text-[#E57723]"></i> جودة الأوصاف</div>
+                    <div class="relative h-40 w-full"><canvas id="kpiChartQuality"></canvas></div>
+                </div>
+                <div class="kpi-chart-card">
+                    <div class="kpi-chart-title"><i class="fa-solid fa-image text-[#6D28D9]"></i> جودة الوسائط (الصور)</div>
+                    <div class="relative h-40 w-full"><canvas id="kpiChartMedia"></canvas></div>
+                </div>
+            </div>
         </div>
     </section>`;
 };

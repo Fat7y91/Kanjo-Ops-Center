@@ -1616,10 +1616,19 @@ const updateCatalogProductDirect = async () => {
         } else {
             payload.variations = [];
         }
-        if (form.files.length) {
+        /* Smart edit routing: only re-queue the product for the image editor
+           when a NEW product image was actually attached. A text-only edit
+           (description, name, price, ...) must NOT reset the status — it just
+           updates the fields so the KPI engine re-evaluates the description and
+           the export picks up the new text, without creating redundant work for
+           the image editor (Youssef). */
+        const hasNewImages = form.files.length > 0;
+        if (hasNewImages) {
             payload.enhancedImageUrl = '';
             payload.enhancedImageUrls = [];
             payload.status = 'pending';
+        } else if (editing.status) {
+            payload.status = editing.status;
         }
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, editing.id), payload);
         /* Update the rep list locally instead of re-reading the collection. */
