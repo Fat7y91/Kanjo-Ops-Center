@@ -1029,6 +1029,246 @@ const kpiRenderChartsForRow = (row) => {
     kpiRenderMediaChart(row);
 };
 
+/* ─────────────────── rep personal KPI preview (manager-only, temporary) ─────────────────── */
+
+/* TEMPORARY rollout guard: the gamified personal screen is a manager preview
+   only until it is officially released to field reps. To ship it to reps,
+   simply relax this predicate. */
+window.canPreviewRepPersonalKpi = () => {
+    const u = window.currentUser;
+    if (!u) return false;
+    if (u.role === 'admin') return true;
+    if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
+    if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) return true;
+    return false;
+};
+
+window._kpiRepPreviewMode = false;
+
+const KPI_SPEED_LABEL = 'مؤشر السرعة والدقة (للعلم والإحصاء فقط)';
+
+const kpiPersonalRank = (row, report) => {
+    const idx = (report.rows || []).findIndex((r) => r.repId === row.repId);
+    return { rank: idx >= 0 ? idx + 1 : null, total: (report.rows || []).length };
+};
+
+const kpiPersonalSmartTips = (row, report) => {
+    const t = report.totals || {};
+    const tips = [];
+    const avgProducts = t.reps ? (t.products / t.reps) : 0;
+    if (row.junkDescriptions > 0) {
+        tips.push({ tone: 'danger', icon: 'fa-wand-magic-sparkles', text: 'لديك ' + row.junkDescriptions + ' وصف وهمي — اضغط على صندوق التنبيه بالأعلى لإصلاحها فوراً.' });
+    }
+    if (row.totalProducts < avgProducts) {
+        tips.push({ tone: 'info', icon: 'fa-arrow-trend-up', text: 'نصيحة: يمكنك تحسين ترتيبك بزيادة عدد المنتجات المضافة اليوم.' });
+    }
+    if (row.emptyDescriptions > 0) {
+        tips.push({ tone: 'info', icon: 'fa-pen-to-square', text: 'نصيحة: ' + row.emptyDescriptions + ' منتج بدون وصف — أضف وصفاً حقيقياً ليرتفع مؤشر الجودة.' });
+    }
+    if (row.imageRatioRaw < 0.8) {
+        tips.push({ tone: 'info', icon: 'fa-image', text: 'نصيحة: أضف صوراً لمنتجاتك لرفع نسبة الجاهزية والترتيب.' });
+    }
+    if (row.totalProducts > 0 && t.minutesPerProductRaw > 0 && row.minutesPerProductRaw > t.minutesPerProductRaw * 1.5) {
+        tips.push({ tone: 'muted', icon: 'fa-gauge-high', text: 'ملاحظة إحصائية: متوسط وقتك لكل منتج أعلى من متوسط الفريق — هذا المؤشر للعلم والإحصاء فقط وليس خصماً.' });
+    }
+    if (!tips.length) {
+        tips.push({ tone: 'success', icon: 'fa-trophy', text: 'أداء ممتاز! لا توجد ملاحظات حالياً — حافظ على هذه الجودة لتتصدر الترتيب.' });
+    }
+    return tips;
+};
+
+const kpiPersonalCard = (opts) => `
+    <div class="kpi-personal-card kpi-personal-card-${opts.tone || 'purple'}">
+        <div class="kpi-personal-card-icon"><i class="fa-solid ${opts.icon}"></i></div>
+        <div class="kpi-personal-card-value">${opts.value}</div>
+        <div class="kpi-personal-card-label">${opts.label}</div>
+        ${opts.foot ? `<div class="kpi-personal-card-foot">${opts.foot}</div>` : ''}
+    </div>`;
+
+const kpiPersonalPreviewHtml = (report, row) => {
+    if (!row) {
+        return `<section class="kpi-panel"><div class="text-center py-10 text-slate-400 font-bold">
+            <i class="fa-solid fa-mobile-screen-button text-3xl text-[#230535]/20 mb-2"></i>
+            <div>اختر مندوباً من القائمة أعلاه لمعاينة شاشته الشخصية</div>
+        </div></section>`;
+    }
+    const rankInfo = kpiPersonalRank(row, report);
+    const medalIcon = rankInfo.rank === 1 ? 'fa-crown' : (rankInfo.rank && rankInfo.rank <= 3) ? 'fa-medal' : 'fa-ranking-star';
+    const validPct = row.validRatioRaw * 100;
+    const imgPct = row.imageRatioRaw * 100;
+    const avgProducts = report.totals.reps ? (report.totals.products / report.totals.reps) : 0;
+    const diffProducts = Math.round(row.totalProducts - avgProducts);
+    const diffFoot = diffProducts > 0
+        ? '<i class="fa-solid fa-arrow-up"></i> أعلى من متوسط الفريق بـ ' + diffProducts
+        : diffProducts < 0
+            ? '<i class="fa-solid fa-arrow-down"></i> أقل من متوسط الفريق بـ ' + Math.abs(diffProducts)
+            : 'متوافق مع متوسط الفريق';
+    const tips = kpiPersonalSmartTips(row, report);
+    const junk = row.junkDescriptions;
+
+    const warningHtml = junk > 0
+        ? `<button type="button" class="kpi-warn-box" onclick="openKpiFixDescriptions('${kpiEscape(row.repId)}')">
+                <span class="kpi-warn-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                <span class="flex-1 text-right min-w-0">
+                    <span class="block font-black text-sm">تنبيه: لديك ${junk} وصف وهمي</span>
+                    <span class="block text-[11px] font-bold opacity-80">اضغط هنا لإصلاح الأوصاف الآن وتحسين مؤشر الجودة فوراً</span>
+                </span>
+                <span class="kpi-warn-cta"><i class="fa-solid fa-wrench"></i> إصلاح الآن</span>
+            </button>`
+        : `<div class="kpi-ok-box">
+                <span class="kpi-ok-icon"><i class="fa-solid fa-circle-check"></i></span>
+                <span class="min-w-0">
+                    <span class="block font-black text-sm">لا توجد أوصاف وهمية</span>
+                    <span class="block text-[11px] font-bold opacity-80">واصل هذا الأداء الممتاز</span>
+                </span>
+            </div>`;
+
+    return `
+    <section class="kpi-panel kpi-personal">
+        <div class="kpi-panel-head">
+            <div class="flex items-center gap-2">
+                <span class="kpi-panel-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
+                <div>
+                    <h3 class="font-black text-sm text-[#230535]">معاينة شاشة المندوب الشخصية</h3>
+                    <p class="text-[11px] font-bold text-slate-400">هذه المعاينة متاحة للمدير فقط قبل إتاحتها للمناديب</p>
+                </div>
+            </div>
+            <span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-eye"></i> وضع المعاينة</span>
+        </div>
+
+        <div class="kpi-personal-hero">
+            <div class="kpi-avatar-ring kpi-avatar-ring-lg">${kpiAvatarHtml(row.name)}</div>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h4 class="font-black text-lg text-[#FFD700] truncate">${kpiEscape(row.name)}</h4>
+                    <span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>
+                </div>
+                <p class="text-[11px] font-bold text-white/70 mt-1">تابع إنتاجك، حسّن أوصافك، وارتقِ في الترتيب</p>
+            </div>
+            <div class="text-center shrink-0">
+                <div class="text-[10px] font-black text-white/60">الوقت الصافي</div>
+                <div class="font-black text-base text-white">${kpiFormatDurationShort(row.totalSeconds)}</div>
+            </div>
+        </div>
+
+        <div class="kpi-personal-cards">
+            ${kpiPersonalCard({ tone: 'purple', icon: 'fa-box-open', value: row.totalProducts, label: 'عدد المنتجات المضافة', foot: diffFoot })}
+            ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
+            ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })}
+            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: imgPct.toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })}
+        </div>
+
+        ${warningHtml}
+
+        <div class="kpi-tips">
+            <div class="kpi-tips-head"><i class="fa-solid fa-lightbulb text-[#FFD700]"></i> نصائح ذكية لتحسين أدائك</div>
+            <ul class="kpi-tips-list">
+                ${tips.map((t) => `<li class="kpi-tip kpi-tip-${t.tone}"><i class="fa-solid ${t.icon}"></i> <span>${t.text}</span></li>`).join('')}
+            </ul>
+        </div>
+    </section>`;
+};
+
+window.toggleKpiRepPreview = async () => {
+    if (!window.canPreviewRepPersonalKpi()) {
+        if (window.showToast) window.showToast('هذه المعاينة متاحة للمدير فقط', false);
+        return;
+    }
+    window._kpiRepPreviewMode = !window._kpiRepPreviewMode;
+    await window.renderKpiDashboard();
+};
+
+const kpiFixItemHtml = (p) => {
+    const name = p.name_ar || p.name_en || p.name || p.id;
+    const current = p.description_ar || p.description_en || p.description || '';
+    const pid = kpiEscape(p.id);
+    return `
+    <div class="kpi-fix-item" data-fix-id="${pid}">
+        <div class="flex items-start justify-between gap-2">
+            <div class="font-black text-[13px] text-[#230535] min-w-0">${kpiEscape(name)}</div>
+            <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> وصف وهمي</span>
+        </div>
+        <div class="kpi-fix-current"><span class="font-black text-[#230535]">الوصف الحالي:</span> ${current ? kpiEscape(current) : '<span class="opacity-50">—</span>'}</div>
+        <textarea id="kpiFixInput_${pid}" rows="2" class="kpi-fix-input" placeholder="اكتب وصفاً حقيقياً للمنتج (أكثر من 10 أحرف)..."></textarea>
+        <div class="flex justify-end mt-2">
+            <button type="button" id="kpiFixSave_${pid}" onclick="kpiSaveFixedDescription('${pid}')" class="kpi-fix-save"><i class="fa-solid fa-floppy-disk"></i> حفظ الوصف</button>
+        </div>
+    </div>`;
+};
+
+window.openKpiFixDescriptions = async (repId) => {
+    if (!window.canPreviewRepPersonalKpi()) {
+        if (window.showToast) window.showToast('هذه المعاينة متاحة للمدير فقط', false);
+        return;
+    }
+    const modal = document.getElementById('kpiFixModal');
+    const list = document.getElementById('kpiFixList');
+    const sub = document.getElementById('kpiFixSubtitle');
+    if (!modal || !list) return;
+    window._kpiFixRepId = repId;
+    modal.classList.remove('hidden');
+    list.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل المنتجات...</div></div>';
+    try {
+        const report = window._kpiLatestReport || await kpiBuildReport();
+        const row = (report.rows || []).find((r) => r.repId === repId);
+        const repName = row ? row.name : repId;
+        if (sub) sub.textContent = repName + ' • جاري التحميل...';
+        const all = await kpiFetchAllProducts();
+        const junk = all.filter((p) => kpiProductRepName(p) === repName
+            && window.kpiValidateDescription(p.description_ar || p.description_en || p.description || '').isJunk);
+        if (sub) sub.textContent = repName + ' • ' + junk.length + ' منتج بحاجة لإصلاح';
+        if (!junk.length) {
+            list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>لا توجد أوصاف وهمية — عمل رائع!</div></div>';
+            return;
+        }
+        list.innerHTML = junk.map(kpiFixItemHtml).join('');
+    } catch (err) {
+        console.error('[kpi] open fix descriptions failed:', err);
+        list.innerHTML = '<div class="text-center py-10 text-red-500 font-bold">تعذر تحميل المنتجات</div>';
+    }
+};
+
+window.closeKpiFixDescriptions = () => {
+    const modal = document.getElementById('kpiFixModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.kpiSaveFixedDescription = async (productId) => {
+    if (!window.canPreviewRepPersonalKpi()) return;
+    const input = document.getElementById('kpiFixInput_' + productId);
+    const value = (input ? input.value : '').trim();
+    const check = window.kpiValidateDescription(value);
+    if (!check.isValid) {
+        if (window.showToast) window.showToast('الرجاء إدخال وصف حقيقي (أكثر من 10 أحرف)', false);
+        if (input) input.focus();
+        return;
+    }
+    const btn = document.getElementById('kpiFixSave_' + productId);
+    const original = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري الحفظ...'; }
+    try {
+        await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), { description_ar: value });
+        const item = document.querySelector('[data-fix-id="' + productId + '"]');
+        if (item) item.remove();
+        const remaining = document.querySelectorAll('#kpiFixList [data-fix-id]').length;
+        if (window.showToast) window.showToast('تم حفظ الوصف بنجاح — تحسّن مؤشرك', true);
+        await window.renderKpiDashboard();
+        if (remaining === 0) {
+            window.closeKpiFixDescriptions();
+        } else {
+            const sub = document.getElementById('kpiFixSubtitle');
+            if (sub && window._kpiLatestReport) {
+                const r = (window._kpiLatestReport.rows || []).find((x) => x.repId === window._kpiFixRepId);
+                sub.textContent = (r ? r.name : '') + ' • تبقّى ' + remaining + ' منتج بحاجة لإصلاح';
+            }
+        }
+    } catch (err) {
+        console.error('[kpi] fix description failed:', err);
+        if (window.showToast) window.showToast('تعذر حفظ الوصف', false);
+        if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
+};
+
 window.renderKpiDashboard = async () => {
     if (!window.canViewKpiDashboard()) {
         window.closeKpiDashboard();
@@ -1036,6 +1276,12 @@ window.renderKpiDashboard = async () => {
     }
     const content = document.getElementById('kpiAnalyticsContent');
     if (!content) return;
+    const canPreview = window.canPreviewRepPersonalKpi();
+    if (!canPreview) window._kpiRepPreviewMode = false;
+    const previewBtn = document.getElementById('kpiRepPreviewBtn');
+    const previewLabel = document.getElementById('kpiRepPreviewBtnLabel');
+    if (previewBtn) previewBtn.classList.toggle('hidden', !canPreview);
+    if (previewLabel) previewLabel.textContent = window._kpiRepPreviewMode ? 'العودة للتحليل الإداري' : 'معاينة شاشة المناديب';
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
     try {
         const report = await kpiBuildReport();
@@ -1047,12 +1293,18 @@ window.renderKpiDashboard = async () => {
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
 
         const selectedRow = report.rows.find((r) => r.repId === window._kpiSelectedRepId) || null;
-        content.innerHTML =
-            kpiGlobalSummaryHtml(report) +
-            kpiRepSelectorHtml(report) +
-            `<div id="kpiDeepDiveWrapper">${kpiDeepDiveHtml(selectedRow)}</div>`;
-
-        requestAnimationFrame(() => kpiRenderChartsForRow(selectedRow));
+        const previewMode = window._kpiRepPreviewMode && canPreview;
+        if (previewMode) {
+            content.innerHTML =
+                kpiRepSelectorHtml(report) +
+                `<div id="kpiDeepDiveWrapper">${kpiPersonalPreviewHtml(report, selectedRow)}</div>`;
+        } else {
+            content.innerHTML =
+                kpiGlobalSummaryHtml(report) +
+                kpiRepSelectorHtml(report) +
+                `<div id="kpiDeepDiveWrapper">${kpiDeepDiveHtml(selectedRow)}</div>`;
+            requestAnimationFrame(() => kpiRenderChartsForRow(selectedRow));
+        }
     } catch (err) {
         console.error('[kpi] dashboard render failed:', err);
         content.innerHTML = '<div class="text-center py-14 text-red-500 font-bold">تعذر تحميل بيانات المؤشرات</div>';
@@ -1080,8 +1332,12 @@ window.selectKpiRep = (repId) => {
 
     const wrapper = document.getElementById('kpiDeepDiveWrapper');
     if (wrapper) {
-        wrapper.innerHTML = kpiDeepDiveHtml(row);
-        requestAnimationFrame(() => kpiRenderChartsForRow(row));
+        if (window._kpiRepPreviewMode && window.canPreviewRepPersonalKpi()) {
+            wrapper.innerHTML = kpiPersonalPreviewHtml(report, row);
+        } else {
+            wrapper.innerHTML = kpiDeepDiveHtml(row);
+            requestAnimationFrame(() => kpiRenderChartsForRow(row));
+        }
     }
 };
 
