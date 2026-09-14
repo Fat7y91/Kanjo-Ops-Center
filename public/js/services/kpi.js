@@ -307,6 +307,44 @@ window.kpiCompleteImageEdit = (productId, imageIndex) => {
 
 /* ─────────────────── retroactive historical time ─────────────────── */
 
+/* Does this product carry a completed/enhanced image edited by the image
+   editor? Accepts both the app's camelCase fields and common snake_case
+   variants, plus image_done-style statuses. */
+const kpiProductHasEnhancedImage = (p) => {
+    if (!p) return false;
+    const lists = [p.enhancedImageUrls, p.enhanced_image_urls];
+    for (const list of lists) {
+        if (Array.isArray(list) && list.some((u) => String(u || '').trim())) return true;
+    }
+    const singles = [p.enhancedImageUrl, p.enhanced_image_url, p.enhancedImage, p.enhanced_image];
+    if (singles.some((u) => typeof u === 'string' && u.trim())) return true;
+    if (p.has_enhanced_image === true || p.hasEnhancedImage === true) return true;
+    const status = String(p.status || p.image_status || p.imageStatus || '').toLowerCase();
+    if (['done', 'image_done', 'completed', 'complete', 'approved', 'enhanced'].includes(status)) return true;
+    return false;
+};
+
+const kpiIsEditorName = (name) => {
+    const n = String(name || '');
+    const l = n.toLowerCase();
+    return n.includes('يوسف') || l.includes('youssef') || l.includes('yousef');
+};
+
+/* Resolve the image editor's display name (يوسف) from the users table, falling
+   back to the known default. */
+const kpiResolveImageEditorName = () => {
+    const table = window.users;
+    if (table && typeof table === 'object') {
+        for (const key of Object.keys(table)) {
+            const name = String((table[key] && table[key].name) || '');
+            if (kpiIsEditorName(name)) return name;
+        }
+    }
+    const current = String((window.currentUser && window.currentUser.name) || '');
+    if (kpiIsEditorName(current)) return current;
+    return 'يوسف';
+};
+
 window.calculateHistoricalTime = async () => {
     if (!window.canViewKpiDashboard()) {
         if (window.showToast) window.showToast('هذه الأداة متاحة للمؤسسين ومدير العمليات فقط', false);
@@ -317,14 +355,19 @@ window.calculateHistoricalTime = async () => {
     try {
         const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
         const byRep = new Map();
+        let enhancedCount = 0;
         snap.forEach((d) => {
             const p = { id: d.id, ...(d.data() || {}) };
             const rep = kpiProductRepName(p);
             const ms = kpiToMillis(p.createdAt || p.created_at || p.updatedAt);
             if (!byRep.has(rep)) byRep.set(rep, []);
             byRep.get(rep).push(ms);
+            /* Global image-edit audit: counted regardless of who added the
+               product on the field (the editor works on reps' products). */
+            if (kpiProductHasEnhancedImage(p)) enhancedCount += 1;
         });
-        const results = [];
+
+        const records = new Map(); // repId -> { rep, seconds, count, editorCredit, enhancedCount }
         for (const [rep, stamps] of byRep.entries()) {
             stamps.sort((a, b) => a - b);
             let totalMs = 0;
@@ -334,19 +377,48 @@ window.calculateHistoricalTime = async () => {
                 if (diff > 0 && diff < KPI_SESSION_BREAK_MS) totalMs += diff;
                 else totalMs += KPI_STANDARD_ADD_MS;
             });
-            const seconds = Math.round(totalMs / 1000);
-            const repId = kpiRepId(rep);
+            records.set(kpiRepId(rep), {
+                rep,
+                seconds: Math.round(totalMs / 1000),
+                count: stamps.length,
+                editorCredit: 0,
+                enhancedCount: 0
+            });
+        }
+
+        /* Credit the image editor for EVERY enhanced product in the database
+           (300s each). The original reps keep their own data-entry time — the
+           credit is additive and never subtracted from them. */
+        const editorName = kpiResolveImageEditorName();
+        const editorId = kpiRepId(editorName);
+        const editorCredit = enhancedCount * KPI_EDIT_FALLBACK_SECONDS;
+        const editorRecord = records.get(editorId) || { rep: editorName, seconds: 0, count: 0, editorCredit: 0, enhancedCount: 0 };
+        editorRecord.rep = editorRecord.rep || editorName;
+        editorRecord.seconds += editorCredit;
+        editorRecord.editorCredit = editorCredit;
+        editorRecord.enhancedCount = enhancedCount;
+        records.set(editorId, editorRecord);
+
+        const results = [];
+        for (const [repId, info] of records.entries()) {
             await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, repId), {
                 repId,
-                repName: rep,
-                historicalSeconds: seconds,
-                historicalProductCount: stamps.length,
+                repName: info.rep,
+                historicalSeconds: Math.max(0, Number(info.seconds) || 0),
+                historicalProductCount: info.count,
+                historicalEnhancedCount: info.enhancedCount || 0,
+                historicalEditorCreditSeconds: info.editorCredit || 0,
                 historicalComputedAt: new Date()
             }, { merge: true });
-            results.push({ rep, repId, seconds, count: stamps.length });
+            results.push({ rep: info.rep, repId, seconds: info.seconds, count: info.count });
         }
-        if (window.showToast) window.showToast('تم احتساب الوقت التاريخي لـ ' + results.length + ' مندوب');
-        return results;
+
+        const creditMinutes = Math.round(editorCredit / 60);
+        if (window.showToast) {
+            window.showToast('تم احتساب الوقت التاريخي: ' + results.length + ' مندوب • ' +
+                enhancedCount + ' صورة محسّنة (' + creditMinutes + ' دقيقة للمحرر ' + editorName + ')');
+        }
+        return { results, enhancedCount, editorCredit, editorName };
     } catch (err) {
         console.error('[kpi] historical calculation failed:', err);
         if (window.showToast) window.showToast('فشل احتساب الوقت التاريخي', false);
@@ -842,7 +914,7 @@ const kpiDeepDiveHtml = (row) => {
                 <div class="grid grid-cols-2 gap-2">
                     ${kpiMetricCard({ icon: 'fa-hourglass-half', iconBg: '#230535', iconColor: '#FFD700', value: kpiFormatDurationExact(row.totalSeconds), label: 'الوقت النشط الفعلي (دقيق)' })}
                     ${kpiMetricCard({ icon: 'fa-bolt', iconBg: '#FFD700', iconColor: '#230535', value: (row.minutesPerProductRaw).toFixed(2) + ' د', label: 'الكفاءة الدقيقة / منتج' })}
-                    ${kpiMetricCard({ icon: 'fa-circle-xmark', iconBg: '#dc2626', iconColor: '#fff', value: row.junkDescriptions, label: 'خصم: أوصاف وهمية' })}
+                    ${kpiMetricCard({ icon: 'fa-circle-xmark', iconBg: '#dc2626', iconColor: '#fff', value: row.junkDescriptions, label: 'أوصاف وهمية' })}
                     ${kpiMetricCard({ icon: 'fa-star', iconBg: '#37d99a', iconColor: '#fff', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الفعلية' })}
                 </div>
 
@@ -853,8 +925,8 @@ const kpiDeepDiveHtml = (row) => {
                     <div class="kpi-fin-row"><span>وقت إدخال التفاعل (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.activeSeconds)}</span></div>
                     <div class="kpi-fin-row"><span>وقت تحرير الصور (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.imageEditSeconds)}</span></div>
                     <div class="kpi-fin-row"><span>الوقت التاريخي المُحتسب</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.historicalSeconds)}</span></div>
-                    <div class="kpi-fin-row"><span>أوصاف صحيحة / منظمة</span><span class="kpi-fin-val text-emerald-600">${row.validDescriptions} (${validPct.toFixed(1)}%)</span></div>
-                    <div class="kpi-fin-row"><span>أوصاف وهمية (عقوبة)</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>أوصاف صحيحة</span><span class="kpi-fin-val text-emerald-600">${row.validDescriptions} (${validPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>أوصاف وهمية</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>بدون وصف</span><span class="kpi-fin-val text-slate-500">${row.emptyDescriptions} (${emptyPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
                     <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
