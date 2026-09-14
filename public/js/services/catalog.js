@@ -194,6 +194,19 @@ async function uploadCatalogImageToGas(base64Data, fileName, merchantName, image
     }
 }
 
+/* Shared raw-image upload used by the manager KPI preview's "missing image"
+   fixer. Reuses the exact same compression + Google Apps Script storage path
+   as the catalog so every uploaded file lands in the standard raw-images
+   folder with the merchant context intact. */
+window.uploadCatalogRawImage = async (file, merchantName) => {
+    if (!file) throw new Error('NO_FILE');
+    if (!String(file.type || '').startsWith('image/')) throw new Error('NOT_IMAGE');
+    if (file.size > CATALOG_MAX_IMAGE_BYTES) throw new Error('TOO_LARGE');
+    const base64 = await compressCatalogImage(file);
+    const fileName = catalogJpegFileName('raw-' + Date.now(), 'raw.jpg');
+    return uploadCatalogImageToGas(base64, fileName, merchantName || 'Unknown', 'raw');
+};
+
 const listFinalizedMerchants = () => {
     const map = new Map();
     const teamFilter = (window.currentUser && window.currentUser.role === 'rep') ? window.currentUser.team : null;

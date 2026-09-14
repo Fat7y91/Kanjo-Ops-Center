@@ -345,6 +345,22 @@ const kpiProductImageEditedMillis = (p) => {
     return 0;
 };
 
+/* Raw (original) image presence — mirrors the catalog's rawImageUrl(s) fields
+   plus the common snake_case / legacy aliases. */
+const kpiProductHasRawImage = (p) => {
+    if (!p) return false;
+    const lists = [p.rawImageUrls, p.raw_image_urls];
+    for (const list of lists) {
+        if (Array.isArray(list) && list.some((u) => String(u || '').trim())) return true;
+    }
+    const singles = [p.rawImageUrl, p.raw_image_url, p.image_url, p.main_image_url, p.image, p.rawImage];
+    return singles.some((u) => typeof u === 'string' && u.trim());
+};
+
+/* A product needs a raw image ONLY when it has no original image AND the media
+   editor has not touched it yet (never interfere with Youssef's workflow). */
+const kpiProductNeedsRawImage = (p) => !kpiProductHasRawImage(p) && !kpiProductHasEnhancedImage(p);
+
 const kpiIsEditorName = (name) => {
     const n = String(name || '');
     const l = n.toLowerCase();
@@ -1188,6 +1204,7 @@ const kpiPersonalPreviewHtml = (report, row) => {
             : 'متوافق مع متوسط الفريق';
     const tips = kpiPersonalSmartTips(row, report);
     const junk = row.junkDescriptions;
+    const missingImages = isEditor ? 0 : (row.withoutImage || 0);
 
     const warningHtml = junk > 0
         ? `<button type="button" class="kpi-warn-box" onclick="openKpiFixDescriptions('${kpiEscape(row.repId)}')">
@@ -1205,6 +1222,17 @@ const kpiPersonalPreviewHtml = (report, row) => {
                     <span class="block text-[11px] font-bold opacity-80">واصل هذا الأداء الممتاز</span>
                 </span>
             </div>`;
+
+    const imgWarnHtml = missingImages > 0
+        ? `<button type="button" class="kpi-warn-box kpi-warn-box-gold" onclick="openKpiFixImages('${kpiEscape(row.repId)}')">
+                <span class="kpi-warn-icon kpi-warn-icon-gold"><i class="fa-solid fa-image"></i></span>
+                <span class="flex-1 text-right min-w-0">
+                    <span class="block font-black text-sm">تنبيه: لديك ${missingImages} منتج بدون صور</span>
+                    <span class="block text-[11px] font-bold opacity-80">اضغط هنا لرفع الصور الآن ورفع نسبة جاهزية منتجاتك</span>
+                </span>
+                <span class="kpi-warn-cta"><i class="fa-solid fa-upload"></i> رفع صورة</span>
+            </button>`
+        : '';
 
     return `
     <section class="kpi-panel kpi-personal">
@@ -1252,6 +1280,8 @@ const kpiPersonalPreviewHtml = (report, row) => {
 
         ${warningHtml}
 
+        ${imgWarnHtml}
+
         <div class="kpi-tips">
             <div class="kpi-tips-head"><i class="fa-solid fa-lightbulb text-[#FFD700]"></i> نصائح ذكية لتحسين أدائك</div>
             <ul class="kpi-tips-list">
@@ -1272,12 +1302,16 @@ window.toggleKpiRepPreview = async () => {
 
 const kpiFixItemHtml = (p) => {
     const name = p.name_ar || p.name_en || p.name || p.id;
+    const merchant = p.merchantName || p.merchant || p.merchant_name || '—';
     const current = p.description_ar || p.description_en || p.description || '';
     const pid = kpiEscape(p.id);
     return `
     <div class="kpi-fix-item" data-fix-id="${pid}">
         <div class="flex items-start justify-between gap-2">
-            <div class="font-black text-[13px] text-[#230535] min-w-0">${kpiEscape(name)}</div>
+            <div class="min-w-0">
+                <div class="font-black text-[13px] text-[#230535]">${kpiEscape(name)}</div>
+                <div class="kpi-fix-merchant"><i class="fa-solid fa-store"></i> ${kpiEscape(merchant)}</div>
+            </div>
             <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-triangle-exclamation"></i> وصف وهمي</span>
         </div>
         <div class="kpi-fix-current"><span class="font-black text-[#230535]">الوصف الحالي:</span> ${current ? kpiEscape(current) : '<span class="opacity-50">—</span>'}</div>
@@ -1358,6 +1392,126 @@ window.kpiSaveFixedDescription = async (productId) => {
         console.error('[kpi] fix description failed:', err);
         if (window.showToast) window.showToast('تعذر حفظ الوصف', false);
         if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
+};
+
+/* ─────────── "Fix missing images" workflow (manager preview only) ───────────
+   STRICT eligibility (never touches Youssef's pipeline):
+     a) added by this rep,
+     b) no original image (rawImageUrl/rawImageUrls/image_url…), AND
+     c) not edited by the media editor (no enhanced image, status not image_done). */
+
+const kpiFixImageItemHtml = (p) => {
+    const name = p.name_ar || p.name_en || p.name || p.id;
+    const merchant = p.merchantName || p.merchant || p.merchant_name || '—';
+    const pid = kpiEscape(p.id);
+    return `
+    <div class="kpi-fix-item kpi-fix-item-image" data-fix-img-id="${pid}">
+        <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+                <div class="font-black text-[13px] text-[#230535]">${kpiEscape(name)}</div>
+                <div class="kpi-fix-merchant"><i class="fa-solid fa-store"></i> ${kpiEscape(merchant)}</div>
+            </div>
+            <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-image"></i> بدون صورة</span>
+        </div>
+        <div class="flex justify-end mt-2">
+            <input type="file" id="kpiImgInput_${pid}" accept="image/*" class="hidden" onchange="kpiUploadMissingImage('${pid}', this)">
+            <button type="button" id="kpiImgUpload_${pid}" onclick="document.getElementById('kpiImgInput_${pid}').click()" class="kpi-fix-save"><i class="fa-solid fa-upload"></i> رفع صورة</button>
+        </div>
+    </div>`;
+};
+
+window.openKpiFixImages = async (repId) => {
+    if (!window.canPreviewRepPersonalKpi()) {
+        if (window.showToast) window.showToast('هذه المعاينة متاحة للمدير فقط', false);
+        return;
+    }
+    const modal = document.getElementById('kpiFixImagesModal');
+    const list = document.getElementById('kpiFixImagesList');
+    const sub = document.getElementById('kpiFixImagesSubtitle');
+    if (!modal || !list) return;
+    window._kpiFixImagesRepId = repId;
+    modal.classList.remove('hidden');
+    list.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل المنتجات...</div></div>';
+    try {
+        const report = window._kpiLatestReport || await kpiBuildReport();
+        const row = (report.rows || []).find((r) => r.repId === repId);
+        const repName = row ? row.name : repId;
+        if (sub) sub.textContent = repName + ' • جاري التحميل...';
+        const all = await kpiFetchAllProducts();
+        const missing = all.filter((p) => kpiProductRepName(p) === repName && kpiProductNeedsRawImage(p));
+        if (sub) sub.textContent = repName + ' • ' + missing.length + ' منتج بدون صور';
+        if (!missing.length) {
+            list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>كل المنتجات لديها صور أو مُحررة بالفعل — لا شيء مطلوب</div></div>';
+            return;
+        }
+        list.innerHTML = missing.map(kpiFixImageItemHtml).join('');
+    } catch (err) {
+        console.error('[kpi] open fix images failed:', err);
+        list.innerHTML = '<div class="text-center py-10 text-red-500 font-bold">تعذر تحميل المنتجات</div>';
+    }
+};
+
+window.closeKpiFixImages = () => {
+    const modal = document.getElementById('kpiFixImagesModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.kpiUploadMissingImage = async (productId, input) => {
+    if (!window.canPreviewRepPersonalKpi()) return;
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    if (!String(file.type || '').startsWith('image/')) {
+        if (window.showToast) window.showToast('الرجاء اختيار ملف صورة صالح', false);
+        if (input) input.value = '';
+        return;
+    }
+    if (typeof window.uploadCatalogRawImage !== 'function') {
+        if (window.showToast) window.showToast('خدمة الرفع غير متاحة حالياً', false);
+        return;
+    }
+    const btn = document.getElementById('kpiImgUpload_' + productId);
+    const original = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري الرفع...'; }
+    try {
+        const all = await kpiFetchAllProducts();
+        const product = all.find((p) => p.id === productId);
+        /* Re-check the strict guard right before writing — never overwrite the editor. */
+        if (!product || !kpiProductNeedsRawImage(product)) {
+            if (window.showToast) window.showToast('تم تحديث هذا المنتج بالفعل — لا حاجة للرفع', false);
+            if (btn) { btn.disabled = false; btn.innerHTML = original; }
+            if (input) input.value = '';
+            return;
+        }
+        const merchantName = product.merchantName || product.merchant || product.merchant_name || 'Unknown';
+        const url = await window.uploadCatalogRawImage(file, merchantName);
+        await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), {
+            rawImageUrl: url,
+            rawImageUrls: [url],
+            image_url: url,
+            status: 'pending',
+            updatedAt: new Date()
+        });
+        const item = document.querySelector('[data-fix-img-id="' + productId + '"]');
+        if (item) item.remove();
+        const remaining = document.querySelectorAll('#kpiFixImagesList [data-fix-img-id]').length;
+        if (window.showToast) window.showToast('تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
+        await window.renderKpiDashboard();
+        if (remaining === 0) {
+            window.closeKpiFixImages();
+        } else {
+            const sub = document.getElementById('kpiFixImagesSubtitle');
+            if (sub && window._kpiLatestReport) {
+                const r = (window._kpiLatestReport.rows || []).find((x) => x.repId === window._kpiFixImagesRepId);
+                sub.textContent = (r ? r.name : '') + ' • تبقّى ' + remaining + ' منتج بدون صور';
+            }
+        }
+    } catch (err) {
+        console.error('[kpi] upload missing image failed:', err);
+        const tooLarge = String(err && err.message) === 'TOO_LARGE';
+        if (window.showToast) window.showToast(tooLarge ? 'حجم الصورة كبير جداً (الحد الأقصى 15 ميجا)' : 'تعذر رفع الصورة', false);
+        if (btn) { btn.disabled = false; btn.innerHTML = original; }
+        if (input) input.value = '';
     }
 };
 
