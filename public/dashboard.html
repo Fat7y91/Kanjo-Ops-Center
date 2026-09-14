@@ -959,6 +959,21 @@
 
 
 
+                <div id="kpiNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openKpiDashboard()" class="relative text-slate-600 hover:text-[#E57723] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-chart-line text-[#E57723]"></i>
+
+                        <span>لوحة المؤشرات</span>
+
+                    </button>
+
+                </div>
+
+
+
+
                 <div id="notificationsWrapper" class="hidden relative mr-2">
 
                     <button onclick="toggleNotifications()" class="relative text-slate-500 hover:text-kanjo-primary transition-colors p-1">
@@ -2492,7 +2507,9 @@
 
                         <label class="block text-[11px] font-black text-[#230535] mb-1">وصف المنتج بالعربية</label>
 
-                        <textarea id="catalogDescriptionAr" required rows="3" placeholder="وصف مختصر للمنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></textarea>
+                        <textarea id="catalogDescriptionAr" required rows="3" oninput="onCatalogDescriptionInput()" placeholder="وصف مختصر للمنتج" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></textarea>
+
+                        <p id="catalogDescriptionWarning" class="hidden mt-1 text-[11px] font-black text-amber-600"><i class="fa-solid fa-triangle-exclamation"></i> الوصف قصير جداً ولن يتم احتسابه في تقييم الجودة</p>
 
                     </div>
 
@@ -2878,6 +2895,46 @@
 
 
     <div id="contract-template-container" class="hidden"></div>
+
+
+
+    <div id="kpiDashboardModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[150]" onclick="if(event.target===this) closeKpiDashboard()">
+
+        <div class="bg-slate-50 rounded-3xl w-full max-w-6xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
+
+            <div class="bg-[#230535] text-white px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-3 shrink-0">
+
+                <div class="flex items-center gap-3 min-w-0">
+
+                    <div class="bg-[#FFD700] text-[#230535] p-3 rounded-2xl text-xl shrink-0"><i class="fa-solid fa-chart-line"></i></div>
+
+                    <div class="min-w-0">
+
+                        <h3 class="font-black text-lg">لوحة مؤشرات الأداء والجودة</h3>
+
+                        <p id="kpiLastUpdated" class="text-[11px] font-bold text-white/70">آخر تحديث: —</p>
+
+                    </div>
+
+                </div>
+
+                <div class="flex items-center gap-2">
+
+                    <button type="button" id="kpiHistoricalBtn" onclick="runKpiHistoricalCalculation()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> احتساب الوقت التاريخي</button>
+
+                    <button type="button" onclick="renderKpiDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-rotate"></i> تحديث</button>
+
+                    <button type="button" onclick="closeKpiDashboard()" class="text-white/70 hover:text-white p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+                </div>
+
+            </div>
+
+            <div id="kpiDashboardContent" class="flex-1 overflow-y-auto hide-scrollbar p-4 sm:p-6"></div>
+
+        </div>
+
+    </div>
 
 </body>
 

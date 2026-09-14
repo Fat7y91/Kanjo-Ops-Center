@@ -12,6 +12,7 @@ import './ui/modals.js';
 import './ui/accounting.js';
 import './ui/dashboard.js';
 import './ui/charts.js';
+import './services/kpi.js';
 
 /* Populate category dropdowns */
 categories.sort().forEach(c => {

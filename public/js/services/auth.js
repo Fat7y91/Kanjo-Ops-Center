@@ -165,6 +165,18 @@ function applyThemeAndShowDashboard() {
         if (archivedReportsBtnWrapper) {
             archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
         }
+
+        const kpiNavBtnWrapper = document.getElementById('kpiNavBtnWrapper');
+        if (kpiNavBtnWrapper) {
+            const canViewKpi = (typeof window.canViewKpiDashboard === 'function')
+                ? window.canViewKpiDashboard()
+                : false;
+            kpiNavBtnWrapper.classList.toggle('hidden', !canViewKpi);
+        }
+
+        if (typeof window.kpiStartActiveTracker === 'function') {
+            window.kpiStartActiveTracker();
+        }
         
         if(canViewLive && window.setupAdvancedFilterElements) {
             window.setupAdvancedFilterElements();

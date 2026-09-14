@@ -800,6 +800,7 @@ window.selectMasterCatalogItem = (itemId) => {
     const skuEl = document.getElementById('catalogSku');
     if (nameEl) nameEl.value = name;
     if (descEl && !String(descEl.value || '').trim()) descEl.value = name;
+    if (typeof window.onCatalogDescriptionInput === 'function') window.onCatalogDescriptionInput();
     if (priceEl) priceEl.value = price;
     if (skuEl && sku) skuEl.value = sku;
     const typeEl = document.getElementById('catalogProductType');
@@ -991,6 +992,7 @@ window.applyCatalogNameSuggestion = (productId) => {
 
     if (nameEl) nameEl.value = name;
     if (descEl && desc) descEl.value = desc;
+    if (typeof window.onCatalogDescriptionInput === 'function') window.onCatalogDescriptionInput();
     if (priceEl && product.base_price != null && product.base_price !== '') priceEl.value = product.base_price;
     if (typeEl) typeEl.value = isVariable ? 'variable' : 'simple';
     if (section) section.classList.toggle('hidden', !isVariable);
@@ -1213,6 +1215,7 @@ const clearCatalogProductFields = (keepMerchant) => {
     if (typeEl) typeEl.value = 'simple';
     resetCatalogImageState();
     resetCatalogVariations();
+    if (typeof window.onCatalogDescriptionInput === 'function') window.onCatalogDescriptionInput();
     if (keepMerchant) {
         const nameEl = document.getElementById('catalogNameAr');
         if (nameEl) nameEl.focus();
@@ -1665,6 +1668,7 @@ window.openCatalogProductEditor = (productId) => {
     if (nameEl) nameEl.value = product.name_ar || '';
     const descEl = document.getElementById('catalogDescriptionAr');
     if (descEl) descEl.value = product.description_ar || '';
+    if (typeof window.onCatalogDescriptionInput === 'function') window.onCatalogDescriptionInput();
     const skuEl = document.getElementById('catalogSku');
     if (skuEl) skuEl.value = product.sku || '';
     const typeEl = document.getElementById('catalogProductType');
@@ -2476,7 +2480,23 @@ window.downloadCatalogRawImage = (productId, imageIndex) => {
     const idx = Number(imageIndex) || 0;
     const url = catalogDriveDownloadUrl(urls[idx] || urls[0]);
     if (!url) return window.showToast('لا يوجد رابط للصورة الأصلية', false);
+    if (typeof window.kpiMarkImageSourceOpened === 'function') {
+        window.kpiMarkImageSourceOpened(productId, idx);
+    }
     window.open(url, '_blank', 'noopener');
+};
+
+window.onCatalogDescriptionInput = () => {
+    const field = document.getElementById('catalogDescriptionAr');
+    const warning = document.getElementById('catalogDescriptionWarning');
+    if (!field || !warning) return;
+    const result = (typeof window.kpiValidateDescription === 'function')
+        ? window.kpiValidateDescription(field.value)
+        : null;
+    const show = result
+        ? (!result.isEmpty && !result.isValid)
+        : String(field.value || '').trim().length > 0 && String(field.value || '').trim().length <= 10;
+    warning.classList.toggle('hidden', !show);
 };
 
 window.triggerCatalogEnhancedSlot = (productId, imageIndex) => {
@@ -2571,6 +2591,9 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
             product.merchantName || '',
             'enhanced'
         );
+        if (typeof window.kpiCompleteImageEdit === 'function') {
+            window.kpiCompleteImageEdit(productId, idx);
+        }
         const enhancedUrls = getCatalogEnhancedLocal(productId, targetCount);
         enhancedUrls[idx] = uploadedUrl;
         window._catalogEnhancedUploads[productId] = enhancedUrls;

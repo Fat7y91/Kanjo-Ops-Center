@@ -117,6 +117,13 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // KPI & quality tracking (`rep_kpis/{repId}` + daily_stats subcollection).
+    // Auth is anonymous + PIN; dashboard visibility RBAC (Founders + Operations
+    // Manager) and per-user tracking live in the client (kpi.js).
+    match /rep_kpis/{repId}/{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
     // 4) Admin allowlist bootstrap.
     match /app_security/{docId} {
       allow read: if isAdmin();
