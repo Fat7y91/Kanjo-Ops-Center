@@ -324,6 +324,27 @@ const kpiProductHasEnhancedImage = (p) => {
     return false;
 };
 
+/* Best-effort millisecond timestamp for WHEN the enhanced image was produced.
+   Prefers a dedicated image timestamp, then the document's updatedAt, and only
+   then falls back to createdAt. Returns 0 when no usable timestamp exists. */
+const kpiProductImageEditedMillis = (p) => {
+    if (!p) return 0;
+    const candidates = [
+        p.imageUpdatedAt, p.image_updated_at,
+        p.enhancedImageUpdatedAt, p.enhanced_image_updated_at,
+        p.imagesUpdatedAt, p.images_updated_at,
+        p.imageEditCompletedAt, p.image_edit_completed_at,
+        p.enhancedAt, p.enhanced_at,
+        p.updatedAt, p.updated_at,
+        p.createdAt, p.created_at
+    ];
+    for (const value of candidates) {
+        const ms = kpiToMillis(value);
+        if (ms > 0) return ms;
+    }
+    return 0;
+};
+
 const kpiIsEditorName = (name) => {
     const n = String(name || '');
     const l = n.toLowerCase();
@@ -356,6 +377,8 @@ window.calculateHistoricalTime = async () => {
         const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
         const byRep = new Map();
         let enhancedCount = 0;
+        const editedStamps = [];   // timestamps of every enhanced image, globally
+        let untimedEnhanced = 0;   // enhanced products with no usable timestamp
         snap.forEach((d) => {
             const p = { id: d.id, ...(d.data() || {}) };
             const rep = kpiProductRepName(p);
@@ -364,7 +387,12 @@ window.calculateHistoricalTime = async () => {
             byRep.get(rep).push(ms);
             /* Global image-edit audit: counted regardless of who added the
                product on the field (the editor works on reps' products). */
-            if (kpiProductHasEnhancedImage(p)) enhancedCount += 1;
+            if (kpiProductHasEnhancedImage(p)) {
+                enhancedCount += 1;
+                const editedMs = kpiProductImageEditedMillis(p);
+                if (editedMs > 0) editedStamps.push(editedMs);
+                else untimedEnhanced += 1;
+            }
         });
 
         const records = new Map(); // repId -> { rep, seconds, count, editorCredit, enhancedCount }
@@ -386,12 +414,29 @@ window.calculateHistoricalTime = async () => {
             });
         }
 
-        /* Credit the image editor for EVERY enhanced product in the database
-           (300s each). The original reps keep their own data-entry time — the
-           credit is additive and never subtracted from them. */
+        /* Realistic retroactive time for the image editor, derived from the
+           upload/update timestamps themselves instead of a flat multiplier.
+           Sort every enhanced image chronologically and, for each one:
+             - if it started a new session (first image or a gap > 30 min),
+               credit the standard 5-minute session-start fallback;
+             - otherwise credit the EXACT elapsed delta since the previous
+               image (a continuous editing workflow).
+           Enhanced products without any timestamp get the 5-minute fallback.
+           The original reps keep their own data-entry time — this credit is
+           additive and never subtracted from them. */
+        const sortedStamps = editedStamps.slice().sort((a, b) => a - b);
+        let editorMs = 0;
+        sortedStamps.forEach((ms, i) => {
+            if (i === 0) { editorMs += KPI_EDIT_FALLBACK_SECONDS * 1000; return; }
+            const delta = ms - sortedStamps[i - 1];
+            if (delta > 0 && delta <= KPI_EDIT_DURATION_CAP_SECONDS * 1000) editorMs += delta;
+            else editorMs += KPI_EDIT_FALLBACK_SECONDS * 1000;
+        });
+        editorMs += untimedEnhanced * KPI_EDIT_FALLBACK_SECONDS * 1000;
+        const editorCredit = Math.round(editorMs / 1000);
+
         const editorName = kpiResolveImageEditorName();
         const editorId = kpiRepId(editorName);
-        const editorCredit = enhancedCount * KPI_EDIT_FALLBACK_SECONDS;
         const editorRecord = records.get(editorId) || { rep: editorName, seconds: 0, count: 0, editorCredit: 0, enhancedCount: 0 };
         editorRecord.rep = editorRecord.rep || editorName;
         editorRecord.seconds += editorCredit;
@@ -543,6 +588,7 @@ const kpiBuildReport = async () => {
         return reps.get(repId);
     };
 
+    let editedImagesTotal = 0;
     products.forEach((p) => {
         const rep = ensureRep(kpiProductRepName(p));
         rep.totalProducts += 1;
@@ -550,6 +596,10 @@ const kpiBuildReport = async () => {
         if (merchant) rep.merchants.add(merchant);
 
         if (kpiProductHasImage(p)) rep.withImage += 1;
+
+        /* Global image-edit count: independent of the data-entry metric and
+           attributed to the image editor, not to the product's creator. */
+        if (kpiProductHasEnhancedImage(p)) editedImagesTotal += 1;
 
         const variations = kpiProductVariations(p);
         if (variations.length > 0) {
@@ -578,6 +628,11 @@ const kpiBuildReport = async () => {
         rep.historicalComputedAt = data.historicalComputedAt || null;
     });
 
+    /* Attribute the global edited-images count to the image editor's own row,
+       ensuring the row exists even when he created no products himself. */
+    const editorRowName = kpiResolveImageEditorName();
+    ensureRep(editorRowName).editedImagesCount = editedImagesTotal;
+
     const rows = [];
     for (const rep of reps.values()) {
         const stats = await kpiFetchDailyStats(rep.repId);
@@ -598,6 +653,7 @@ const kpiBuildReport = async () => {
             repId: rep.repId,
             name: rep.name,
             totalProducts,
+            editedImagesCount: rep.editedImagesCount || 0,
             merchantsCount: rep.merchants.size,
             withImage: rep.withImage,
             withoutImage: Math.max(0, totalProducts - rep.withImage),
@@ -629,6 +685,7 @@ const kpiBuildReport = async () => {
 
     const totals = rows.reduce((acc, r) => {
         acc.products += r.totalProducts;
+        acc.editedImages += r.editedImagesCount;
         acc.merchants += r.merchantsCount;
         acc.seconds += r.totalSeconds;
         acc.activeSeconds += r.activeSeconds;
@@ -642,7 +699,7 @@ const kpiBuildReport = async () => {
         acc.withoutImage += r.withoutImage;
         return acc;
     }, {
-        products: 0, merchants: 0, seconds: 0, activeSeconds: 0, imageEditSeconds: 0,
+        products: 0, editedImages: 0, merchants: 0, seconds: 0, activeSeconds: 0, imageEditSeconds: 0,
         historicalSeconds: 0, junk: 0, valid: 0, empty: 0, nonEmpty: 0, withImage: 0, withoutImage: 0
     });
     totals.reps = rows.length;
@@ -837,7 +894,7 @@ const kpiGlobalSummaryHtml = (report) => {
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 items-start">
             ${kpiMetricCard({ icon: 'fa-box-open', iconBg: '#230535', iconColor: '#FFD700', value: t.products, label: 'إجمالي المنتجات' })}
-            ${kpiMetricCard({ icon: 'fa-stopwatch', iconBg: '#FFD700', iconColor: '#230535', value: kpiFormatDurationShort(t.seconds), label: 'إجمالي الوقت الصافي', hint: 'نشط ' + kpiFormatDurationShort(t.activeSeconds) })}
+            ${kpiMetricCard({ icon: 'fa-stopwatch', iconBg: '#FFD700', iconColor: '#230535', value: kpiFormatDurationShort(t.seconds), label: 'إجمالي الوقت الصافي', hint: 'نشط ' + kpiFormatDurationShort(t.activeSeconds) + ' • صور مُحررة: ' + t.editedImages })}
             ${kpiMetricCard({ icon: 'fa-gauge-high', iconBg: '#230535', iconColor: '#37d99a', value: t.minutesPerProductRaw.toFixed(2) + ' د', label: 'الكفاءة (دقيقة/منتج)' })}
             ${kpiMetricCard({ icon: 'fa-star', iconBg: '#37d99a', iconColor: '#fff', value: (t.validRatioRaw * 100).toFixed(1) + '%', label: 'جودة الأوصاف' })}
             ${kpiMetricCard({ icon: 'fa-triangle-exclamation', iconBg: '#dc2626', iconColor: '#fff', value: t.junk, label: 'أوصاف وهمية', hint: 'التجار: ' + t.merchants + ' • بصور: ' + (t.imageRatioRaw * 100).toFixed(0) + '%' })}
@@ -850,13 +907,14 @@ const kpiRepCardHtml = (row, selected) => {
     const badge = row.junkDescriptions > 0
         ? `<span class="kpi-junk-badge"><i class="fa-solid fa-triangle-exclamation"></i> ${row.junkDescriptions} وصف وهمي</span>`
         : `<span class="kpi-clean-badge"><i class="fa-solid fa-circle-check"></i> لا يوجد وصف وهمي</span>`;
+    const editedPart = row.editedImagesCount ? ' • ' + row.editedImagesCount + ' صورة مُحررة' : '';
     return `
     <button type="button" class="kpi-rep-pick ${selected ? 'kpi-rep-pick-active' : ''}" data-kpi-rep="${kpiEscape(row.repId)}" onclick="selectKpiRep('${kpiEscape(row.repId)}')">
         <div class="flex items-center gap-2.5 min-w-0 w-full">
             <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
             <div class="min-w-0 text-right flex-1">
                 <div class="font-black text-[13px] text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
-                <div class="text-[10px] font-bold text-slate-400 truncate">${row.merchantsCount} تاجر • ${row.totalProducts} منتج</div>
+                <div class="text-[10px] font-bold text-slate-400 truncate">${row.merchantsCount} تاجر • ${row.totalProducts} منتج${editedPart}</div>
                 <div class="text-[11px] font-black text-[#6D28D9] mt-0.5">${kpiFormatDurationShort(row.totalSeconds)}</div>
             </div>
         </div>
@@ -920,6 +978,7 @@ const kpiDeepDiveHtml = (row) => {
 
                 <div class="kpi-financial-grid">
                     <div class="kpi-fin-row"><span>عدد المنتجات المُدخلة</span><span class="kpi-fin-val">${row.totalProducts}</span></div>
+                    <div class="kpi-fin-row"><span>عدد الصور المُحررة (عبر كل المناديب)</span><span class="kpi-fin-val text-[#6D28D9]">${row.editedImagesCount || 0}</span></div>
                     <div class="kpi-fin-row"><span>عدد التجار المُضافين</span><span class="kpi-fin-val">${row.merchantsCount}</span></div>
                     <div class="kpi-fin-row"><span>أيام النشاط الفعلي</span><span class="kpi-fin-val">${row.activeDays || row.trackedDays || 0}</span></div>
                     <div class="kpi-fin-row"><span>وقت إدخال التفاعل (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.activeSeconds)}</span></div>
