@@ -1938,6 +1938,7 @@ const renderCatalogMerchantFolderCard = (group) => {
             <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${counts.approved} مكتمل</span>
             <span class="text-[10px] font-black bg-[#E57723]/15 text-[#E57723] px-2 py-0.5 rounded-full">${counts.pending} قيد المعالجة</span>
         </div>
+        ${renderCatalogMerchantSearchMatches(group)}
     </button>`;
 };
 
@@ -2130,6 +2131,44 @@ const catalogDeepSearchFilter = (products, query) => {
     return (products || []).filter((p) => passing.has(catalogGroupMerchantKey(p)));
 };
 
+/* Maps each merchant to the exact products whose name matched the query.
+   Founders use this mini-list to audit suspicious entries (name + price +
+   who entered it) without leaving the merchant folder grid. */
+const catalogDeepSearchProductMatchMap = (products, query) => {
+    const q = window.normalizeArabic(String(query || ''));
+    const map = new Map();
+    if (!q) return map;
+    (products || []).forEach((p) => {
+        if (!window.normalizeArabic(catalogProductDisplayName(p)).includes(q)) return;
+        const merchantName = catalogGroupMerchantKey(p);
+        if (!map.has(merchantName)) map.set(merchantName, []);
+        map.get(merchantName).push(p);
+    });
+    return map;
+};
+
+const renderCatalogMerchantSearchMatches = (group) => {
+    const matches = group && group.matchedSearchProducts;
+    if (!Array.isArray(matches) || !matches.length) return '';
+    const items = matches.map((p) => {
+        const name = catalogEscapeHtml(catalogProductDisplayName(p) || 'بدون اسم');
+        const rawPrice = p.base_price != null ? p.base_price : (p.price != null ? p.price : '');
+        const price = catalogEscapeHtml(rawPrice === '' ? '—' : rawPrice);
+        const rep = catalogEscapeHtml(catalogRepDisplayName(p));
+        return `<li class="flex items-start justify-between gap-2 py-1.5 border-b border-purple-100/70 last:border-0">
+            <div class="min-w-0 flex-1 text-right">
+                <div class="text-[11px] font-black text-[#230535] leading-snug line-clamp-2">${name}</div>
+                <div class="text-[9px] font-bold text-purple-500 mt-0.5"><i class="fa-solid fa-user-pen"></i> أضافه: ${rep}</div>
+            </div>
+            <div class="text-[11px] font-black text-[#E57723] whitespace-nowrap">${price} ج.م</div>
+        </li>`;
+    }).join('');
+    return `<div class="mt-3 bg-purple-50 border border-purple-100 rounded-xl p-2.5 text-right" onclick="event.stopPropagation()">
+        <div class="text-[10px] font-black text-purple-700 mb-1.5 flex items-center gap-1.5"><i class="fa-solid fa-list-check"></i> نتائج مطابقة داخل هذا التاجر (${matches.length})</div>
+        <ul>${items}</ul>
+    </div>`;
+};
+
 const catalogSearchNoResultsHtml = (query) => `<div class="col-span-full text-center py-10 text-slate-400 font-bold">
     <i class="fa-solid fa-magnifying-glass text-3xl text-[#230535]/30 mb-3"></i>
     <div class="text-base text-[#230535] font-black mb-1">لا توجد نتائج مطابقة</div>
@@ -2267,6 +2306,14 @@ const renderCatalogAllProductsList = () => {
     } else if (toolbar) {
         toolbar.classList.add('hidden');
         toolbar.innerHTML = '';
+    }
+    /* Attach the exact matched products (name match) to each merchant so the
+       folder card can render an inline audit mini-list while searching.
+       Groups are rebuilt on every render, so clearing the search naturally
+       drops `matchedSearchProducts` and restores the clean default state. */
+    if (searchQuery) {
+        const matchMap = catalogDeepSearchProductMatchMap(products, searchQuery);
+        groups.forEach((g) => { g.matchedSearchProducts = matchMap.get(g.merchantName) || []; });
     }
     list.className = 'catalog-card-grid';
     list.innerHTML = groups.map(renderCatalogMerchantFolderCard).join('');
