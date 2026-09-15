@@ -1248,3 +1248,136 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     min-width: 0;
 }
 .kpi-kanjo-score-meta .text-slate-400 { color: rgba(255, 255, 255, 0.6) !important; }
+
+/* Clickable Kanjo Score banner (deep-dive) — glow hover only, no layout shift. */
+.kpi-kanjo-score-clickable {
+    width: 100%;
+    text-align: right;
+    cursor: pointer;
+    border: 1px solid rgba(255, 215, 0, 0.25);
+    transition: box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+}
+.kpi-kanjo-score-clickable:hover,
+.kpi-kanjo-score-clickable:focus-visible {
+    filter: brightness(1.06);
+    border-color: rgba(255, 215, 0, 0.7);
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.45), 0 18px 34px -24px rgba(35, 5, 53, 0.95);
+    outline: none;
+}
+.kpi-kanjo-score-hint {
+    margin-top: 0.15rem;
+    font-size: 0.6rem;
+    font-weight: 800;
+    color: #FFD700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.85;
+}
+
+/* Clickable personal purple card — hint row only, no layout shift. */
+.kpi-personal-card-clickable {
+    cursor: pointer;
+    transition: box-shadow 0.2s ease, filter 0.2s ease;
+}
+.kpi-personal-card-clickable:hover,
+.kpi-personal-card-clickable:focus-visible {
+    filter: brightness(1.05);
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.5);
+    outline: none;
+}
+.kpi-personal-card-hint {
+    margin-top: 0.35rem;
+    font-size: 0.58rem;
+    font-weight: 800;
+    opacity: 0.85;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ---- Kanjo Score breakdown modal ---- */
+.kpi-score-final {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 1.1rem;
+    background: linear-gradient(120deg, #230535 0%, #4C1D95 100%);
+    color: #fff;
+}
+.kpi-score-final-label {
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.75);
+}
+.kpi-score-final-value {
+    font-size: 2.6rem;
+    font-weight: 900;
+    line-height: 1.05;
+    color: #FFD700;
+}
+.kpi-score-final-value span { font-size: 1rem; color: rgba(255, 255, 255, 0.65); }
+.kpi-score-final-sub {
+    font-size: 0.66rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.7);
+}
+.kpi-score-crit-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.kpi-score-crit { display: flex; flex-direction: column; gap: 0.25rem; }
+.kpi-score-crit-name {
+    font-size: 0.74rem;
+    font-weight: 900;
+    color: #230535;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.kpi-score-crit-val { font-size: 0.74rem; font-weight: 900; color: #230535; }
+.kpi-score-track {
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: #eef1f6;
+    overflow: hidden;
+}
+.kpi-score-fill { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+.kpi-score-crit-basis { font-size: 0.6rem; font-weight: 700; color: #64748b; line-height: 1.5; }
+.kpi-score-total {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.8rem;
+    border-radius: 0.8rem;
+    background: rgba(255, 215, 0, 0.16);
+    border: 1px solid rgba(255, 215, 0, 0.5);
+    font-size: 0.8rem;
+    font-weight: 900;
+    color: #230535;
+}
+.kpi-score-info {
+    border-radius: 0.8rem;
+    border: 1px dashed rgba(109, 40, 217, 0.35);
+    background: #fbfaff;
+    padding: 0.6rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.kpi-score-info-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #4C1D95;
+}
+.kpi-score-info-row > span:last-child { margin-inline-start: auto; color: #230535; }
+.kpi-score-note {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #64748b;
+    line-height: 1.6;
+    display: flex;
+    gap: 0.4rem;
+    align-items: flex-start;
+}
+.kpi-score-note i { color: #6D28D9; margin-top: 0.15rem; }
+
