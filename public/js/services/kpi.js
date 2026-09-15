@@ -49,6 +49,27 @@ window.canViewKpiDashboard = () => {
     return false;
 };
 
+/* Field reps (مندوب) are the primary audience of the personal performance
+   screen. They are hard-locked to their own identity everywhere below. */
+window.isFieldRepUser = () => {
+    const u = window.currentUser;
+    return !!(u && u.role === 'rep');
+};
+
+/* The personal screen is now LIVE for field reps, and stays available to the
+   Founders / Ops Manager as a preview + admin deep-dive. */
+window.canViewPersonalKpi = () => {
+    if (typeof window.canViewKpiDashboard === 'function' && window.canViewKpiDashboard()) return true;
+    return window.isFieldRepUser();
+};
+
+/* Resolve which rep a personal screen belongs to. Reps can only ever open
+   their OWN screen; managers may inspect any rep (deep-dive). */
+window.kpiResolvePersonalRepId = (requestedRepId) => {
+    if (window.isFieldRepUser()) return kpiRepId((window.currentUser && window.currentUser.name) || '');
+    return String(requestedRepId || '');
+};
+
 /* Reps and the content/editor role (يوسف) are the only roles whose time is
    actively tracked. */
 window.isKpiTrackedUser = () => {
@@ -520,6 +541,36 @@ const kpiFetchAllProducts = async () => {
     return items;
 };
 
+/* Secure, rep-scoped product fetch. A field rep only ever loads the products
+   they personally added (queries are scoped by the logged-in User ID via the
+   common author fields). Managers keep the full view. */
+const kpiFetchProductsForRep = async (repName) => {
+    const name = String(repName || '').trim();
+    if (!name || typeof window.query !== 'function' || typeof window.where !== 'function') return [];
+    const found = new Map();
+    const collect = (snap) => snap.forEach((d) => found.set(d.id, { id: d.id, ...(d.data() || {}) }));
+    const authorFields = ['added_by', 'createdBy'];
+    for (const field of authorFields) {
+        try {
+            const snap = await window.getDocs(window.query(
+                window.collection(window.db, KPI_PRODUCTS_COLLECTION),
+                window.where(field, '==', name)
+            ));
+            collect(snap);
+        } catch (err) {
+            /* Missing field/index on a given deployment — try the next alias. */
+        }
+    }
+    return Array.from(found.values());
+};
+
+/* Reps get a scoped fetch of their own products; managers get the full set
+   for the cross-rep audit tools. */
+const kpiFetchProductsForScope = async (repName) => {
+    if (window.isFieldRepUser()) return kpiFetchProductsForRep(repName);
+    return kpiFetchAllProducts();
+};
+
 const kpiFetchParentRecords = async () => {
     const map = new Map();
     try {
@@ -649,6 +700,12 @@ const kpiBuildReport = async () => {
     const editorRowName = kpiResolveImageEditorName();
     const editorRankId = kpiRepId(editorRowName);
     ensureRep(editorRowName).editedImagesCount = editedImagesTotal;
+
+    /* Always materialize the signed-in rep's own row so their personal screen
+       renders (with zeros) even before they add their first product. */
+    if (window.isFieldRepUser() && window.currentUser && window.currentUser.name) {
+        ensureRep(window.currentUser.name);
+    }
 
     const rows = [];
     for (const rep of reps.values()) {
@@ -1144,7 +1201,11 @@ const KPI_SPEED_LABEL = 'مؤشر السرعة والدقة (للعلم والإ
 
 const kpiPersonalRank = (row, report) => {
     const fieldRows = (report.rows || []).filter((r) => !r.isEditor);
-    return { rank: row.isEditor ? null : (row.rank || null), total: fieldRows.length };
+    /* `report.totals.reps` survives report scoping (the rep's report only
+       carries their own row), so the "X of Y" denominator stays correct. */
+    const totalFromTotals = report && report.totals ? Number(report.totals.reps) : 0;
+    const total = totalFromTotals > 0 ? totalFromTotals : fieldRows.length;
+    return { rank: row.isEditor ? null : (row.rank || null), total };
 };
 
 const kpiPersonalSmartTips = (row, report) => {
@@ -1183,11 +1244,12 @@ const kpiPersonalCard = (opts) => `
         ${opts.foot ? `<div class="kpi-personal-card-foot">${opts.foot}</div>` : ''}
     </div>`;
 
-const kpiPersonalPreviewHtml = (report, row) => {
+const kpiPersonalPanelHtml = (report, row, opts) => {
+    const liveMode = !!(opts && opts.liveMode);
     if (!row) {
         return `<section class="kpi-panel"><div class="text-center py-10 text-slate-400 font-bold">
             <i class="fa-solid fa-mobile-screen-button text-3xl text-[#230535]/20 mb-2"></i>
-            <div>اختر مندوباً من القائمة أعلاه لمعاينة شاشته الشخصية</div>
+            <div>${liveMode ? 'لا توجد بيانات بعد — ابدأ بإضافة منتجاتك لتظهر مؤشراتك هنا' : 'اختر مندوباً من القائمة أعلاه لمعاينة شاشته الشخصية'}</div>
         </div></section>`;
     }
     const rankInfo = kpiPersonalRank(row, report);
@@ -1238,13 +1300,13 @@ const kpiPersonalPreviewHtml = (report, row) => {
     <section class="kpi-panel kpi-personal">
         <div class="kpi-panel-head">
             <div class="flex items-center gap-2">
-                <span class="kpi-panel-icon"><i class="fa-solid fa-mobile-screen-button"></i></span>
+                <span class="kpi-panel-icon"><i class="fa-solid ${liveMode ? 'fa-house-chimney-user' : 'fa-mobile-screen-button'}"></i></span>
                 <div>
-                    <h3 class="font-black text-sm text-[#230535]">معاينة شاشة المندوب الشخصية</h3>
-                    <p class="text-[11px] font-bold text-slate-400">هذه المعاينة متاحة للمدير فقط قبل إتاحتها للمناديب</p>
+                    <h3 class="font-black text-sm text-[#230535]">${liveMode ? 'لوحة أدائي' : 'معاينة شاشة المندوب الشخصية'}</h3>
+                    <p class="text-[11px] font-bold text-slate-400">${liveMode ? 'تابع إنتاجك وجودة أوصافك لحظياً وارتقِ في الترتيب' : 'هذه المعاينة متاحة للمدير فقط قبل إتاحتها للمناديب'}</p>
                 </div>
             </div>
-            <span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-eye"></i> وضع المعاينة</span>
+            ${liveMode ? '' : '<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-eye"></i> وضع المعاينة</span>'}
         </div>
 
         <div class="kpi-personal-hero">
@@ -1323,25 +1385,31 @@ const kpiFixItemHtml = (p) => {
 };
 
 window.openKpiFixDescriptions = async (repId) => {
-    if (!window.canPreviewRepPersonalKpi()) {
-        if (window.showToast) window.showToast('هذه المعاينة متاحة للمدير فقط', false);
+    if (!window.canViewPersonalKpi()) {
+        if (window.showToast) window.showToast('هذه الأداة غير متاحة لحسابك', false);
         return;
     }
     const modal = document.getElementById('kpiFixModal');
     const list = document.getElementById('kpiFixList');
     const sub = document.getElementById('kpiFixSubtitle');
     if (!modal || !list) return;
+    /* Reps are hard-locked to their own identity, so they can never audit or
+       edit another rep's products through this workflow. */
+    repId = window.kpiResolvePersonalRepId(repId);
     window._kpiFixRepId = repId;
     modal.classList.remove('hidden');
     list.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل المنتجات...</div></div>';
     try {
         const report = window._kpiLatestReport || await kpiBuildReport();
         const row = (report.rows || []).find((r) => r.repId === repId);
-        const repName = row ? row.name : repId;
+        const repName = window.isFieldRepUser()
+            ? String((window.currentUser && window.currentUser.name) || repId)
+            : (row ? row.name : repId);
         if (sub) sub.textContent = repName + ' • جاري التحميل...';
-        const all = await kpiFetchAllProducts();
+        const all = await kpiFetchProductsForScope(repName);
         const junk = all.filter((p) => kpiProductRepName(p) === repName
             && window.kpiValidateDescription(p.description_ar || p.description_en || p.description || '').isJunk);
+        window._kpiFixAllowedIds = new Set(junk.map((p) => p.id));
         if (sub) sub.textContent = repName + ' • ' + junk.length + ' منتج بحاجة لإصلاح';
         if (!junk.length) {
             list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>لا توجد أوصاف وهمية — عمل رائع!</div></div>';
@@ -1360,7 +1428,15 @@ window.closeKpiFixDescriptions = () => {
 };
 
 window.kpiSaveFixedDescription = async (productId) => {
-    if (!window.canPreviewRepPersonalKpi()) return;
+    if (!window.canViewPersonalKpi()) return;
+    /* Reps may only fix products that were loaded into their own scoped list. */
+    if (window.isFieldRepUser()) {
+        const allowed = window._kpiFixAllowedIds;
+        if (!(allowed instanceof Set) || !allowed.has(productId)) {
+            if (window.showToast) window.showToast('لا يمكنك تعديل هذا المنتج', false);
+            return;
+        }
+    }
     const input = document.getElementById('kpiFixInput_' + productId);
     const value = (input ? input.value : '').trim();
     const check = window.kpiValidateDescription(value);
@@ -1422,24 +1498,28 @@ const kpiFixImageItemHtml = (p) => {
 };
 
 window.openKpiFixImages = async (repId) => {
-    if (!window.canPreviewRepPersonalKpi()) {
-        if (window.showToast) window.showToast('هذه المعاينة متاحة للمدير فقط', false);
+    if (!window.canViewPersonalKpi()) {
+        if (window.showToast) window.showToast('هذه الأداة غير متاحة لحسابك', false);
         return;
     }
     const modal = document.getElementById('kpiFixImagesModal');
     const list = document.getElementById('kpiFixImagesList');
     const sub = document.getElementById('kpiFixImagesSubtitle');
     if (!modal || !list) return;
+    repId = window.kpiResolvePersonalRepId(repId);
     window._kpiFixImagesRepId = repId;
     modal.classList.remove('hidden');
     list.innerHTML = '<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل المنتجات...</div></div>';
     try {
         const report = window._kpiLatestReport || await kpiBuildReport();
         const row = (report.rows || []).find((r) => r.repId === repId);
-        const repName = row ? row.name : repId;
+        const repName = window.isFieldRepUser()
+            ? String((window.currentUser && window.currentUser.name) || repId)
+            : (row ? row.name : repId);
         if (sub) sub.textContent = repName + ' • جاري التحميل...';
-        const all = await kpiFetchAllProducts();
+        const all = await kpiFetchProductsForScope(repName);
         const missing = all.filter((p) => kpiProductRepName(p) === repName && kpiProductNeedsRawImage(p));
+        window._kpiFixImageAllowedIds = new Set(missing.map((p) => p.id));
         if (sub) sub.textContent = repName + ' • ' + missing.length + ' منتج بدون صور';
         if (!missing.length) {
             list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>كل المنتجات لديها صور أو مُحررة بالفعل — لا شيء مطلوب</div></div>';
@@ -1458,7 +1538,16 @@ window.closeKpiFixImages = () => {
 };
 
 window.kpiUploadMissingImage = async (productId, input) => {
-    if (!window.canPreviewRepPersonalKpi()) return;
+    if (!window.canViewPersonalKpi()) return;
+    /* Reps may only upload to products inside their own scoped list. */
+    if (window.isFieldRepUser()) {
+        const allowed = window._kpiFixImageAllowedIds;
+        if (!(allowed instanceof Set) || !allowed.has(productId)) {
+            if (window.showToast) window.showToast('لا يمكنك تعديل هذا المنتج', false);
+            if (input) input.value = '';
+            return;
+        }
+    }
     const file = input && input.files && input.files[0];
     if (!file) return;
     if (!String(file.type || '').startsWith('image/')) {
@@ -1474,7 +1563,9 @@ window.kpiUploadMissingImage = async (productId, input) => {
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري الرفع...'; }
     try {
-        const all = await kpiFetchAllProducts();
+        const all = await kpiFetchProductsForScope(
+            String((window.currentUser && window.currentUser.name) || '')
+        );
         const product = all.find((p) => p.id === productId);
         /* Re-check the strict guard right before writing — never overwrite the editor. */
         if (!product || !kpiProductNeedsRawImage(product)) {
@@ -1515,35 +1606,66 @@ window.kpiUploadMissingImage = async (productId, input) => {
     }
 };
 
+/* Restrict a report to a single rep's own row before rendering it on their
+   personal screen. `totals` is preserved only for team-average comparisons;
+   the rep never receives any other rep's row. */
+const kpiScopeReportForRep = (report, repId) => {
+    const row = (report.rows || []).find((r) => r.repId === repId) || null;
+    return {
+        rows: row ? [row] : [],
+        totals: report.totals || {},
+        generatedAt: report.generatedAt || new Date()
+    };
+};
+
 window.renderKpiDashboard = async () => {
-    if (!window.canViewKpiDashboard()) {
+    const isRep = window.isFieldRepUser();
+    if (!window.canViewPersonalKpi()) {
         window.closeKpiDashboard();
         return;
     }
     const content = document.getElementById('kpiAnalyticsContent');
     if (!content) return;
+
+    /* Managers keep the preview toggle; reps get the live personal screen. */
     const canPreview = window.canPreviewRepPersonalKpi();
     if (!canPreview) window._kpiRepPreviewMode = false;
     const previewBtn = document.getElementById('kpiRepPreviewBtn');
     const previewLabel = document.getElementById('kpiRepPreviewBtnLabel');
-    if (previewBtn) previewBtn.classList.toggle('hidden', !canPreview);
+    if (previewBtn) previewBtn.classList.toggle('hidden', !canPreview || isRep);
     if (previewLabel) previewLabel.textContent = window._kpiRepPreviewMode ? 'العودة للتحليل الإداري' : 'معاينة شاشة المناديب';
+    const historicalBtn = document.getElementById('kpiHistoricalBtn');
+    if (historicalBtn) historicalBtn.classList.toggle('hidden', isRep);
+    const viewTitle = document.getElementById('kpiViewTitle');
+    if (viewTitle) viewTitle.textContent = isRep ? 'لوحة أدائي' : 'مركز تحليل الأداء والجودة';
+
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
     try {
         const report = await kpiBuildReport();
+        const stampEl = document.getElementById('kpiLastUpdated');
+        if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
+
+        /* Live rep view: strictly scoped to the logged-in rep's own row. */
+        if (isRep) {
+            const ownId = window.kpiResolvePersonalRepId('');
+            const ownReport = kpiScopeReportForRep(report, ownId);
+            window._kpiLatestReport = ownReport;
+            const ownRow = ownReport.rows[0] || null;
+            content.innerHTML =
+                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>`;
+            return;
+        }
+
         window._kpiLatestReport = report;
         if (!window._kpiSelectedRepId || !report.rows.some((r) => r.repId === window._kpiSelectedRepId)) {
             window._kpiSelectedRepId = report.rows.length ? report.rows[0].repId : null;
         }
-        const stampEl = document.getElementById('kpiLastUpdated');
-        if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
-
         const selectedRow = report.rows.find((r) => r.repId === window._kpiSelectedRepId) || null;
         const previewMode = window._kpiRepPreviewMode && canPreview;
         if (previewMode) {
             content.innerHTML =
                 kpiRepSelectorHtml(report) +
-                `<div id="kpiDeepDiveWrapper">${kpiPersonalPreviewHtml(report, selectedRow)}</div>`;
+                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(report, selectedRow, { liveMode: false })}</div>`;
         } else {
             content.innerHTML =
                 kpiGlobalSummaryHtml(report) +
@@ -1579,7 +1701,7 @@ window.selectKpiRep = (repId) => {
     const wrapper = document.getElementById('kpiDeepDiveWrapper');
     if (wrapper) {
         if (window._kpiRepPreviewMode && window.canPreviewRepPersonalKpi()) {
-            wrapper.innerHTML = kpiPersonalPreviewHtml(report, row);
+            wrapper.innerHTML = kpiPersonalPanelHtml(report, row, { liveMode: false });
         } else {
             wrapper.innerHTML = kpiDeepDiveHtml(row);
             requestAnimationFrame(() => kpiRenderChartsForRow(row));
@@ -1588,8 +1710,8 @@ window.selectKpiRep = (repId) => {
 };
 
 window.openKpiDashboard = async () => {
-    if (!window.canViewKpiDashboard()) {
-        if (window.showToast) window.showToast('لوحة المؤشرات متاحة للمؤسسين ومدير العمليات فقط', false);
+    if (!window.canViewPersonalKpi()) {
+        if (window.showToast) window.showToast('لوحة المؤشرات غير متاحة لحسابك', false);
         return;
     }
     const view = document.getElementById('kpiAnalyticsView');

@@ -168,10 +168,12 @@ function applyThemeAndShowDashboard() {
 
         const kpiNavBtnWrapper = document.getElementById('kpiNavBtnWrapper');
         if (kpiNavBtnWrapper) {
-            const canViewKpi = (typeof window.canViewKpiDashboard === 'function')
-                ? window.canViewKpiDashboard()
+            const canViewKpi = (typeof window.canViewPersonalKpi === 'function')
+                ? window.canViewPersonalKpi()
                 : false;
             kpiNavBtnWrapper.classList.toggle('hidden', !canViewKpi);
+            const kpiNavLabel = kpiNavBtnWrapper.querySelector('span');
+            if (kpiNavLabel) kpiNavLabel.textContent = isRep ? 'لوحة أدائي' : 'لوحة المؤشرات';
         }
 
         if (typeof window.kpiStartActiveTracker === 'function') {
@@ -180,6 +182,16 @@ function applyThemeAndShowDashboard() {
         
         if(canViewLive && window.setupAdvancedFilterElements) {
             window.setupAdvancedFilterElements();
+        }
+
+        /* Field reps land directly on their personalised performance screen,
+           which now serves as their native home view. */
+        if (isRep && !isDataEntry && typeof window.openKpiDashboard === 'function') {
+            afterAuthReady().then(() => {
+                if (window._kpiDashboardOpenedOnLogin) return;
+                window._kpiDashboardOpenedOnLogin = true;
+                window.openKpiDashboard();
+            });
         }
     }
     
