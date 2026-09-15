@@ -1769,6 +1769,16 @@
 
                     <div id="catalogRepLeaderboard" class="hidden"></div>
 
+                    <div id="catalogGlobalSearchWrap" class="relative">
+
+                        <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-[#230535]/50 text-sm pointer-events-none"></i>
+
+                        <input type="search" id="catalogGlobalSearchInput" oninput="onCatalogGlobalSearchInput(event)" placeholder="ابحث عن اسم مطعم، سوبر ماركت، أو اسم منتج/وجبة..." autocomplete="off" class="catalog-global-search w-full bg-white border-2 border-[#230535]/15 rounded-2xl pr-11 pl-11 py-3 text-sm font-bold text-[#230535] placeholder:text-slate-400 placeholder:font-bold outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10">
+
+                        <button type="button" id="catalogGlobalSearchClear" onclick="clearCatalogGlobalSearch()" class="hidden absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition" aria-label="مسح البحث"><i class="fa-solid fa-xmark text-xs"></i></button>
+
+                    </div>
+
                     <div id="catalogAllProductsView" class="space-y-3 min-h-[60vh]">
 
                         <div id="catalogAllProductsToolbar" class="hidden"></div>

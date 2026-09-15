@@ -1890,7 +1890,13 @@ window.toggleCatalogAllProductsWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogAllProductsOpen = willOpen;
-    if (willOpen) renderCatalogAllProductsList();
+    if (willOpen) {
+        const searchInput = document.getElementById('catalogGlobalSearchInput');
+        if (searchInput) searchInput.value = String(window._catalogSearchQuery || '');
+        const clearBtn = document.getElementById('catalogGlobalSearchClear');
+        if (clearBtn) clearBtn.classList.toggle('hidden', !String(window._catalogSearchQuery || '').trim());
+        renderCatalogAllProductsList();
+    }
 };
 
 const catalogMerchantLogoUrl = (merchantName) => {
@@ -2095,21 +2101,100 @@ window.toggleCatalogRepFilter = (encodedName) => {
     }
 };
 
+/* Global deep search for "جميع منتجات المناديب".
+   Matches (infix, Arabic-normalized) against merchant names AND product
+   names, then keeps every merchant that passes so the folder grid stays
+   coherent. Runs on the rep-scoped list, so it honors the active
+   Multi-Select Rep Filter automatically. */
+const catalogProductDisplayName = (p) => String(
+    (p && (p.name_ar || p.name_en || p.name)) || ''
+).trim();
+
+const catalogDeepSearchMerchantSet = (products, query) => {
+    const q = window.normalizeArabic(String(query || ''));
+    const passing = new Set();
+    if (!q) return passing;
+    (products || []).forEach((p) => {
+        const merchantName = catalogGroupMerchantKey(p);
+        if (passing.has(merchantName)) return;
+        const nameMatch = window.normalizeArabic(merchantName).includes(q);
+        const productMatch = window.normalizeArabic(catalogProductDisplayName(p)).includes(q);
+        if (nameMatch || productMatch) passing.add(merchantName);
+    });
+    return passing;
+};
+
+const catalogDeepSearchFilter = (products, query) => {
+    if (!String(query || '').trim()) return products;
+    const passing = catalogDeepSearchMerchantSet(products, query);
+    return (products || []).filter((p) => passing.has(catalogGroupMerchantKey(p)));
+};
+
+const catalogSearchNoResultsHtml = (query) => `<div class="col-span-full text-center py-10 text-slate-400 font-bold">
+    <i class="fa-solid fa-magnifying-glass text-3xl text-[#230535]/30 mb-3"></i>
+    <div class="text-base text-[#230535] font-black mb-1">لا توجد نتائج مطابقة</div>
+    <div class="text-xs">لم نعثر على تاجر أو منتج يطابق: <span class="text-[#E57723]">${catalogEscapeHtml(String(query || ''))}</span></div>
+    <button type="button" onclick="clearCatalogGlobalSearch()" class="mt-4 bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition inline-flex items-center gap-2">
+        <i class="fa-solid fa-xmark"></i> مسح البحث
+    </button>
+</div>`;
+
+let _catalogGlobalSearchTimer = null;
+window.onCatalogGlobalSearchInput = (event) => {
+    const input = event && event.target;
+    const value = input ? String(input.value || '') : '';
+    const clearBtn = document.getElementById('catalogGlobalSearchClear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !value);
+    if (_catalogGlobalSearchTimer) clearTimeout(_catalogGlobalSearchTimer);
+    _catalogGlobalSearchTimer = setTimeout(() => {
+        window._catalogSearchQuery = value;
+        /* A merchant detail view would hide the filtered folders, so snap
+           back to the folder grid while a query is active. */
+        if (value.trim()) window._catalogAllProductsSelectedMerchant = '';
+        renderCatalogAllProductsList();
+    }, 300);
+};
+
+window.clearCatalogGlobalSearch = () => {
+    if (_catalogGlobalSearchTimer) {
+        clearTimeout(_catalogGlobalSearchTimer);
+        _catalogGlobalSearchTimer = null;
+    }
+    window._catalogSearchQuery = '';
+    const input = document.getElementById('catalogGlobalSearchInput');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('catalogGlobalSearchClear');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    renderCatalogAllProductsList();
+};
+
 const renderCatalogAllProductsList = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
     const allProducts = window.allCatalogProductsCache || [];
     const selectedRep = String(window._catalogSelectedRep || '');
-    const products = selectedRep
+    const repProducts = selectedRep
         ? allProducts.filter((p) => catalogRepDisplayName(p) === selectedRep)
         : allProducts;
+    const searchQuery = String(window._catalogSearchQuery || '').trim();
+    const products = catalogDeepSearchFilter(repProducts, searchQuery);
     if (countEl) countEl.textContent = String(products.length);
     window.renderCatalogRepLeaderboard(allProducts);
     if (!list) return;
     if (!products.length) {
         if (toolbar) {
-            if (selectedRep) {
+            if (selectedRep && searchQuery) {
+                toolbar.classList.remove('hidden');
+                toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
+                <button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#E57723] text-white px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <i class="fa-solid fa-xmark"></i> إلغاء تصفية المندوب
+                </button>
+                <div class="min-w-0 text-center flex-1">
+                    <div class="font-black text-sm text-[#230535] truncate"><i class="fa-solid fa-filter text-[#E57723]"></i> نطاق البحث: ${catalogEscapeHtml(selectedRep)}</div>
+                </div>
+            </div>`;
+            } else if (selectedRep) {
                 toolbar.classList.remove('hidden');
                 toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
                 <button type="button" onclick="toggleCatalogRepFilter('${encodeURIComponent(selectedRep).replace(/'/g, '%27')}')" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
@@ -2125,7 +2210,7 @@ const renderCatalogAllProductsList = () => {
             }
         }
         list.className = 'catalog-card-grid';
-        list.innerHTML = catalogAllProductsEmptyHtml;
+        list.innerHTML = searchQuery ? catalogSearchNoResultsHtml(searchQuery) : catalogAllProductsEmptyHtml;
         return;
     }
     const groups = groupCatalogProductsByMerchant(products);
@@ -2162,6 +2247,19 @@ const renderCatalogAllProductsList = () => {
                 </button>
                 <div class="min-w-0 text-center flex-1">
                     <div class="font-black text-sm text-[#230535] truncate"><i class="fa-solid fa-filter text-[#E57723]"></i> منتجات المندوب: ${catalogEscapeHtml(selectedRep)}</div>
+                    <div class="text-[10px] font-bold text-slate-500">${searchQuery ? `نتائج البحث عن «${catalogEscapeHtml(searchQuery)}» — ` : ''}${products.length} منتج — ${groups.length} تاجر</div>
+                </div>
+            </div>`;
+        }
+    } else if (searchQuery) {
+        if (toolbar) {
+            toolbar.classList.remove('hidden');
+            toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
+                <button type="button" onclick="clearCatalogGlobalSearch()" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-2">
+                    <i class="fa-solid fa-xmark"></i> مسح البحث
+                </button>
+                <div class="min-w-0 text-center flex-1">
+                    <div class="font-black text-sm text-[#230535] truncate"><i class="fa-solid fa-magnifying-glass text-[#E57723]"></i> نتائج البحث: ${catalogEscapeHtml(searchQuery)}</div>
                     <div class="text-[10px] font-bold text-slate-500">${products.length} منتج — ${groups.length} تاجر</div>
                 </div>
             </div>`;
