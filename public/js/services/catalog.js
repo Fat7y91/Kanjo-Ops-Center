@@ -518,35 +518,168 @@ const catalogProductLightboxUrl = (p) => {
 };
 
 const catalogClickableThumbHtml = (p, opts) => {
+    const pid = catalogEscapeHtml((p && p.id) || '');
     const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
     const full = catalogEscapeHtml(catalogProductLightboxUrl(p));
     const imgClass = (opts && opts.imgClass) || 'w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer';
-    const boxClass = (opts && opts.boxClass) || 'w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0';
+    const boxClass = (opts && opts.boxClass) || 'w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0 cursor-pointer';
+    const click = pid
+        ? `onclick="event.stopPropagation();openCatalogProductLightbox('${pid}')"`
+        : `onclick="event.stopPropagation();openImageLightbox(this)"`;
     if (!thumb || !full) {
-        return `<div class="${boxClass}"><i class="fa-regular fa-image"></i></div>`;
+        return `<div class="${boxClass}" ${click} title="عرض الصورة" role="button"><i class="fa-regular fa-image"></i></div>`;
     }
-    return `<img src="${thumb}" data-full-img="${full}" alt="" loading="lazy" class="${imgClass}" onclick="event.stopPropagation();openImageLightbox(this)" onerror="this.style.display='none'">`;
+    return `<img src="${thumb}" data-full-img="${full}" alt="" loading="lazy" class="${imgClass}" ${click} title="عرض الصورة بالحجم الكامل" onerror="this.style.display='none'">`;
+};
+
+/* Open the shared lightbox for a specific product, resolving its full-resolution
+   image from the live caches. When the product has no image, the lightbox shows
+   a friendly empty-state message instead. */
+window.openCatalogProductLightbox = (productId) => {
+    const product = findCatalogProductById(productId);
+    window.openImageViewer(product ? catalogProductLightboxUrl(product) : '');
 };
 
 window.openImageLightbox = (el) => {
     if (el && typeof el.stopPropagation === 'function') el.stopPropagation();
     const node = (el && el.getAttribute) ? el : null;
     const url = node ? String(node.getAttribute('data-full-img') || '').trim() : '';
-    if (!url) return;
+    window.openImageViewer(url);
+};
+
+window.openImageViewer = (url) => {
     const overlay = document.getElementById('imageLightbox');
     const img = document.getElementById('imageLightboxImg');
+    const empty = document.getElementById('imageLightboxEmpty');
     if (!overlay || !img) return;
-    img.removeAttribute('hidden');
-    img.style.display = 'block';
-    img.src = url;
+    const src = String(url || '').trim();
+    if (!src) {
+        img.removeAttribute('src');
+        img.style.display = 'none';
+        if (empty) empty.classList.remove('hidden');
+    } else {
+        if (empty) empty.classList.add('hidden');
+        img.style.display = 'block';
+        img.src = src;
+    }
     overlay.classList.remove('hidden');
 };
 
 window.closeImageLightbox = () => {
     const overlay = document.getElementById('imageLightbox');
     const img = document.getElementById('imageLightboxImg');
+    const empty = document.getElementById('imageLightboxEmpty');
     if (overlay) overlay.classList.add('hidden');
-    if (img) img.src = '';
+    if (img) { img.style.display = 'none'; img.src = ''; }
+    if (empty) empty.classList.add('hidden');
+};
+
+/* ─────────── Product details modal (admin/manager audit) ───────────
+   Surfaces the fields management needs to spot bad data entry: the exact
+   name, base price, the full raw description (highlighted), every variation
+   with its price/barcode, and who added it. */
+const catalogProductDetailsHtml = (p) => {
+    const name = catalogEscapeHtml(p.name_ar || p.name_en || p.name || 'بدون اسم');
+    const nameEn = p.name_en ? catalogEscapeHtml(p.name_en) : '';
+    const price = p.base_price == null || p.base_price === '' ? '—' : catalogEscapeHtml(p.base_price);
+    const desc = String(p.description_ar || p.description_en || p.description || '').trim();
+    const descHtml = desc
+        ? `<div class="whitespace-pre-wrap break-words">${catalogEscapeHtml(desc)}</div>`
+        : '<span class="text-slate-400 font-bold">لا يوجد وصف لهذا المنتج</span>';
+    const sku = catalogEscapeHtml(p.sku || p.barcode || '');
+    const category = catalogEscapeHtml(p.category || '');
+    const rep = catalogEscapeHtml(catalogRepDisplayName(p));
+    const variations = (Array.isArray(p.variations) ? p.variations : [])
+        .filter((v) => v && String(v.name || '').trim());
+    const varsHtml = variations.length
+        ? `<div class="overflow-x-auto rounded-xl border border-[#230535]/10">
+                <table class="w-full text-right text-[12px] border-collapse">
+                    <thead class="bg-[#230535] text-[#FFD700]">
+                        <tr>
+                            <th class="px-3 py-2 font-black">#</th>
+                            <th class="px-3 py-2 font-black">اسم الخيار</th>
+                            <th class="px-3 py-2 font-black">السعر</th>
+                            <th class="px-3 py-2 font-black">الباركود</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white">
+                        ${variations.map((v, i) => {
+                            const vname = catalogEscapeHtml(v.name);
+                            const vprice = v.price == null || v.price === '' ? '—' : catalogEscapeHtml(v.price);
+                            const vbarcode = catalogEscapeHtml(v.barcode || v.sku || '—');
+                            return `<tr class="${i % 2 ? 'bg-purple-50/50' : ''} border-t border-[#230535]/5">
+                                <td class="px-3 py-2 font-bold text-slate-400">${i + 1}</td>
+                                <td class="px-3 py-2 font-black text-[#230535]">${vname}</td>
+                                <td class="px-3 py-2 font-black text-[#E57723] whitespace-nowrap">${vprice} ج.م</td>
+                                <td class="px-3 py-2 font-bold text-slate-500">${vbarcode}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`
+        : '<div class="text-slate-400 font-bold text-[12px] bg-slate-50 border border-dashed border-[#230535]/15 rounded-xl px-3 py-3">منتج بسيط بدون متغيرات</div>';
+
+    return `
+    <div class="rounded-2xl border border-[#230535]/10 bg-slate-50 p-3">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <div class="font-black text-base text-[#230535] break-words">${name}</div>
+                ${nameEn ? `<div class="text-[11px] font-bold text-slate-400 mt-0.5">${nameEn}</div>` : ''}
+                ${(category || sku) ? `<div class="flex flex-wrap gap-1.5 mt-2">
+                    ${category ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full">${category}</span>` : ''}
+                    ${sku ? `<span class="text-[10px] font-black bg-[#6D28D9]/10 text-[#6D28D9] px-2 py-0.5 rounded-full">SKU: ${sku}</span>` : ''}
+                </div>` : ''}
+            </div>
+            <div class="shrink-0 text-center bg-white border border-[#FFD700]/60 rounded-2xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-400">السعر الأساسي</div>
+                <div class="font-black text-lg text-[#E57723]">${price} ج.م</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border-2 border-[#FFD700]/70 bg-[#FFD700]/10 p-3">
+        <div class="text-[11px] font-black text-[#230535] mb-1.5 flex items-center gap-1.5"><i class="fa-solid fa-align-right"></i> الوصف الكامل</div>
+        <div class="text-[12px] font-bold text-[#230535] leading-relaxed">${descHtml}</div>
+    </div>
+
+    <div>
+        <div class="text-[11px] font-black text-[#230535] mb-1.5 flex items-center gap-1.5"><i class="fa-solid fa-list"></i> المتغيرات (${variations.length})</div>
+        ${varsHtml}
+    </div>
+
+    <div class="rounded-2xl bg-[#230535] text-white p-3 flex items-center justify-between gap-2">
+        <div class="text-[11px] font-black text-white/70 flex items-center gap-1.5"><i class="fa-solid fa-user-pen"></i> أضافه</div>
+        <div class="font-black text-sm text-[#FFD700] truncate">${rep}</div>
+    </div>`;
+};
+
+window.openCatalogProductDetails = (productId) => {
+    const product = findCatalogProductById(productId);
+    if (!product) {
+        if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
+        return;
+    }
+    const modal = document.getElementById('catalogProductDetailsModal');
+    const card = document.getElementById('catalogProductDetailsCard');
+    const body = document.getElementById('catalogProductDetailsBody');
+    if (!modal || !card || !body) return;
+    if (window._catalogDetailsHideTimer) { clearTimeout(window._catalogDetailsHideTimer); window._catalogDetailsHideTimer = null; }
+    body.innerHTML = catalogProductDetailsHtml(product);
+    if (card) card.scrollTop = 0;
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => card.classList.remove('opacity-0', 'scale-95'));
+};
+
+window.closeCatalogProductDetails = () => {
+    const modal = document.getElementById('catalogProductDetailsModal');
+    const card = document.getElementById('catalogProductDetailsCard');
+    if (!modal) return;
+    if (card) card.classList.add('opacity-0', 'scale-95');
+    if (window._catalogDetailsHideTimer) clearTimeout(window._catalogDetailsHideTimer);
+    window._catalogDetailsHideTimer = setTimeout(() => {
+        modal.classList.add('hidden');
+        window._catalogDetailsHideTimer = null;
+    }, 180);
 };
 
 const hideCatalogSavedImages = () => {
@@ -1943,6 +2076,7 @@ const renderCatalogMerchantFolderCard = (group) => {
 };
 
 const renderCatalogAllProductCard = (p) => {
+    const pid = catalogEscapeHtml(p.id);
     const name = catalogEscapeHtml(p.name_ar || 'بدون اسم');
     const price = catalogEscapeHtml(p.base_price == null ? '' : p.base_price);
     const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
@@ -1950,11 +2084,11 @@ const renderCatalogAllProductCard = (p) => {
     const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#E57723]/15 text-[#E57723]';
     const thumbHtml = catalogClickableThumbHtml(p, {
         imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100',
-        boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60'
+        boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer'
     });
     return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
         ${thumbHtml}
-        <div class="font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem]">${name}</div>
+        <button type="button" onclick="openCatalogProductDetails('${pid}')" title="عرض التفاصيل الكاملة" class="block w-full text-right font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem] cursor-pointer transition-colors hover:text-[#E57723] hover:underline decoration-[#FFD700] underline-offset-2">${name}</button>
         <div class="flex flex-wrap gap-1.5">
             <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
             <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
@@ -3881,6 +4015,11 @@ window.addEventListener('keydown', (ev) => {
     const lightbox = document.getElementById('imageLightbox');
     if (ev.key === 'Escape' && lightbox && !lightbox.classList.contains('hidden')) {
         window.closeImageLightbox();
+        return;
+    }
+    const detailsModal = document.getElementById('catalogProductDetailsModal');
+    if (ev.key === 'Escape' && detailsModal && !detailsModal.classList.contains('hidden')) {
+        window.closeCatalogProductDetails();
         return;
     }
     const searchModal = document.getElementById('masterCatalogSearchModal');
