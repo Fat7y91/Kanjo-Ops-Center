@@ -521,8 +521,8 @@ const catalogClickableThumbHtml = (p, opts) => {
     const pid = catalogEscapeHtml((p && p.id) || '');
     const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
     const full = catalogEscapeHtml(catalogProductLightboxUrl(p));
-    const imgClass = (opts && opts.imgClass) || 'w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer';
-    const boxClass = (opts && opts.boxClass) || 'w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0 cursor-pointer';
+    const imgClass = (opts && opts.imgClass) || 'w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0 cursor-pointer transition-opacity duration-200 hover:opacity-75';
+    const boxClass = (opts && opts.boxClass) || 'w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0 cursor-pointer transition-opacity duration-200 hover:opacity-75';
     const click = pid
         ? `onclick="event.stopPropagation();openCatalogProductLightbox('${pid}')"`
         : `onclick="event.stopPropagation();openImageLightbox(this)"`;
@@ -2083,8 +2083,8 @@ const renderCatalogAllProductCard = (p) => {
     const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
     const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#E57723]/15 text-[#E57723]';
     const thumbHtml = catalogClickableThumbHtml(p, {
-        imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100',
-        boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer'
+        imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100 transition-opacity duration-200 hover:opacity-75',
+        boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer transition-opacity duration-200 hover:opacity-75'
     });
     return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
         ${thumbHtml}
