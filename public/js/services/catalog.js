@@ -102,13 +102,6 @@ const catalogDriveThumbnailUrl = (fileIdOrUrl) => {
 
 const catalogMerchantDomId = (name) => 'm-' + encodeURIComponent(String(name || 'unknown')).replace(/[^a-zA-Z0-9]/g, '_');
 
-const fileToBase64 = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
-    reader.readAsDataURL(file);
-});
-
 const compressImage = (file, maxDimension = 1000, quality = 0.7) => new Promise((resolve, reject) => {
     if (!file) {
         reject(new Error('NO_FILE'));
@@ -149,17 +142,78 @@ const compressImage = (file, maxDimension = 1000, quality = 0.7) => new Promise(
     reader.readAsDataURL(file);
 });
 
+/* Always compress before uploading. We deliberately DO NOT fall back to sending
+   the original raw file: uploading multi-megabyte base64 payloads is the #1 cause
+   of uploads dying midway on weak mobile connections. If the first pass fails
+   (low-memory canvas, HEIC quirks, decode failure) we retry with progressively
+   smaller dimensions/quality, and only then surface a clear error so the rep can
+   pick a smaller/standard JPEG instead of silently uploading a huge file. */
+const CATALOG_COMPRESS_TIERS = [
+    { maxDimension: 1000, quality: 0.70 },
+    { maxDimension: 800, quality: 0.60 },
+    { maxDimension: 640, quality: 0.50 }
+];
+
 const compressCatalogImage = async (file) => {
-    try {
-        return await compressImage(file, 1000, 0.7);
-    } catch (_) {
-        return fileToBase64(file);
+    if (!file) throw new Error('NO_FILE');
+    let lastErr = null;
+    for (let i = 0; i < CATALOG_COMPRESS_TIERS.length; i++) {
+        const tier = CATALOG_COMPRESS_TIERS[i];
+        try {
+            const result = await compressImage(file, tier.maxDimension, tier.quality);
+            if (result && String(result).indexOf('data:image') === 0) return result;
+            lastErr = new Error('COMPRESS_EMPTY');
+        } catch (err) {
+            lastErr = err;
+            console.warn('[catalog] compression attempt ' + (i + 1) + ' failed:', err && err.message ? err.message : err);
+        }
     }
+    throw lastErr || new Error('COMPRESS_FAILED');
 };
 
 const catalogJpegFileName = (name, fallback) => {
     const base = String(name || fallback || 'image').replace(/\.[^.]+$/, '');
     return (base || fallback || 'image') + '.jpg';
+};
+
+const CATALOG_UPLOAD_TIMEOUT_MS = 60000;
+const CATALOG_UPLOAD_MAX_ATTEMPTS = 3;
+const CATALOG_UPLOAD_BASE_BACKOFF_MS = 1000;
+
+const catalogUploadSleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+/* Single HTTP attempt with a hard timeout so a stalled connection can never hang
+   the whole "Sync All" batch. Returns { ok, result, status } or throws on a
+   retryable network/timeout error. */
+const catalogUploadAttempt = async (url, payload) => {
+    const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    let timedOut = false;
+    const timer = controller ? setTimeout(() => { timedOut = true; controller.abort(); }, CATALOG_UPLOAD_TIMEOUT_MS) : null;
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            redirect: 'follow',
+            body: payload,
+            signal: controller ? controller.signal : undefined
+        });
+        const text = await response.text();
+        let result = null;
+        try { result = JSON.parse(text); } catch (_) { result = null; }
+        return { ok: response.ok, status: response.status, result };
+    } catch (err) {
+        const wrapped = new Error(timedOut ? 'UPLOAD_TIMEOUT' : ((err && err.message) || 'UPLOAD_NETWORK_ERROR'));
+        wrapped.retryable = true;
+        wrapped.cause = err;
+        throw wrapped;
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+};
+
+const catalogUploadRetryDelay = (attempt) => {
+    const base = CATALOG_UPLOAD_BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+    const jitter = Math.floor(Math.random() * 400);
+    return base + jitter;
 };
 
 async function uploadCatalogImageToGas(base64Data, fileName, merchantName, imageType) {
@@ -175,23 +229,36 @@ async function uploadCatalogImageToGas(base64Data, fileName, merchantName, image
         fileContent: base64Content,
         mimeType: mimeType
     });
-    try {
-        const response = await fetch(GAS_URL, {
-            method: 'POST',
-            redirect: 'follow',
-            body: payload
-        });
-        const result = await response.json();
-        if (result.status === 'success') {
-            const directUrl = catalogDriveViewUrl(result.id || result.url);
-            if (directUrl) return directUrl;
-            throw new Error(result.message || 'GAS API Error');
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= CATALOG_UPLOAD_MAX_ATTEMPTS; attempt++) {
+        try {
+            const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
+            if (ok && result && result.status === 'success') {
+                const directUrl = catalogDriveViewUrl(result.id || result.url);
+                if (directUrl) return directUrl;
+                throw new Error(result.message || 'GAS API Error');
+            }
+            /* Retry only transient server-side failures; a 4xx (other than 429)
+               means the request itself is wrong, so fail fast. */
+            const retryable = status === 429 || status >= 500;
+            const httpErr = new Error((result && result.message) || ('GAS_HTTP_' + status));
+            if (!retryable) throw httpErr;
+            httpErr.retryable = true;
+            throw httpErr;
+        } catch (error) {
+            lastError = error;
+            const canRetry = !!error.retryable && attempt < CATALOG_UPLOAD_MAX_ATTEMPTS;
+            if (!canRetry) {
+                console.error('GAS Upload Failed (attempt ' + attempt + '):', error);
+                throw error;
+            }
+            const wait = catalogUploadRetryDelay(attempt);
+            console.warn('[catalog] upload attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
+            await catalogUploadSleep(wait);
         }
-        throw new Error(result.message || 'GAS API Error');
-    } catch (error) {
-        console.error('GAS Upload Failed:', error);
-        throw error;
     }
+    throw lastError || new Error('UPLOAD_FAILED');
 }
 
 /* Shared raw-image upload used by the manager KPI preview's "missing image"
@@ -2111,7 +2178,7 @@ window.openCatalogAllProductsMerchant = (encodedName, event) => {
     window._catalogMerchantNavLock = now;
 
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
-    transitionCatalogAllProductsView(() => renderCatalogAllProductsList());
+    transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
 window.backCatalogAllProductsMerchants = (event) => {
@@ -2120,7 +2187,7 @@ window.backCatalogAllProductsMerchants = (event) => {
         event.stopPropagation();
     }
     window._catalogAllProductsSelectedMerchant = '';
-    transitionCatalogAllProductsView(() => renderCatalogAllProductsList());
+    transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
 /* Fade the products view out, swap its DOM, then fade it back in using
@@ -2341,7 +2408,7 @@ window.clearCatalogGlobalSearch = () => {
     renderCatalogAllProductsList();
 };
 
-const renderCatalogAllProductsList = () => {
+const renderCatalogAllProductsListNow = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
@@ -2453,6 +2520,10 @@ const renderCatalogAllProductsList = () => {
     list.innerHTML = groups.map(renderCatalogMerchantFolderCard).join('');
 };
 
+/* Snapshot-driven callers use the coalesced version (at most one rebuild per
+   animation frame); explicit UI actions call Now() directly for instant feedback. */
+const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAllProductsListNow);
+
 window.renderCatalogAllProductsWidget = () => {
     const widget = document.getElementById('catalogAllProductsWidget');
     if (!widget) return;
@@ -2460,8 +2531,9 @@ window.renderCatalogAllProductsWidget = () => {
     widget.classList.toggle('hidden', !canView);
     const countEl = document.getElementById('catalogAllProductsCount');
     if (countEl) countEl.textContent = String((window.allCatalogProductsCache || []).length);
-    window.renderCatalogRepLeaderboard(window.allCatalogProductsCache || []);
     const body = document.getElementById('catalogAllProductsBody');
+    /* The leaderboard is rendered inside renderCatalogAllProductsListNow(), so we
+       no longer render it twice per widget refresh. */
     if (canView && body && !body.classList.contains('hidden')) renderCatalogAllProductsList();
 };
 
@@ -2658,26 +2730,34 @@ const catalogEnhanceTargetCount = (product) => {
     return rawCount > 0 ? rawCount : 1;
 };
 
-const syncOneCatalogDraft = async (draft) => {
+const syncOneCatalogDraft = async (draft, persistProgress) => {
     const nameAr = String((draft && draft.name_ar) || '').trim();
     const descriptionAr = String((draft && draft.description_ar) || '').trim();
-    await delay(1500);
-    const nameEn = await translateArToEn(nameAr);
-    await delay(1500);
-    const descriptionEn = await translateArToEn(descriptionAr);
+    /* Translate name + description concurrently (previously two serialized calls
+       separated by fixed 1.5s sleeps, which made bulk sync needlessly slow). */
+    const [nameEn, descriptionEn] = await Promise.all([
+        translateArToEn(nameAr),
+        translateArToEn(descriptionAr)
+    ]);
     const images = Array.isArray(draft && draft.images) ? draft.images : [];
-    const rawImageUrls = [];
+    /* Resume support: every successful upload is written back onto the draft
+       (rawImageUrls[i] / variation.uploadedImageUrl) and persisted, so a retry
+       after a mid-way failure only uploads the images that are still missing. */
+    if (!Array.isArray(draft.rawImageUrls)) draft.rawImageUrls = [];
     for (let i = 0; i < images.length; i++) {
         const img = images[i] || {};
         if (!img.base64) continue;
+        if (draft.rawImageUrls[i]) continue;
         const uploadedUrl = await uploadCatalogImageToGas(
             img.base64,
             img.fileName || catalogJpegFileName('', 'product-raw-' + (i + 1)),
             (draft && draft.merchantName) || 'Unknown',
             'raw'
         );
-        rawImageUrls.push(uploadedUrl);
+        draft.rawImageUrls[i] = uploadedUrl;
+        if (typeof persistProgress === 'function') await persistProgress();
     }
+    const rawImageUrls = images.map((_, i) => draft.rawImageUrls[i]).filter(Boolean);
     const payload = {
         merchantId: draft.merchantId,
         merchantName: draft.merchantName,
@@ -2700,15 +2780,20 @@ const syncOneCatalogDraft = async (draft) => {
     };
     if (draft.product_type === 'variable' && Array.isArray(draft.variations)) {
         const variantPayload = [];
-        for (const v of draft.variations) {
+        for (let j = 0; j < draft.variations.length; j++) {
+            const v = draft.variations[j];
             let variantImageUrl = '';
-            if (v && v.imageBase64) {
+            if (v && v.uploadedImageUrl) {
+                variantImageUrl = v.uploadedImageUrl;
+            } else if (v && v.imageBase64) {
                 variantImageUrl = await uploadCatalogImageToGas(
                     v.imageBase64,
                     v.imageFileName || catalogJpegFileName('', 'variant'),
                     draft.merchantName || 'Unknown',
                     'variant'
                 );
+                v.uploadedImageUrl = variantImageUrl;
+                if (typeof persistProgress === 'function') await persistProgress();
             } else if (v && v.image_url) {
                 variantImageUrl = v.image_url;
             }
@@ -2746,17 +2831,21 @@ window.syncAllCatalogDrafts = async () => {
     const remaining = [];
     let uploaded = 0;
     try {
-        let done = 0;
-        for (const draft of drafts) {
+        for (let done = 0; done < drafts.length; done++) {
             setSyncLabel(done, drafts.length);
+            const draft = drafts[done];
+            /* Persist every not-yet-completed draft (failed ones already collected
+               in `remaining`, plus the current draft with its in-progress image
+               URLs and every pending draft after it) after each uploaded image,
+               so progress survives a failure OR a reload. */
+            const persistProgress = () => writeCatalogDrafts(remaining.concat(drafts.slice(done)));
             try {
-                await syncOneCatalogDraft(draft);
+                await syncOneCatalogDraft(draft, persistProgress);
                 uploaded++;
             } catch (err) {
                 console.error('[catalog] draft sync failed:', err);
                 remaining.push(draft);
             }
-            done++;
         }
         await writeCatalogDrafts(remaining);
         if (remaining.length === 0) {

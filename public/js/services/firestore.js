@@ -767,11 +767,22 @@ function rerenderDashboard() {
 const loadMoreTasks = () => {};
 window.loadMoreTasks = loadMoreTasks;
 
-// الاستماع الحي الكامل والصريح بدون أي قيود لجلب جميع المستندات والعقود
+// الاستماع الحي للمهام — مُقيَّد بفريق المندوب + حد أقصى لتفادي تحميل المجموعة كاملة
 window.listenToTasks = () => {
-    const tasksCol = collection(db, "tasks");
-    
-    onSnapshot(tasksCol, (snapshot) => {
+    if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') return;
+    if (window._tasksListenerStarted) return;
+    window._tasksListenerStarted = true;
+
+    /* Scope the previously-unfiltered tasks listener. A field rep only needs
+       their own team's tasks, and the generous limit stops low-end devices from
+       downloading the entire multi-city dataset and re-rendering it on every
+       single task write (the main cause of the dashboard lag). */
+    const repTeam = (currentUser && currentUser.role === 'rep' && currentUser.team) ? currentUser.team : null;
+    const tasksQuery = repTeam
+        ? query(collection(db, "tasks"), where("team", "==", repTeam), limit(3000))
+        : query(collection(db, "tasks"), limit(6000));
+
+    const unsub = onSnapshot(tasksQuery, (snapshot) => {
         window.tasksMemory.clear();
         snapshot.forEach((docSnap) => {
             window.tasksMemory.set(docSnap.id, docSnap.data());
@@ -813,6 +824,9 @@ window.listenToTasks = () => {
             showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
         }
     });
+
+    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+    window._appListenerUnsubscribers.push(unsub);
 };
 
 function updateQuickLinksWalletCounter() {

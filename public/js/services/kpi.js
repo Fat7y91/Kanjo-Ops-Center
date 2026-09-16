@@ -176,11 +176,24 @@ window._kpiLastActivity = Date.now();
 window._kpiIdle = false;
 window._kpiTrackerStarted = false;
 
+/* localStorage writes are synchronous and block the main thread, so we no longer
+   write on every 1s tick. The in-memory counter updates every second, but it is
+   persisted at most once per 30s (plus explicitly on tab hide / unload). */
+const KPI_PERSIST_INTERVAL_MS = 30000;
+window._kpiLastPersistAt = Date.now();
+
 const kpiPersistActive = () => {
     const today = kpiLocalDateKey();
     const store = kpiReadActiveStore();
     if (store.date !== today) window._kpiActiveSeconds = 0;
     kpiWriteActiveStore({ date: today, seconds: Math.max(0, Number(window._kpiActiveSeconds) || 0) });
+    window._kpiLastPersistAt = Date.now();
+};
+
+const kpiMaybePersistActive = () => {
+    if ((Date.now() - (Number(window._kpiLastPersistAt) || 0)) >= KPI_PERSIST_INTERVAL_MS) {
+        kpiPersistActive();
+    }
 };
 
 const kpiMarkActivity = () => {
@@ -225,10 +238,16 @@ window.kpiStartActiveTracker = () => {
     const events = ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'scroll', 'keydown', 'wheel', 'pointerdown'];
     events.forEach((ev) => window.addEventListener(ev, kpiMarkActivity, { passive: true }));
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) window.kpiSyncActiveTime();
+        if (document.hidden) {
+            kpiPersistActive();
+            window.kpiSyncActiveTime();
+        }
     });
     window.addEventListener('online', () => window.kpiSyncActiveTime());
-    window.addEventListener('beforeunload', kpiPersistActive);
+    window.addEventListener('beforeunload', () => {
+        kpiPersistActive();
+        window.kpiSyncActiveTime();
+    });
     window._kpiTickHandle = setInterval(() => {
         if (document.hidden) return;
         if ((Date.now() - window._kpiLastActivity) > KPI_IDLE_MS) {
@@ -236,7 +255,7 @@ window.kpiStartActiveTracker = () => {
             return;
         }
         window._kpiActiveSeconds += 1;
-        kpiPersistActive();
+        kpiMaybePersistActive();
         if (window._kpiActiveSeconds % 60 === 0) window.kpiSyncActiveTime();
     }, 1000);
     window.kpiSyncActiveTime();

@@ -316,7 +316,9 @@ window.renderFinancialProfilesTable = (profiles) => {
 };
 
 window.loadFinancialProfilesForAccounting = () => {
-    onSnapshot(collection(db, "financial_profiles"), (snap) => {
+    if (window._financialProfilesListenerStarted) return;
+    window._financialProfilesListenerStarted = true;
+    const unsub = onSnapshot(collection(db, "financial_profiles"), (snap) => {
         window.financialProfilesCache.clear();
         const profiles = [];
         snap.forEach(docSnap => {
@@ -325,7 +327,11 @@ window.loadFinancialProfilesForAccounting = () => {
             profiles.push(data);
         });
         window.renderFinancialProfilesTable(profiles);
+    }, (error) => {
+        console.error('[accounting] financial_profiles listener failed:', error);
     });
+    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+    window._appListenerUnsubscribers.push(unsub);
 };
 
 window.approveFinancialProfile = async (id) => {

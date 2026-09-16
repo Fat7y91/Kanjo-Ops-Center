@@ -16,6 +16,12 @@ let db;
 
 try {
     db = initializeFirestore(app, {
+        // Force HTTP long-polling instead of the default WebChannel/WebSocket
+        // transport. Many ISP/mobile/hotel Wi-Fi networks (and corporate proxies)
+        // silently block or break long-lived WebSocket streams, which used to leave
+        // the whole app stuck on the loading spinner while 4G worked fine. Long
+        // polling degrades gracefully over restrictive networks.
+        experimentalForceLongPolling: true,
         localCache: persistentLocalCache({
             // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
             // and passing both silently falls back to an in-memory cache that refetches

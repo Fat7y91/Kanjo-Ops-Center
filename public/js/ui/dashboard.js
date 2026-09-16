@@ -1418,7 +1418,7 @@ window.tasksGoToday = () => {
     window.tasksDateChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
 };
 
-window.renderDashboard = (snapshot) => {
+const renderDashboardNow = (snapshot) => {
 
     if (!snapshot) return;
 
@@ -2117,6 +2117,11 @@ window.renderDashboard = (snapshot) => {
     container.appendChild(fragment); 
 
 };
+
+/* Coalesce rapid Firestore-driven re-renders (unfiltered tasks + merchants +
+   transferRequests snapshots can all land in the same tick) into at most one
+   full dashboard rebuild per animation frame, so the main thread stays free. */
+window.renderDashboard = window.scheduleFrameRender(renderDashboardNow);
 
 function calculateTopPerformer(tasks) {
 

@@ -24,10 +24,33 @@ categories.sort().forEach(c => {
 
 /* Restore session — but ONLY after the Firebase auth baseline (anonymous sign-in)
    has resolved, so the strict Firestore rules never reject the first reads and the
-   UI never renders empty lists before data is fetched. There is NO artificial
-   timeout: the loading spinner (injected by dashboard.js) stays visible until the
-   first batch of Firestore data arrives and renderDashboard() replaces it. */
-window.authReady.then(() => {
+   UI never renders empty lists before data is fetched. The loading spinner
+   (injected by dashboard.js) stays visible until the first batch of Firestore
+   data arrives and renderDashboard() replaces it.
+
+   On restrictive Wi-Fi networks the anonymous sign-in handshake can hang for a
+   very long time; we race it against a deadline so the app always boots instead
+   of freezing on the spinner forever. Firestore reads may briefly fail until auth
+   lands, but the UI recovers as soon as the session is ready. */
+const AUTH_READY_TIMEOUT_MS = 8000;
+const authReadyWithTimeout = new Promise((resolve) => {
+    let settled = false;
+    const finish = (reason) => {
+        if (settled) return;
+        settled = true;
+        if (reason === 'timeout') {
+            console.warn('[boot] Firebase auth handshake timed out; restoring session optimistically.');
+            if (typeof window.showToast === 'function') {
+                window.showToast('الاتصال بالسيرفر بطيء، سيتم استئناف الجلسة عند توفّر الشبكة', false);
+            }
+        }
+        resolve(null);
+    };
+    Promise.resolve(window.authReady).then(() => finish('ready')).catch(() => finish('error'));
+    setTimeout(() => finish('timeout'), AUTH_READY_TIMEOUT_MS);
+});
+
+authReadyWithTimeout.then(() => {
     const savedUser = localStorage.getItem(SESSION_KEY);
     if (savedUser) {
         window.currentUser = JSON.parse(savedUser);

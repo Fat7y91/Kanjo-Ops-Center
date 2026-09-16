@@ -270,7 +270,30 @@ function applyThemeAndShowDashboard() {
     });
 }
 
+/* Detach every registered Firestore real-time listener. Without this the
+   `_appListenerUnsubscribers` registry was write-only, so listeners stayed
+   attached for the whole page lifetime. Call before logout / re-auth. */
+window.detachAppListeners = () => {
+    const subscribers = Array.isArray(window._appListenerUnsubscribers) ? window._appListenerUnsubscribers.slice() : [];
+    subscribers.forEach((unsub) => {
+        try {
+            if (typeof unsub === 'function') unsub();
+        } catch (err) {
+            console.error('[listeners] detach failed:', err);
+        }
+    });
+    window._appListenerUnsubscribers = [];
+    window._appListenersRegistered = false;
+    window._catalogListenerStarted = false;
+    window._tasksListenerStarted = false;
+    window._financialProfilesListenerStarted = false;
+};
+
 window.applyThemeAndShowDashboard = applyThemeAndShowDashboard;
-window.logout = () => { window.clearSession(); window.location.reload(); };
+window.logout = () => {
+    window.detachAppListeners();
+    window.clearSession();
+    window.location.reload();
+};
 
 export { SESSION_KEY, IDLE_TIMEOUT, resetIdleTimer, applyThemeAndShowDashboard, login };

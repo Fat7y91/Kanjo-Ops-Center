@@ -93,6 +93,32 @@ window.formatNotificationTime = (timestamp) => {
 
 window.normalizeArabic = (str) => str.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, '').toLowerCase();
 
+/* Coalesce a burst of render calls into at most one execution per animation
+   frame (or the next macrotask as a fallback). Multiple Firestore snapshots can
+   land in the same tick; running the (heavy) render synchronously for each one
+   blocks the main thread and makes the UI feel frozen. */
+window.scheduleFrameRender = (fn) => {
+    let scheduled = false;
+    let latestArgs = null;
+    return (...args) => {
+        latestArgs = args;
+        if (scheduled) return;
+        scheduled = true;
+        const run = () => {
+            scheduled = false;
+            const a = latestArgs;
+            latestArgs = null;
+            try {
+                fn.apply(null, a || []);
+            } catch (err) {
+                console.error('[render] scheduled render failed:', err);
+            }
+        };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+        else setTimeout(run, 16);
+    };
+};
+
 window.calculateComm = (target, achieved) => { 
 
     if (!target || !achieved) return ''; 
