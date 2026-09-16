@@ -3267,14 +3267,19 @@ const KANJO_VARIANT_ATTRIBUTE_DEFAULT = 'ID:2 | المقاس';
 const KANJO_VARIANT_ATTRIBUTE_MAP = {
     'الخيار': 'ID:2 | المقاس',
     'الحجم': 'ID:2 | المقاس',
+    'النوع': 'ID:2 | المقاس',
+    'نوع': 'ID:2 | المقاس',
     'size': 'ID:2 | المقاس'
 };
 
-/* Variants in the catalog carry only a free-text option name, so classify it as
-   a size when it looks like one — otherwise keep the neutral attribute label —
-   then map that local label to the strict Kanjo template value. */
+/* Variants in the catalog carry only a free-text option name, so first try an
+   explicit local label ("الحجم" / "الخيار" / "النوع" / "size"), then classify the
+   value as a size when it looks like one — and always return the strict Kanjo
+   template value the importer accepts. */
 const kanjoVariantAttributeName = (name) => {
     const normalized = normalizeArabic(name);
+    const explicitKey = Object.keys(KANJO_VARIANT_ATTRIBUTE_MAP).find((key) => normalizeArabic(key) === normalized);
+    if (explicitKey) return KANJO_VARIANT_ATTRIBUTE_MAP[explicitKey];
     const sizeWords = ['صغير', 'وسط', 'كبير', 'جامبو', 'عائلي', 'small', 'medium', 'large', 'xl', 'xxl'];
     const isSize = sizeWords.some((word) => {
         const w = normalizeArabic(word);
