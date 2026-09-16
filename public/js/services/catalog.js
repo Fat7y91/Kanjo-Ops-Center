@@ -812,12 +812,14 @@ const normalizeArabicSearchText = (value) => String(value || '')
     .trim();
 
 /* Standalone Arabic normalization helper used by the "Add Product" smart
-   autocomplete. Removes tashkeel/tatweel, unifies alef forms, normalizes
-   taa marbuta and alef maqsura so morphological variations collapse to the
-   same searchable string. */
+   autocomplete and the Kanjo category matcher. Removes tashkeel/tatweel,
+   unifies alef forms and hamza carriers, normalizes taa marbuta and alef
+   maqsura so morphological variations collapse to the same searchable string. */
 const normalizeArabic = (str) => String(str || '')
     .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
     .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ئ/g, 'ي')
+    .replace(/ؤ/g, 'و')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
     .toLowerCase()
@@ -3168,29 +3170,24 @@ const populateMerchantExportFilter = async () => {
 /* Official Kanjo product categories, exactly as the platform import template
    expects them (`ID:<id> | <name>`). */
 /* Official Kanjo product categories, exactly as the platform import template
-   expects them (`ID:<id> | <name>`). Ordered by ID; this order is also the final
-   tie-breaker when two categories match at the same position. */
+   expects them (`ID:<id> | <name>`). The order below is the canonical order and
+   the final tie-breaker when two categories match at the same position. */
 const KANJO_PRODUCT_CATEGORIES = [
-    { id: 4, name: 'بيتزا', keywords: ['بيتزا', 'بيتزه', 'pizza', 'cheese pizza'] },
-    { id: 5, name: 'برجر', keywords: ['برجر', 'برغر', 'همبرجر', 'هامبرجر', 'burger', 'burgers', 'cheese burger', 'cheeseburger', 'beef burger', 'chicken burger'] },
-    { id: 6, name: 'سي فود', keywords: ['سي فود', 'سيفود', 'جمبري', 'جمبرى', 'سمك', 'سمكه', 'سيلا', 'روبيان', 'كاليماري', 'فيش', 'sea food', 'seafood', 'see food', 'fish', 'shrimp'] },
-    { id: 7, name: 'بيض والبان', keywords: ['بيض والبان', 'بيض', 'لبن', 'زبادي', 'زبدة', 'زبده', 'حليب', 'البان', 'ألبان', 'جبن', 'جبنه', 'جبنة رومي', 'eggs', 'egg', 'dairy', 'milk', 'cheese'] },
-    { id: 8, name: 'مجمدات', keywords: ['مجمدات', 'مجمد', 'فريزر', 'بانيه مجمد', 'بانيه مجمده', 'freezer', 'freezers', 'frozen'] },
-    { id: 11, name: 'شاورما', keywords: ['شاورما', 'شاورمه', 'shawerma', 'shawarma'] },
-    { id: 12, name: 'حلويات', keywords: ['حلويات', 'كيك', 'كيكه', 'تشيز كيك', 'وافل', 'كريب حلو', 'تورتة', 'تورتا', 'بسبوسة', 'بسبوسه', 'كنافة', 'كنافه', 'بسكوت', 'جاتوه', 'sweets', 'sweet', 'cake', 'dessert'] },
-    { id: 13, name: 'مشويات', keywords: ['مشويات', 'مشوي', 'مشويه', 'كفتة', 'كفته', 'طرب', 'شيش', 'كباب', 'تكة', 'تكه', 'grilled', 'grill', 'kebab', 'kofta', 'barbeque', 'bbq'] },
-    { id: 14, name: 'فطار', keywords: ['فطار', 'افطار', 'إفطار', 'فول', 'طعمية', 'طعميه', 'جبنة', 'بيض', 'breakfast', 'ful', 'tameya'] },
-    { id: 15, name: 'فطائر', keywords: ['فطائر', 'فطاير', 'فطير', 'فطيرة', 'فطيره', 'pies', 'pie'] },
-    { id: 19, name: 'كريب', keywords: ['كريب', 'crepe', 'crepes'] },
-    { id: 20, name: 'فتة', keywords: ['فتة', 'فته', 'fattah', 'fatta'] },
-    { id: 21, name: 'وافل', keywords: ['وافل', 'waffle', 'waffles'] },
-    { id: 22, name: 'مشروبات ساخنة', keywords: ['مشروبات ساخنة', 'مشروبات ساخنه', 'مشروب ساخن', 'شاي', 'قهوة', 'قهوه', 'نسكافيه', 'كابتشينو', 'لاتيه', 'اسبريسو', 'hot drinks', 'hot drink', 'tea', 'coffee'] },
-    { id: 23, name: 'مشروبات باردة', keywords: ['مشروبات باردة', 'مشروبات بارده', 'مشروب بارد', 'مياه', 'كنز', 'عصير', 'بيبسي', 'كوكا', 'سموذي', 'فرابيه', 'cold drinks', 'cold drink', 'juice', 'soda', 'water'] },
-    { id: 24, name: 'فريد تشيكن', keywords: ['فرايد', 'فريد', 'تشيكن', 'كريسبي', 'ستربس', 'زنجبيل', 'فرايد تشيكن', 'fried chicken', 'fired chicken', 'crispy', 'strips', 'zinger'] },
-    { id: 25, name: 'فرايد تشيكن', keywords: ['فرايد', 'فريد', 'تشيكن', 'كريسبي', 'ستربس', 'زنجبيل', 'فرايد تشيكن', 'fried chicken', 'fired chicken', 'crispy', 'strips', 'zinger'] },
-    { id: 26, name: 'باستا', keywords: ['باستا', 'مكرونة', 'مكرونه', 'ليزانيا', 'لازانيا', 'نجرسكو', 'pasta', 'macaroni', 'macaroan', 'lasagna'] },
-    { id: 27, name: 'ساندويتش', keywords: ['ساندويتش', 'سندوتش', 'كبدة', 'كبده', 'سجق', 'بانيه', 'برجر لحم', 'برجر دجاج', 'برجر في عيش', 'sandwich', 'hotdog', 'hot dog', 'sausage'] },
-    { id: 28, name: 'لحوم', keywords: ['لحوم', 'لحمة', 'لحمه', 'ستيك', 'فاهيتا', 'meat', 'steak', 'fajita'] }
+    { id: 26, name: 'باستا', keywords: ['باستا', 'مكرونه', 'ليزانيا', 'نجرسكو', 'pasta'] },
+    { id: 24, name: 'بطاطس', keywords: ['بطاطس', 'شيبس', 'محمره', 'potato', 'fries'] },
+    { id: 4, name: 'بيتزا', keywords: ['بيتزا', 'پيتزا', 'pizza'] },
+    { id: 29, name: 'حواوشي', keywords: ['حواوشي', 'hawawshi'] },
+    { id: 27, name: 'ساندويتش', keywords: ['ساندويتش', 'سندوتش', 'ساندوتش', 'كبده', 'سجق', 'بانيه', 'sandwich'] },
+    { id: 25, name: 'فرايد تشيكن', keywords: ['فرايد', 'تشيكن', 'كريسبي', 'ستربس', 'زنجر', 'بروست', 'fried', 'chicken', 'crispy'] },
+    { id: 28, name: 'لحوم', keywords: ['لحوم', 'لحمه', 'ستيك', 'فاهيتا', 'كباب حله', 'meat', 'steak'] },
+    { id: 5, name: 'برجر', keywords: ['برجر', 'همبرجر', 'burger'] },
+    { id: 6, name: 'سي فود', keywords: ['سي فود', 'جمبري', 'سمك', 'سبيط', 'كابوريا', 'seafood', 'fish', 'shrimp'] },
+    { id: 13, name: 'مشويات', keywords: ['مشويات', 'كفته', 'طرب', 'شيش', 'كباب', 'نيفه', 'ريش', 'grilled', 'kofta'] },
+    { id: 11, name: 'شاورما', keywords: ['شاورما', 'شاورمه', 'shawerma'] },
+    { id: 14, name: 'فطار', keywords: ['فطار', 'فول', 'طعميه', 'جبنه', 'بيض', 'breakfast'] },
+    { id: 15, name: 'فطائر', keywords: ['فطائر', 'فطير', 'pies'] },
+    { id: 19, name: 'كريب', keywords: ['كريب', 'crepe'] },
+    { id: 20, name: 'فتة', keywords: ['فته', 'fattah'] }
 ];
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
@@ -3199,28 +3196,26 @@ const KANJO_CATEGORY_VALUES = KANJO_PRODUCT_CATEGORIES.map((cat) => kanjoCategor
 const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
 const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'price', 'stock', 'thumbnail_url', 'status'];
 
-/* Whole-word / phrase keyword hit. Naive substring matching produced false
-   positives (e.g. "أبيض" contains "بيض", "بالجبنة" contains "جبن"), so single
-   words are matched against normalized tokens (allowing the definite article),
-   while multi-word keywords are matched as phrases against the full name. */
-const kanjoCategoryKeywordHit = (keyword, haystack, tokens) => {
+/* Normalized substring hit. Both the keyword and the product name pass through
+   normalizeArabic first, so minor spelling differences (hamza/alef forms, taa
+   marbuta vs haa, alef maqsura vs yaa, tashkeel/tatweel) never break the match. */
+const kanjoCategoryKeywordHit = (keyword, haystack) => {
     const kw = normalizeArabic(keyword);
     if (!kw) return false;
-    if (kw.indexOf(' ') !== -1) return haystack.indexOf(kw) !== -1;
-    return tokens.some((token) => token === kw || token === ('ال' + kw) || (kw.length >= 4 && token.indexOf(kw) === 0));
+    return haystack.indexOf(kw) !== -1;
 };
 
 /* Match info for one category: the character position of its earliest matching
    keyword (the primary noun usually appears first) plus a `defining` flag that is
    true when a matched keyword IS the category name or a leading part of it (e.g.
-   "وافل" defines the Waffle category, "بيض" defines "بيض والبان"). This lets
-   same-word overlaps resolve to the owning category. */
-const kanjoCategoryMatchInfo = (cat, haystack, tokens) => {
+   "مشويات" defines the Grills category, "لحمه" leads "لحوم"). This lets
+   overlapping matches resolve to the category that owns the word. */
+const kanjoCategoryMatchInfo = (cat, haystack) => {
     const nameNorm = normalizeArabic(cat.name);
     let best = -1;
     let defining = false;
     cat.keywords.forEach((keyword) => {
-        if (!kanjoCategoryKeywordHit(keyword, haystack, tokens)) return;
+        if (!kanjoCategoryKeywordHit(keyword, haystack)) return;
         const kw = normalizeArabic(keyword);
         if (kw && (nameNorm === kw || nameNorm.indexOf(kw) === 0)) defining = true;
         const pos = haystack.indexOf(kw);
@@ -3244,11 +3239,10 @@ const kanjoMatchProductCategory = (product) => {
     const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
         .replace(/\s+/g, ' ')
         .trim();
-    const tokens = haystack ? haystack.split(' ') : [];
     const matches = [];
     if (haystack) {
         KANJO_PRODUCT_CATEGORIES.forEach((cat, order) => {
-            const info = kanjoCategoryMatchInfo(cat, haystack, tokens);
+            const info = kanjoCategoryMatchInfo(cat, haystack);
             if (info) matches.push({ cat, order, pos: info.pos, defining: info.defining ? 1 : 0 });
         });
     }
@@ -3308,7 +3302,7 @@ const kanjoSheetFromRows = (columns, rows) => (
 );
 
 const kanjoWriteWorkbook = (productRows, variantRows, fileName) => {
-    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('XLSX_MISSING');
+    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('مكتبة Excel غير محمّلة، أعد تحميل الصفحة');
     const wb = XLSX.utils.book_new();
     const wsProducts = kanjoSheetFromRows(KANJO_PRODUCTS_SHEET_COLUMNS, productRows);
     const wsVariants = kanjoSheetFromRows(KANJO_VARIANTS_SHEET_COLUMNS, variantRows);
@@ -3317,6 +3311,17 @@ const kanjoWriteWorkbook = (productRows, variantRows, fileName) => {
     XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
     XLSX.utils.book_append_sheet(wb, wsVariants, 'Variants');
     XLSX.writeFile(wb, fileName);
+};
+
+/* Failsafe for the whole export pipeline: never fail silently. Logs the full
+   error (with stack) and surfaces a clear message to the user. */
+const kanjoReportExportError = (err) => {
+    const error = err || new Error('UNKNOWN_EXPORT_ERROR');
+    console.error('[catalog] Kanjo Excel export failed:', error);
+    const message = (error && error.message) ? error.message : String(error);
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert('حدث خطأ أثناء التصدير: ' + message);
+    }
 };
 
 const kanjoFinalizeExport = (evaluations, selections, opts) => {
@@ -3337,8 +3342,7 @@ const kanjoFinalizeExport = (evaluations, selections, opts) => {
         kanjoWriteWorkbook(productRows, variantRows, fileName);
         if (window.showToast) window.showToast('تم تصدير ملف Excel (' + productRows.length + ' منتج، ' + variantRows.length + ' خيار) بنجاح');
     } catch (err) {
-        console.error('[catalog] Kanjo Excel write failed:', err);
-        if (window.showToast) window.showToast('فشل إنشاء ملف Excel', false);
+        kanjoReportExportError(err);
     }
 };
 
@@ -3444,8 +3448,7 @@ window.exportKanjoExcel = async (options) => {
         }
         kanjoFinalizeExport(evaluations, {}, opts);
     } catch (err) {
-        console.error('[catalog] Kanjo Excel export failed:', err);
-        if (window.showToast) window.showToast('فشل تصدير ملف Excel', false);
+        kanjoReportExportError(err);
     }
 };
 
