@@ -30,6 +30,21 @@ window.isCatalogContentUser = () => {
     return name.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
 };
 
+/* The Media Editor (يوسف). In the live users table his role is 'rep', so there is
+   no dedicated role string to rely on; we therefore prefer an explicit role when
+   one is ever added and otherwise fall back to the name/email identity that the
+   rest of the app already uses (isCatalogContentUser / kpiIsEditorName). */
+window.isCatalogMediaEditor = () => {
+    const u = window.currentUser;
+    if (!u) return false;
+    const role = String(u.role || '').toLowerCase();
+    if (role === 'editor' || role === 'media_editor' || role === 'content') return true;
+    if (typeof window.isCatalogContentUser === 'function' && window.isCatalogContentUser()) return true;
+    const name = String(u.name || '');
+    const email = String(u.email || '').toLowerCase();
+    return name.includes('يوسف') || email.includes('youssef') || email.includes('yousef');
+};
+
 window.isCatalogAdminUser = () => {
     const u = window.currentUser;
     if (!u) return false;
@@ -154,8 +169,64 @@ const CATALOG_COMPRESS_TIERS = [
     { maxDimension: 640, quality: 0.50 }
 ];
 
+/* The Media Editor's enhanced images must not be degraded by the field-rep ladder
+   above. We keep them near-original: at most 2000px on the long edge at 0.95
+   quality, and if the image is already inside that budget we pass it through
+   untouched so a second JPEG pass never eats into the quality. */
+const CATALOG_EDITOR_MAX_DIMENSION = 2000;
+const CATALOG_EDITOR_QUALITY = 0.95;
+const CATALOG_EDITOR_SKIP_BYTES = 2 * 1024 * 1024;
+
+const catalogFileToDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('FILE_READ_FAILED'));
+    reader.onload = () => {
+        const result = String(reader.result || '');
+        if (result.indexOf('data:image') === 0) resolve(result);
+        else reject(new Error('FILE_READ_EMPTY'));
+    };
+    reader.readAsDataURL(file);
+});
+
+const catalogReadImageDimensions = (file) => new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+        const size = { width: img.naturalWidth || img.width || 0, height: img.naturalHeight || img.height || 0 };
+        URL.revokeObjectURL(url);
+        resolve(size);
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('IMAGE_LOAD_FAILED'));
+    };
+    img.src = url;
+});
+
+const compressCatalogImageForEditor = async (file) => {
+    try {
+        const { width, height } = await catalogReadImageDimensions(file);
+        const withinBudget = width > 0 && height > 0
+            && width <= CATALOG_EDITOR_MAX_DIMENSION
+            && height <= CATALOG_EDITOR_MAX_DIMENSION;
+        const type = String(file.type || '').toLowerCase();
+        const passthroughSafe = type === 'image/jpeg' || type === 'image/jpg' || type === 'image/webp';
+        if (withinBudget && passthroughSafe && file.size <= CATALOG_EDITOR_SKIP_BYTES) {
+            return await catalogFileToDataUrl(file);
+        }
+    } catch (err) {
+        console.warn('[catalog] editor image probe failed, re-encoding instead:', err && err.message ? err.message : err);
+    }
+    const result = await compressImage(file, CATALOG_EDITOR_MAX_DIMENSION, CATALOG_EDITOR_QUALITY);
+    if (result && String(result).indexOf('data:image') === 0) return result;
+    throw new Error('COMPRESS_EMPTY');
+};
+
 const compressCatalogImage = async (file) => {
     if (!file) throw new Error('NO_FILE');
+    if (typeof window.isCatalogMediaEditor === 'function' && window.isCatalogMediaEditor()) {
+        return compressCatalogImageForEditor(file);
+    }
     let lastErr = null;
     for (let i = 0; i < CATALOG_COMPRESS_TIERS.length; i++) {
         const tier = CATALOG_COMPRESS_TIERS[i];
