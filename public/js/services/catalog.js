@@ -3167,22 +3167,30 @@ const populateMerchantExportFilter = async () => {
 
 /* Official Kanjo product categories, exactly as the platform import template
    expects them (`ID:<id> | <name>`). */
+/* Official Kanjo product categories, exactly as the platform import template
+   expects them (`ID:<id> | <name>`). Ordered by ID; this order is also the final
+   tie-breaker when two categories match at the same position. */
 const KANJO_PRODUCT_CATEGORIES = [
-    { id: 4, name: 'بيتزا', keywords: ['pizza', 'بيتزا', 'بيتزه'] },
-    { id: 5, name: 'برجر', keywords: ['burger', 'burgers', 'برجر', 'برغر', 'همبرجر', 'هامبرجر'] },
-    { id: 6, name: 'سي فود', keywords: ['sea food', 'seafood', 'see food', 'سي فود', 'سيفود', 'سمك', 'سمكه', 'جمبري', 'جمبرى', 'روبيان', 'كاليماري', 'فيش'] },
-    { id: 13, name: 'مشويات', keywords: ['grill', 'grilled', 'barbeque', 'bbq', 'مشويات', 'مشوي', 'مشويه', 'كفتة', 'كفته', 'كباب', 'تكة', 'تكه', 'شيش'] },
-    { id: 19, name: 'كريب', keywords: ['crepe', 'crepes', 'كريب'] },
-    { id: 11, name: 'شاورما', keywords: ['shawerma', 'shawarma', 'شاورما', 'شاورمه'] },
-    { id: 12, name: 'حلويات', keywords: ['sweets', 'sweet', 'dessert', 'حلويات', 'كيك', 'كيكه', 'تورتة', 'تورتا', 'بسبوسة', 'بسبوسه', 'كنافة', 'كنافه', 'بسكوت', 'جاتوه'] },
-    { id: 14, name: 'فطار', keywords: ['breakfast', 'فطار', 'افطار', 'إفطار', 'طعمية', 'طعميه', 'فول'] },
-    { id: 15, name: 'فطائر', keywords: ['pies', 'pie', 'فطائر', 'فطاير', 'فطيرة', 'فطيره'] },
-    { id: 20, name: 'فتة', keywords: ['fattah', 'fatta', 'فتة', 'فته'] },
-    { id: 21, name: 'وافل', keywords: ['waffle', 'waffles', 'وافل'] },
-    { id: 22, name: 'مشروبات ساخنة', keywords: ['hot drink', 'hot drinks', 'مشروبات ساخنة', 'مشروبات ساخنه', 'مشروب ساخن', 'قهوة', 'قهوه', 'شاي', 'كابتشينو', 'لاتيه', 'نسكافيه', 'اسبريسو'] },
-    { id: 23, name: 'مشروبات باردة', keywords: ['cold drink', 'cold drinks', 'مشروبات باردة', 'مشروبات بارده', 'مشروب بارد', 'عصير', 'سموذي', 'فرابيه'] },
-    { id: 8, name: 'مجمدات', keywords: ['freezer', 'freezers', 'frozen', 'مجمدات', 'مجمد', 'فريزر'] },
-    { id: 7, name: 'بيض والبان', keywords: ['eggs', 'egg', 'dairy', 'بيض والبان', 'بيض', 'البان', 'ألبان', 'حليب', 'لبن', 'جبن', 'جبنه', 'زبادي', 'زبدة', 'زبده'] }
+    { id: 4, name: 'بيتزا', keywords: ['بيتزا', 'بيتزه', 'pizza', 'cheese pizza'] },
+    { id: 5, name: 'برجر', keywords: ['برجر', 'برغر', 'همبرجر', 'هامبرجر', 'burger', 'burgers', 'cheese burger', 'cheeseburger', 'beef burger', 'chicken burger'] },
+    { id: 6, name: 'سي فود', keywords: ['سي فود', 'سيفود', 'جمبري', 'جمبرى', 'سمك', 'سمكه', 'سيلا', 'روبيان', 'كاليماري', 'فيش', 'sea food', 'seafood', 'see food', 'fish', 'shrimp'] },
+    { id: 7, name: 'بيض والبان', keywords: ['بيض والبان', 'بيض', 'لبن', 'زبادي', 'زبدة', 'زبده', 'حليب', 'البان', 'ألبان', 'جبن', 'جبنه', 'جبنة رومي', 'eggs', 'egg', 'dairy', 'milk', 'cheese'] },
+    { id: 8, name: 'مجمدات', keywords: ['مجمدات', 'مجمد', 'فريزر', 'بانيه مجمد', 'بانيه مجمده', 'freezer', 'freezers', 'frozen'] },
+    { id: 11, name: 'شاورما', keywords: ['شاورما', 'شاورمه', 'shawerma', 'shawarma'] },
+    { id: 12, name: 'حلويات', keywords: ['حلويات', 'كيك', 'كيكه', 'تشيز كيك', 'وافل', 'كريب حلو', 'تورتة', 'تورتا', 'بسبوسة', 'بسبوسه', 'كنافة', 'كنافه', 'بسكوت', 'جاتوه', 'sweets', 'sweet', 'cake', 'dessert'] },
+    { id: 13, name: 'مشويات', keywords: ['مشويات', 'مشوي', 'مشويه', 'كفتة', 'كفته', 'طرب', 'شيش', 'كباب', 'تكة', 'تكه', 'grilled', 'grill', 'kebab', 'kofta', 'barbeque', 'bbq'] },
+    { id: 14, name: 'فطار', keywords: ['فطار', 'افطار', 'إفطار', 'فول', 'طعمية', 'طعميه', 'جبنة', 'بيض', 'breakfast', 'ful', 'tameya'] },
+    { id: 15, name: 'فطائر', keywords: ['فطائر', 'فطاير', 'فطير', 'فطيرة', 'فطيره', 'pies', 'pie'] },
+    { id: 19, name: 'كريب', keywords: ['كريب', 'crepe', 'crepes'] },
+    { id: 20, name: 'فتة', keywords: ['فتة', 'فته', 'fattah', 'fatta'] },
+    { id: 21, name: 'وافل', keywords: ['وافل', 'waffle', 'waffles'] },
+    { id: 22, name: 'مشروبات ساخنة', keywords: ['مشروبات ساخنة', 'مشروبات ساخنه', 'مشروب ساخن', 'شاي', 'قهوة', 'قهوه', 'نسكافيه', 'كابتشينو', 'لاتيه', 'اسبريسو', 'hot drinks', 'hot drink', 'tea', 'coffee'] },
+    { id: 23, name: 'مشروبات باردة', keywords: ['مشروبات باردة', 'مشروبات بارده', 'مشروب بارد', 'مياه', 'كنز', 'عصير', 'بيبسي', 'كوكا', 'سموذي', 'فرابيه', 'cold drinks', 'cold drink', 'juice', 'soda', 'water'] },
+    { id: 24, name: 'فريد تشيكن', keywords: ['فرايد', 'فريد', 'تشيكن', 'كريسبي', 'ستربس', 'زنجبيل', 'فرايد تشيكن', 'fried chicken', 'fired chicken', 'crispy', 'strips', 'zinger'] },
+    { id: 25, name: 'فرايد تشيكن', keywords: ['فرايد', 'فريد', 'تشيكن', 'كريسبي', 'ستربس', 'زنجبيل', 'فرايد تشيكن', 'fried chicken', 'fired chicken', 'crispy', 'strips', 'zinger'] },
+    { id: 26, name: 'باستا', keywords: ['باستا', 'مكرونة', 'مكرونه', 'ليزانيا', 'لازانيا', 'نجرسكو', 'pasta', 'macaroni', 'macaroan', 'lasagna'] },
+    { id: 27, name: 'ساندويتش', keywords: ['ساندويتش', 'سندوتش', 'كبدة', 'كبده', 'سجق', 'بانيه', 'برجر لحم', 'برجر دجاج', 'برجر في عيش', 'sandwich', 'hotdog', 'hot dog', 'sausage'] },
+    { id: 28, name: 'لحوم', keywords: ['لحوم', 'لحمة', 'لحمه', 'ستيك', 'فاهيتا', 'meat', 'steak', 'fajita'] }
 ];
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
@@ -3199,28 +3207,35 @@ const kanjoCategoryKeywordHit = (keyword, haystack, tokens) => {
     const kw = normalizeArabic(keyword);
     if (!kw) return false;
     if (kw.indexOf(' ') !== -1) return haystack.indexOf(kw) !== -1;
-    return tokens.some((token) => token === kw || token === ('ال' + kw) || (kw.length >= 3 && token.indexOf(kw) === 0));
+    return tokens.some((token) => token === kw || token === ('ال' + kw) || (kw.length >= 4 && token.indexOf(kw) === 0));
 };
 
-/* Character position of a category's earliest matching keyword within the
-   normalized name. Used to pick the dominant category when a name matches
-   several — the primary noun usually appears first. */
-const kanjoCategoryMatchPosition = (cat, haystack, tokens) => {
+/* Match info for one category: the character position of its earliest matching
+   keyword (the primary noun usually appears first) plus a `defining` flag that is
+   true when a matched keyword IS the category name or a leading part of it (e.g.
+   "وافل" defines the Waffle category, "بيض" defines "بيض والبان"). This lets
+   same-word overlaps resolve to the owning category. */
+const kanjoCategoryMatchInfo = (cat, haystack, tokens) => {
+    const nameNorm = normalizeArabic(cat.name);
     let best = -1;
+    let defining = false;
     cat.keywords.forEach((keyword) => {
         if (!kanjoCategoryKeywordHit(keyword, haystack, tokens)) return;
-        const pos = haystack.indexOf(normalizeArabic(keyword));
+        const kw = normalizeArabic(keyword);
+        if (kw && (nameNorm === kw || nameNorm.indexOf(kw) === 0)) defining = true;
+        const pos = haystack.indexOf(kw);
         if (pos === -1) return;
         if (best === -1 || pos < best) best = pos;
     });
-    return best;
+    if (best === -1) return null;
+    return { pos: best, defining };
 };
 
 /* Confidence-based matcher. A product matching ONE OR MORE categories is
-   auto-resolved to the dominant match (the keyword appearing earliest in the
-   name: "بيتزا سي فود" -> Pizza, "كريب جمبري" -> Crepe) and passes through with
-   no manual review. Only names with ZERO matches are returned as `unmapped` and
-   routed to the audit modal. Returns:
+   auto-resolved to the dominant match (earliest keyword: "بيتزا سي فود" -> Pizza,
+   "كريب جمبري" -> Crepe) and passes through with no manual review. Only names
+   with ZERO matches are returned as `unmapped` and routed to the audit modal.
+   Returns:
    - { status: 'matched',  category, options }  1+ matches, auto-resolved
    - { status: 'unmapped', category: '' }       nothing matched, needs review */
 const kanjoMatchProductCategory = (product) => {
@@ -3232,20 +3247,19 @@ const kanjoMatchProductCategory = (product) => {
     const tokens = haystack ? haystack.split(' ') : [];
     const matches = [];
     if (haystack) {
-        KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
-            const pos = kanjoCategoryMatchPosition(cat, haystack, tokens);
-            if (pos !== -1) matches.push({ cat, pos });
+        KANJO_PRODUCT_CATEGORIES.forEach((cat, order) => {
+            const info = kanjoCategoryMatchInfo(cat, haystack, tokens);
+            if (info) matches.push({ cat, order, pos: info.pos, defining: info.defining ? 1 : 0 });
         });
     }
     if (matches.length) {
-        /* Earliest keyword wins; ties keep the canonical category order. */
-        let primary = matches[0];
-        for (let i = 1; i < matches.length; i++) {
-            if (matches[i].pos < primary.pos) primary = matches[i];
-        }
+        /* Earliest keyword wins; then the category that "owns" the word; then
+           the canonical (ID) order. */
+        matches.sort((a, b) => (a.pos - b.pos) || (b.defining - a.defining) || (a.order - b.order));
+        const primary = matches[0].cat;
         return {
             status: 'matched',
-            category: kanjoCategoryValue(primary.cat),
+            category: kanjoCategoryValue(primary),
             options: matches.map((match) => match.cat)
         };
     }
