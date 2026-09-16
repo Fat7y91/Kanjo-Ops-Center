@@ -3304,6 +3304,23 @@ const mapVariantToKanjo = (rawName, rawValue) => {
     return { name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value };
 };
 
+/* Sentinel + flat option list used by the variant conflict modal so the admin
+   can pick any valid Kanjo attribute (or delete an invalid variant). */
+const KANJO_VARIANT_DELETE = '__KANJO_DELETE_VARIANT__';
+const KANJO_VARIANT_ATTRIBUTE_OPTIONS = (() => {
+    const list = [];
+    const seen = new Set();
+    KANJO_VARIANT_RULES.forEach((rule) => {
+        if (seen.has(rule.value)) return;
+        seen.add(rule.value);
+        list.push({ name: rule.name, value: rule.value });
+    });
+    if (!seen.has(KANJO_VARIANT_FALLBACK.value)) {
+        list.push({ name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value });
+    }
+    return list;
+})();
+
 const kanjoBuildProductRow = (p, category) => {
     const row = mapCatalogProductToExportRow(p);
     row.category = category || '';
@@ -3315,31 +3332,131 @@ const kanjoBuildProductRow = (p, category) => {
     return row;
 };
 
+const kanjoBuildVariantRow = (p, v, index) => {
+    const mapped = mapVariantToKanjo(v && v.name, v && v.name);
+    return {
+        product_key: (p && p.id) || '',
+        variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
+        attribute_1_name: mapped.name,
+        attribute_1_value: mapped.value,
+        /* Kanjo expects the full attribute/branch column set even when unused. */
+        attribute_2_name: '',
+        attribute_2_value: '',
+        attribute_3_name: '',
+        attribute_3_value: '',
+        attribute_4_name: '',
+        attribute_4_value: '',
+        branch: '',
+        price: Number(v && v.price) || 0,
+        stock: Number(v && v.stock) || 0,
+        thumbnail_url: catalogDirectImageUrl((v && v.image_url) || '') || '',
+        status: 'active'
+    };
+};
+
 const kanjoBuildVariantRows = (p) => {
     const variations = Array.isArray(p && p.variations)
         ? p.variations.filter((v) => v && String(v.name || '').trim())
         : [];
-    return variations.map((v, index) => {
-        const mapped = mapVariantToKanjo(v.name, v.name);
-        return {
-            product_key: (p && p.id) || '',
-            variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
-            attribute_1_name: mapped.name,
-            attribute_1_value: mapped.value,
-            /* Kanjo expects the full attribute/branch column set even when unused. */
-            attribute_2_name: '',
-            attribute_2_value: '',
-            attribute_3_name: '',
-            attribute_3_value: '',
-            attribute_4_name: '',
-            attribute_4_value: '',
-            branch: '',
-            price: Number(v.price) || 0,
-            stock: Number(v.stock) || 0,
-            thumbnail_url: catalogDirectImageUrl(v.image_url || '') || '',
-            status: 'active'
-        };
+    return variations.map((v, index) => kanjoBuildVariantRow(p, v, index));
+};
+
+/* Flatten every product's variants into audit-friendly entries that carry both
+   the raw source option and the strict Kanjo row that will be exported. */
+const kanjoCollectVariantEntries = (evaluations) => {
+    const entries = [];
+    (evaluations || []).forEach(({ product }) => {
+        const variations = Array.isArray(product && product.variations)
+            ? product.variations.filter((v) => v && String(v.name || '').trim())
+            : [];
+        const nameAr = String((product && product.name_ar) || '').trim();
+        const nameEn = String((product && product.name_en) || '').trim();
+        variations.forEach((v, index) => {
+            const row = kanjoBuildVariantRow(product, v, index);
+            entries.push({
+                entryId: String(entries.length),
+                product_key: row.product_key,
+                productName: nameAr || nameEn || '(بدون اسم)',
+                rawName: String(v.name || ''),
+                rawValue: String(v.name || ''),
+                price: row.price,
+                attribute_1_name: row.attribute_1_name,
+                attribute_1_value: row.attribute_1_value,
+                row
+            });
+        });
     });
+    return entries;
+};
+
+const kanjoVariantGroupKey = (entry) => String(entry.product_key) + '\u0001' + String(entry.attribute_1_value);
+
+/* Group by product + resolved Kanjo attribute value. */
+const kanjoGroupVariantEntries = (entries) => {
+    const groups = new Map();
+    (entries || []).forEach((entry) => {
+        const key = kanjoVariantGroupKey(entry);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(entry);
+    });
+    return Array.from(groups.values());
+};
+
+/* Post-resolution safety net: drop only EXACT same-price duplicates so no
+   pricing information is ever lost silently. */
+const kanjoDedupeVariantEntries = (entries) => {
+    const seen = new Map();
+    const out = [];
+    (entries || []).forEach((entry) => {
+        const key = kanjoVariantGroupKey(entry);
+        if (!seen.has(key)) { seen.set(key, entry); out.push(entry); return; }
+        if (seen.get(key).price === entry.price) return;
+        out.push(entry);
+    });
+    return out;
+};
+
+/* Apply the admin's manual resolutions. `__KANJO_DELETE_VARIANT__` removes the
+   variant; otherwise the selected option index re-points the attribute. */
+const kanjoApplyVariantDecisions = (kept, conflicts, decisions) => {
+    const resolved = (kept || []).slice();
+    (conflicts || []).forEach((group) => {
+        group.entries.forEach((entry) => {
+            const decision = decisions[entry.entryId];
+            if (!decision || decision === KANJO_VARIANT_DELETE) return;
+            const option = KANJO_VARIANT_ATTRIBUTE_OPTIONS[Number(decision)];
+            if (!option) return;
+            entry.attribute_1_name = option.name;
+            entry.attribute_1_value = option.value;
+            entry.row.attribute_1_name = option.name;
+            entry.row.attribute_1_value = option.value;
+            resolved.push(entry);
+        });
+    });
+    return kanjoDedupeVariantEntries(resolved);
+};
+
+/* Pre-export variant audit. Same-price duplicates are dropped silently, but any
+   group with DIFFERENT prices halts the export and opens the conflict modal. */
+const kanjoStartVariantPhase = (evaluations, selections, opts) => {
+    const entries = kanjoCollectVariantEntries(evaluations);
+    const groups = kanjoGroupVariantEntries(entries);
+    const kept = [];
+    const conflicts = [];
+    groups.forEach((group) => {
+        if (group.length <= 1) { if (group[0]) kept.push(group[0]); return; }
+        const uniquePrices = new Set(group.map((e) => e.price));
+        if (uniquePrices.size === 1) { kept.push(group[0]); return; }
+        conflicts.push({ productKey: group[0].product_key, productName: group[0].productName, entries: group });
+    });
+    if (conflicts.length) {
+        window.openKanjoVariantConflictModal(conflicts, (decisions) => {
+            const resolved = kanjoApplyVariantDecisions(kept, conflicts, decisions || {});
+            kanjoFinalizeExport(evaluations, selections, opts, resolved);
+        });
+        return;
+    }
+    kanjoFinalizeExport(evaluations, selections, opts, kept);
 };
 
 const kanjoSheetFromRows = (columns, rows) => (
@@ -3371,18 +3488,25 @@ const kanjoReportExportError = (err) => {
     }
 };
 
-const kanjoFinalizeExport = (evaluations, selections, opts) => {
+const kanjoFinalizeExport = (evaluations, selections, opts, variantEntries) => {
     try {
         const productRows = [];
-        const variantRows = [];
         evaluations.forEach(({ product, match }) => {
             const key = String((product && product.id) || '');
             const category = match.status === 'matched'
                 ? match.category
                 : (selections[key] || match.category || '');
             productRows.push(kanjoBuildProductRow(product, category));
-            variantRows.push(...kanjoBuildVariantRows(product));
         });
+        /* The variant phase already resolved duplicates/conflicts; fall back to a
+           straight build only when called without pre-computed entries. */
+        let variantRows;
+        if (Array.isArray(variantEntries)) {
+            variantRows = variantEntries.map((entry) => entry.row);
+        } else {
+            variantRows = [];
+            evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
+        }
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
@@ -3465,6 +3589,80 @@ window.closeKanjoCategoryAuditModal = () => {
     }
 };
 
+/* ===== Interactive pre-export variant price-conflict audit ===== */
+
+let _kanjoVariantAuditState = null;
+
+window.openKanjoVariantConflictModal = (conflicts, onConfirm) => {
+    const modal = document.getElementById('kanjoVariantConflictModal');
+    const body = document.getElementById('kanjoVariantConflictBody');
+    const countEl = document.getElementById('kanjoVariantConflictCount');
+    if (!modal || !body) {
+        if (typeof onConfirm === 'function') onConfirm({});
+        return;
+    }
+    _kanjoVariantAuditState = { conflicts: conflicts || [], onConfirm };
+    const optionsHtml = KANJO_VARIANT_ATTRIBUTE_OPTIONS.map((opt, idx) => (
+        '<option value="' + idx + '">' + catalogEscapeHtml(opt.value) + '</option>'
+    )).join('');
+    const totalVariants = (conflicts || []).reduce((n, group) => n + group.entries.length, 0);
+    body.innerHTML = (conflicts || []).map((group) => {
+        const rowsHtml = group.entries.map((entry) => (
+            '<div class="bg-white border border-purple-100 rounded-2xl p-3">'
+            + '<div class="flex items-start justify-between gap-2 mb-2">'
+            + '<div class="min-w-0">'
+            + '<div class="font-black text-xs text-[#230535] break-words">' + catalogEscapeHtml(entry.rawValue || '(بدون اسم)') + '</div>'
+            + '<div class="text-[10px] font-bold text-slate-400">' + catalogEscapeHtml(entry.attribute_1_value) + ' — السعر: ' + catalogEscapeHtml(String(entry.price)) + '</div>'
+            + '</div>'
+            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-700">تعارض سعر</span>'
+            + '</div>'
+            + '<select class="kanjo-variant-conflict-select w-full p-3 bg-white border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]"'
+            + ' data-entry-id="' + catalogEscapeHtml(entry.entryId) + '">'
+            + '<option value="" disabled selected>اختر القيمة الصحيحة للمتغير...</option>'
+            + '<option value="' + KANJO_VARIANT_DELETE + '">--- حذف هذا المتغير (Delete Variant) ---</option>'
+            + optionsHtml
+            + '</select>'
+            + '</div>'
+        )).join('');
+        return '<div class="bg-kanjo-light/60 border border-purple-100 rounded-2xl p-3 space-y-2">'
+            + '<div class="font-black text-sm text-[#230535] break-words">' + catalogEscapeHtml(group.productName) + '</div>'
+            + rowsHtml
+            + '</div>';
+    }).join('');
+    if (countEl) countEl.textContent = String(totalVariants);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (window.showToast) window.showToast('يوجد تعارض أسعار في ' + totalVariants + ' متغير، حدّد القيم قبل التصدير', false);
+};
+
+window.confirmKanjoVariantConflictAudit = () => {
+    if (!_kanjoVariantAuditState) return;
+    const decisions = {};
+    let missing = 0;
+    document.querySelectorAll('#kanjoVariantConflictBody .kanjo-variant-conflict-select').forEach((sel) => {
+        const id = sel.getAttribute('data-entry-id') || '';
+        const value = String(sel.value || '');
+        if (!value) { missing++; return; }
+        decisions[id] = value;
+    });
+    if (missing) {
+        if (window.showToast) window.showToast('برجاء تحديد قيمة لكل متغير متعارض (' + missing + ' متبقي)', false);
+        return;
+    }
+    const onConfirm = _kanjoVariantAuditState.onConfirm;
+    window.closeKanjoVariantConflictModal();
+    if (typeof onConfirm === 'function') onConfirm(decisions);
+};
+
+window.closeKanjoVariantConflictModal = () => {
+    _kanjoVariantAuditState = null;
+    const modal = document.getElementById('kanjoVariantConflictModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+
 window.exportKanjoExcel = async (options) => {
     const opts = options || {};
     if (!window.isCatalogAdminUser()) {
@@ -3489,11 +3687,11 @@ window.exportKanjoExcel = async (options) => {
         const pending = evaluations.filter((e) => e.match.status === 'unmapped');
         if (pending.length) {
             window.openKanjoCategoryAuditModal(pending, (selections) => {
-                kanjoFinalizeExport(evaluations, selections || {}, opts);
+                kanjoStartVariantPhase(evaluations, selections || {}, opts);
             });
             return;
         }
-        kanjoFinalizeExport(evaluations, {}, opts);
+        kanjoStartVariantPhase(evaluations, {}, opts);
     } catch (err) {
         kanjoReportExportError(err);
     }
