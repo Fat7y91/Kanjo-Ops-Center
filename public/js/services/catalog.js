@@ -3261,8 +3261,18 @@ const kanjoMatchProductCategory = (product) => {
     return { status: 'unmapped', category: '', options: [] };
 };
 
+/* Kanjo only accepts attribute names from its own template, so the local
+   free-text labels are mapped to the strict template value. */
+const KANJO_VARIANT_ATTRIBUTE_DEFAULT = 'ID:2 | المقاس';
+const KANJO_VARIANT_ATTRIBUTE_MAP = {
+    'الخيار': 'ID:2 | المقاس',
+    'الحجم': 'ID:2 | المقاس',
+    'size': 'ID:2 | المقاس'
+};
+
 /* Variants in the catalog carry only a free-text option name, so classify it as
-   a size when it looks like one — otherwise keep the neutral attribute label. */
+   a size when it looks like one — otherwise keep the neutral attribute label —
+   then map that local label to the strict Kanjo template value. */
 const kanjoVariantAttributeName = (name) => {
     const normalized = normalizeArabic(name);
     const sizeWords = ['صغير', 'وسط', 'كبير', 'جامبو', 'عائلي', 'small', 'medium', 'large', 'xl', 'xxl'];
@@ -3270,7 +3280,8 @@ const kanjoVariantAttributeName = (name) => {
         const w = normalizeArabic(word);
         return w && normalized.indexOf(w) !== -1;
     });
-    return isSize ? 'الحجم' : 'الخيار';
+    const localLabel = isSize ? 'الحجم' : 'الخيار';
+    return KANJO_VARIANT_ATTRIBUTE_MAP[localLabel] || KANJO_VARIANT_ATTRIBUTE_DEFAULT;
 };
 
 const kanjoBuildProductRow = (p, category) => {
@@ -3279,6 +3290,8 @@ const kanjoBuildProductRow = (p, category) => {
     /* Kanjo bulk importer expects "variant" (not "variable") for multi-option
        products; simple products stay "simple". */
     if (String(row.product_type || '').toLowerCase() === 'variable') row.product_type = 'variant';
+    /* Variant products must not carry a base_price — only simple products do. */
+    if (row.product_type === 'variant') row.base_price = '';
     return row;
 };
 
