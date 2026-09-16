@@ -3194,7 +3194,7 @@ const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) :
 const KANJO_CATEGORY_VALUES = KANJO_PRODUCT_CATEGORIES.map((cat) => kanjoCategoryValue(cat));
 
 const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
-const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'price', 'stock', 'thumbnail_url', 'status'];
+const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'attribute_2_name', 'attribute_2_value', 'attribute_3_name', 'attribute_3_value', 'attribute_4_name', 'attribute_4_value', 'branch', 'price', 'stock', 'thumbnail_url', 'status'];
 
 /* Normalized substring hit. Both the keyword and the product name pass through
    normalizeArabic first, so minor spelling differences (hamza/alef forms, taa
@@ -3276,6 +3276,9 @@ const kanjoVariantAttributeName = (name) => {
 const kanjoBuildProductRow = (p, category) => {
     const row = mapCatalogProductToExportRow(p);
     row.category = category || '';
+    /* Kanjo bulk importer expects "variant" (not "variable") for multi-option
+       products; simple products stay "simple". */
+    if (String(row.product_type || '').toLowerCase() === 'variable') row.product_type = 'variant';
     return row;
 };
 
@@ -3288,6 +3291,14 @@ const kanjoBuildVariantRows = (p) => {
         variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
         attribute_1_name: kanjoVariantAttributeName(v.name),
         attribute_1_value: v.name || '',
+        /* Kanjo expects the full attribute/branch column set even when unused. */
+        attribute_2_name: '',
+        attribute_2_value: '',
+        attribute_3_name: '',
+        attribute_3_value: '',
+        attribute_4_name: '',
+        attribute_4_value: '',
+        branch: '',
         price: Number(v.price) || 0,
         stock: Number(v.stock) || 0,
         thumbnail_url: catalogDirectImageUrl(v.image_url || '') || '',
