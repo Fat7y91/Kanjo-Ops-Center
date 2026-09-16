@@ -3261,32 +3261,47 @@ const kanjoMatchProductCategory = (product) => {
     return { status: 'unmapped', category: '', options: [] };
 };
 
-/* Kanjo only accepts attribute names from its own template, so the local
-   free-text labels are mapped to the strict template value. */
-const KANJO_VARIANT_ATTRIBUTE_DEFAULT = 'ID:2 | المقاس';
-const KANJO_VARIANT_ATTRIBUTE_MAP = {
-    'الخيار': 'ID:2 | المقاس',
-    'الحجم': 'ID:2 | المقاس',
-    'النوع': 'ID:2 | المقاس',
-    'نوع': 'ID:2 | المقاس',
-    'size': 'ID:2 | المقاس'
-};
+/* ===== Kanjo strict variant attribute mapper =====
+   The Kanjo bulk importer only accepts attribute names/values from its own
+   template (`ID:X | ATTR:X | Name`). Plain-text option values are translated
+   through a master dictionary derived from Kanjo's variants CSV. Rules are
+   ordered so the most specific tokens win (e.g. "xxl" before "xl" before "l",
+   and taste/bread before the single-letter size tokens). */
+const KANJO_VARIANT_FALLBACK = { name: 'ID:2 | المقاس', value: 'ID:5 | ATTR:2 | وسط' };
 
-/* Variants in the catalog carry only a free-text option name, so first try an
-   explicit local label ("الحجم" / "الخيار" / "النوع" / "size"), then classify the
-   value as a size when it looks like one — and always return the strict Kanjo
-   template value the importer accepts. */
-const kanjoVariantAttributeName = (name) => {
-    const normalized = normalizeArabic(name);
-    const explicitKey = Object.keys(KANJO_VARIANT_ATTRIBUTE_MAP).find((key) => normalizeArabic(key) === normalized);
-    if (explicitKey) return KANJO_VARIANT_ATTRIBUTE_MAP[explicitKey];
-    const sizeWords = ['صغير', 'وسط', 'كبير', 'جامبو', 'عائلي', 'small', 'medium', 'large', 'xl', 'xxl'];
-    const isSize = sizeWords.some((word) => {
-        const w = normalizeArabic(word);
-        return w && normalized.indexOf(w) !== -1;
-    });
-    const localLabel = isSize ? 'الحجم' : 'الخيار';
-    return KANJO_VARIANT_ATTRIBUTE_MAP[localLabel] || KANJO_VARIANT_ATTRIBUTE_DEFAULT;
+const KANJO_VARIANT_RULES = [
+    /* A) BREAD (الخبز) — Variant ID: 4 */
+    { name: 'ID:4 | الخبز', value: 'ID:14 | ATTR:4 | خبز سوري', any: ['سوري', 'syrian'] },
+    { name: 'ID:4 | الخبز', value: 'ID:15 | ATTR:4 | عيش فينو', any: ['فينو', 'fino'] },
+    /* B) TASTE (الطعم) — Variant ID: 3 */
+    { name: 'ID:3 | الطعم', value: 'ID:12 | ATTR:3 | حراق', any: ['حراق', 'spicy'] },
+    { name: 'ID:3 | الطعم', value: 'ID:13 | ATTR:3 | عادي', any: ['عادي', 'normal'] },
+    /* C) SIZE (المقاس) — Variant ID: 2 */
+    { name: 'ID:2 | المقاس', value: 'ID:11 | ATTR:2 | كبير جدا', any: ['كبير جدا', 'xxl'] },
+    { name: 'ID:2 | المقاس', value: 'ID:7 | ATTR:2 | كبير', any: ['كبير', 'xl'] },
+    { name: 'ID:2 | المقاس', value: 'ID:18 | ATTR:2 | صاروخ', any: ['صاروخ'] },
+    { name: 'ID:2 | المقاس', value: 'ID:19 | ATTR:2 | شرقي', any: ['شرقي'] },
+    { name: 'ID:2 | المقاس', value: 'ID:6 | ATTR:2 | لارج', any: ['لارج', 'l'] },
+    { name: 'ID:2 | المقاس', value: 'ID:4 | ATTR:2 | صغير', any: ['صغير', 's'] },
+    { name: 'ID:2 | المقاس', value: 'ID:5 | ATTR:2 | وسط', any: ['وسط', 'm'] },
+    /* D) SAUCE (الصوص) — Variant ID: 5 */
+    { name: 'ID:5 | الصوص', value: 'ID:16 | ATTR:5 | أحمر', any: ['أحمر', 'red'] },
+    { name: 'ID:5 | الصوص', value: 'ID:17 | ATTR:5 | أبيض', any: ['أبيض', 'white'] }
+];
+
+/* Translate a plain-text variant (option name + value) into Kanjo's strict
+   attribute id pair. Returns `{ name, value }` and never fails: unmatched
+   values fall back to Size/Middle so the sheet always passes validation. */
+const mapVariantToKanjo = (rawName, rawValue) => {
+    const haystack = normalizeArabic([rawValue, rawName].filter(Boolean).join(' '));
+    if (haystack) {
+        const hit = KANJO_VARIANT_RULES.find((rule) => rule.any.some((token) => {
+            const t = normalizeArabic(token);
+            return t && haystack.indexOf(t) !== -1;
+        }));
+        if (hit) return { name: hit.name, value: hit.value };
+    }
+    return { name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value };
 };
 
 const kanjoBuildProductRow = (p, category) => {
@@ -3304,24 +3319,27 @@ const kanjoBuildVariantRows = (p) => {
     const variations = Array.isArray(p && p.variations)
         ? p.variations.filter((v) => v && String(v.name || '').trim())
         : [];
-    return variations.map((v, index) => ({
-        product_key: (p && p.id) || '',
-        variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
-        attribute_1_name: kanjoVariantAttributeName(v.name),
-        attribute_1_value: v.name || '',
-        /* Kanjo expects the full attribute/branch column set even when unused. */
-        attribute_2_name: '',
-        attribute_2_value: '',
-        attribute_3_name: '',
-        attribute_3_value: '',
-        attribute_4_name: '',
-        attribute_4_value: '',
-        branch: '',
-        price: Number(v.price) || 0,
-        stock: Number(v.stock) || 0,
-        thumbnail_url: catalogDirectImageUrl(v.image_url || '') || '',
-        status: 'active'
-    }));
+    return variations.map((v, index) => {
+        const mapped = mapVariantToKanjo(v.name, v.name);
+        return {
+            product_key: (p && p.id) || '',
+            variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
+            attribute_1_name: mapped.name,
+            attribute_1_value: mapped.value,
+            /* Kanjo expects the full attribute/branch column set even when unused. */
+            attribute_2_name: '',
+            attribute_2_value: '',
+            attribute_3_name: '',
+            attribute_3_value: '',
+            attribute_4_name: '',
+            attribute_4_value: '',
+            branch: '',
+            price: Number(v.price) || 0,
+            stock: Number(v.stock) || 0,
+            thumbnail_url: catalogDirectImageUrl(v.image_url || '') || '',
+            status: 'active'
+        };
+    });
 };
 
 const kanjoSheetFromRows = (columns, rows) => (
