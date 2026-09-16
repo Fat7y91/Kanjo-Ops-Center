@@ -3202,11 +3202,27 @@ const kanjoCategoryKeywordHit = (keyword, haystack, tokens) => {
     return tokens.some((token) => token === kw || token === ('ال' + kw) || (kw.length >= 3 && token.indexOf(kw) === 0));
 };
 
-/* Confidence-based matcher. Returns:
-   - { status: 'matched',   category }  when exactly one category matches
-   - { status: 'ambiguous', options }   when several categories match
-   - { status: 'unmapped',  options }   when nothing matches
-   `category` is only ever a confident value — never a blind default. */
+/* Character position of a category's earliest matching keyword within the
+   normalized name. Used to pick the dominant category when a name matches
+   several — the primary noun usually appears first. */
+const kanjoCategoryMatchPosition = (cat, haystack, tokens) => {
+    let best = -1;
+    cat.keywords.forEach((keyword) => {
+        if (!kanjoCategoryKeywordHit(keyword, haystack, tokens)) return;
+        const pos = haystack.indexOf(normalizeArabic(keyword));
+        if (pos === -1) return;
+        if (best === -1 || pos < best) best = pos;
+    });
+    return best;
+};
+
+/* Confidence-based matcher. A product matching ONE OR MORE categories is
+   auto-resolved to the dominant match (the keyword appearing earliest in the
+   name: "بيتزا سي فود" -> Pizza, "كريب جمبري" -> Crepe) and passes through with
+   no manual review. Only names with ZERO matches are returned as `unmapped` and
+   routed to the audit modal. Returns:
+   - { status: 'matched',  category, options }  1+ matches, auto-resolved
+   - { status: 'unmapped', category: '' }       nothing matched, needs review */
 const kanjoMatchProductCategory = (product) => {
     const existing = String((product && product.category) || '').trim();
     const existingOfficial = KANJO_CATEGORY_VALUES.indexOf(existing) !== -1 ? existing : '';
@@ -3214,15 +3230,27 @@ const kanjoMatchProductCategory = (product) => {
         .replace(/\s+/g, ' ')
         .trim();
     const tokens = haystack ? haystack.split(' ') : [];
-    const options = [];
+    const matches = [];
     if (haystack) {
         KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
-            if (cat.keywords.some((kw) => kanjoCategoryKeywordHit(kw, haystack, tokens))) options.push(cat);
+            const pos = kanjoCategoryMatchPosition(cat, haystack, tokens);
+            if (pos !== -1) matches.push({ cat, pos });
         });
     }
-    if (options.length === 1) return { status: 'matched', category: kanjoCategoryValue(options[0]), options };
-    if (existingOfficial) return { status: 'matched', category: existingOfficial, options };
-    return { status: options.length ? 'ambiguous' : 'unmapped', category: '', options };
+    if (matches.length) {
+        /* Earliest keyword wins; ties keep the canonical category order. */
+        let primary = matches[0];
+        for (let i = 1; i < matches.length; i++) {
+            if (matches[i].pos < primary.pos) primary = matches[i];
+        }
+        return {
+            status: 'matched',
+            category: kanjoCategoryValue(primary.cat),
+            options: matches.map((match) => match.cat)
+        };
+    }
+    if (existingOfficial) return { status: 'matched', category: existingOfficial, options: [] };
+    return { status: 'unmapped', category: '', options: [] };
 };
 
 /* Variants in the catalog carry only a free-text option name, so classify it as
@@ -3326,29 +3354,18 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
         const sub = (nameAr && nameEn && nameAr !== nameEn)
             ? '<div class="text-[10px] text-slate-400 font-bold mt-0.5 break-words">' + catalogEscapeHtml(nameEn) + '</div>'
             : '';
-        const suggested = (entry.match && entry.match.status === 'ambiguous' && entry.match.options && entry.match.options.length)
-            ? kanjoCategoryValue(entry.match.options[0])
-            : '';
-        const badgeClass = (entry.match && entry.match.status === 'ambiguous')
-            ? 'bg-amber-100 text-amber-700'
-            : 'bg-rose-100 text-rose-700';
-        const badgeLabel = (entry.match && entry.match.status === 'ambiguous') ? 'تصنيف متعدد' : 'غير مطابق';
         return '<div class="kanjo-audit-row bg-kanjo-light/60 border border-purple-100 rounded-2xl p-3">'
             + '<div class="flex items-start justify-between gap-2 mb-2">'
             + '<div class="min-w-0"><div class="font-black text-sm text-[#230535] break-words">' + catalogEscapeHtml(label) + '</div>' + sub + '</div>'
-            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg ' + badgeClass + '">' + badgeLabel + '</span>'
+            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-700">غير مطابق</span>'
             + '</div>'
             + '<select class="kanjo-audit-select w-full p-3 bg-white border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]"'
-            + ' data-product-key="' + catalogEscapeHtml(key) + '" data-suggested="' + catalogEscapeHtml(suggested) + '">'
+            + ' data-product-key="' + catalogEscapeHtml(key) + '">'
             + '<option value="" disabled selected>اختر التصنيف الصحيح...</option>'
             + optionsHtml
             + '</select>'
             + '</div>';
     }).join('');
-    body.querySelectorAll('.kanjo-audit-select').forEach((sel) => {
-        const suggested = sel.getAttribute('data-suggested');
-        if (suggested) sel.value = suggested;
-    });
     if (countEl) countEl.textContent = String((items || []).length);
     modal.classList.remove('hidden');
     modal.classList.add('flex');
@@ -3402,7 +3419,9 @@ window.exportKanjoExcel = async (options) => {
             return;
         }
         const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p) }));
-        const pending = evaluations.filter((e) => e.match.status !== 'matched');
+        /* Multi-match items are already auto-resolved by the matcher, so the modal
+           only ever sees truly unmapped products. */
+        const pending = evaluations.filter((e) => e.match.status === 'unmapped');
         if (pending.length) {
             window.openKanjoCategoryAuditModal(pending, (selections) => {
                 kanjoFinalizeExport(evaluations, selections || {}, opts);
