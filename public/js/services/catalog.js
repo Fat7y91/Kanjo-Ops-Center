@@ -55,20 +55,6 @@ window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role 
 
 window.canUseStagingCatalog = () => !!window.isDataEntryUser();
 
-const CATALOG_EXPORT_COLUMNS = [
-    'product_key',
-    'product_type',
-    'sku',
-    'name_en',
-    'name_ar',
-    'description_en',
-    'description_ar',
-    'base_price',
-    'main_image_url',
-    'category',
-    'status'
-];
-
 const catalogScriptUrl = () => (window.KANJO_CATALOG_SCRIPT_URL || CATALOG_GAS_URL || '').trim();
 
 const catalogDriveFileId = (value) => {
@@ -329,21 +315,6 @@ const resolveMerchantCategory = (merchant) => {
 
 const formatCsvRow = (values) => values.map((val) => '"' + String(val !== undefined && val !== null ? val : '').replace(/[\r\n]+/g, ' - ').replace(/"/g, '""') + '"').join(';');
 
-const downloadKanjoCsv = (rows, fileName) => {
-    const headersString = formatCsvRow(CATALOG_EXPORT_COLUMNS);
-    const rowsString = rows.map((row) => formatCsvRow(CATALOG_EXPORT_COLUMNS.map((col) => row[col]))).join('\r\n');
-    const csvString = headersString + '\r\n' + rowsString;
-    const blob = new Blob(['\uFEFF', csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
-
 const catalogRawImageUrls = (p) => {
     const source = (Array.isArray(p && p.rawImageUrls) && p.rawImageUrls.length)
         ? p.rawImageUrls
@@ -376,7 +347,7 @@ const mapCatalogProductToExportRow = (p) => ({
     description_en: p.description_en || '',
     description_ar: p.description_ar || '',
     base_price: Number(p.base_price) || 0,
-    main_image_url: catalogEnhancedImageUrls(p)[0] || '',
+    main_image_url: catalogEnhancedImageUrls(p)[0] || catalogRawImageUrls(p)[0] || '',
     category: p.category || '',
     status: 'active'
 });
@@ -3192,6 +3163,259 @@ const populateMerchantExportFilter = async () => {
     if (previous && names.indexOf(previous) !== -1) select.value = previous;
 };
 
+/* ═══════════════════ Kanjo Excel bulk export engine ═══════════════════ */
+
+/* Official Kanjo product categories, exactly as the platform import template
+   expects them (`ID:<id> | <name>`). */
+const KANJO_PRODUCT_CATEGORIES = [
+    { id: 4, name: 'بيتزا', keywords: ['pizza', 'بيتزا', 'بيتزه'] },
+    { id: 5, name: 'برجر', keywords: ['burger', 'burgers', 'برجر', 'برغر', 'همبرجر', 'هامبرجر'] },
+    { id: 6, name: 'سي فود', keywords: ['sea food', 'seafood', 'see food', 'سي فود', 'سيفود', 'سمك', 'سمكه', 'جمبري', 'جمبرى', 'روبيان', 'كاليماري', 'فيش'] },
+    { id: 13, name: 'مشويات', keywords: ['grill', 'grilled', 'barbeque', 'bbq', 'مشويات', 'مشوي', 'مشويه', 'كفتة', 'كفته', 'كباب', 'تكة', 'تكه', 'شيش'] },
+    { id: 19, name: 'كريب', keywords: ['crepe', 'crepes', 'كريب'] },
+    { id: 11, name: 'شاورما', keywords: ['shawerma', 'shawarma', 'شاورما', 'شاورمه'] },
+    { id: 12, name: 'حلويات', keywords: ['sweets', 'sweet', 'dessert', 'حلويات', 'كيك', 'كيكه', 'تورتة', 'تورتا', 'بسبوسة', 'بسبوسه', 'كنافة', 'كنافه', 'بسكوت', 'جاتوه'] },
+    { id: 14, name: 'فطار', keywords: ['breakfast', 'فطار', 'افطار', 'إفطار', 'طعمية', 'طعميه', 'فول'] },
+    { id: 15, name: 'فطائر', keywords: ['pies', 'pie', 'فطائر', 'فطاير', 'فطيرة', 'فطيره'] },
+    { id: 20, name: 'فتة', keywords: ['fattah', 'fatta', 'فتة', 'فته'] },
+    { id: 21, name: 'وافل', keywords: ['waffle', 'waffles', 'وافل'] },
+    { id: 22, name: 'مشروبات ساخنة', keywords: ['hot drink', 'hot drinks', 'مشروبات ساخنة', 'مشروبات ساخنه', 'مشروب ساخن', 'قهوة', 'قهوه', 'شاي', 'كابتشينو', 'لاتيه', 'نسكافيه', 'اسبريسو'] },
+    { id: 23, name: 'مشروبات باردة', keywords: ['cold drink', 'cold drinks', 'مشروبات باردة', 'مشروبات بارده', 'مشروب بارد', 'عصير', 'سموذي', 'فرابيه'] },
+    { id: 8, name: 'مجمدات', keywords: ['freezer', 'freezers', 'frozen', 'مجمدات', 'مجمد', 'فريزر'] },
+    { id: 7, name: 'بيض والبان', keywords: ['eggs', 'egg', 'dairy', 'بيض والبان', 'بيض', 'البان', 'ألبان', 'حليب', 'لبن', 'جبن', 'جبنه', 'زبادي', 'زبدة', 'زبده'] }
+];
+
+const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
+const KANJO_CATEGORY_VALUES = KANJO_PRODUCT_CATEGORIES.map((cat) => kanjoCategoryValue(cat));
+
+const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
+const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'price', 'stock', 'thumbnail_url', 'status'];
+
+/* Whole-word / phrase keyword hit. Naive substring matching produced false
+   positives (e.g. "أبيض" contains "بيض", "بالجبنة" contains "جبن"), so single
+   words are matched against normalized tokens (allowing the definite article),
+   while multi-word keywords are matched as phrases against the full name. */
+const kanjoCategoryKeywordHit = (keyword, haystack, tokens) => {
+    const kw = normalizeArabic(keyword);
+    if (!kw) return false;
+    if (kw.indexOf(' ') !== -1) return haystack.indexOf(kw) !== -1;
+    return tokens.some((token) => token === kw || token === ('ال' + kw) || (kw.length >= 3 && token.indexOf(kw) === 0));
+};
+
+/* Confidence-based matcher. Returns:
+   - { status: 'matched',   category }  when exactly one category matches
+   - { status: 'ambiguous', options }   when several categories match
+   - { status: 'unmapped',  options }   when nothing matches
+   `category` is only ever a confident value — never a blind default. */
+const kanjoMatchProductCategory = (product) => {
+    const existing = String((product && product.category) || '').trim();
+    const existingOfficial = KANJO_CATEGORY_VALUES.indexOf(existing) !== -1 ? existing : '';
+    const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
+        .replace(/\s+/g, ' ')
+        .trim();
+    const tokens = haystack ? haystack.split(' ') : [];
+    const options = [];
+    if (haystack) {
+        KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
+            if (cat.keywords.some((kw) => kanjoCategoryKeywordHit(kw, haystack, tokens))) options.push(cat);
+        });
+    }
+    if (options.length === 1) return { status: 'matched', category: kanjoCategoryValue(options[0]), options };
+    if (existingOfficial) return { status: 'matched', category: existingOfficial, options };
+    return { status: options.length ? 'ambiguous' : 'unmapped', category: '', options };
+};
+
+/* Variants in the catalog carry only a free-text option name, so classify it as
+   a size when it looks like one — otherwise keep the neutral attribute label. */
+const kanjoVariantAttributeName = (name) => {
+    const normalized = normalizeArabic(name);
+    const sizeWords = ['صغير', 'وسط', 'كبير', 'جامبو', 'عائلي', 'small', 'medium', 'large', 'xl', 'xxl'];
+    const isSize = sizeWords.some((word) => {
+        const w = normalizeArabic(word);
+        return w && normalized.indexOf(w) !== -1;
+    });
+    return isSize ? 'الحجم' : 'الخيار';
+};
+
+const kanjoBuildProductRow = (p, category) => {
+    const row = mapCatalogProductToExportRow(p);
+    row.category = category || '';
+    return row;
+};
+
+const kanjoBuildVariantRows = (p) => {
+    const variations = Array.isArray(p && p.variations)
+        ? p.variations.filter((v) => v && String(v.name || '').trim())
+        : [];
+    return variations.map((v, index) => ({
+        product_key: (p && p.id) || '',
+        variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
+        attribute_1_name: kanjoVariantAttributeName(v.name),
+        attribute_1_value: v.name || '',
+        price: Number(v.price) || 0,
+        stock: Number(v.stock) || 0,
+        thumbnail_url: catalogDirectImageUrl(v.image_url || '') || '',
+        status: 'active'
+    }));
+};
+
+const kanjoSheetFromRows = (columns, rows) => (
+    (rows && rows.length)
+        ? XLSX.utils.json_to_sheet(rows, { header: columns })
+        : XLSX.utils.aoa_to_sheet([columns])
+);
+
+const kanjoWriteWorkbook = (productRows, variantRows, fileName) => {
+    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('XLSX_MISSING');
+    const wb = XLSX.utils.book_new();
+    const wsProducts = kanjoSheetFromRows(KANJO_PRODUCTS_SHEET_COLUMNS, productRows);
+    const wsVariants = kanjoSheetFromRows(KANJO_VARIANTS_SHEET_COLUMNS, variantRows);
+    wsProducts['!cols'] = KANJO_PRODUCTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+    wsVariants['!cols'] = KANJO_VARIANTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+    XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
+    XLSX.utils.book_append_sheet(wb, wsVariants, 'Variants');
+    XLSX.writeFile(wb, fileName);
+};
+
+const kanjoFinalizeExport = (evaluations, selections, opts) => {
+    try {
+        const productRows = [];
+        const variantRows = [];
+        evaluations.forEach(({ product, match }) => {
+            const key = String((product && product.id) || '');
+            const category = match.status === 'matched'
+                ? match.category
+                : (selections[key] || match.category || '');
+            productRows.push(kanjoBuildProductRow(product, category));
+            variantRows.push(...kanjoBuildVariantRows(product));
+        });
+        const merchantName = String((opts && opts.merchantName) || '').trim();
+        const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
+        const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+        kanjoWriteWorkbook(productRows, variantRows, fileName);
+        if (window.showToast) window.showToast('تم تصدير ملف Excel (' + productRows.length + ' منتج، ' + variantRows.length + ' خيار) بنجاح');
+    } catch (err) {
+        console.error('[catalog] Kanjo Excel write failed:', err);
+        if (window.showToast) window.showToast('فشل إنشاء ملف Excel', false);
+    }
+};
+
+/* ===== Interactive pre-export category audit ===== */
+
+let _kanjoAuditState = null;
+
+window.openKanjoCategoryAuditModal = (items, onConfirm) => {
+    const modal = document.getElementById('kanjoCategoryAuditModal');
+    const body = document.getElementById('kanjoCategoryAuditBody');
+    const countEl = document.getElementById('kanjoCategoryAuditCount');
+    if (!modal || !body) {
+        if (typeof onConfirm === 'function') onConfirm({});
+        return;
+    }
+    _kanjoAuditState = { items: items || [], onConfirm };
+    const optionsHtml = KANJO_PRODUCT_CATEGORIES.map((cat) => {
+        const value = kanjoCategoryValue(cat);
+        return '<option value="' + catalogEscapeHtml(value) + '">' + catalogEscapeHtml(value) + '</option>';
+    }).join('');
+    body.innerHTML = (items || []).map((entry) => {
+        const p = entry.product || {};
+        const key = String(p.id || '');
+        const nameAr = String(p.name_ar || '').trim();
+        const nameEn = String(p.name_en || '').trim();
+        const label = nameAr || nameEn || '(بدون اسم)';
+        const sub = (nameAr && nameEn && nameAr !== nameEn)
+            ? '<div class="text-[10px] text-slate-400 font-bold mt-0.5 break-words">' + catalogEscapeHtml(nameEn) + '</div>'
+            : '';
+        const suggested = (entry.match && entry.match.status === 'ambiguous' && entry.match.options && entry.match.options.length)
+            ? kanjoCategoryValue(entry.match.options[0])
+            : '';
+        const badgeClass = (entry.match && entry.match.status === 'ambiguous')
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-rose-100 text-rose-700';
+        const badgeLabel = (entry.match && entry.match.status === 'ambiguous') ? 'تصنيف متعدد' : 'غير مطابق';
+        return '<div class="kanjo-audit-row bg-kanjo-light/60 border border-purple-100 rounded-2xl p-3">'
+            + '<div class="flex items-start justify-between gap-2 mb-2">'
+            + '<div class="min-w-0"><div class="font-black text-sm text-[#230535] break-words">' + catalogEscapeHtml(label) + '</div>' + sub + '</div>'
+            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg ' + badgeClass + '">' + badgeLabel + '</span>'
+            + '</div>'
+            + '<select class="kanjo-audit-select w-full p-3 bg-white border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]"'
+            + ' data-product-key="' + catalogEscapeHtml(key) + '" data-suggested="' + catalogEscapeHtml(suggested) + '">'
+            + '<option value="" disabled selected>اختر التصنيف الصحيح...</option>'
+            + optionsHtml
+            + '</select>'
+            + '</div>';
+    }).join('');
+    body.querySelectorAll('.kanjo-audit-select').forEach((sel) => {
+        const suggested = sel.getAttribute('data-suggested');
+        if (suggested) sel.value = suggested;
+    });
+    if (countEl) countEl.textContent = String((items || []).length);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    if (window.showToast) window.showToast('راجع تصنيف ' + (items || []).length + ' منتج لإكمال التصدير', false);
+};
+
+window.confirmKanjoCategoryAudit = () => {
+    if (!_kanjoAuditState) return;
+    const selections = {};
+    let missing = 0;
+    document.querySelectorAll('#kanjoCategoryAuditBody .kanjo-audit-select').forEach((sel) => {
+        const key = sel.getAttribute('data-product-key') || '';
+        const value = String(sel.value || '');
+        if (!value) { missing++; return; }
+        selections[key] = value;
+    });
+    if (missing) {
+        if (window.showToast) window.showToast('برجاء تحديد تصنيف لكل المنتجات (' + missing + ' متبقي)', false);
+        return;
+    }
+    const onConfirm = _kanjoAuditState.onConfirm;
+    window.closeKanjoCategoryAuditModal();
+    if (typeof onConfirm === 'function') onConfirm(selections);
+};
+
+window.closeKanjoCategoryAuditModal = () => {
+    _kanjoAuditState = null;
+    const modal = document.getElementById('kanjoCategoryAuditModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+
+window.exportKanjoExcel = async (options) => {
+    const opts = options || {};
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('تصدير الكتالوج متاح للإدارة فقط', false);
+        return;
+    }
+    try {
+        const allDone = await fetchDoneCatalogProducts();
+        let filtered = allDone;
+        if (opts.merchantId) {
+            filtered = allDone.filter((p) => String(p.merchantId || '') === String(opts.merchantId));
+        } else if (opts.merchantName) {
+            filtered = allDone.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
+        }
+        if (!filtered.length) {
+            if (window.showToast) window.showToast('لا توجد منتجات مكتملة للتصدير', false);
+            return;
+        }
+        const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p) }));
+        const pending = evaluations.filter((e) => e.match.status !== 'matched');
+        if (pending.length) {
+            window.openKanjoCategoryAuditModal(pending, (selections) => {
+                kanjoFinalizeExport(evaluations, selections || {}, opts);
+            });
+            return;
+        }
+        kanjoFinalizeExport(evaluations, {}, opts);
+    } catch (err) {
+        console.error('[catalog] Kanjo Excel export failed:', err);
+        if (window.showToast) window.showToast('فشل تصدير ملف Excel', false);
+    }
+};
+
 window.exportDoneCatalogProducts = async () => {
     if (!window.isCatalogAdminUser()) {
         if (window.showToast) window.showToast('تصدير الكتالوج متاح للإدارة فقط', false);
@@ -3199,23 +3423,7 @@ window.exportDoneCatalogProducts = async () => {
     }
     const select = document.getElementById('merchantExportFilter');
     const merchantName = String((select && select.value) || '').trim();
-    if (!merchantName) {
-        window.alert('اختر التاجر للتصدير...');
-        if (window.showToast) window.showToast('اختر التاجر للتصدير...', false);
-        return;
-    }
-    try {
-        const allDone = await fetchDoneCatalogProducts();
-        const filtered = allDone.filter((p) => catalogProductMerchantName(p) === merchantName);
-        const exportData = filtered.map(mapCatalogProductToExportRow);
-        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة لهذا التاجر', false);
-        const safeName = merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
-        downloadKanjoCsv(exportData, 'Kanjo_Catalog_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
-        window.showToast('تم تصدير شيت المنتجات بنجاح');
-    } catch (err) {
-        console.error('[catalog] export failed:', err);
-        window.showToast('فشل تصدير الكتالوج', false);
-    }
+    return window.exportKanjoExcel(merchantName ? { merchantName } : {});
 };
 
 const fetchAllCatalogProducts = async () => {
@@ -3285,22 +3493,7 @@ window.exportMerchantKanjoSheet = async () => {
     const merchantName = String(window.activeMerchantBaseName || (nameEl && nameEl.innerText) || '').trim();
     if (!merchantName) return window.showToast('افتح بطاقة تاجر أولاً', false);
     const merchantId = (window.findMerchantIdForBase && window.findMerchantIdForBase(merchantName)) || '';
-    try {
-        const allDone = await fetchDoneCatalogProducts();
-        const filtered = allDone.filter((p) => {
-            const pName = String(p.merchantName || '');
-            const pId = String(p.merchantId || '');
-            return (merchantId && pId === merchantId) || pName === merchantName;
-        });
-        const exportData = filtered.map(mapCatalogProductToExportRow);
-        if (exportData.length === 0) return window.showToast('لا توجد منتجات مكتملة لهذا التاجر', false);
-        const safeName = merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40);
-        downloadKanjoCsv(exportData, 'Kanjo_Catalog_' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.csv');
-        window.showToast('تم تصدير شيت المنتجات بنجاح');
-    } catch (err) {
-        console.error('[catalog] merchant export failed:', err);
-        window.showToast('فشل تصدير الكتالوج', false);
-    }
+    return window.exportKanjoExcel({ merchantName, merchantId });
 };
 
 const sortCatalogProductsByCreatedAt = (items) => {
