@@ -204,10 +204,10 @@
             <div class="relative rounded-[2.9rem] border border-white/15 bg-brand-purple-deep p-3 shadow-2xl">
               <div class="absolute top-5 left-1/2 -translate-x-1/2 w-28 h-6 bg-brand-purple-deep rounded-full z-10"></div>
               <div class="rounded-[2.3rem] overflow-hidden bg-black aspect-[9/16]">
-                <video autoplay loop muted playsinline class="w-full h-full object-contain">
+                <video autoplay loop muted playsinline poster="dashboard-poster.svg" class="w-full h-full object-contain">
                   <source src="dashboard.webm" type="video/webm">
                   <source src="dashboard.mp4" type="video/mp4">
-                  <img src="dashboard.gif" alt="لوحة تحكم التاجر على كانجو" class="w-full h-full object-contain" loading="eager" />
+                  <img src="dashboard-poster.svg" alt="لوحة تحكم التاجر على كانجو" class="w-full h-full object-contain" width="400" height="400" loading="eager" decoding="async" />
                 </video>
               </div>
             </div>
@@ -324,10 +324,10 @@
       <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
         <div class="order-2 lg:order-1">
           <div class="relative w-full max-w-md lg:max-w-lg mx-auto">
-            <video autoplay loop muted playsinline class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+            <video loop muted playsinline preload="none" data-kanjo-autoplay poster="earnings-poster.svg" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
               <source src="earnings.webm" type="video/webm">
               <source src="earnings.mp4" type="video/mp4">
-              <img src="earnings.gif" alt="شاشة أرباح التاجر" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+              <img src="earnings-poster.svg" alt="شاشة أرباح التاجر" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain" width="400" height="400" loading="lazy" decoding="async">
             </video>
           </div>
         </div>
@@ -416,10 +416,10 @@
           </ul>
         </div>
         <div class="relative w-full max-w-md lg:max-w-lg mx-auto">
-          <video autoplay loop muted playsinline class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+          <video loop muted playsinline preload="none" data-kanjo-autoplay poster="speed-poster.svg" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
             <source src="speed.webm" type="video/webm">
             <source src="speed.mp4" type="video/mp4">
-            <img src="speed.gif" alt="شاشة سرعة التوصيل" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+            <img src="speed-poster.svg" alt="شاشة سرعة التوصيل" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain" width="400" height="400" loading="lazy" decoding="async">
           </video>
         </div>
       </div>
@@ -428,10 +428,10 @@
       <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
         <div class="order-2 lg:order-1">
           <div class="relative w-full max-w-md lg:max-w-lg mx-auto">
-            <video autoplay loop muted playsinline class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+            <video loop muted playsinline preload="none" data-kanjo-autoplay poster="idle-poster.svg" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
               <source src="idle.webm" type="video/webm">
               <source src="idle.mp4" type="video/mp4">
-              <img src="idle.gif" alt="شاشة إدارة وقت فراغ التاجر" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain">
+              <img src="idle-poster.svg" alt="شاشة إدارة وقت فراغ التاجر" class="mix-blend-multiply w-full max-w-md lg:max-w-lg mx-auto object-contain" width="400" height="400" loading="lazy" decoding="async">
             </video>
           </div>
         </div>
@@ -499,10 +499,11 @@
           </ul>
         </div>
         <div class="relative">
-          <video autoplay loop muted playsinline
+          <video loop muted playsinline preload="none" data-kanjo-autoplay poster="team-poster.svg"
                  class="relative w-full max-w-lg lg:max-w-xl mx-auto object-contain mix-blend-multiply">
             <source src="team.webm" type="video/webm">
             <source src="team.mp4" type="video/mp4">
+            <img src="team-poster.svg" alt="فريق كانجو الميداني" class="relative w-full max-w-lg lg:max-w-xl mx-auto object-contain mix-blend-multiply" width="400" height="400" loading="lazy" decoding="async">
           </video>
         </div>
       </div>
@@ -821,6 +822,33 @@
     window.addEventListener('scroll', () => {
       header.classList.toggle('shadow-lg', window.scrollY > 20);
     });
+
+    /* Play the feature loops only while they are on screen. Below-the-fold
+       videos use preload="none" and no autoplay, so their weight is never paid
+       on first paint: they load+play when scrolled into view, and pause when
+       they leave. Falls back to playing everything if IO is unavailable. */
+    (function () {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const videos = Array.prototype.slice.call(document.querySelectorAll('video[data-kanjo-autoplay]'));
+      if (!videos.length) return;
+      videos.forEach(function (v) {
+        v.muted = true;
+        v.setAttribute('muted', '');
+        v.setAttribute('playsinline', '');
+      });
+      if (!('IntersectionObserver' in window)) {
+        videos.forEach(function (v) { try { v.play(); } catch (e) {} });
+        return;
+      }
+      const io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          const v = entry.target;
+          if (entry.isIntersecting) { try { v.play(); } catch (e) {} }
+          else { try { v.pause(); } catch (e) {} }
+        });
+      }, { rootMargin: '200px 0px', threshold: 0.15 });
+      videos.forEach(function (v) { io.observe(v); });
+    })();
   </script>
 
   <script type="module" src="js/landing.js"></script>

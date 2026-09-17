@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="إدارة وقت الفراغ مع كانجو">
+  <defs>
+    <linearGradient id="kwarm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD700"/>
+      <stop offset="1" stop-color="#E57723"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#ffffff"/>
+  <circle cx="200" cy="160" r="132" fill="#230535" opacity="0.05"/>
+  <g fill="none" stroke="#230535" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="200" cy="158" r="76"/>
+    <path d="M200 110v48l34 20"/>
+  </g>
+  <circle cx="200" cy="158" r="9" fill="url(#kwarm)"/>
+  <text x="200" y="302" text-anchor="middle" font-family="Sora, Almarai, sans-serif" font-size="30" font-weight="700" letter-spacing="10" fill="#230535">KANJO</text>
+  <text x="200" y="340" text-anchor="middle" font-family="Almarai, sans-serif" font-size="17" font-weight="700" fill="#E57723">إدارة وقت الفراغ</text>
+</svg>

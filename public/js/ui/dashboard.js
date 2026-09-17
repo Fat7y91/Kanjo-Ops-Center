@@ -1317,16 +1317,10 @@ window.showDashboardLoading = () => {
     if (!container) return;
     container.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:90px 20px;text-align:center;font-family:'Segoe UI',Tahoma,sans-serif;color:#4b5563;">
-            <div style="width:64px;height:64px;border:6px solid #e5e7eb;border-top-color:#7c3aed;border-radius:50%;animation:kanjo-dashboard-spin 0.9s linear infinite;"></div>
-            <p style="margin-top:26px;font-size:19px;font-weight:700;">جارٍ تحميل بيانات المحلات والعقود...</p>
+            <div class="kanjo-loader-ring" role="status" aria-label="جارٍ التحميل"></div>
+            <p style="margin-top:26px;font-size:19px;font-weight:700;color:#230535;">جارٍ تحميل بيانات المحلات والعقود...</p>
             <p style="margin-top:8px;font-size:14px;color:#9ca3af;">يتم عرض أحدث البيانات فور اكتمال التحميل</p>
         </div>`;
-    if (!document.getElementById('kanjo-dashboard-spin-style')) {
-        const style = document.createElement('style');
-        style.id = 'kanjo-dashboard-spin-style';
-        style.textContent = '@keyframes kanjo-dashboard-spin { to { transform: rotate(360deg); } }';
-        document.head.appendChild(style);
-    }
 };
 
 /* ─── Firestore missing-index error box ───

@@ -44,6 +44,72 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     animation: progressFill 0.8s linear forwards;
 }
 
+/* —— Kanjo branded loaders (pure CSS/SVG, zero image weight) ——
+   Purple #230535 · Gold #FFD700 · Warm Orange #E57723 */
+@keyframes kanjoSpin { to { transform: rotate(360deg); } }
+
+@keyframes kanjoPulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.55); }
+    70% { box-shadow: 0 0 0 16px rgba(255, 215, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+}
+
+.kanjo-loader {
+    --kanjo-loader-size: 64px;
+    width: var(--kanjo-loader-size);
+    height: var(--kanjo-loader-size);
+    border-radius: 50%;
+    border: 6px solid rgba(35, 5, 53, 0.12);
+    border-top-color: #230535;
+    border-right-color: #E57723;
+    border-bottom-color: #FFD700;
+    animation: kanjoSpin 0.9s linear infinite;
+}
+
+.kanjo-loader-ring {
+    position: relative;
+    width: 70px;
+    height: 70px;
+}
+
+.kanjo-loader-ring::before,
+.kanjo-loader-ring::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    border: 5px solid transparent;
+}
+
+.kanjo-loader-ring::before {
+    inset: 0;
+    border-top-color: #230535;
+    border-right-color: #E57723;
+    animation: kanjoSpin 1s linear infinite;
+}
+
+.kanjo-loader-ring::after {
+    inset: 11px;
+    border-bottom-color: #FFD700;
+    animation: kanjoSpin 0.8s linear infinite reverse;
+}
+
+.kanjo-loader-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #230535;
+    animation: kanjoPulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kanjo-loader,
+    .kanjo-loader-ring::before,
+    .kanjo-loader-ring::after,
+    .kanjo-loader-dot {
+        animation-duration: 2.4s;
+    }
+}
+
 /* —— أزرار تسجيل الزيارة الميدانية —— */
 .visit-control-wrap { position: relative; }
 

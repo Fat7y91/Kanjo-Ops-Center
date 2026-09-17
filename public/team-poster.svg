@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-label="فريق كانجو الميداني">
+  <defs>
+    <linearGradient id="kwarm" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD700"/>
+      <stop offset="1" stop-color="#E57723"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="#ffffff"/>
+  <circle cx="200" cy="160" r="132" fill="#230535" opacity="0.05"/>
+  <g fill="none" stroke="#230535" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="200" cy="130" r="30"/>
+    <path d="M148 220c0-29 23-52 52-52s52 23 52 52"/>
+    <path d="M120 214c-8-15-23-24-40-24M280 214c8-15 23-24 40-24"/>
+  </g>
+  <circle cx="200" cy="130" r="10" fill="url(#kwarm)"/>
+  <text x="200" y="302" text-anchor="middle" font-family="Sora, Almarai, sans-serif" font-size="30" font-weight="700" letter-spacing="10" fill="#230535">KANJO</text>
+  <text x="200" y="340" text-anchor="middle" font-family="Almarai, sans-serif" font-size="17" font-weight="700" fill="#E57723">فريق ميداني حقيقي</text>
+</svg>
