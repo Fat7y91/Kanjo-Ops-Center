@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+/* Kanjo Ops — Provision Firebase Auth custom claims for enterprise RBAC.
+ *
+ * The dashboard keeps its anonymous sign-in + client PIN UX. This script is
+ * the trusted half: it binds each device's ANONYMOUS auth UID to the matching
+ * PIN identity by writing custom claims that firestore.rules can enforce.
+ *
+ * Claims written:
+ *   kanjoRole    admin | founder | accounting | rep | data_entry
+ *   kanjoTeam    'Fox Team' | 'Power Team' | ''
+ *   kanjoName    the Arabic display name (must match the PIN identity)
+ *   kanjoRepId   kpiRepId(kanjoName) — mirrors public/js/services/kpi.js
+ *   kanjoOps     true for the Operations Manager (name contains محمود)
+ *   kanjoContent true for the content/image editor (name contains يوسف/yousef)
+ *
+ * Credentials (same convention as the other scripts):
+ *   FIREBASE_SERVICE_ACCOUNT       : full service-account JSON (CI secret)
+ *   GOOGLE_APPLICATION_CREDENTIALS : path to a service-account JSON file
+ *
+ * Usage:
+ *   node scripts/set-auth-claims.mjs --list
+ *       List auth users with current claims + any enrollment hint.
+ *
+ *   node scripts/set-auth-claims.mjs --auto
+ *       Apply claims for every uid that registered an enrollment hint through
+ *       the dashboard (collection `enrollment_requests`, docId == uid).
+ *
+ *   node scripts/set-auth-claims.mjs --apply roles.json
+ *       Apply an explicit map: { "<uid>": { "role": "...", "team": "...",
+ *       "name": "..." }, ... }.
+ *
+ *   node scripts/set-auth-claims.mjs --enforce
+ *   node scripts/set-auth-claims.mjs --unenforce
+ *       Flip the migration switch app_security/config.enforceRbac.
+ *
+ *   SYNC_DRY_RUN=1 node scripts/set-auth-claims.mjs --auto
+ *       Show what would change without writing.
+ */
+
+import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { readFileSync } from 'node:fs';
+
+const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry'];
+
+const dryRun = process.env.SYNC_DRY_RUN === '1';
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(name);
+const valueOf = (name) => {
+  const i = args.indexOf(name);
+  return i !== -1 && args[i + 1] ? args[i + 1] : '';
+};
+
+let adminApp;
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  adminApp = initializeApp({ credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) }, 'set-auth-claims');
+} else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  adminApp = initializeApp({ credential: applicationDefault() }, 'set-auth-claims');
+} else {
+  console.error('No Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS.');
+  process.exit(1);
+}
+
+const auth = getAuth(adminApp);
+const db = getFirestore(adminApp);
+
+// Mirror of public/js/services/kpi.js kpiRepId().
+const kpiRepId = (name) => {
+  const clean = String(name || '').trim().replace(/[\/\s]+/g, '_').replace(/[^\u0600-\u06FFa-zA-Z0-9_.-]/g, '');
+  return clean || 'unknown';
+};
+
+const isOpsName = (name) => String(name || '').includes('محمود');
+
+const isContentName = (name) => {
+  const raw = String(name || '');
+  const lower = raw.toLowerCase();
+  return raw.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
+};
+
+const buildClaims = (identity) => {
+  const role = String(identity && identity.role || '').trim();
+  const name = String(identity && identity.name || '').trim();
+  const team = String(identity && identity.team || '').trim();
+  if (!VALID_ROLES.includes(role)) throw new Error(`invalid role: ${role}`);
+  if (!name) throw new Error('missing name');
+  return {
+    kanjoRole: role,
+    kanjoTeam: team,
+    kanjoName: name,
+    kanjoRepId: kpiRepId(name),
+    kanjoOps: isOpsName(name),
+    kanjoContent: isContentName(name)
+  };
+};
+
+const listUsers = async () => {
+  const rows = [];
+  let pageToken;
+  do {
+    const res = await auth.listUsers(1000, pageToken);
+    res.users.forEach((u) => rows.push({
+      uid: u.uid,
+      provider: (u.providerData || []).map((p) => p.providerId).join(',') || 'anonymous',
+      createdAt: u.metadata && u.metadata.creationTime,
+      claims: u.customClaims || {}
+    }));
+    pageToken = res.pageToken;
+  } while (pageToken);
+
+  const hints = new Map();
+  const hintSnap = await db.collection('enrollment_requests').get();
+  hintSnap.forEach((d) => hints.set(d.id, d.data() || {}));
+
+  console.log(`Auth users: ${rows.length}\n`);
+  rows.forEach((r) => {
+    const h = hints.get(r.uid);
+    const hint = h ? ` | hint: ${h.name || '?'} / ${h.role || '?'} / ${h.team || ''}` : '';
+    const claim = r.claims.kanjoRole ? ` | claims: ${r.claims.kanjoRole} / ${r.claims.kanjoName || ''}` : '';
+    console.log(`${r.uid}  [${r.provider}]  ${r.createdAt || ''}${claim}${hint}`);
+  });
+};
+
+const applyIdentity = async (uid, identity) => {
+  let claims;
+  try {
+    claims = buildClaims(identity);
+  } catch (err) {
+    console.warn(`skip ${uid}: ${err.message}`);
+    return false;
+  }
+  if (dryRun) {
+    console.log(`[dry-run] ${uid} <- ${JSON.stringify(claims)}`);
+    return true;
+  }
+  await auth.setCustomUserClaims(uid, claims);
+  console.log(`ok  ${uid} <- ${claims.kanjoRole} / ${claims.kanjoName}`);
+  return true;
+};
+
+const applyAuto = async () => {
+  const snap = await db.collection('enrollment_requests').get();
+  if (snap.empty) {
+    console.log('No enrollment hints found. Have each user log in once, or use --apply roles.json.');
+    return;
+  }
+  let applied = 0;
+  for (const d of snap.docs) {
+    const hint = d.data() || {};
+    if (await applyIdentity(d.id, hint)) applied += 1;
+  }
+  console.log(`\nDone. ${applied}/${snap.size} claim sets ${dryRun ? '(dry-run)' : 'written'}.`);
+  console.log('Users must refresh/re-login so their ID token picks up the new claims.');
+};
+
+const applyFile = async (path) => {
+  if (!path) {
+    console.error('Usage: node scripts/set-auth-claims.mjs --apply roles.json');
+    process.exit(1);
+  }
+  const map = JSON.parse(readFileSync(path, 'utf8'));
+  let applied = 0;
+  for (const [uid, identity] of Object.entries(map)) {
+    if (await applyIdentity(uid, identity)) applied += 1;
+  }
+  console.log(`\nDone. ${applied}/${Object.keys(map).length} claim sets ${dryRun ? '(dry-run)' : 'written'}.`);
+};
+
+const setEnforce = async (enabled) => {
+  if (dryRun) {
+    console.log(`[dry-run] app_security/config.enforceRbac = ${enabled}`);
+    return;
+  }
+  await db.collection('app_security').doc('config').set(
+    { enforceRbac: enabled, updatedAt: new Date() },
+    { merge: true }
+  );
+  console.log(`app_security/config.enforceRbac = ${enabled}`);
+  if (enabled) {
+    console.log('Strict RBAC is now live. Verify every role before logging out of the console session.');
+  }
+};
+
+const main = async () => {
+  if (flag('--list')) return listUsers();
+  if (flag('--enforce')) return setEnforce(true);
+  if (flag('--unenforce')) return setEnforce(false);
+  if (flag('--apply')) return applyFile(valueOf('--apply'));
+  if (flag('--auto')) return applyAuto();
+  console.log('Nothing to do. Use --list, --auto, --apply <file>, --enforce or --unenforce.');
+};
+
+main().catch((err) => {
+  console.error('set-auth-claims failed:', err);
+  process.exit(1);
+});

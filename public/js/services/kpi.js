@@ -593,6 +593,14 @@ const kpiFetchProductsForScope = async (repName) => {
 const kpiFetchParentRecords = async () => {
     const map = new Map();
     try {
+        /* Field reps are hard-scoped to their own parent record; only managers
+           may enumerate every rep. Mirrors the rep_kpis security rules. */
+        if (window.isFieldRepUser() && window.currentUser && window.currentUser.name) {
+            const ownId = kpiRepId(window.currentUser.name);
+            const snap = await window.getDoc(window.doc(window.db, KPI_REP_COLLECTION, ownId));
+            if (snap && snap.exists && snap.exists()) map.set(ownId, snap.data() || {});
+            return map;
+        }
         const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
         snap.forEach((d) => map.set(d.id, d.data() || {}));
     } catch (err) {
@@ -649,7 +657,10 @@ const kpiMinutesPerProductRaw = (seconds, products) => {
 };
 
 const kpiBuildReport = async () => {
-    const products = await kpiFetchAllProducts();
+    /* Reps only load their own catalog products; managers get the full set. */
+    const products = await kpiFetchProductsForScope(
+        (window.currentUser && window.currentUser.name) || ''
+    );
     const parents = await kpiFetchParentRecords();
 
     const reps = new Map();
@@ -727,7 +738,12 @@ const kpiBuildReport = async () => {
     }
 
     const rows = [];
-    for (const rep of reps.values()) {
+    /* A field rep may only resolve daily stats for their own repId; managers
+       enumerate the whole team. */
+    const repList = window.isFieldRepUser()
+        ? [reps.get(kpiRepId((window.currentUser && window.currentUser.name) || ''))].filter(Boolean)
+        : Array.from(reps.values());
+    for (const rep of repList) {
         const stats = await kpiFetchDailyStats(rep.repId);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
         const totalProducts = rep.totalProducts;

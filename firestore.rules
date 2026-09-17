@@ -3,21 +3,63 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ═══════════════════════════════════════════════════════════════
-    // Kanjo Operations Center — Firestore Security Rules (RBAC)
+    // Kanjo Operations Center — Firestore Security Rules (Claims RBAC)
+    //
+    // Identity is sourced from Firebase Auth custom claims provisioned by
+    // scripts/set-auth-claims.mjs:
+    //     kanjoRole   : admin | founder | accounting | rep | data_entry
+    //     kanjoTeam   : 'Fox Team' | 'Power Team' | ''
+    //     kanjoName   : the Arabic display name (matches PIN identity)
+    //     kanjoRepId  : kpiRepId(kanjoName)
+    //     kanjoOps    : true for the Operations Manager (محمود)
+    //     kanjoContent: true for the content/image editor (يوسف)
+    //
+    // The app keeps its anonymous sign-in + client PIN UX. The Admin SDK
+    // script binds each device's anonymous UID to the matching PIN identity.
+    //
+    // ── MIGRATION SWITCH ──────────────────────────────────────────
+    //   app_security/config { enforceRbac: true }
+    //
+    // While that document is absent (or enforceRbac != true):
+    //   - users WITHOUT claims keep the previous signed-in behaviour, so
+    //     deploying this file can never lock the team out before enrollment;
+    //   - users WITH claims are already evaluated against the scoped rules.
+    // Run the script's --enforce step once every user has claims to close the
+    // door on unclaimed sessions entirely.
     // ═══════════════════════════════════════════════════════════════
 
-    function isSignedIn() {
-      return request.auth != null;
+    function isSignedIn() { return request.auth != null; }
+    function tok() { return request.auth.token; }
+
+    function claimRole() { return isSignedIn() ? tok().kanjoRole : null; }
+    function claimTeam() { return isSignedIn() ? tok().kanjoTeam : null; }
+    function claimName() { return isSignedIn() ? tok().kanjoName : null; }
+    function claimRepId() { return isSignedIn() ? tok().kanjoRepId : null; }
+
+    function isAdmin() { return claimRole() == 'admin'; }
+    function isFounder() { return claimRole() == 'founder'; }
+    function isAccounting() { return claimRole() == 'accounting'; }
+    function isRep() { return claimRole() == 'rep'; }
+    function isDataEntry() { return claimRole() == 'data_entry'; }
+
+    function isPrivileged() { return isAdmin() || isFounder(); }
+    function isOpsManager() { return isSignedIn() && tok().kanjoOps == true; }
+    function isContentUser() { return isSignedIn() && tok().kanjoContent == true; }
+    function isManagerViewer() { return isPrivileged() || isOpsManager(); }
+
+    function rbacEnforced() {
+      return exists(/databases/$(database)/documents/app_security/config)
+        && get(/databases/$(database)/documents/app_security/config).data.enforceRbac == true;
     }
 
-    // Admin = custom claim role 'admin' OR uid listed in app_security/admins
-    function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.role == 'admin' ||
-        (exists(/databases/$(database)/documents/app_security/admins) &&
-         get(/databases/$(database)/documents/app_security/admins).data.uids is list &&
-         get(/databases/$(database)/documents/app_security/admins).data.uids.hasAny([request.auth.uid]))
-      );
+    // Legacy gate used ONLY during the migration window:
+    //   - a user WITH claims is always evaluated against the scoped rules;
+    //   - a user WITHOUT claims keeps the old signed-in behaviour until
+    //     app_security/config.enforceRbac == true, then is denied.
+    // Short-circuiting on the claim also means the config lookup never runs on
+    // the hot path once the team is enrolled.
+    function legacy() {
+      return isSignedIn() && claimRole() == null && !rbacEnforced();
     }
 
     // 1) Global default: deny everything.
@@ -64,11 +106,25 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 3) Operational collections used by the dashboard app.
+    // 3) Operational tasks.
+    // - Managers (admin/founder/ops) and accounting may read everything.
+    // - Field reps are hard-scoped to their own team.
+    // - Data-entry may read (catalog tooling) but not write.
     match /tasks/{docId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn();
+      function canReadTask() {
+        return isPrivileged() || isAccounting() || isDataEntry()
+          || (isRep() && resource.data.team == claimTeam());
+      }
+      function canWriteTask() {
+        return isPrivileged() || isOpsManager()
+          || (isRep() && resource.data.team == claimTeam());
+      }
+      allow read: if legacy() || canReadTask();
+      allow create: if legacy()
+        || isPrivileged() || isOpsManager()
+        || (isRep() && request.resource.data.team == claimTeam());
+      allow update: if legacy() || canWriteTask();
+      allow delete: if legacy() || isPrivileged() || isOpsManager();
     }
 
     // Public landing page — merchant lead registration form.
@@ -83,54 +139,91 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Transfer requests: reps raise them for their own tasks; managers review
+    // and resolve. Only managers may mutate a request's status.
     match /transferRequests/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if legacy() || isPrivileged() || isOpsManager() || isAccounting() || isRep();
+      allow create: if legacy()
+        || isPrivileged() || isOpsManager()
+        || (isRep() && request.resource.data.requestedBy == claimName());
+      allow update, delete: if legacy() || isPrivileged() || isOpsManager();
     }
 
+    // Financial payment profiles: reps own exactly one document keyed by their
+    // display name; accounting and managers manage the whole set.
     match /financial_profiles/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if legacy()
+        || isPrivileged() || isOpsManager() || isAccounting()
+        || (isRep() && docId == claimName());
+      allow write: if legacy()
+        || isPrivileged() || isOpsManager() || isAccounting()
+        || (isRep() && docId == claimName()
+            && request.resource.data.employeeName == claimName());
     }
 
+    // Payroll configuration. Reads stay open to signed-in users because the
+    // client loads the config for the whole dashboard; writes are trusted roles
+    // only (accounting saves it from the payroll screen).
     match /settings/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if legacy() || isPrivileged() || isOpsManager() || isAccounting();
     }
 
+    // Moderation bin for archived/wrong reports — Operations Manager + admins.
     match /archivedReports/{docId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if legacy() || isManagerViewer();
     }
 
     // Product catalog pipeline (`merchant_products`).
-    // Auth is anonymous + PIN; identity RBAC and field validation live in the client.
+    // Auth is anonymous + PIN; reps and data-entry create/edit catalog rows and
+    // KPI managers read the full set. Identity RBAC for these rows lives in the
+    // client, so the server gate stays at "authenticated session".
     match /merchant_products/{docId} {
       allow read, write: if isSignedIn();
     }
 
-    // JSON catalog importer staging (`staging_catalogs`).
-    // Auth is anonymous + PIN; identity RBAC lives in the client (data_entry / founder / محمود).
+    // JSON catalog importer staging (`staging_catalogs`) — data-entry tooling.
     match /staging_catalogs/{docId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
     }
 
-    // Master catalog import (`master_catalog`).
-    // Auth is anonymous + PIN; identity RBAC lives in the client (data_entry / founder / محمود).
+    // Master catalog import/management (`master_catalog`). Reps may READ it
+    // (reference search for supermarket merchants); only data-entry/managers
+    // may import or clear it.
     match /master_catalog/{docId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
     }
 
     // KPI & quality tracking (`rep_kpis/{repId}` + daily_stats subcollection).
-    // Auth is anonymous + PIN; dashboard visibility RBAC (Founders + Operations
-    // Manager) and per-user tracking live in the client (kpi.js).
-    match /rep_kpis/{repId}/{document=**} {
-      allow read, write: if isSignedIn();
+    // Managers read every rep; each rep (and the content editor) is hard-locked
+    // to their own repId.
+    match /rep_kpis/{repId} {
+      function isOwnRep() {
+        return isSignedIn() && claimRepId() != null && claimRepId() == repId;
+      }
+      allow read: if legacy() || isManagerViewer() || isOwnRep();
+      allow write: if legacy() || isManagerViewer();
+
+      match /daily_stats/{date} {
+        allow read: if legacy() || isManagerViewer() || isOwnRep();
+        allow write: if legacy() || isManagerViewer() || isOwnRep();
+      }
     }
 
-    // 4) Admin allowlist bootstrap.
+    // 4) Security bootstrap / enrollment bookkeeping. Clients never read or
+    // write app_security; the Admin SDK script (which bypasses rules) owns it.
     match /app_security/{docId} {
-      allow read: if isAdmin();
-      allow create: if isSignedIn()
-        && docId == 'admins'
-        && !exists(/databases/$(database)/documents/app_security/admins);
-      allow update, delete: if isAdmin();
+      allow read, write: if false;
+    }
+
+    // Anonymous-session enrollment hints. A signed-in client may register ONLY
+    // its own uid so the operator can map device -> PIN identity before running
+    // scripts/set-auth-claims.mjs. Requests are untrusted hints reviewed by the
+    // operator, never an authorization source.
+    match /enrollment_requests/{uid} {
+      allow create, update: if isSignedIn() && uid == request.auth.uid;
+      allow read, delete: if isPrivileged() || isOpsManager();
     }
   }
 }

@@ -50,12 +50,19 @@ const authReadyWithTimeout = new Promise((resolve) => {
     setTimeout(() => finish('timeout'), AUTH_READY_TIMEOUT_MS);
 });
 
-authReadyWithTimeout.then(() => {
+authReadyWithTimeout.then(async () => {
     const savedUser = localStorage.getItem(SESSION_KEY);
     if (savedUser) {
         window.currentUser = JSON.parse(savedUser);
         if (typeof window.showDashboardLoading === 'function') {
             window.showDashboardLoading();
+        }
+        /* Refresh the ID token so provisioned RBAC claims override the cached
+           PIN identity before the UI is gated by role. Falls back silently to
+           the PIN identity while claims are not yet enrolled. Bounded so a slow
+           network cannot hang the boot. */
+        if (typeof window.ensureAuthClaims === 'function') {
+            try { await window.ensureAuthClaims(); } catch (e) {}
         }
         applyThemeAndShowDashboard();
     }

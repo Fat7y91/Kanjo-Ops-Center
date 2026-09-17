@@ -32,12 +32,78 @@ window.applyTeamTheme = (team) => {
     document.head.appendChild(style);
 }
 
+/* ─── Claims-based identity sync ─────────────────────────────────────────
+   Anonymous sign-in gives every device an Auth UID; the Admin SDK script
+   (scripts/set-auth-claims.mjs) attaches kanjoRole/kanjoTeam/kanjoName/...
+   claims to that UID. When claims exist we treat them as authoritative over
+   the client PIN table; when they do not (pre-enrollment) we keep the PIN
+   identity so the app never locks out. Mirrors firestore.rules. */
+let _authClaimsSynced = false;
+window.authClaims = window.authClaims || null;
+
+window.ensureAuthClaims = async () => {
+    if (_authClaimsSynced) return window.authClaims;
+    try {
+        const fbUser = window.auth && window.auth.currentUser;
+        if (fbUser && typeof fbUser.getIdTokenResult === 'function') {
+            /* Bound the token refresh so a slow network can never hang boot. */
+            const token = await Promise.race([
+                fbUser.getIdTokenResult(true),
+                new Promise((res) => setTimeout(() => res(null), 5000))
+            ]);
+            if (!token) return window.authClaims;
+            const claims = (token && token.claims) || {};
+            window.authClaims = claims;
+            _authClaimsSynced = true;
+
+            if (claims.kanjoRole) {
+                currentUser = {
+                    ...(currentUser || window.currentUser || {}),
+                    name: claims.kanjoName || (currentUser && currentUser.name) || '',
+                    role: claims.kanjoRole,
+                    team: claims.kanjoTeam || (currentUser && currentUser.team) || '',
+                    repId: claims.kanjoRepId || ''
+                };
+                window.currentUser = currentUser;
+                window.saveSession(currentUser);
+            } else if (currentUser && fbUser.uid) {
+                /* Pre-enrollment: register an untrusted hint so the operator can
+                   map this device UID to a PIN identity before running the
+                   claims script. Hints are never an authorization source. */
+                window.setDoc(
+                    window.doc(window.db, 'enrollment_requests', fbUser.uid),
+                    {
+                        uid: fbUser.uid,
+                        name: currentUser.name || '',
+                        role: currentUser.role || '',
+                        team: currentUser.team || '',
+                        at: new Date()
+                    },
+                    { merge: true }
+                ).catch(() => {});
+            }
+            return claims;
+        }
+    } catch (err) {
+        console.warn('[auth] claims sync failed:', err);
+    }
+    return window.authClaims;
+};
+
+/* Force a re-read of the token (e.g. right after claims were provisioned). */
+window.syncAuthClaims = async () => {
+    _authClaimsSynced = false;
+    return window.ensureAuthClaims();
+};
+
 async function login(pinOverride = null) {
     if (window.authReady) { try { await Promise.race([window.authReady, new Promise(r => setTimeout(r, 5000))]); } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
     if(users[pin]) {
         currentUser = users[pin];
-        window.currentUser = currentUser; 
+        window.currentUser = currentUser;
+        await window.ensureAuthClaims();
+        currentUser = window.currentUser || currentUser;
         window.saveSession(currentUser);
         applyThemeAndShowDashboard();
         resetIdleTimer();
