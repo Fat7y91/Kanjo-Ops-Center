@@ -569,17 +569,14 @@ const kpiFetchProductsForRep = async (repName) => {
     const found = new Map();
     const collect = (snap) => snap.forEach((d) => found.set(d.id, { id: d.id, ...(d.data() || {}) }));
     const authorFields = ['added_by', 'createdBy'];
-    for (const field of authorFields) {
-        try {
-            const snap = await window.getDocs(window.query(
-                window.collection(window.db, KPI_PRODUCTS_COLLECTION),
-                window.where(field, '==', name)
-            ));
-            collect(snap);
-        } catch (err) {
-            /* Missing field/index on a given deployment — try the next alias. */
-        }
-    }
+    /* Query both author aliases concurrently instead of serially. */
+    const results = await Promise.all(authorFields.map((field) =>
+        window.getDocs(window.query(
+            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
+            window.where(field, '==', name)
+        )).catch(() => null)
+    ));
+    results.forEach((snap) => { if (snap) collect(snap); });
     return Array.from(found.values());
 };
 
@@ -657,11 +654,12 @@ const kpiMinutesPerProductRaw = (seconds, products) => {
 };
 
 const kpiBuildReport = async () => {
-    /* Reps only load their own catalog products; managers get the full set. */
-    const products = await kpiFetchProductsForScope(
-        (window.currentUser && window.currentUser.name) || ''
-    );
-    const parents = await kpiFetchParentRecords();
+    /* Reps only load their own catalog products; managers get the full set.
+       Fetch products and parent records concurrently. */
+    const [products, parents] = await Promise.all([
+        kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || ''),
+        kpiFetchParentRecords()
+    ]);
 
     const reps = new Map();
     const ensureRep = (name) => {
@@ -737,13 +735,13 @@ const kpiBuildReport = async () => {
         ensureRep(window.currentUser.name);
     }
 
-    const rows = [];
     /* A field rep may only resolve daily stats for their own repId; managers
-       enumerate the whole team. */
+       enumerate the whole team. Every daily-stats read runs concurrently — the
+       old serial `await` inside a for-loop scaled report time with headcount. */
     const repList = window.isFieldRepUser()
         ? [reps.get(kpiRepId((window.currentUser && window.currentUser.name) || ''))].filter(Boolean)
         : Array.from(reps.values());
-    for (const rep of repList) {
+    const rows = await Promise.all(repList.map(async (rep) => {
         const stats = await kpiFetchDailyStats(rep.repId);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
         const totalProducts = rep.totalProducts;
@@ -758,7 +756,7 @@ const kpiBuildReport = async () => {
         const dailyCounts = Array.from(rep.dailyCounts.entries())
             .map(([date, count]) => ({ date, count }))
             .sort((a, b) => a.date.localeCompare(b.date));
-        rows.push({
+        return {
             repId: rep.repId,
             name: rep.name,
             isEditor: rep.repId === editorRankId,
@@ -788,8 +786,8 @@ const kpiBuildReport = async () => {
             activeDays: dailyCounts.length,
             dailyCounts,
             lastActiveDate: dailyCounts.length ? dailyCounts[dailyCounts.length - 1].date : null
-        });
-    }
+        };
+    }));
 
     /* ─────────── Kanjo Weighted Score (out of 100) & competitive ranking ───────────
        Normalize the absolute counts against the top field performer so counts and

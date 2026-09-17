@@ -816,30 +816,107 @@ function rerenderDashboard() {
     }
 }
 
-const loadMoreTasks = () => {};
+/* ── Tasks window: deterministic ordering + cursor pagination ──────────────
+   The old query was unordered with a hard limit, so which documents made the
+   cut — and therefore every dashboard count — changed from load to load. `time`
+   is an ISO date string present on (almost) every task, so it gives a stable,
+   newest-first window plus a cursor for loadMoreTasks(). The composite index
+   tasks(team ASC, time DESC) backs the rep-scoped variant. Coverage caps are
+   unchanged on purpose (aggregates feed payroll/exports); only ordering and the
+   update path changed. */
+const TASKS_ORDER_FIELD = 'time';
+const TASKS_PAGE_SIZE_REP = 3000;
+const TASKS_PAGE_SIZE_MANAGER = 6000;
+
+window._tasksPage = null;
+
+/* Coalesce a burst of task changes into one merchantId sync + render per frame. */
+const scheduleTaskSync = (() => {
+    const run = () => {
+        if (!window._tasksPage) return;
+        if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
+        rerenderDashboard();
+    };
+    return (typeof window.scheduleFrameRender === 'function')
+        ? window.scheduleFrameRender(run)
+        : run;
+})();
+
+const loadMoreTasks = async () => {
+    const page = window._tasksPage;
+    if (!page || page.loading || page.exhausted || !page.cursor) return 0;
+    page.loading = true;
+    try {
+        const snapshot = await getDocs(page.buildQuery(page.cursor));
+        let added = 0;
+        snapshot.forEach((docSnap) => {
+            if (!window.tasksMemory.has(docSnap.id)) added++;
+            window.tasksMemory.set(docSnap.id, docSnap.data());
+        });
+        if (snapshot.docs.length) page.cursor = snapshot.docs[snapshot.docs.length - 1];
+        page.exhausted = snapshot.docs.length < page.pageSize;
+        if (added > 0) scheduleTaskSync();
+        return snapshot.docs.length;
+    } catch (err) {
+        console.error('[tasks] loadMoreTasks failed:', err);
+        return 0;
+    } finally {
+        page.loading = false;
+    }
+};
 window.loadMoreTasks = loadMoreTasks;
 
-// الاستماع الحي للمهام — مُقيَّد بفريق المندوب + حد أقصى لتفادي تحميل المجموعة كاملة
+// الاستماع الحي للمهام — مُقيَّد بفريق المندوب + نافذة مرتّبة قابلة للترقيم
 window.listenToTasks = () => {
     if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') return;
     if (window._tasksListenerStarted) return;
     window._tasksListenerStarted = true;
 
-    /* Scope the previously-unfiltered tasks listener. A field rep only needs
-       their own team's tasks, and the generous limit stops low-end devices from
-       downloading the entire multi-city dataset and re-rendering it on every
-       single task write (the main cause of the dashboard lag). */
-    const repTeam = (currentUser && currentUser.role === 'rep' && currentUser.team) ? currentUser.team : null;
-    const tasksQuery = repTeam
-        ? query(collection(db, "tasks"), where("team", "==", repTeam), limit(3000))
-        : query(collection(db, "tasks"), limit(6000));
+    /* A fresh listener (e.g. after re-login as another team) must start from a
+       clean memory, otherwise docs from the previous session linger. */
+    if (!window.tasksMemory) window.tasksMemory = new Map();
+    window.tasksMemory.clear();
 
-    const unsub = onSnapshot(tasksQuery, (snapshot) => {
-        window.tasksMemory.clear();
-        snapshot.forEach((docSnap) => {
-            window.tasksMemory.set(docSnap.id, docSnap.data());
+    /* Scope the previously-unfiltered tasks listener. A field rep only needs
+       their own team's tasks; managers get the whole set. */
+    const repTeam = (currentUser && currentUser.role === 'rep' && currentUser.team) ? currentUser.team : null;
+    const pageSize = repTeam ? TASKS_PAGE_SIZE_REP : TASKS_PAGE_SIZE_MANAGER;
+    const baseConstraints = repTeam ? [where("team", "==", repTeam)] : [];
+
+    const buildQuery = (cursor) => query(
+        collection(db, "tasks"),
+        ...baseConstraints,
+        orderBy(TASKS_ORDER_FIELD, "desc"),
+        ...(cursor ? [startAfter(cursor)] : []),
+        limit(pageSize)
+    );
+
+    window._tasksPage = { repTeam, pageSize, cursor: null, exhausted: false, loading: false, buildQuery };
+
+    let firstSnapshot = true;
+    const handleSnapshot = (snapshot) => {
+        /* Apply only the changed documents instead of clearing and rebuilding the
+           whole Map on every write (the main source of lag at scale). */
+        let mutated = false;
+        snapshot.docChanges().forEach((change) => {
+            const id = change.doc.id;
+            if (change.type === 'removed') {
+                if (window.tasksMemory.delete(id)) mutated = true;
+            } else {
+                window.tasksMemory.set(id, change.doc.data());
+                mutated = true;
+            }
         });
 
+        /* Cursor = oldest doc of the newest-first window. */
+        if (snapshot.docs.length) {
+            window._tasksPage.cursor = snapshot.docs[snapshot.docs.length - 1];
+            window._tasksPage.exhausted = snapshot.docs.length < pageSize;
+        } else {
+            window._tasksPage.exhausted = true;
+        }
+
+        /* One-time signed/achieved correction, still based on the initial set. */
         if (!window.hasRunSignedMigration) {
             window.hasRunSignedMigration = true;
             const migrationBatch = writeBatch(db);
@@ -862,15 +939,13 @@ window.listenToTasks = () => {
             }
         }
 
-        /* Unique Merchant ID backfill: assign a permanent merchantId to any
-           task doc that still lacks one so the Google Drive binding never
-           depends on the merchant name. */
-        if (typeof window.ensureMerchantIds === 'function') {
-            window.ensureMerchantIds();
+        if (mutated || firstSnapshot) {
+            firstSnapshot = false;
+            scheduleTaskSync();
         }
+    };
 
-        rerenderDashboard();
-    }, (error) => {
+    const unsub = onSnapshot(buildQuery(null), handleSnapshot, (error) => {
         console.error("Firestore snapshot error:", error);
         if (typeof showToast === 'function') {
             showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
