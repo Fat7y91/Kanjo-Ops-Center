@@ -65,6 +65,12 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: node scripts/set-auth-claims.mjs --auto
 
+      - name: Verify claims exist before enforcing
+        if: inputs.mode == 'enforce'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --verify
+
       - name: Enforce strict RBAC
         if: inputs.mode == 'enforce'
         env:

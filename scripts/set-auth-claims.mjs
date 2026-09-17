@@ -33,6 +33,10 @@
  *   node scripts/set-auth-claims.mjs --unenforce
  *       Flip the migration switch app_security/config.enforceRbac.
  *
+ *   node scripts/set-auth-claims.mjs --verify
+ *       Print how many UIDs carry kanjoRole claims. Exits non-zero (refusing)
+ *       when zero are provisioned, to make accidental mass-lockout impossible.
+ *
  *   SYNC_DRY_RUN=1 node scripts/set-auth-claims.mjs --auto
  *       Show what would change without writing.
  */
@@ -122,6 +126,28 @@ const listUsers = async () => {
   });
 };
 
+/* Safety gate: refuse to enforce when nothing has been provisioned. Flipping
+   enforceRbac with zero kanjoRole claims turns every signed-in session into an
+   unclaimed legacy session, which the strict rules deny -> total lockout. */
+const verifyClaims = async () => {
+  let claimed = 0;
+  let total = 0;
+  let pageToken;
+  do {
+    const res = await auth.listUsers(1000, pageToken);
+    total += res.users.length;
+    res.users.forEach((u) => {
+      if (u.customClaims && u.customClaims.kanjoRole) claimed += 1;
+    });
+    pageToken = res.pageToken;
+  } while (pageToken);
+  console.log(`Users with kanjoRole claims: ${claimed}/${total}`);
+  if (claimed === 0) {
+    console.error('Refusing to enforce: no UIDs carry kanjoRole claims. Enforcing now would lock out every session.');
+    process.exit(1);
+  }
+};
+
 const applyIdentity = async (uid, identity) => {
   let claims;
   try {
@@ -184,6 +210,7 @@ const setEnforce = async (enabled) => {
 
 const main = async () => {
   if (flag('--list')) return listUsers();
+  if (flag('--verify')) return verifyClaims();
   if (flag('--enforce')) return setEnforce(true);
   if (flag('--unenforce')) return setEnforce(false);
   if (flag('--apply')) return applyFile(valueOf('--apply'));
