@@ -37,15 +37,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # The script is ESM, so NODE_PATH is ignored; a local node_modules link to
-      # the globally installed SDK is the reliable way to resolve the import.
+      # The script is ESM: NODE_PATH is ignored, and a symlink to the global
+      # package leaves firebase-admin's own deps (e.g. @google-cloud/firestore)
+      # unresolvable. A local install is required. Node 22 satisfies the
+      # firebase-admin >=22 engine requirement.
       - name: Install Firebase Admin SDK
-        run: |
-          npm install -g firebase-admin@latest
-          mkdir -p "$GITHUB_WORKSPACE/node_modules"
-          ln -sfn "$(npm root -g)/firebase-admin" "$GITHUB_WORKSPACE/node_modules/firebase-admin"
+        run: npm install --no-save --no-package-lock firebase-admin@latest
 
       - name: List auth users and enrollment hints
         if: inputs.mode == 'list'
