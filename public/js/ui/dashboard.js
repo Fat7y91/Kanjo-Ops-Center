@@ -2118,6 +2118,16 @@ const renderDashboardNow = (snapshot) => {
 
 };
 
+/* O(1) header badge update for the manager transfer queue. The live queue
+   listener calls this instead of rebuilding the whole dashboard, keeping the
+   real-time sync cheap on low-end devices. */
+window.updateTransferRequestBadge = (pendingCount) => {
+    const badge = document.getElementById('transferBadge');
+    if (!badge) return;
+    if (Number(pendingCount) > 0) badge.classList.remove('hidden');
+    else badge.classList.add('hidden');
+};
+
 /* Coalesce rapid Firestore-driven re-renders (unfiltered tasks + merchants +
    transferRequests snapshots can all land in the same tick) into at most one
    full dashboard rebuild per animation frame, so the main thread stays free. */

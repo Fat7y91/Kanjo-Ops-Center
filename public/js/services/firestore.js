@@ -430,29 +430,23 @@ window.submitTransferRequest = async () => {
     showToast("تم إرسال طلب النقل إلى إدارة التشغيل بنجاح");
 };
 
-window.openAdminTransferModal = async () => {
-    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
-        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
-        return;
-    }
-    const listContainer = document.getElementById('adminTransferList');
-    listContainer.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل الطلبات...</div>';
-    document.getElementById('adminTransferModal').classList.remove('hidden');
+/* ── Manager transfer queue: lightweight live snapshot ─────────────────────
+   The manager panel used a one-time getDocs(), so a rep's request (e.g.
+   Sarah) only appeared after a hard refresh. We attach a scoped onSnapshot
+   while the panel is open and rebuild only the list, coalesced through
+   scheduleFrameRender, so the extra listener never blocks the main thread
+   nor triggers a full dashboard rebuild. */
+window._adminTransferRequestsCache = null;
+window._adminTransferQueueUnsub = null;
 
-    const q = query(collection(db, "transferRequests"), where("status", "==", "pending"));
-    const snap = await getDocs(q);
-
-    if (snap.empty) {
+const renderAdminTransferQueue = (listContainer) => {
+    if (!listContainer) return;
+    const requests = Array.isArray(window._adminTransferRequestsCache) ? window._adminTransferRequestsCache : [];
+    if (!requests.length) {
         listContainer.innerHTML = '<div class="text-center text-slate-400 py-8 font-bold">لا توجد طلبات نقل معلقة حالياً</div>';
         return;
     }
-
-    listContainer.innerHTML = '';
-    snap.forEach(docSnap => {
-        const req = docSnap.data();
-        const reqId = docSnap.id;
-
-        listContainer.innerHTML += `
+    listContainer.innerHTML = requests.map((req) => `
             <div class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100 space-y-2">
                 <div class="flex justify-between items-center font-black text-kanjo-dark text-sm">
                     <span>${req.taskName}</span>
@@ -465,12 +459,70 @@ window.openAdminTransferModal = async () => {
                     <b>السبب:</b> ${req.reason}
                 </div>
                 <div class="flex gap-2 pt-2">
-                    <button onclick="approveTransfer('${reqId}', '${req.taskId}', '${req.toTeam}')" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">قبول ونقل المهمة</button>
-                    <button onclick="rejectTransfer('${reqId}')" class="flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition">إلغاء / رفض</button>
+                    <button onclick="approveTransfer('${req.id}', '${req.taskId}', '${req.toTeam}')" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">قبول ونقل المهمة</button>
+                    <button onclick="rejectTransfer('${req.id}')" class="flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition">إلغاء / رفض</button>
                 </div>
             </div>
-        `;
+        `).join('');
+};
+
+window.detachAdminTransferQueue = () => {
+    const unsub = window._adminTransferQueueUnsub;
+    window._adminTransferQueueUnsub = null;
+    if (typeof unsub === 'function') {
+        try { unsub(); } catch (err) { console.error('[admin-queue] detach failed:', err); }
+    }
+};
+
+window.openAdminTransferQueueLive = () => {
+    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
+        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
+        return;
+    }
+    const listContainer = document.getElementById('adminTransferList');
+    const modal = document.getElementById('adminTransferModal');
+    if (modal) modal.classList.remove('hidden');
+    if (listContainer && !Array.isArray(window._adminTransferRequestsCache)) {
+        listContainer.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل الطلبات...</div>';
+    } else {
+        renderAdminTransferQueue(listContainer);
+    }
+
+    const canListen = typeof onSnapshot === 'function' && typeof query === 'function' && typeof collection === 'function' && typeof where === 'function' && typeof db !== 'undefined';
+    if (!canListen) {
+        if (typeof showToast === 'function') showToast('تعذر تفعيل التحديث المباشر لطلبات النقل', false);
+        return;
+    }
+
+    window.detachAdminTransferQueue();
+    const schedule = typeof window.scheduleFrameRender === 'function' ? window.scheduleFrameRender : ((fn) => fn);
+    const paint = schedule(() => {
+        renderAdminTransferQueue(listContainer);
+        if (typeof window.updateTransferRequestBadge === 'function') {
+            window.updateTransferRequestBadge((window._adminTransferRequestsCache || []).length);
+        }
     });
+    window._adminTransferQueueUnsub = onSnapshot(
+        query(collection(db, "transferRequests"), where("status", "==", "pending")),
+        (snap) => {
+            const requests = [];
+            snap.forEach((docSnap) => requests.push({ id: docSnap.id, ...docSnap.data() }));
+            window._adminTransferRequestsCache = requests;
+            paint();
+        },
+        (err) => {
+            console.error('[admin-queue] transfer listener failed:', err);
+            if (typeof showToast === 'function') showToast('تعذر تحديث طلبات النقل مباشرة، برجاء إعادة المحاولة', false);
+        }
+    );
+};
+
+window.openAdminTransferModal = () => window.openAdminTransferQueueLive();
+
+window.closeAdminTransferModal = () => {
+    window.detachAdminTransferQueue();
+    const modal = document.getElementById('adminTransferModal');
+    if (modal) modal.classList.add('hidden');
 };
 
 window.approveTransfer = async (reqId, taskId, targetTeam) => {
@@ -485,7 +537,7 @@ window.approveTransfer = async (reqId, taskId, targetTeam) => {
         status: 'approved'
     });
 
-    document.getElementById('adminTransferModal').classList.add('hidden');
+    window.closeAdminTransferModal();
     showToast("🎉 تمت الموافقة على طلب النقل ونقل المهمة لتاريخ اليوم بنجاح!");
 };
 
@@ -493,7 +545,7 @@ window.rejectTransfer = async (reqId) => {
     await updateDoc(doc(db, "transferRequests", reqId), {
         status: 'rejected'
     });
-    document.getElementById('adminTransferModal').classList.add('hidden');
+    window.closeAdminTransferModal();
     showToast("تم إغلاق طلب النقل");
 };
 

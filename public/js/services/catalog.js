@@ -2546,7 +2546,10 @@ window.toggleCatalogDeleteRequestsWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogDeleteRequestsOpen = willOpen;
-    if (willOpen) renderCatalogDeleteRequestsList();
+    if (willOpen) {
+        renderCatalogDeleteRequestsList();
+        window.refreshCatalogDeleteRequestsFromServer();
+    }
 };
 
 const renderCatalogDeleteRequestCard = (p) => {
@@ -2601,6 +2604,27 @@ window.renderCatalogDeleteRequestsWidget = () => {
     if (countEl) countEl.textContent = String((window.catalogDeleteRequestsCache || []).length);
     const body = document.getElementById('catalogDeleteRequestsBody');
     if (body && !body.classList.contains('hidden')) renderCatalogDeleteRequestsList();
+};
+
+/* Force a server read of the delete-request queue so a manager never acts on a
+   stale IndexedDB snapshot right after another device submits a request. The
+   live onSnapshot listener keeps the widget fresh afterwards. */
+window.refreshCatalogDeleteRequestsFromServer = async () => {
+    if (!window.isMahmoudUser()) return;
+    if (typeof window.getDocs !== 'function' || !window.db || typeof window.collection !== 'function' || typeof window.where !== 'function' || typeof window.query !== 'function') return;
+    try {
+        const snap = await window.getDocs(
+            window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true)),
+            { source: 'server' }
+        );
+        const items = [];
+        snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+        window.renderCatalogDeleteRequestsWidget();
+        renderCatalogDeleteRequestsList();
+    } catch (err) {
+        console.error('[catalog] fresh delete-requests sync failed:', err);
+    }
 };
 
 window.approveCatalogProductDeletion = async (productId) => {

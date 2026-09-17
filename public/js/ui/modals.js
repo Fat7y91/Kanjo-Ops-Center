@@ -940,7 +940,9 @@ window.openViewArchivedReportsModal = async () => {
 
     const q = query(collection(db, "archivedReports"), orderBy("timestamp", "desc"));
 
-    const snap = await getDocs(q);
+    /* Managers must not be shown a stale IndexedDB cache of the moderation
+       bin; force the initial read to hit the server. The list is small. */
+    const snap = await getDocs(q, { source: 'server' });
 
 
 
@@ -988,6 +990,13 @@ window.openViewArchivedReportsModal = async () => {
 
     });
 
+};
+
+
+
+window.closeViewArchivedReportsModal = () => {
+    const modal = document.getElementById('viewArchivedReportsModal');
+    if (modal) modal.classList.add('hidden');
 };
 
 
@@ -1264,88 +1273,14 @@ window.submitTransferRequest = async () => {
 
 
 
-window.openAdminTransferModal = async () => {
-
-    if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
-
-        if (window.showToast) window.showToast('هذه الشاشة متاحة لإدارة التشغيل فقط', false);
-
-        return;
-
+window.openAdminTransferModal = () => {
+    /* Delegate to the canonical live engine in firestore.js: it attaches a
+       scoped onSnapshot for the pending queue and coalesces renders, so a rep
+       request appears for the manager instantly without a hard refresh. */
+    if (typeof window.openAdminTransferQueueLive === 'function') {
+        return window.openAdminTransferQueueLive();
     }
-
-    const listContainer = document.getElementById('adminTransferList');
-
-    listContainer.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل الطلبات...</div>';
-
-    document.getElementById('adminTransferModal').classList.remove('hidden');
-
-
-
-    const q = query(collection(db, "transferRequests"), where("status", "==", "pending"));
-
-    const snap = await getDocs(q);
-
-
-
-    if (snap.empty) {
-
-        listContainer.innerHTML = '<div class="text-center text-slate-400 py-8 font-bold">لا توجد طلبات نقل معلقة حالياً</div>';
-
-        return;
-
-    }
-
-
-
-    listContainer.innerHTML = '';
-
-    snap.forEach(docSnap => {
-
-        const req = docSnap.data();
-
-        const reqId = docSnap.id;
-
-
-
-        listContainer.innerHTML += `
-
-            <div class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100 space-y-2">
-
-                <div class="flex justify-between items-center font-black text-kanjo-dark text-sm">
-
-                    <span>${req.taskName}</span>
-
-                    <span class="text-xs bg-purple-200 text-purple-900 px-2.5 py-1 rounded-full">نقل من (${req.fromTeam}) إلى (${req.toTeam})</span>
-
-                </div>
-
-                <div class="text-xs text-slate-600">
-
-                    <b>المقدم:</b> ${req.requestedBy}
-
-                </div>
-
-                <div class="bg-white p-3 rounded-xl border border-purple-100 text-xs text-slate-700">
-
-                    <b>السبب:</b> ${req.reason}
-
-                </div>
-
-                <div class="flex gap-2 pt-2">
-
-                    <button onclick="approveTransfer('${reqId}', '${req.taskId}', '${req.toTeam}')" class="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">قبول ونقل المهمة</button>
-
-                    <button onclick="rejectTransfer('${reqId}')" class="flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold hover:bg-red-700 transition">إلغاء / رفض</button>
-
-                </div>
-
-            </div>
-
-        `;
-
-    });
-
+    if (window.showToast) window.showToast('تعذر فتح شاشة طلبات النقل', false);
 };
 
 
@@ -1374,7 +1309,7 @@ window.approveTransfer = async (reqId, taskId, targetTeam) => {
 
 
 
-    document.getElementById('adminTransferModal').classList.add('hidden');
+    window.closeAdminTransferModal();
 
     showToast("🎉 تمت الموافقة على طلب النقل ونقل المهمة لتاريخ اليوم بنجاح!");
 
@@ -1390,7 +1325,7 @@ window.rejectTransfer = async (reqId) => {
 
     });
 
-    document.getElementById('adminTransferModal').classList.add('hidden');
+    window.closeAdminTransferModal();
 
     showToast("تم إغلاق طلب النقل");
 
