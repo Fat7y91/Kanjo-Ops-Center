@@ -1,0 +1,91 @@
+name: Provision Auth Claims (RBAC)
+
+# Manual-only. Each phase is a separate, explicit dispatch so the destructive
+# `enforce` switch can never be flipped in the same run as `apply-auto`.
+# Recommended order: list -> auto-dry -> apply-auto -> (users reload) -> enforce.
+# Rollback at any time with `unenforce`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Provisioning action"
+        required: true
+        default: "list"
+        type: choice
+        options:
+          - "list"
+          - "auto-dry"
+          - "apply-auto"
+          - "enforce"
+          - "unenforce"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provision-auth-claims
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The script is ESM, so NODE_PATH is ignored; a local node_modules link to
+      # the globally installed SDK is the reliable way to resolve the import.
+      - name: Install Firebase Admin SDK
+        run: |
+          npm install -g firebase-admin@latest
+          mkdir -p "$GITHUB_WORKSPACE/node_modules"
+          ln -sfn "$(npm root -g)/firebase-admin" "$GITHUB_WORKSPACE/node_modules/firebase-admin"
+
+      - name: List auth users and enrollment hints
+        if: inputs.mode == 'list'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --list
+
+      - name: Auto-map (dry-run, writes nothing)
+        if: inputs.mode == 'auto-dry'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          SYNC_DRY_RUN: "1"
+        run: node scripts/set-auth-claims.mjs --auto
+
+      - name: Apply auto claims
+        if: inputs.mode == 'apply-auto'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --auto
+
+      - name: Enforce strict RBAC
+        if: inputs.mode == 'enforce'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --enforce
+
+      - name: Unenforce RBAC (rollback to legacy mode)
+        if: inputs.mode == 'unenforce'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --unenforce
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Auth claims provisioning: \`${{ inputs.mode }}\`"
+            echo ""
+            echo "- Workflow: \`.github/workflows/provision-auth-claims.yml\`"
+            echo "- Script: \`node scripts/set-auth-claims.mjs\`"
+            echo ""
+            echo "Review the logs above for the uid/identity mapping and written counts."
+          } >> "$GITHUB_STEP_SUMMARY"
