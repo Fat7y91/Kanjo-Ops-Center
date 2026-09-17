@@ -1,5 +1,32 @@
 /* Kanjo Ops — Excel Export (SheetJS / XLSX) */
 
+/* P1.7: build the workbook in the background worker when possible so a large
+   export never blocks the dashboard. Falls back to the historic inline SheetJS
+   path (also used when the worker/CDN is unavailable). */
+const kanjoWriteSheets = async (sheets, fileName) => {
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.writeWorkbook === 'function') {
+        return window.kanjoExportWorker.writeWorkbook(sheets, fileName);
+    }
+    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('EXCEL_LIB_UNAVAILABLE');
+    const wb = XLSX.utils.book_new();
+    (sheets || []).forEach((sheet) => {
+        const header = sheet.header || [];
+        const ws = (sheet.rows && sheet.rows.length)
+            ? XLSX.utils.json_to_sheet(sheet.rows, header.length ? { header: header } : undefined)
+            : XLSX.utils.aoa_to_sheet([header]);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name || 'Sheet');
+    });
+    XLSX.writeFile(wb, fileName);
+    return true;
+};
+
+const kanjoExportYield = () => (
+    (typeof window.kanjoYieldToMain === 'function')
+        ? window.kanjoYieldToMain()
+        : new Promise((resolve) => setTimeout(resolve, 0))
+);
+
+
 window.exportDetailsExcel = async () => {
 
     let exportData = [];
@@ -190,7 +217,21 @@ window.exportDetailsExcel = async () => {
 
             const signedOrProvList = list.filter(i => (i.isSigned && i.achieved > 0) || i.isProvisional);
 
-            signedOrProvList.forEach(item => {
+            /* Index tasks by base name once (O(N)) instead of rescanning the whole
+               cache for every merchant (O(M x N)), and yield to the browser every
+               few hundred merchants so a large export never freezes the UI. */
+            const tasksByBaseName = new Map();
+            window.allTasksCache.forEach(t => {
+                const bn = getBaseName(t.name);
+                const bucket = tasksByBaseName.get(bn);
+                if (bucket) bucket.push(t); else tasksByBaseName.set(bn, [t]);
+            });
+
+            for (let sIdx = 0; sIdx < signedOrProvList.length; sIdx++) {
+
+                const item = signedOrProvList[sIdx];
+
+                if (sIdx > 0 && sIdx % 200 === 0) await kanjoExportYield();
 
                 let assignedTeam = item.team || '-';
 
@@ -198,43 +239,43 @@ window.exportDetailsExcel = async () => {
 
                 let latestTimestamp = '';
 
-                window.allTasksCache.forEach(t => {
+                const matchedTasks = tasksByBaseName.get(item.name) || [];
 
-                    if (getBaseName(t.name) === item.name) {
+                for (let mIdx = 0; mIdx < matchedTasks.length; mIdx++) {
 
-                        if (t.team) assignedTeam = t.team;
+                    const t = matchedTasks[mIdx];
 
-                        if (t.reports) {
+                    if (t.team) assignedTeam = t.team;
 
-                            t.reports.forEach(r => {
+                    if (t.reports) {
 
-                                let rDate = r.date || (r.timestamp ? r.timestamp.split(' ')[0] : '');
+                        t.reports.forEach(r => {
 
-                                let rTime = r.time || (r.timestamp ? r.timestamp.split(' ').slice(1).join(' ') : '');
+                            let rDate = r.date || (r.timestamp ? r.timestamp.split(' ')[0] : '');
 
-                                let rTimestamp = r.timestamp || `${rDate} ${rTime || '00:00:00'}`;
+                            let rTime = r.time || (r.timestamp ? r.timestamp.split(' ').slice(1).join(' ') : '');
 
-                                if (rDate && rDate <= todayStr && (!latestDate || rDate > latestDate)) latestDate = rDate;
+                            let rTimestamp = r.timestamp || `${rDate} ${rTime || '00:00:00'}`;
 
-                                if (rTimestamp && (!latestTimestamp || rTimestamp > latestTimestamp)) latestTimestamp = rTimestamp;
+                            if (rDate && rDate <= todayStr && (!latestDate || rDate > latestDate)) latestDate = rDate;
 
-                            });
+                            if (rTimestamp && (!latestTimestamp || rTimestamp > latestTimestamp)) latestTimestamp = rTimestamp;
 
-                        }
-
-                        if (!latestDate && t.time && t.time <= todayStr) latestDate = t.time;
-
-                        if (!latestTimestamp && t.time && t.time <= todayStr) latestTimestamp = `${t.time} 00:00:00`;
+                        });
 
                     }
 
-                });
+                    if (!latestDate && t.time && t.time <= todayStr) latestDate = t.time;
+
+                    if (!latestTimestamp && t.time && t.time <= todayStr) latestTimestamp = `${t.time} 00:00:00`;
+
+                }
 
                 item.assignedTeam = assignedTeam;
 
                 item.contractTimestamp = latestTimestamp || `${todayStr} 00:00:00`;
 
-            });
+            }
 
             signedOrProvList.sort((a, b) => (b.contractTimestamp || '').localeCompare(a.contractTimestamp || ''));
 
@@ -370,13 +411,10 @@ window.exportDetailsExcel = async () => {
 
 
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Modal List");
-
-    XLSX.writeFile(wb, "Kanjo_Payroll_Details_Export_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    await kanjoWriteSheets(
+        [{ name: "Kanjo Modal List", rows: exportData }],
+        "Kanjo_Payroll_Details_Export_" + new Date().toISOString().slice(0,10) + ".xlsx"
+    );
 
     showToast("تم تصدير القائمة إلى ملف إكسيل بنجاح");
 
@@ -416,7 +454,7 @@ window.toggleExportOptions = (type) => {
 
 
 
-window.performExport = () => {
+window.performExport = async () => {
 
     const isAll = document.getElementById('expAll').checked;
 
@@ -502,13 +540,10 @@ window.performExport = () => {
 
     if(exportData.length === 0) return showToast("لا توجد بيانات تطابق الاختيارات", false);
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Data");
-
-    XLSX.writeFile(wb, "Kanjo_Detailed_Export_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    await kanjoWriteSheets(
+        [{ name: "Kanjo Data", rows: exportData }],
+        "Kanjo_Detailed_Export_" + new Date().toISOString().slice(0,10) + ".xlsx"
+    );
 
     document.getElementById('exportModal').classList.add('hidden');
 
@@ -518,7 +553,7 @@ window.performExport = () => {
 
 
 
-window.performAdvancedExport = () => {
+window.performAdvancedExport = async () => {
 
     if(!window.filteredTasksForExport || window.filteredTasksForExport.length === 0) {
 
@@ -590,19 +625,16 @@ window.performAdvancedExport = () => {
 
     });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Filtered Data");
-
-    XLSX.writeFile(wb, "Kanjo_Filtered_Dashboard_Export_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    await kanjoWriteSheets(
+        [{ name: "Kanjo Filtered Data", rows: exportData }],
+        "Kanjo_Filtered_Dashboard_Export_" + new Date().toISOString().slice(0,10) + ".xlsx"
+    );
 
     showToast("تم تصدير الداتا المتفلترة بنجاح");
 
 };
 
-window.exportFinancialProfilesExcel = () => {
+window.exportFinancialProfilesExcel = async () => {
     const profiles = Array.from(window.financialProfilesCache.values());
     if (profiles.length === 0) { showToast("لا توجد بيانات دفع لتصديرها", false); return; }
 
@@ -634,10 +666,10 @@ window.exportFinancialProfilesExcel = () => {
         return row;
     });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Payment Profiles");
-    XLSX.writeFile(wb, "Kanjo_Payment_Profiles_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    await kanjoWriteSheets(
+        [{ name: "Kanjo Payment Profiles", rows: exportData }],
+        "Kanjo_Payment_Profiles_" + new Date().toISOString().slice(0,10) + ".xlsx"
+    );
     showToast("تم تصدير بيانات الدفع بنجاح");
 };
 
@@ -795,15 +827,12 @@ window.exportPayrollExcel = async () => {
 
 
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Payroll Report");
-
     const periodKey = window.getPayrollPeriodKey ? window.getPayrollPeriodKey() : new Date().toISOString().slice(0, 7);
 
-    XLSX.writeFile(wb, `Kanjo_Payroll_Report_${periodKey}.xlsx`);
+    await kanjoWriteSheets(
+        [{ name: "Kanjo Payroll Report", rows: exportData }],
+        `Kanjo_Payroll_Report_${periodKey}.xlsx`
+    );
 
     showToast("تم تصدير تقرير الرواتب بنجاح");
 

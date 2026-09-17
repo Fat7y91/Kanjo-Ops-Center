@@ -135,8 +135,24 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // ─── Notifications ───────────────────────────────────────────────
+    // Reps raise event notifications (report/visit/contract) and accounting
+    // raises financial ones, but only the manager/accounting roles actually
+    // render the bell and may mark notifications read. Deletion is manager-only.
     match /notifications/{docId} {
-      allow read, write: if isSignedIn();
+      function canReadNotifications() {
+        return isPrivileged() || isOpsManager() || isAccounting();
+      }
+      function canCreateNotification() {
+        return isPrivileged() || isOpsManager() || isAccounting() || isRep();
+      }
+      allow read: if legacy() || canReadNotifications();
+      allow create: if legacy() || (canCreateNotification()
+        && request.resource.data.title is string
+        && request.resource.data.isRead == false);
+      allow update: if legacy() || (canReadNotifications()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']));
+      allow delete: if legacy() || isPrivileged() || isOpsManager();
     }
 
     // Transfer requests: reps raise them for their own tasks; managers review
@@ -161,12 +177,15 @@ service cloud.firestore {
             && request.resource.data.employeeName == claimName());
     }
 
-    // Payroll configuration. Reads stay open to signed-in users because the
-    // client loads the config for the whole dashboard; writes are trusted roles
-    // only (accounting saves it from the payroll screen).
+    // Payroll configuration (settings/payrollConfig). Only the payroll roles may
+    // read it (reps never load it) and only that single document may be written.
     match /settings/{docId} {
-      allow read: if isSignedIn();
-      allow write: if legacy() || isPrivileged() || isOpsManager() || isAccounting();
+      function canUsePayrollConfig() {
+        return isPrivileged() || isOpsManager() || isAccounting();
+      }
+      allow read: if legacy() || canUsePayrollConfig();
+      allow write: if docId == 'payrollConfig'
+        && (legacy() || canUsePayrollConfig());
     }
 
     // Moderation bin for archived/wrong reports — Operations Manager + admins.
@@ -176,10 +195,18 @@ service cloud.firestore {
 
     // Product catalog pipeline (`merchant_products`).
     // Auth is anonymous + PIN; reps and data-entry create/edit catalog rows and
-    // KPI managers read the full set. Identity RBAC for these rows lives in the
-    // client, so the server gate stays at "authenticated session".
+    // KPI managers read the full set. Reads stay open to any signed-in session so
+    // the catalog reference pickers keep working, but writes are now limited to
+    // the catalog roles: accounting (never edits the catalog) and unclaimed
+    // sessions in enforcement mode are rejected. Deletion is reserved for the
+    // managers/data-entry that own the purge tools.
     match /merchant_products/{docId} {
-      allow read, write: if isSignedIn();
+      function canWriteCatalog() {
+        return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
+      }
+      allow read: if isSignedIn();
+      allow create, update: if legacy() || canWriteCatalog();
+      allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 
     // JSON catalog importer staging (`staging_catalogs`) — data-entry tooling.

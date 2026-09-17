@@ -1961,6 +1961,14 @@ const renderDashboardNow = (snapshot) => {
 
     if (advVisitsEl) advVisitsEl.innerText = advVisitsCount.toLocaleString();
 
+    /* Server-side aggregate totals (P1.4): annotate the coverage card with the
+       whole-system figures computed by Firestore instead of the client. Kept as
+       a tooltip so the filtered view above is never overwritten. */
+    if (advTasksEl && window.kanjoServerSummary && window.kanjoServerSummary.tasks) {
+        const st = window.kanjoServerSummary.tasks;
+        advTasksEl.title = `إجمالي النظام (سيرفر): ${st.total} مهمة | تعاقد نهائي: ${st.signed} | اتفاق مبدئي: ${st.provisional}`;
+    }
+
 
 
     const metricConversionEl = document.getElementById('metricConversionRate');
@@ -2388,6 +2396,31 @@ window.renderTasks = (grouped) => {
        without scanning all tasks for each card. */
     const driveLookup = (typeof window.buildDriveLookup === 'function') ? window.buildDriveLookup() : new Map();
 
+    /* Merchant → effective target/signed/achieved rollup, computed in ONE pass
+       over tasksMemory instead of re-scanning it inside every card (which was
+       O(cards x tasks)). The maths mirror the previous per-card loop exactly:
+       a signed task wins over a provisional one, and the achieved value is the
+       max over signed/provisional tasks (kept NaN-safe against t.achieved). */
+    const merchantEffectiveMap = new Map();
+    window.tasksMemory.forEach((memTask) => {
+        const bn = getBaseName(memTask.name);
+        let info = merchantEffectiveMap.get(bn);
+        if (!info) {
+            info = { signed: false, provisional: false, maxAchieved: 0, firstNonZeroTarget: 0 };
+            merchantEffectiveMap.set(bn, info);
+        }
+        if (!info.firstNonZeroTarget && memTask.target > 0) info.firstNonZeroTarget = memTask.target;
+        const memAchieved = Number(memTask.achieved) || 0;
+        if (memTask.isSigned && memAchieved > 0) {
+            info.signed = true;
+            info.provisional = false;
+            if (memAchieved > info.maxAchieved) info.maxAchieved = memAchieved;
+        } else if ((memTask.isProvisional || (memTask.isSigned && memAchieved === 0)) && !info.signed) {
+            info.provisional = true;
+            if (memAchieved > info.maxAchieved) info.maxAchieved = memAchieved;
+        }
+    });
+
     Object.keys(grouped).sort().forEach(date => { 
 
         const isToday = (date === todayStr); const isOpen = (isToday || singleDateView) ? 'open' : '';
@@ -2408,43 +2441,19 @@ window.renderTasks = (grouped) => {
 
             const baseN = getBaseName(t.name);
 
+            const effectiveInfo = merchantEffectiveMap.get(baseN) || { signed: false, provisional: false, maxAchieved: 0, firstNonZeroTarget: 0 };
+
             let effectiveTarget = t.target;
 
-            let effectiveIsSigned = false;
+            let effectiveIsSigned = effectiveInfo.signed;
 
-            let effectiveIsProvisional = false;
+            let effectiveIsProvisional = effectiveInfo.provisional;
 
             let effectiveAchieved = t.achieved;
 
+            if (!effectiveTarget && effectiveInfo.firstNonZeroTarget > 0) effectiveTarget = effectiveInfo.firstNonZeroTarget;
 
-
-            window.tasksMemory.forEach((memTask) => {
-
-                if (getBaseName(memTask.name) === baseN) {
-
-                    if (!effectiveTarget && memTask.target > 0) effectiveTarget = memTask.target;
-
-                    const memAchieved = Number(memTask.achieved) || 0;
-
-                    if (memTask.isSigned && memAchieved > 0) {
-
-                        effectiveIsSigned = true;
-
-                        effectiveIsProvisional = false;
-
-                        if (memAchieved > effectiveAchieved) effectiveAchieved = memAchieved;
-
-                    } else if ((memTask.isProvisional || (memTask.isSigned && memAchieved === 0)) && !effectiveIsSigned) {
-
-                        effectiveIsProvisional = true;
-
-                        if (memAchieved > effectiveAchieved) effectiveAchieved = memAchieved;
-
-                    }
-
-                }
-
-            });
+            if (effectiveInfo.maxAchieved > effectiveAchieved) effectiveAchieved = effectiveInfo.maxAchieved;
 
 
 

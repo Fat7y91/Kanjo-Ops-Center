@@ -314,6 +314,10 @@ window.recordAttendance = async function(taskId, type) {
             if (!memFinalized) mem.time = todayStr;
             if (cleanAddress) mem.address = cleanAddress;
             window.tasksMemory.set(taskId, mem);
+            /* Local optimistic update: bump the version so the derived
+               aggregates recompute on the next render instead of waiting for
+               the listener round-trip. */
+            window.tasksMemoryVersion = tasksMemoryVersion() + 1;
         }
 
         showToast(type === 'start'
@@ -744,16 +748,38 @@ window.submitReport = async () => {
     showToast("تم حفظ التقرير ومزامنة المتابعات بنجاح"); 
 };
 
+/* ── Memoized full-memory scans (P1.4) ─────────────────────────────────────
+   Every dashboard render used to re-walk the whole tasks Map twice (virtual
+   snapshot + unique-merchant aggregation). A render is often triggered by
+   something other than task data (a filter, payroll settings, a merchant
+   upload), so `tasksMemoryVersion` is bumped only when a task document really
+   changes. As long as the version is unchanged these two helpers return their
+   previous result instead of iterating thousands of documents again. */
+const tasksMemoryVersion = () => (
+    typeof window.tasksMemoryVersion === 'number' ? window.tasksMemoryVersion : 0
+);
+
 function buildVirtualSnapshot() {
-    return {
+    const version = tasksMemoryVersion();
+    if (window._virtualSnapshotCache && window._virtualSnapshotVersion === version) {
+        return window._virtualSnapshotCache;
+    }
+    const snapshot = {
         docs: Array.from(window.tasksMemory.entries()).map(([id, data]) => ({ id, data: () => data })),
         forEach: (cb) => {
             window.tasksMemory.forEach((data, id) => cb({ id, data: () => data }));
         }
     };
+    window._virtualSnapshotCache = snapshot;
+    window._virtualSnapshotVersion = version;
+    return snapshot;
 }
 
 function computeUniqueMerchantsFromMemory() {
+    const version = tasksMemoryVersion();
+    if (window._uniqueMerchantsVersion === version && window.currentUniqueMerchantsGlobal instanceof Map) {
+        return;
+    }
     const uniqueMerchants = new Map();
     window.tasksMemory.forEach((task) => {
         const baseName = getBaseName(task.name);
@@ -791,6 +817,7 @@ function computeUniqueMerchantsFromMemory() {
         if (task.cat && task.cat !== "متابعة" && task.cat !== "متابعه") mData.cat = task.cat;
     });
     window.currentUniqueMerchantsGlobal = uniqueMerchants;
+    window._uniqueMerchantsVersion = version;
 }
 
 function rerenderDashboard() {
@@ -855,7 +882,10 @@ const loadMoreTasks = async () => {
         });
         if (snapshot.docs.length) page.cursor = snapshot.docs[snapshot.docs.length - 1];
         page.exhausted = snapshot.docs.length < page.pageSize;
-        if (added > 0) scheduleTaskSync();
+        if (added > 0) {
+            window.tasksMemoryVersion = tasksMemoryVersion() + 1;
+            scheduleTaskSync();
+        }
         return snapshot.docs.length;
     } catch (err) {
         console.error('[tasks] loadMoreTasks failed:', err);
@@ -876,6 +906,9 @@ window.listenToTasks = () => {
        clean memory, otherwise docs from the previous session linger. */
     if (!window.tasksMemory) window.tasksMemory = new Map();
     window.tasksMemory.clear();
+    /* A new session/window must invalidate the memoized full-memory scans so the
+       first render rebuilds from this listener's data, not a previous login. */
+    window.tasksMemoryVersion = tasksMemoryVersion() + 1;
 
     /* Scope the previously-unfiltered tasks listener. A field rep only needs
        their own team's tasks; managers get the whole set. */
@@ -940,6 +973,7 @@ window.listenToTasks = () => {
         }
 
         if (mutated || firstSnapshot) {
+            if (mutated) window.tasksMemoryVersion = tasksMemoryVersion() + 1;
             firstSnapshot = false;
             scheduleTaskSync();
         }
@@ -954,6 +988,14 @@ window.listenToTasks = () => {
 
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
     window._appListenerUnsubscribers.push(unsub);
+
+    /* Prime the server-side aggregate summary for this scope (P1.4). This runs
+       entirely off the main computation path: the browser asks Firestore to
+       count/sum/average the tasks, merchants, products and financial profiles
+       and caches the result instead of iterating the data locally. */
+    if (window.kanjoAggregates && typeof window.kanjoAggregates.getServerSummary === 'function') {
+        Promise.resolve(window.kanjoAggregates.getServerSummary({ team: repTeam })).catch(() => {});
+    }
 };
 
 function updateQuickLinksWalletCounter() {

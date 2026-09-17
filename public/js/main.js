@@ -2,6 +2,8 @@
 import './config/firebase.js';
 import { categories } from './config/constants.js';
 import './utils/helpers.js';
+import './utils/exportWorker.js';
+import './services/aggregates.js';
 import './utils/export.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';

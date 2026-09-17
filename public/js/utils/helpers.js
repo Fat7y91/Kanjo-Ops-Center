@@ -144,4 +144,15 @@ window.isRestaurantCafeCategoryExact = (cat) => {
     return c === 'مطاعم وكافيهات' || c.endsWith('مطاعم وكافيهات');
 };
 
+/* Cooperative yield point for long, CPU-bound loops (P1.7).
+   Give the browser a chance to paint / handle input between chunks of heavy
+   work instead of freezing until the whole export/import finishes. Prefers the
+   modern scheduler.yield() when available and degrades to a macrotask. */
+window.kanjoYieldToMain = () => {
+    if (typeof scheduler !== 'undefined' && scheduler && typeof scheduler.yield === 'function') {
+        return scheduler.yield();
+    }
+    return new Promise((resolve) => setTimeout(resolve, 0));
+};
+
 export { getBaseName };

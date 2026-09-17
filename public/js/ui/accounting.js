@@ -354,7 +354,7 @@ window.approveFinancialProfile = async (id) => {
     }
 };
 
-window.exportFinancialProfilesExcel = () => {
+window.exportFinancialProfilesExcel = async () => {
     const profiles = Array.from(window.financialProfilesCache.values());
     if (profiles.length === 0) { showToast("لا توجد بيانات دفع لتصديرها", false); return; }
 
@@ -386,10 +386,15 @@ window.exportFinancialProfilesExcel = () => {
         return row;
     });
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Kanjo Payment Profiles");
-    XLSX.writeFile(wb, "Kanjo_Payment_Profiles_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    const fileName = "Kanjo_Payment_Profiles_" + new Date().toISOString().slice(0,10) + ".xlsx";
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.writeWorkbook === 'function') {
+        await window.kanjoExportWorker.writeWorkbook([{ name: "Kanjo Payment Profiles", rows: exportData }], fileName);
+    } else {
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Kanjo Payment Profiles");
+        XLSX.writeFile(wb, fileName);
+    }
     showToast("تم تصدير بيانات الدفع بنجاح");
 };
 

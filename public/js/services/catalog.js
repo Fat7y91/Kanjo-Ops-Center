@@ -3489,7 +3489,17 @@ const kanjoSheetFromRows = (columns, rows) => (
         : XLSX.utils.aoa_to_sheet([columns])
 );
 
-const kanjoWriteWorkbook = (productRows, variantRows, fileName) => {
+const kanjoWriteWorkbook = async (productRows, variantRows, fileName) => {
+    /* P1.7: hand the (CPU-heavy) SheetJS serialization to the background worker.
+       The worker receives plain row data and streams the .xlsx bytes back, so
+       the dashboard thread stays responsive even for tens of thousands of rows. */
+    const sheets = [
+        { name: 'Products', header: KANJO_PRODUCTS_SHEET_COLUMNS, rows: productRows, colWidth: 22 },
+        { name: 'Variants', header: KANJO_VARIANTS_SHEET_COLUMNS, rows: variantRows, colWidth: 22 }
+    ];
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.writeWorkbook === 'function') {
+        return window.kanjoExportWorker.writeWorkbook(sheets, fileName);
+    }
     if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('مكتبة Excel غير محمّلة، أعد تحميل الصفحة');
     const wb = XLSX.utils.book_new();
     const wsProducts = kanjoSheetFromRows(KANJO_PRODUCTS_SHEET_COLUMNS, productRows);
@@ -3512,16 +3522,18 @@ const kanjoReportExportError = (err) => {
     }
 };
 
-const kanjoFinalizeExport = (evaluations, selections, opts, variantEntries) => {
+const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
         const productRows = [];
-        evaluations.forEach(({ product, match }) => {
+        for (let i = 0; i < evaluations.length; i++) {
+            if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
+            const { product, match } = evaluations[i];
             const key = String((product && product.id) || '');
             const category = match.status === 'matched'
                 ? match.category
                 : (selections[key] || match.category || '');
             productRows.push(kanjoBuildProductRow(product, category));
-        });
+        }
         /* The variant phase already resolved duplicates/conflicts; fall back to a
            straight build only when called without pre-computed entries. */
         let variantRows;
@@ -3534,7 +3546,7 @@ const kanjoFinalizeExport = (evaluations, selections, opts, variantEntries) => {
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
-        kanjoWriteWorkbook(productRows, variantRows, fileName);
+        await kanjoWriteWorkbook(productRows, variantRows, fileName);
         if (window.showToast) window.showToast('تم تصدير ملف Excel (' + productRows.length + ' منتج، ' + variantRows.length + ' خيار) بنجاح');
     } catch (err) {
         kanjoReportExportError(err);
@@ -4005,24 +4017,37 @@ window.parseRawTextCatalog = async () => {
         return;
     }
     const cleanText = rawText.replace(/\\"/g, '"');
-    const regex = /"imageUrl"\s*:\s*"([^"]+)"[\s\S]*?"productName"\s*:\s*"([^"]+)"[\s\S]*?"sellingPrice"\s*:\s*([0-9.]+)/g;
     const unique = new Map();
-    let match;
-    while ((match = regex.exec(cleanText)) !== null) {
-        const name = String(match[2] || '').trim();
-        if (!name || unique.has(name)) continue;
-        const price = parseFloat(match[3]);
-        unique.set(name, {
-            name,
-            name_ar: name,
-            name_en: name,
-            price: Number.isFinite(price) ? price : 0,
-            image_url: String(match[1] || '').trim(),
+    const addExtracted = (name, price, imageUrl) => {
+        const trimmed = String(name || '').trim();
+        if (!trimmed || unique.has(trimmed)) return;
+        const numPrice = Number(price);
+        unique.set(trimmed, {
+            name: trimmed,
+            name_ar: trimmed,
+            name_en: trimmed,
+            price: Number.isFinite(numPrice) ? numPrice : 0,
+            image_url: String(imageUrl || '').trim(),
             category,
             sku: '',
             scraped_at: new Date(),
             uploaded_at: new Date()
         });
+    };
+    /* P1.7: the lazy `[\s\S]*?` scan is O(text) and stalls the main thread on big
+       pastes, so run it in the worker; fall back to the inline regex otherwise. */
+    let offloaded = null;
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.parseRawText === 'function') {
+        offloaded = await window.kanjoExportWorker.parseRawText(cleanText, category);
+    }
+    if (Array.isArray(offloaded)) {
+        offloaded.forEach((it) => addExtracted(it.name, it.price, it.imageUrl));
+    } else {
+        const regex = /"imageUrl"\s*:\s*"([^"]+)"[\s\S]*?"productName"\s*:\s*"([^"]+)"[\s\S]*?"sellingPrice"\s*:\s*([0-9.]+)/g;
+        let match;
+        while ((match = regex.exec(cleanText)) !== null) {
+            addExtracted(match[2], parseFloat(match[3]), match[1]);
+        }
     }
     const items = Array.from(unique.values());
     if (!items.length) {
@@ -4152,6 +4177,23 @@ const parseCsvRecords = (text) => {
     return records;
 };
 
+/* P1.7: off-thread parse helpers that fall back to the synchronous parsers
+   when the worker is unavailable. */
+const parseCsvRecordsAsync = async (text) => {
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.parseCsv === 'function') {
+        const records = await window.kanjoExportWorker.parseCsv(text);
+        if (Array.isArray(records)) return records;
+    }
+    return parseCsvRecords(text);
+};
+
+const parseJsonOffthread = (text) => {
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.parseJson === 'function') {
+        return window.kanjoExportWorker.parseJson(text);
+    }
+    return Promise.resolve(JSON.parse(text));
+};
+
 const mapMasterCatalogCsvRow = (row, idx) => {
     const kanjoId = String(row.id || row.Id || row.ID || '').trim();
     const name = String(row.name || row.name_ar || '').trim();
@@ -4201,7 +4243,7 @@ window.migrateMasterCatalogFromCsv = async () => {
     const report = { csvRows: 0, imported: 0, skipped: [], duplicates: [], cleared: 0, errors: [] };
     try {
         const text = await readLocalJsonFile(file);
-        const records = parseCsvRecords(text);
+        const records = await parseCsvRecordsAsync(text);
         if (!records.length) {
             window.showToast('ملف CSV فارغ أو غير صالح', false);
             return;
@@ -4278,7 +4320,7 @@ window.uploadMasterCatalogDriveLinks = async () => {
     const report = { csvRows: 0, updated: 0, unmatched: [], skipped: [], duplicates: [], errors: [] };
     try {
         const text = await readLocalJsonFile(file);
-        const records = parseCsvRecords(text);
+        const records = await parseCsvRecordsAsync(text);
         if (!records.length) {
             window.showToast('ملف CSV فارغ أو غير صالح', false);
             return;
@@ -4397,7 +4439,7 @@ window.processMasterCatalogJson = async () => {
             const text = await readLocalJsonFile(files[i]);
             let parsed;
             try {
-                parsed = JSON.parse(text);
+                parsed = await parseJsonOffthread(text);
             } catch (_) {
                 window.showToast('ملف JSON غير صالح: ' + files[i].name, false);
                 return;
@@ -4494,7 +4536,7 @@ window.processStagingCatalogJson = async () => {
         });
         let parsed;
         try {
-            parsed = JSON.parse(text);
+            parsed = await parseJsonOffthread(text);
         } catch (_) {
             window.showToast('ملف JSON غير صالح', false);
             return;
