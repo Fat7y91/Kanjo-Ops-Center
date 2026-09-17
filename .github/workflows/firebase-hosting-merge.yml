@@ -22,10 +22,21 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
           channelId: live
           projectId: kanjo-desouk
-      - name: Deploy Firestore rules & indexes
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}' > "$RUNNER_TEMP/firebase-sa.json"
-          npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project kanjo-desouk
+      - name: Write Firebase service account
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+      - name: Deploy Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
           CI: true
+        run: npx -y firebase-tools@latest deploy --only firestore:rules --project kanjo-desouk
+      # Best-effort: the CI service account may lack datastore.indexes.create.
+      # Indexes are a performance optimisation, so never fail the deploy on them.
+      - name: Deploy Firestore indexes (best-effort)
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true
+        run: npx -y firebase-tools@latest deploy --only firestore:indexes --project kanjo-desouk
+
