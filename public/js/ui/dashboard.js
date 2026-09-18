@@ -2862,11 +2862,9 @@ window.setupAdvancedFilterElements = setupAdvancedFilterElements;
 window.calculateTopPerformer = calculateTopPerformer;
 window.calculateTopTeam = calculateTopTeam;
 
-/* ─── Infinite scroll / Load More (paginated task fetching) ───
-   Fetches the next TASKS_PAGE_SIZE tasks (startAfter the last visible doc)
-   when the user scrolls near the bottom of the dashboard, instead of ever
-   fetching the entire collection. Backed by window.loadMoreTasks() which is
-   defined in services/firestore.js. */
+/* ─── Infinite scroll / Load More ───
+   The full ordered task set is now streamed once (local-first), so there is no
+   next page. window.loadMoreTasks() is kept as a no-op for compatibility. */
 window.setupInfiniteScroll = () => {
     const maybeLoadMore = () => {
         if (typeof window.loadMoreTasks !== 'function') return;

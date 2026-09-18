@@ -41,7 +41,7 @@ window.applyTeamTheme = (team) => {
 let _authClaimsSynced = false;
 window.authClaims = window.authClaims || null;
 
-window.ensureAuthClaims = async () => {
+window.ensureAuthClaims = async (intendedIdentity) => {
     if (_authClaimsSynced) return window.authClaims;
     try {
         const fbUser = window.auth && window.auth.currentUser;
@@ -53,13 +53,73 @@ window.ensureAuthClaims = async () => {
             ]);
             if (!token) return window.authClaims;
             const claims = (token && token.claims) || {};
+
+            /* Which person is signing in on THIS device right now? An explicit
+               argument (PIN login) wins, then the module-local user, then the
+               session restored by main.js. */
+            const intended = intendedIdentity || currentUser || window.currentUser || null;
+            const intendedName = String((intended && intended.name) || '').trim();
+            const claimName = String(claims.kanjoName || '').trim();
+
+            /* Shared-device reconciliation: the browser's anonymous UID can still
+               carry a *different* teammate's claims from a previous shift. Those
+               claims would scope every team/time read to the wrong person (or to
+               nobody), so a PIN login must never inherit them. Re-authenticate to
+               a clean UID and register this identity as an enrollment hint. */
+            if (claims.kanjoRole && intendedName && claimName && claimName !== intendedName) {
+                if (!window._claimsReauthAttempted) {
+                    window._claimsReauthAttempted = true;
+                    try {
+                        if (typeof window.signOut === 'function' && window.auth) {
+                            await window.signOut(window.auth);
+                        }
+                        const cred = (typeof window.signInAnonymously === 'function' && window.auth)
+                            ? await window.signInAnonymously(window.auth)
+                            : null;
+                        const newUid = cred && cred.user && cred.user.uid;
+                        window.authReady = Promise.resolve(cred && cred.user);
+                        if (newUid) {
+                            window.setDoc(
+                                window.doc(window.db, 'enrollment_requests', newUid),
+                                {
+                                    uid: newUid,
+                                    name: intendedName,
+                                    role: (intended && intended.role) || '',
+                                    team: (intended && intended.team) || '',
+                                    at: new Date()
+                                },
+                                { merge: true }
+                            ).catch(() => {});
+                        }
+                        window.authClaims = {};
+                        _authClaimsSynced = true;
+                        currentUser = Object.assign({}, intended || {});
+                        window.currentUser = currentUser;
+                        window.saveSession(currentUser);
+                        /* Re-bind listeners under the new UID/identity. */
+                        if (typeof window.detachAppListeners === 'function') window.detachAppListeners();
+                        applyThemeAndShowDashboard();
+                        return window.authClaims;
+                    } catch (e) {
+                        console.warn('[auth] shared-device re-auth failed:', e);
+                    }
+                }
+                /* Re-auth unavailable: keep the PIN identity for this session so
+                   we never silently impersonate the other teammate. */
+                currentUser = Object.assign({}, intended || {});
+                window.currentUser = currentUser;
+                window.authClaims = claims;
+                _authClaimsSynced = true;
+                return claims;
+            }
+
             window.authClaims = claims;
             _authClaimsSynced = true;
 
             /* Session restore only sets window.currentUser (via main.js); the
                module-local currentUser is set by an explicit PIN login. Use
                either so a plain page reload also registers the hint. */
-            const identity = currentUser || window.currentUser || null;
+            const identity = intended;
 
             if (claims.kanjoRole) {
                 currentUser = {
@@ -107,11 +167,26 @@ async function login(pinOverride = null) {
     if(users[pin]) {
         currentUser = users[pin];
         window.currentUser = currentUser;
-        await window.ensureAuthClaims();
-        currentUser = window.currentUser || currentUser;
         window.saveSession(currentUser);
+        /* Paint the dashboard and attach listeners immediately: never block the
+           UI on the token/claims round-trip. Claims reconciliation runs in the
+           background and re-applies the theme if it changes the identity. */
         applyThemeAndShowDashboard();
         resetIdleTimer();
+        const intendedIdentity = currentUser;
+        const beforeKey = [intendedIdentity.name, intendedIdentity.role, intendedIdentity.team].join('|');
+        if (typeof window.ensureAuthClaims === 'function') {
+            window.ensureAuthClaims(intendedIdentity).then(() => {
+                currentUser = window.currentUser || currentUser;
+                window.saveSession(currentUser);
+                const afterKey = [currentUser.name, currentUser.role, currentUser.team].join('|');
+                if (afterKey !== beforeKey && typeof window.detachAppListeners === 'function') {
+                    window.detachAppListeners();
+                }
+                applyThemeAndShowDashboard();
+                if (window.lastSnapshot && typeof renderDashboard === 'function') renderDashboard(window.lastSnapshot);
+            }).catch(() => {});
+        }
     } else { 
         if(!pinOverride) {
             if(window.showToast) window.showToast("رمز الدخول غير صحيح", false);

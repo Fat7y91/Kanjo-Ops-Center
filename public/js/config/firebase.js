@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, deleteField, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, CACHE_SIZE_UNLIMITED, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, deleteField, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
 // Firebase web config. Values are injected at build time by scripts/split-modules.mjs
@@ -34,21 +34,20 @@ let db;
 if (canPersistLocalCache) {
     try {
         db = initializeFirestore(app, {
-            // Force HTTP long-polling instead of the default WebChannel/WebSocket
-            // transport. Many ISP/mobile/hotel Wi-Fi networks (and corporate proxies)
-            // silently block or break long-lived WebSocket streams, which used to leave
-            // the whole app stuck on the loading spinner while 4G worked fine. Long
-            // polling degrades gracefully over restrictive networks.
-            experimentalForceLongPolling: true,
+            // Auto-detect transport: start with the fast default WebChannel/WebSocket
+            // stream and fall back to HTTP long-polling only when the network
+            // (ISP/mobile/hotel Wi-Fi, corporate proxy) actually breaks the stream.
+            // Previously we force-disabled WebChannel for everyone, which made good
+            // networks pay long-polling latency on every read.
+            experimentalAutoDetectLongPolling: true,
             localCache: persistentLocalCache({
                 // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
                 // and passing both silently falls back to an in-memory cache that refetches
                 // everything on every reload (main cause of the app being extremely heavy).
                 tabManager: persistentSingleTabManager(),
-                // 10 MB hard cap on the persistent (IndexedDB) cache. Prevents old/low-end
-                // devices from hanging while the SDK resolves indexes against a huge stale
-                // local cache during multi-city scale-up.
-                cacheSizeBytes: 10485760
+                // Unlimited persistent (IndexedDB) cache so the full text dataset stays
+                // local and the UI paints instantly/offline without server round-trips.
+                cacheSizeBytes: CACHE_SIZE_UNLIMITED
             })
         });
     } catch (e) {
@@ -59,7 +58,7 @@ if (canPersistLocalCache) {
 } else {
     // Storage-restricted context (e.g. Safari Private Browsing): memory cache only.
     try {
-        db = initializeFirestore(app, { experimentalForceLongPolling: true });
+        db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
     } catch (e) {
         console.error("initializeFirestore failed; using default memory cache:", e);
         db = getFirestore(app);
@@ -92,6 +91,7 @@ if (appCheckSiteKey) {
 const auth = getAuth(app);
 window.auth = auth;
 window.signInAnonymously = signInAnonymously;
+window.signOut = signOut;
 
 // Resolves once an authenticated session is established. Data listeners should
 // wait on window.authReady before reading/writing so they don't race auth.

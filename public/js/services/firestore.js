@@ -843,17 +843,15 @@ function rerenderDashboard() {
     }
 }
 
-/* ── Tasks window: deterministic ordering + cursor pagination ──────────────
-   The old query was unordered with a hard limit, so which documents made the
-   cut — and therefore every dashboard count — changed from load to load. `time`
-   is an ISO date string present on (almost) every task, so it gives a stable,
-   newest-first window plus a cursor for loadMoreTasks(). The composite index
-   tasks(team ASC, time DESC) backs the rep-scoped variant. Coverage caps are
-   unchanged on purpose (aggregates feed payroll/exports); only ordering and the
-   update path changed. */
+/* ── Tasks: full ordered dataset, no window/limit ─────────────────────────
+   The dashboard is local-first: the entire team's tasks are streamed once and
+   kept in the persistent IndexedDB cache so every count/payroll/export is
+   computed from the complete set. The previous hard limit (3000/6000) made
+   "which documents made the cut" — and therefore every count — depend on the
+   page size. `time` is an ISO date string present on (almost) every task, so it
+   gives a stable newest-first ordering; the composite index
+   tasks(team ASC, time DESC) backs the rep-scoped variant. */
 const TASKS_ORDER_FIELD = 'time';
-const TASKS_PAGE_SIZE_REP = 3000;
-const TASKS_PAGE_SIZE_MANAGER = 6000;
 
 window._tasksPage = null;
 
@@ -869,31 +867,9 @@ const scheduleTaskSync = (() => {
         : run;
 })();
 
-const loadMoreTasks = async () => {
-    const page = window._tasksPage;
-    if (!page || page.loading || page.exhausted || !page.cursor || page.fallback) return 0;
-    page.loading = true;
-    try {
-        const snapshot = await getDocs(page.buildQuery(page.cursor));
-        let added = 0;
-        snapshot.forEach((docSnap) => {
-            if (!window.tasksMemory.has(docSnap.id)) added++;
-            window.tasksMemory.set(docSnap.id, docSnap.data());
-        });
-        if (snapshot.docs.length) page.cursor = snapshot.docs[snapshot.docs.length - 1];
-        page.exhausted = snapshot.docs.length < page.pageSize;
-        if (added > 0) {
-            window.tasksMemoryVersion = tasksMemoryVersion() + 1;
-            scheduleTaskSync();
-        }
-        return snapshot.docs.length;
-    } catch (err) {
-        console.error('[tasks] loadMoreTasks failed:', err);
-        return 0;
-    } finally {
-        page.loading = false;
-    }
-};
+/* Retained for API compatibility (the dashboard "load more" affordance no
+   longer has anything to page through — the full set is already resident). */
+const loadMoreTasks = async () => 0;
 window.loadMoreTasks = loadMoreTasks;
 
 // الاستماع الحي للمهام — مُقيَّد بفريق المندوب + نافذة مرتّبة قابلة للترقيم
@@ -913,15 +889,14 @@ window.listenToTasks = () => {
     /* Scope the previously-unfiltered tasks listener. A field rep only needs
        their own team's tasks; managers get the whole set. */
     const repTeam = (currentUser && currentUser.role === 'rep' && currentUser.team) ? currentUser.team : null;
-    const pageSize = repTeam ? TASKS_PAGE_SIZE_REP : TASKS_PAGE_SIZE_MANAGER;
     const baseConstraints = repTeam ? [where("team", "==", repTeam)] : [];
 
-    const buildOrderedQuery = (cursor) => query(
+    /* No limit / no cursor: stream the complete ordered dataset. Persistence
+       keeps it in IndexedDB, so this is paid once and then served from cache. */
+    const buildOrderedQuery = () => query(
         collection(db, "tasks"),
         ...baseConstraints,
-        orderBy(TASKS_ORDER_FIELD, "desc"),
-        ...(cursor ? [startAfter(cursor)] : []),
-        limit(pageSize)
+        orderBy(TASKS_ORDER_FIELD, "desc")
     );
 
     /* Fallback for a missing composite index. The rep-scoped ordered query needs
@@ -931,11 +906,10 @@ window.listenToTasks = () => {
        loads — in this degraded mode newest-first ordering is not guaranteed. */
     const buildFallbackQuery = () => query(
         collection(db, "tasks"),
-        ...baseConstraints,
-        limit(pageSize)
+        ...baseConstraints
     );
 
-    window._tasksPage = { repTeam, pageSize, cursor: null, exhausted: false, loading: false, buildQuery: buildOrderedQuery, fallback: false };
+    window._tasksPage = { repTeam, buildQuery: buildOrderedQuery, fallback: false };
 
     let firstSnapshot = true;
     const handleSnapshot = (snapshot) => {
@@ -951,14 +925,6 @@ window.listenToTasks = () => {
                 mutated = true;
             }
         });
-
-        /* Cursor = oldest doc of the newest-first window. */
-        if (snapshot.docs.length) {
-            window._tasksPage.cursor = snapshot.docs[snapshot.docs.length - 1];
-            window._tasksPage.exhausted = snapshot.docs.length < pageSize;
-        } else {
-            window._tasksPage.exhausted = true;
-        }
 
         /* One-time signed/achieved correction, still based on the initial set. */
         if (!window.hasRunSignedMigration) {
