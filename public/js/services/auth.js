@@ -56,17 +56,22 @@ window.ensureAuthClaims = async () => {
             window.authClaims = claims;
             _authClaimsSynced = true;
 
+            /* Session restore only sets window.currentUser (via main.js); the
+               module-local currentUser is set by an explicit PIN login. Use
+               either so a plain page reload also registers the hint. */
+            const identity = currentUser || window.currentUser || null;
+
             if (claims.kanjoRole) {
                 currentUser = {
-                    ...(currentUser || window.currentUser || {}),
-                    name: claims.kanjoName || (currentUser && currentUser.name) || '',
+                    ...(identity || {}),
+                    name: claims.kanjoName || (identity && identity.name) || '',
                     role: claims.kanjoRole,
-                    team: claims.kanjoTeam || (currentUser && currentUser.team) || '',
+                    team: claims.kanjoTeam || (identity && identity.team) || '',
                     repId: claims.kanjoRepId || ''
                 };
                 window.currentUser = currentUser;
                 window.saveSession(currentUser);
-            } else if (currentUser && fbUser.uid) {
+            } else if (identity && fbUser.uid) {
                 /* Pre-enrollment: register an untrusted hint so the operator can
                    map this device UID to a PIN identity before running the
                    claims script. Hints are never an authorization source. */
@@ -74,9 +79,9 @@ window.ensureAuthClaims = async () => {
                     window.doc(window.db, 'enrollment_requests', fbUser.uid),
                     {
                         uid: fbUser.uid,
-                        name: currentUser.name || '',
-                        role: currentUser.role || '',
-                        team: currentUser.team || '',
+                        name: identity.name || '',
+                        role: identity.role || '',
+                        team: identity.team || '',
                         at: new Date()
                     },
                     { merge: true }

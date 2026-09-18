@@ -213,8 +213,10 @@ const main = async () => {
   if (flag('--verify')) return verifyClaims();
   if (flag('--enforce')) return setEnforce(true);
   if (flag('--unenforce')) return setEnforce(false);
-  if (flag('--apply')) return applyFile(valueOf('--apply'));
+  /* --auto is checked before --apply so `--auto --apply` (no file) means
+     "write claims from the enrollment hints", not the file importer. */
   if (flag('--auto')) return applyAuto();
+  if (flag('--apply')) return applyFile(valueOf('--apply'));
   console.log('Nothing to do. Use --list, --auto, --apply <file>, --enforce or --unenforce.');
 };
 
