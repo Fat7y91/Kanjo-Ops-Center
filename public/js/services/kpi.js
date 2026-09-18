@@ -1414,8 +1414,9 @@ const kpiPersonalRank = (row, report) => {
     const fieldRows = (report.rows || []).filter((r) => !r.isEditor);
     /* `report.totals.reps` survives report scoping (the rep's report only
        carries their own row), so the "X of Y" denominator stays correct. */
+    const totalFromTeam = report && report.totals ? Number(report.totals.teamReps) : 0;
     const totalFromTotals = report && report.totals ? Number(report.totals.reps) : 0;
-    const total = totalFromTotals > 0 ? totalFromTotals : fieldRows.length;
+    const total = totalFromTeam > 0 ? totalFromTeam : (totalFromTotals > 0 ? totalFromTotals : fieldRows.length);
     return { rank: row.isEditor ? null : (row.rank || null), total };
 };
 
@@ -1965,7 +1966,7 @@ window.renderKpiDashboard = async () => {
             const board = kpiComputeTeamBoard(summaries, ownRow);
             /* The scoped report only carries one row, so restore the real team
                denominator and this rep's true rank for the "المركز X من Y" badge. */
-            if (board.total > 0) ownReport.totals.reps = board.total;
+            if (board.total > 0) ownReport.totals.teamReps = board.total;
             if (ownRow && !ownRow.isEditor && board.ownRank) ownRow.rank = board.ownRank;
             window._kpiLatestReport = ownReport;
             content.innerHTML =
