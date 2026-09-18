@@ -152,6 +152,35 @@ const statusReport = async () => {
   console.log(`enrollment hints           : ${hintSnap.size}`);
 };
 
+/* Read-only probe: run the exact production queries and surface any missing
+   composite-index errors (Firestore returns the console create-index URL). */
+const queryCheck = async () => {
+  const probes = [
+    { label: 'tasks orderBy(time desc) [manager]', run: () => db.collection('tasks').orderBy('time', 'desc').limit(1).get() }
+  ];
+  ['Fox Team', 'Power Team'].forEach((team) => {
+    probes.push({
+      label: `tasks where(team==${team}) orderBy(time desc) [rep]`,
+      run: () => db.collection('tasks').where('team', '==', team).orderBy('time', 'desc').limit(1).get()
+    });
+  });
+  ['added_by', 'createdBy'].forEach((field) => {
+    probes.push({
+      label: `merchant_products where(${field}==سارة)`,
+      run: () => db.collection('merchant_products').where(field, '==', 'سارة').limit(1).get()
+    });
+  });
+  for (const probe of probes) {
+    try {
+      await probe.run();
+      console.log(`OK   ${probe.label}`);
+    } catch (err) {
+      console.log(`FAIL ${probe.label}`);
+      console.log(`     ${err && err.message ? err.message : err}`);
+    }
+  }
+};
+
 const verifyClaims = async () => {
   let claimed = 0;
   let total = 0;
@@ -234,6 +263,7 @@ const setEnforce = async (enabled) => {
 const main = async () => {
   if (flag('--list')) return listUsers();
   if (flag('--status')) return statusReport();
+  if (flag('--querycheck')) return queryCheck();
   if (flag('--verify')) return verifyClaims();
   if (flag('--enforce')) return setEnforce(true);
   if (flag('--unenforce')) return setEnforce(false);

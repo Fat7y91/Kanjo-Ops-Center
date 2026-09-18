@@ -16,6 +16,7 @@ on:
         options:
           - "list"
           - "status"
+          - "querycheck"
           - "auto-dry"
           - "apply-auto"
           - "enforce"
@@ -58,6 +59,12 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: node scripts/set-auth-claims.mjs --status
+
+      - name: Probe production queries for missing indexes
+        if: inputs.mode == 'querycheck'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --querycheck
 
       - name: Auto-map (dry-run, writes nothing)
         if: inputs.mode == 'auto-dry'
