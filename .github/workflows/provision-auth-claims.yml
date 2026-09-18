@@ -15,6 +15,7 @@ on:
         type: choice
         options:
           - "list"
+          - "status"
           - "auto-dry"
           - "apply-auto"
           - "enforce"
@@ -51,6 +52,12 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: node scripts/set-auth-claims.mjs --list
+
+      - name: Report migration status
+        if: inputs.mode == 'status'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --status
 
       - name: Auto-map (dry-run, writes nothing)
         if: inputs.mode == 'auto-dry'

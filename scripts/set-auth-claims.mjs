@@ -129,6 +129,29 @@ const listUsers = async () => {
 /* Safety gate: refuse to enforce when nothing has been provisioned. Flipping
    enforceRbac with zero kanjoRole claims turns every signed-in session into an
    unclaimed legacy session, which the strict rules deny -> total lockout. */
+/* Diagnostic: report the migration switch and provisioning coverage. */
+const statusReport = async () => {
+  const cfg = await db.collection('app_security').doc('config').get();
+  const enforced = cfg.exists && cfg.data() && cfg.data().enforceRbac === true;
+  const hintSnap = await db.collection('enrollment_requests').get();
+  let claimed = 0;
+  let total = 0;
+  let pageToken;
+  do {
+    const res = await auth.listUsers(1000, pageToken);
+    total += res.users.length;
+    res.users.forEach((u) => {
+      if (u.customClaims && u.customClaims.kanjoRole) claimed += 1;
+    });
+    pageToken = res.pageToken;
+  } while (pageToken);
+  console.log(`app_security/config exists : ${cfg.exists}`);
+  console.log(`enforceRbac                : ${enforced}`);
+  console.log(`auth users                 : ${total}`);
+  console.log(`users with kanjoRole claim : ${claimed}`);
+  console.log(`enrollment hints           : ${hintSnap.size}`);
+};
+
 const verifyClaims = async () => {
   let claimed = 0;
   let total = 0;
@@ -210,6 +233,7 @@ const setEnforce = async (enabled) => {
 
 const main = async () => {
   if (flag('--list')) return listUsers();
+  if (flag('--status')) return statusReport();
   if (flag('--verify')) return verifyClaims();
   if (flag('--enforce')) return setEnforce(true);
   if (flag('--unenforce')) return setEnforce(false);
