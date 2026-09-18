@@ -1052,6 +1052,9 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 
 /* ─────────── Team leaderboard (rep gamification) ─────────── */
+.kpi-leaderboard > .kpi-leaderboard-rows {
+    margin-top: 0;
+}
 .kpi-leaderboard-rows {
     display: flex;
     flex-direction: column;

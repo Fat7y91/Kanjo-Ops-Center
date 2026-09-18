@@ -237,7 +237,7 @@ service cloud.firestore {
       function isTeammateSummary() {
         return isRep()
           && claimTeam() != null
-          && resource.data.get('team', '') == claimTeam();
+          && resource.data.team == claimTeam();
       }
       function summaryKeys() {
         return [

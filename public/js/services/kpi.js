@@ -686,20 +686,38 @@ const kpiPublishSummaries = (rows) => {
 };
 
 /* Read the team's published summaries. Rule-gated: only same-kanjoTeam rows are
-   returned to a rep (managers/legacy users see all). */
+   returned to a rep (managers/legacy users see all). The payroll roster seeds
+   the list so every teammate is counted in the denominator even before they
+   have published a summary (a summary doc only becomes readable to the team
+   once it carries the `team` field). */
 const kpiFetchTeamSummaries = async () => {
     const u = window.currentUser || {};
     const team = String(u.team || kpiRepTeamName(u.name) || '').trim();
     if (!team) return [];
+    const byId = new Map();
+    (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
+        .filter((p) => p && String(p.team || '').trim() === team && p.name)
+        .forEach((p) => {
+            const repId = window.kpiRepId(p.name);
+            byId.set(repId, {
+                repId,
+                name: p.name,
+                team,
+                isEditor: false,
+                totalProducts: 0,
+                totalSeconds: 0,
+                validRatio: 0,
+                imageRatio: 0
+            });
+        });
     try {
         const snap = await window.getDocs(window.query(
             window.collection(window.db, KPI_REP_COLLECTION),
             window.where('team', '==', team)
         ));
-        const rows = [];
         snap.forEach((d) => {
             const data = d.data() || {};
-            rows.push({
+            byId.set(d.id, {
                 repId: d.id,
                 name: data.repName || d.id,
                 team: data.team || team,
@@ -710,11 +728,10 @@ const kpiFetchTeamSummaries = async () => {
                 imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
             });
         });
-        return rows;
     } catch (err) {
         console.error('[kpi] team leaderboard fetch failed:', err);
-        return [];
     }
+    return Array.from(byId.values());
 };
 
 /* Merge the live own-row over the published summaries and compute the same
@@ -773,15 +790,6 @@ const kpiTeamLeaderboardHtml = (board) => {
         </div>`;
     }).join('');
     return `<section class="kpi-panel kpi-leaderboard">
-        <div class="kpi-panel-head">
-            <div class="flex items-center gap-2">
-                <span class="kpi-panel-icon"><i class="fa-solid fa-ranking-star"></i></span>
-                <div>
-                    <h3 class="font-black text-sm text-[#230535]">ترتيب فريقك</h3>
-                    <p class="text-[11px] font-bold text-slate-400">منافسة ودية بين مناديب فريقك — شفافية كاملة لرفع الأداء</p>
-                </div>
-            </div>
-        </div>
         <div class="kpi-leaderboard-rows">${cards}</div>
     </section>`;
 };
