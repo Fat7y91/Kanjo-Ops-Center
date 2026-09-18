@@ -691,26 +691,29 @@ const kpiPublishSummaries = (rows) => {
    have published a summary (a summary doc only becomes readable to the team
    once it carries the `team` field). */
 const kpiFetchTeamSummaries = async () => {
-    const u = window.currentUser || {};
-    const team = String(u.team || kpiRepTeamName(u.name) || '').trim();
-    if (!team) return [];
-    const byId = new Map();
-    (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
-        .filter((p) => p && String(p.team || '').trim() === team && p.name)
-        .forEach((p) => {
-            const repId = kpiRepId(p.name);
-            byId.set(repId, {
-                repId,
-                name: p.name,
-                team,
-                isEditor: false,
-                totalProducts: 0,
-                totalSeconds: 0,
-                validRatio: 0,
-                imageRatio: 0
-            });
-        });
+    /* Never let leaderboard fetching throw into the dashboard render path: any
+       failure degrades to the payroll roster (or an empty list), never a fatal
+       "تعذر تحميل بيانات المؤشرات". */
     try {
+        const u = window.currentUser || {};
+        const team = String(u.team || kpiRepTeamName(u.name) || '').trim();
+        if (!team) return [];
+        const byId = new Map();
+        (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
+            .filter((p) => p && String(p.team || '').trim() === team && p.name)
+            .forEach((p) => {
+                const repId = kpiRepId(p.name);
+                byId.set(repId, {
+                    repId,
+                    name: p.name,
+                    team,
+                    isEditor: false,
+                    totalProducts: 0,
+                    totalSeconds: 0,
+                    validRatio: 0,
+                    imageRatio: 0
+                });
+            });
         const snap = await window.getDocs(window.query(
             window.collection(window.db, KPI_REP_COLLECTION),
             window.where('team', '==', team)
@@ -728,10 +731,11 @@ const kpiFetchTeamSummaries = async () => {
                 imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
             });
         });
+        return Array.from(byId.values());
     } catch (err) {
         console.error('[kpi] team leaderboard fetch failed:', err);
+        return [];
     }
-    return Array.from(byId.values());
 };
 
 /* Merge the live own-row over the published summaries and compute the same
