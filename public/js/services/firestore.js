@@ -970,13 +970,6 @@ window.listenToTasks = () => {
         if (typeof currentUnsub === 'function') window._appListenerUnsubscribers.push(currentUnsub);
     };
 
-    const silenceError = (error) => {
-        const code = String((error && error.code) || '').toLowerCase();
-        if (code === 'permission-denied') return true;
-        if (typeof window.isFirestoreIndexError === 'function' && window.isFirestoreIndexError(error)) return true;
-        return false;
-    };
-
     let retriedForAuth = false;
 
     /* Resolve the loading UI on any terminal error. The strict watchdog in
@@ -985,6 +978,14 @@ window.listenToTasks = () => {
     const recoverOrToast = (error) => {
         if (!window.hasRenderedData && typeof window.showDashboardLoadFailure === 'function') {
             window.showDashboardLoadFailure(error);
+            return;
+        }
+        /* A permission-denied is an authorization outcome, not a connection
+           failure: never surface the misleading "check your connection" toast
+           for it. It is logged for operators instead. */
+        const code = String((error && error.code) || '').toLowerCase();
+        if (code === 'permission-denied') {
+            console.error('[tasks] permission denied; suppressing generic network toast:', error);
             return;
         }
         if (typeof showToast === 'function') {
@@ -1006,9 +1007,11 @@ window.listenToTasks = () => {
             retriedForAuth = true;
             Promise.resolve(window.authReady).catch(() => null).then(() => {
                 if (window._tasksListenerStarted && !fallbackActive) {
+                    /* Detach the failed listener before re-subscribing so a
+                       permission-denied retry cannot accumulate duplicates. */
+                    if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
                     currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, (retryErr) => {
                         console.error("Firestore snapshot error (post-auth retry):", retryErr);
-                        if (silenceError(retryErr)) { recoverOrToast(retryErr); return; }
                         recoverOrToast(retryErr);
                     });
                     registerUnsub();
@@ -1016,7 +1019,6 @@ window.listenToTasks = () => {
             });
             return;
         }
-        if (silenceError(error)) { recoverOrToast(error); return; }
         recoverOrToast(error);
     };
 

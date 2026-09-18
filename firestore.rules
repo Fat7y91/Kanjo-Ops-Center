@@ -31,10 +31,13 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function tok() { return request.auth.token; }
 
-    function claimRole() { return isSignedIn() ? tok().kanjoRole : null; }
-    function claimTeam() { return isSignedIn() ? tok().kanjoTeam : null; }
-    function claimName() { return isSignedIn() ? tok().kanjoName : null; }
-    function claimRepId() { return isSignedIn() ? tok().kanjoRepId : null; }
+    // NOTE: custom claims MUST be read with .get('name', null); dot-access to a
+    // missing key raises an evaluation error (which denies the rule), so a
+    // claimless token would make `claimRole() == null` false and break legacy().
+    function claimRole() { return isSignedIn() ? tok().get('kanjoRole', null) : null; }
+    function claimTeam() { return isSignedIn() ? tok().get('kanjoTeam', null) : null; }
+    function claimName() { return isSignedIn() ? tok().get('kanjoName', null) : null; }
+    function claimRepId() { return isSignedIn() ? tok().get('kanjoRepId', null) : null; }
 
     function isAdmin() { return claimRole() == 'admin'; }
     function isFounder() { return claimRole() == 'founder'; }
@@ -43,8 +46,8 @@ service cloud.firestore {
     function isDataEntry() { return claimRole() == 'data_entry'; }
 
     function isPrivileged() { return isAdmin() || isFounder(); }
-    function isOpsManager() { return isSignedIn() && tok().kanjoOps == true; }
-    function isContentUser() { return isSignedIn() && tok().kanjoContent == true; }
+    function isOpsManager() { return isSignedIn() && tok().get('kanjoOps', false) == true; }
+    function isContentUser() { return isSignedIn() && tok().get('kanjoContent', false) == true; }
     function isManagerViewer() { return isPrivileged() || isOpsManager(); }
 
     function rbacEnforced() {
@@ -53,13 +56,14 @@ service cloud.firestore {
     }
 
     // Legacy gate used ONLY during the migration window:
-    //   - a user WITH claims is always evaluated against the scoped rules;
-    //   - a user WITHOUT claims keeps the old signed-in behaviour until
-    //     app_security/config.enforceRbac == true, then is denied.
-    // Short-circuiting on the claim also means the config lookup never runs on
-    // the hot path once the team is enrolled.
+    //   - while app_security/config.enforceRbac is NOT true, every signed-in
+    //     session keeps the old behaviour (lockout-free migration);
+    //   - once enforced, claimless sessions are denied and each user is
+    //     evaluated against the scoped claim rules.
+    // Kept deliberately independent of claimRole() so a missing custom claim
+    // can never break the escape hatch.
     function legacy() {
-      return isSignedIn() && claimRole() == null && !rbacEnforced();
+      return isSignedIn() && !rbacEnforced();
     }
 
     // 1) Global default: deny everything.
@@ -112,7 +116,7 @@ service cloud.firestore {
     // - Data-entry may read (catalog tooling) but not write.
     match /tasks/{docId} {
       function canReadTask() {
-        return isPrivileged() || isAccounting() || isDataEntry()
+        return isPrivileged() || isOpsManager() || isAccounting() || isDataEntry()
           || (isRep() && resource.data.team == claimTeam());
       }
       function canWriteTask() {
