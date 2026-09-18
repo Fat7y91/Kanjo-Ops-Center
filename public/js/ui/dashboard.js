@@ -1331,7 +1331,7 @@ window.showDashboardLoading = () => {
    If the first batch of data has not arrived after this deadline, replace the
    spinner with a recoverable card. Covers every stall cause: a denied listener,
    a hung anonymous-auth handshake, a slow network, or a missing index. */
-const DASHBOARD_LOAD_TIMEOUT_MS = 15000;
+const DASHBOARD_LOAD_TIMEOUT_MS = 30000;
 
 window.startDashboardWatchdog = () => {
     window.clearDashboardWatchdog();

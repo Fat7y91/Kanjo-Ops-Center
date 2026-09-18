@@ -698,7 +698,7 @@ const kpiFetchTeamSummaries = async () => {
     (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
         .filter((p) => p && String(p.team || '').trim() === team && p.name)
         .forEach((p) => {
-            const repId = window.kpiRepId(p.name);
+            const repId = kpiRepId(p.name);
             byId.set(repId, {
                 repId,
                 name: p.name,

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, CACHE_SIZE_UNLIMITED, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, deleteField, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, deleteField, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
@@ -34,20 +34,11 @@ let db;
 if (canPersistLocalCache) {
     try {
         db = initializeFirestore(app, {
-            // Auto-detect transport: start with the fast default WebChannel/WebSocket
-            // stream and fall back to HTTP long-polling only when the network
-            // (ISP/mobile/hotel Wi-Fi, corporate proxy) actually breaks the stream.
-            // Previously we force-disabled WebChannel for everyone, which made good
-            // networks pay long-polling latency on every read.
-            experimentalAutoDetectLongPolling: true,
             localCache: persistentLocalCache({
-                // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
-                // and passing both silently falls back to an in-memory cache that refetches
-                // everything on every reload (main cause of the app being extremely heavy).
-                tabManager: persistentSingleTabManager(),
-                // Unlimited persistent (IndexedDB) cache so the full text dataset stays
-                // local and the UI paints instantly/offline without server round-trips.
-                cacheSizeBytes: CACHE_SIZE_UNLIMITED
+                // Single-tab persistence. cacheSizeBytes is intentionally left at the
+                // SDK default: a custom/unlimited cap made low-end devices hang while
+                // the SDK resolved indexes against a huge stale IndexedDB cache.
+                tabManager: persistentSingleTabManager()
             })
         });
     } catch (e) {
@@ -58,7 +49,7 @@ if (canPersistLocalCache) {
 } else {
     // Storage-restricted context (e.g. Safari Private Browsing): memory cache only.
     try {
-        db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+        db = initializeFirestore(app);
     } catch (e) {
         console.error("initializeFirestore failed; using default memory cache:", e);
         db = getFirestore(app);
