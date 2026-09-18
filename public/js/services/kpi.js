@@ -731,63 +731,126 @@ const kpiFetchLeaderboardSummaries = async () => {
     }
 };
 
-/* Merge the live own-row over the published summaries and compute the same
-   weighted score the manager report uses (normalised over the whole company). */
-const kpiComputeLeaderboard = (summaries, ownRow) => {
-    const map = new Map();
-    (summaries || []).forEach((r) => map.set(r.repId, Object.assign({}, r)));
-    if (ownRow) {
-        const prev = map.get(ownRow.repId) || {};
-        map.set(ownRow.repId, {
-            repId: ownRow.repId,
-            name: ownRow.name,
-            isEditor: !!ownRow.isEditor,
-            totalProducts: Math.max(Number(prev.totalProducts) || 0, Number(ownRow.totalProducts) || 0),
-            totalSeconds: Math.max(Number(prev.totalSeconds) || 0, Number(ownRow.totalSeconds) || 0),
-            validRatio: Number(ownRow.validRatioRaw) || 0,
-            imageRatio: Number(ownRow.imageRatioRaw) || 0
-        });
-    }
-    const field = Array.from(map.values()).filter((r) => !r.isEditor);
-    const maxProducts = field.reduce((m, r) => Math.max(m, Number(r.totalProducts) || 0), 0);
-    const maxSeconds = field.reduce((m, r) => Math.max(m, Number(r.totalSeconds) || 0), 0);
+/* Anonymous benchmarking: reps compare each of their four scored metrics
+   against the single best company-wide value, without ever seeing a peer's
+   name, rank, individual bar or medal. The best value is derived ONLY from the
+   published, non-sensitive rep_kpis summaries (product count, net seconds and
+   the two quality ratios) — never from merchant_products. The rep's OWN side of
+   every comparison is injected from the live local report row so it always
+   matches the values on their top cards, even when their published rep_kpis
+   document is stale. */
+const kpiComputeBenchmark = (summaries, ownRow) => {
+    const field = (summaries || []).filter((r) => !r.isEditor);
+    const own = {
+        score: ownRow && !ownRow.isEditor ? (Number(ownRow.kanjoScore) || 0) : 0,
+        validRatio: ownRow ? (Number(ownRow.validRatioRaw) || 0) : 0,
+        imageRatio: ownRow ? (Number(ownRow.imageRatioRaw) || 0) : 0,
+        speedSeconds: ownRow && (Number(ownRow.totalProducts) || 0) > 0
+            ? (Number(ownRow.avgSecondsPerProduct) || 0)
+            : 0
+    };
+    const best = { score: 0, validRatio: 0, imageRatio: 0, speedSeconds: 0 };
+    let hasSpeed = false;
+    let hasBenchmark = false;
     field.forEach((r) => {
-        const volume = maxProducts ? ((Number(r.totalProducts) || 0) / maxProducts) * 20 : 0;
-        const effort = maxSeconds ? ((Number(r.totalSeconds) || 0) / maxSeconds) * 10 : 0;
-        r.score = volume + effort + ((Number(r.validRatio) || 0) * 35) + ((Number(r.imageRatio) || 0) * 35);
+        const products = Number(r.totalProducts) || 0;
+        if (products <= 0) return;
+        hasBenchmark = true;
+        const seconds = Number(r.totalSeconds) || 0;
+        const valid = Number(r.validRatio) || 0;
+        const image = Number(r.imageRatio) || 0;
+        /* Mirror the score a rep sees on their own top card: the live local
+           report normalises volume/effort against the rep themselves, so the
+           only variable part is the two quality ratios (35 + 35). */
+        const selfScore = (seconds > 0 ? 10 : 0) + 20 + (valid * 35) + (image * 35);
+        best.score = Math.max(best.score, selfScore);
+        best.validRatio = Math.max(best.validRatio, valid);
+        best.imageRatio = Math.max(best.imageRatio, image);
+        if (seconds > 0) {
+            const sp = seconds / products;
+            if (!hasSpeed || sp < best.speedSeconds) { best.speedSeconds = sp; hasSpeed = true; }
+        }
     });
-    field.sort((a, b) => (b.score - a.score) || String(a.name).localeCompare(String(b.name), 'ar'));
-    field.forEach((r, idx) => { r.rank = idx + 1; });
-    const own = ownRow ? field.find((r) => r.repId === ownRow.repId) : null;
-    return { rows: field, total: field.length, ownRank: own ? own.rank : null };
+    return { own, best, hasBenchmark };
 };
 
-const kpiLeaderboardHtml = (board) => {
-    const rows = board && Array.isArray(board.rows) ? board.rows : [];
-    if (!rows.length) return '';
-    const maxScore = rows.reduce((m, r) => Math.max(m, Number(r.score) || 0), 0) || 1;
-    const ownId = window.kpiResolvePersonalRepId('');
-    const medals = ['fa-crown', 'fa-medal', 'fa-award'];
-    const cards = rows.map((r, idx) => {
-        const isOwn = r.repId === ownId;
-        const pct = Math.round(((Number(r.score) || 0) / maxScore) * 100);
-        const medal = idx < 3
-            ? `<i class="fa-solid ${medals[idx]} text-[#FFD700]"></i>`
-            : `<span class="text-[10px] font-black text-slate-400">#${idx + 1}</span>`;
-        return `<div class="kpi-leaderboard-row${isOwn ? ' kpi-leaderboard-row-own' : ''}">
-            <span class="kpi-leaderboard-rank">${medal}</span>
-            <span class="min-w-0 flex-1">
-                <span class="block text-[12px] font-black text-[#230535] truncate">${kpiEscape(r.name)}${isOwn ? ' (أنت)' : ''}</span>
-                <span class="block kpi-leaderboard-bar"><span style="width:${pct}%"></span></span>
-            </span>
-            <span class="text-left shrink-0">
-                <span class="block text-sm font-black text-[#E57723]">${(Number(r.score) || 0).toFixed(1)}%</span>
-                <span class="block text-[10px] font-bold text-slate-400">${r.totalProducts} منتج</span>
-            </span>
-        </div>`;
-    }).join('');
-    return `<section class="kpi-panel kpi-leaderboard">
-        <div class="kpi-leaderboard-rows">${cards}</div>
+const kpiBenchmarkMetricHtml = (opts) => {
+    const fill = Math.max(0, Math.min(100, opts.ownPct));
+    return `<div class="kpi-benchmark-card">
+        <div class="kpi-benchmark-title"><i class="fa-solid ${opts.icon}" style="color:${opts.color}"></i> ${opts.label}</div>
+        <div class="kpi-benchmark-values">
+            <div class="kpi-benchmark-side kpi-benchmark-side-own">
+                <span class="kpi-benchmark-side-label">أنت</span>
+                <span class="kpi-benchmark-side-value">${opts.ownValue}</span>
+            </div>
+            <div class="kpi-benchmark-vs">VS</div>
+            <div class="kpi-benchmark-side kpi-benchmark-side-best">
+                <span class="kpi-benchmark-side-label"><i class="fa-solid fa-crown"></i> أفضل أداء</span>
+                <span class="kpi-benchmark-side-value">${opts.bestValue}</span>
+            </div>
+        </div>
+        <div class="kpi-benchmark-track"><span style="width:${fill}%"></span></div>
+        <div class="kpi-benchmark-note ${opts.atBest ? 'kpi-benchmark-note-best' : 'kpi-benchmark-note-gap'}">${opts.note}</div>
+    </div>`;
+};
+
+const kpiBenchmarkHtml = (benchmark) => {
+    const head = `<div class="kpi-panel-head">
+        <div class="flex items-center gap-2">
+            <span class="kpi-panel-icon"><i class="fa-solid fa-scale-balanced"></i></span>
+            <div>
+                <h3 class="font-black text-sm text-[#230535]">أنت مقابل أفضل أداء في الشركة</h3>
+                <p class="text-[11px] font-bold text-slate-400">مقارنة مجهولة الهوية — قيمك لحظية، وأفضل أداء رقم فقط بدون أسماء أو مراكز</p>
+            </div>
+        </div>
+        <span class="kpi-chip"><i class="fa-solid fa-user-secret"></i> بدون كشف هوية</span>
+    </div>`;
+    if (!benchmark || !benchmark.hasBenchmark) {
+        return `<section class="kpi-panel kpi-benchmark">${head}
+            <div class="kpi-benchmark-empty"><i class="fa-solid fa-hourglass-half"></i> لا توجد بيانات كافية للمقارنة بعد — ابدأ بإضافة منتجاتك وستظهر مقارنتك تلقائياً.</div>
+        </section>`;
+    }
+    const own = benchmark.own || {};
+    const best = benchmark.best || {};
+    /* Higher-is-better metrics: fill shows how close the rep is to the best. */
+    const higher = (ownVal, bestVal, ownText, bestText, fmt, unit) => {
+        const has = bestVal > 0;
+        const ownPct = has ? (ownVal / bestVal) * 100 : (ownVal > 0 ? 100 : 0);
+        const atBest = has && ownVal >= bestVal * 0.999;
+        const note = atBest
+            ? '<i class="fa-solid fa-trophy"></i> أنت في مقدمة الشركة في هذا المؤشر'
+            : has
+                ? 'تفصلك ' + fmt(Math.max(0, bestVal - ownVal)) + ' ' + unit + ' عن أفضل أداء'
+                : 'لا توجد قيمة مرجعية بعد';
+        return { ownValue: ownText, bestValue: bestText, ownPct, atBest, note };
+    };
+    /* Lower-is-better metric (speed): being at or under the best fills
+       the bar; slower reps get a proportionally shorter fill. */
+    const lower = (ownVal, bestVal, ownText, bestText, fmt, unit) => {
+        const hasBest = bestVal > 0;
+        const hasOwn = ownVal > 0;
+        const ownPct = hasBest && hasOwn ? (bestVal / ownVal) * 100 : 0;
+        const atBest = hasBest && hasOwn && ownVal <= bestVal * 1.001;
+        const note = !hasBest
+            ? 'لا توجد قيمة مرجعية بعد'
+            : !hasOwn
+                ? 'لا يوجد وقت مُتتبع لقياس سرعتك بعد'
+                : atBest
+                    ? '<i class="fa-solid fa-bolt"></i> أنت الأسرع في الشركة'
+                    : 'تفصلك ' + fmt(Math.max(0, ownVal - bestVal)) + ' ' + unit + ' عن أفضل أداء';
+        return { ownValue: ownText, bestValue: bestText, ownPct, atBest, note };
+    };
+    const score = higher(own.score, best.score, own.score.toFixed(1) + '%', best.score.toFixed(1) + '%', (v) => v.toFixed(1), 'نقطة');
+    const quality = higher(own.validRatio, best.validRatio, (own.validRatio * 100).toFixed(1) + '%', (best.validRatio * 100).toFixed(1) + '%', (v) => (v * 100).toFixed(1), 'نقطة مئوية');
+    const images = higher(own.imageRatio, best.imageRatio, (own.imageRatio * 100).toFixed(1) + '%', (best.imageRatio * 100).toFixed(1) + '%', (v) => (v * 100).toFixed(1), 'نقطة مئوية');
+    const speed = lower(own.speedSeconds, best.speedSeconds, own.speedSeconds > 0 ? (own.speedSeconds / 60).toFixed(2) + ' د' : '—', best.speedSeconds > 0 ? (best.speedSeconds / 60).toFixed(2) + ' د' : '—', (v) => (v / 60).toFixed(2), 'دقيقة/منتج');
+    return `<section class="kpi-panel kpi-benchmark">${head}
+        <div class="kpi-benchmark-grid">
+            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-award', color: '#6D28D9', label: 'التقييم الشامل' }, score))}
+            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-star', color: '#37d99a', label: 'جودة الأوصاف' }, quality))}
+            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-image', color: '#230535', label: 'نسبة الصور' }, images))}
+            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-bolt', color: '#E57723', label: 'مؤشر السرعة' }, speed))}
+        </div>
     </section>`;
 };
 
@@ -1571,6 +1634,9 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
     }
     const rankInfo = kpiPersonalRank(row, report);
     const isEditor = !!row.isEditor;
+    /* Peer ranks are private: managers still see them, but on the rep's own
+       live screen we show an anonymous benchmark instead of a rank badge. */
+    const showRank = !liveMode && !isEditor;
     const medalIcon = rankInfo.rank === 1 ? 'fa-crown' : (rankInfo.rank && rankInfo.rank <= 3) ? 'fa-medal' : 'fa-ranking-star';
     const validPct = row.validRatioRaw * 100;
     const imgPct = row.imageRatioRaw * 100;
@@ -1620,7 +1686,7 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                 <span class="kpi-panel-icon"><i class="fa-solid ${liveMode ? 'fa-house-chimney-user' : 'fa-mobile-screen-button'}"></i></span>
                 <div>
                     <h3 class="font-black text-sm text-[#230535]">${liveMode ? 'لوحة أدائي' : 'معاينة شاشة المندوب الشخصية'}</h3>
-                    <p class="text-[11px] font-bold text-slate-400">${liveMode ? 'تابع إنتاجك وجودة أوصافك لحظياً وارتقِ في الترتيب' : 'هذه المعاينة متاحة للمدير فقط قبل إتاحتها للمناديب'}</p>
+                    <p class="text-[11px] font-bold text-slate-400">${liveMode ? 'تابع إنتاجك وجودة أوصافك وصورك لحظياً' : 'هذه المعاينة متاحة للمدير فقط قبل إتاحتها للمناديب'}</p>
                 </div>
             </div>
             ${liveMode ? '' : '<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-eye"></i> وضع المعاينة</span>'}
@@ -1633,9 +1699,11 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                     <h4 class="font-black text-lg text-[#FFD700] truncate">${kpiEscape(row.name)}</h4>
                     ${isEditor
                         ? '<span class="kpi-rank-badge kpi-rank-badge-editor"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</span>'
-                        : `<span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>`}
+                        : showRank
+                            ? `<span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>`
+                            : '<span class="kpi-rank-badge"><i class="fa-solid fa-chart-simple"></i> مؤشراتك لحظياً</span>'}
                 </div>
-                <p class="text-[11px] font-bold text-white/70 mt-1">${isEditor ? 'إحصائياتك الشخصية كاملة بدون تقييم تنافسي' : 'تابع إنتاجك، حسّن أوصافك، وارتقِ في الترتيب'}</p>
+                <p class="text-[11px] font-bold text-white/70 mt-1">${isEditor ? 'إحصائياتك الشخصية كاملة بدون تقييم تنافسي' : 'تابع إنتاجك، وحسّن أوصافك وصورك، وقارن أداءك بأفضل أداء في الشركة'}</p>
             </div>
             <div class="text-center shrink-0">
                 ${isEditor
@@ -1651,7 +1719,7 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
         <div class="kpi-personal-cards">
             ${isEditor
                 ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'عدد الصور المُحررة', foot: 'إجمالي الصور التي حررتها' })
-                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: row.rank ? 'المركز #' + row.rank + ' من ' + rankInfo.total : diffFoot, onclick: "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')" })}
+                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: showRank ? (row.rank ? 'المركز #' + row.rank + ' من ' + rankInfo.total : diffFoot) : 'قارن أداءك بأفضل أداء في الشركة بالأسفل', onclick: "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')" })}
             ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
             ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })}
             ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: imgPct.toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })}
@@ -1962,22 +2030,20 @@ window.renderKpiDashboard = async () => {
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
 
-        /* Live rep view: personal row + team-scoped gamification leaderboard. */
+        /* Live rep view: personal row + an anonymous benchmark against the
+           company best. Peer names, ranks and individual bars are never shown. */
         if (isRep) {
             const ownId = window.kpiResolvePersonalRepId('');
             const ownReport = kpiScopeReportForRep(report, ownId);
             const ownRow = ownReport.rows[0] || null;
+            /* Published summaries only feed the ANONYMOUS best-value side; the
+               rep's own side comes from the live local report above. */
             const summaries = await kpiFetchLeaderboardSummaries();
-            const board = kpiComputeLeaderboard(summaries, ownRow);
-            /* The scoped report only carries one row, so restore the GLOBAL
-               denominator and this rep's true company-wide rank for the
-               "المركز X من Y" badge (Y = all ranked reps, not just the team). */
-            if (board.total > 0) ownReport.totals.teamReps = board.total;
-            if (ownRow && !ownRow.isEditor && board.ownRank) ownRow.rank = board.ownRank;
+            const benchmark = kpiComputeBenchmark(summaries, ownRow);
             window._kpiLatestReport = ownReport;
             content.innerHTML =
                 `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>` +
-                kpiLeaderboardHtml(board);
+                kpiBenchmarkHtml(benchmark);
             return;
         }
 
