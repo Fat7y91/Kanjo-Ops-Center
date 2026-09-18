@@ -871,7 +871,7 @@ const scheduleTaskSync = (() => {
 
 const loadMoreTasks = async () => {
     const page = window._tasksPage;
-    if (!page || page.loading || page.exhausted || !page.cursor) return 0;
+    if (!page || page.loading || page.exhausted || !page.cursor || page.fallback) return 0;
     page.loading = true;
     try {
         const snapshot = await getDocs(page.buildQuery(page.cursor));
@@ -916,7 +916,7 @@ window.listenToTasks = () => {
     const pageSize = repTeam ? TASKS_PAGE_SIZE_REP : TASKS_PAGE_SIZE_MANAGER;
     const baseConstraints = repTeam ? [where("team", "==", repTeam)] : [];
 
-    const buildQuery = (cursor) => query(
+    const buildOrderedQuery = (cursor) => query(
         collection(db, "tasks"),
         ...baseConstraints,
         orderBy(TASKS_ORDER_FIELD, "desc"),
@@ -924,7 +924,18 @@ window.listenToTasks = () => {
         limit(pageSize)
     );
 
-    window._tasksPage = { repTeam, pageSize, cursor: null, exhausted: false, loading: false, buildQuery };
+    /* Fallback for a missing composite index. The rep-scoped ordered query needs
+       tasks(team ASC, time DESC); until that index exists Firestore rejects it
+       with FAILED_PRECONDITION (surfaced to users as the generic fetch error).
+       Dropping orderBy removes the index requirement so the dashboard still
+       loads — in this degraded mode newest-first ordering is not guaranteed. */
+    const buildFallbackQuery = () => query(
+        collection(db, "tasks"),
+        ...baseConstraints,
+        limit(pageSize)
+    );
+
+    window._tasksPage = { repTeam, pageSize, cursor: null, exhausted: false, loading: false, buildQuery: buildOrderedQuery, fallback: false };
 
     let firstSnapshot = true;
     const handleSnapshot = (snapshot) => {
@@ -979,15 +990,49 @@ window.listenToTasks = () => {
         }
     };
 
-    const unsub = onSnapshot(buildQuery(null), handleSnapshot, (error) => {
+    const isMissingIndex = (error) => {
+        const code = (error && error.code) || '';
+        const msg = (error && error.message) || '';
+        return code === 'failed-precondition' || /requires an index/i.test(msg);
+    };
+
+    let currentUnsub = null;
+    let fallbackActive = false;
+
+    const registerUnsub = () => {
+        if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+        if (typeof currentUnsub === 'function') window._appListenerUnsubscribers.push(currentUnsub);
+    };
+
+    const startFallback = () => {
+        fallbackActive = true;
+        const page = window._tasksPage;
+        page.fallback = true;
+        page.buildQuery = buildFallbackQuery;
+        page.cursor = null;
+        page.exhausted = true;
+        console.warn('[tasks] composite index missing; loading without newest-first ordering.');
+        currentUnsub = onSnapshot(buildFallbackQuery(), handleSnapshot, (error) => {
+            console.error("Firestore fallback snapshot error:", error);
+            if (typeof showToast === 'function') {
+                showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
+            }
+        });
+        registerUnsub();
+    };
+
+    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, (error) => {
         console.error("Firestore snapshot error:", error);
+        if (!fallbackActive && isMissingIndex(error)) {
+            if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
+            startFallback();
+            return;
+        }
         if (typeof showToast === 'function') {
             showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
         }
     });
-
-    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
-    window._appListenerUnsubscribers.push(unsub);
+    registerUnsub();
 
     /* Prime the server-side aggregate summary for this scope (P1.4). This runs
        entirely off the main computation path: the browser asks Firestore to
