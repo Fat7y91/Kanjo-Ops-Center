@@ -685,28 +685,23 @@ const kpiPublishSummaries = (rows) => {
     return Promise.all(targets.map(kpiPublishSummary));
 };
 
-/* Read the team's published summaries. Rule-gated: only same-kanjoTeam rows are
-   returned to a rep (managers/legacy users see all). The payroll roster seeds
-   the list so every teammate is counted in the denominator even before they
-   have published a summary (a summary doc only becomes readable to the team
-   once it carries the `team` field). */
-const kpiFetchTeamSummaries = async () => {
-    /* Never let leaderboard fetching throw into the dashboard render path: any
-       failure degrades to the payroll roster (or an empty list), never a fatal
-       "تعذر تحميل بيانات المؤشرات". */
+/* Read every rep's published leaderboard summary (GLOBAL leaderboard). The
+   payroll roster seeds the list so every rep is counted in the denominator even
+   before they have published a summary. Rule-gated by `allow read` for all
+   signed-in users. Never lets a failure throw into the dashboard render path. */
+const kpiFetchLeaderboardSummaries = async () => {
     try {
-        const u = window.currentUser || {};
-        const team = String(u.team || kpiRepTeamName(u.name) || '').trim();
-        if (!team) return [];
         const byId = new Map();
+        /* Seed the full company roster so the rank denominator is the total
+           number of reps, not just those who have published a summary yet. */
         (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
-            .filter((p) => p && String(p.team || '').trim() === team && p.name)
+            .filter((p) => p && p.name)
             .forEach((p) => {
                 const repId = kpiRepId(p.name);
                 byId.set(repId, {
                     repId,
                     name: p.name,
-                    team,
+                    team: String(p.team || '').trim(),
                     isEditor: false,
                     totalProducts: 0,
                     totalSeconds: 0,
@@ -714,16 +709,14 @@ const kpiFetchTeamSummaries = async () => {
                     imageRatio: 0
                 });
             });
-        const snap = await window.getDocs(window.query(
-            window.collection(window.db, KPI_REP_COLLECTION),
-            window.where('team', '==', team)
-        ));
+        /* No team filter: rank against every rep company-wide. */
+        const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
         snap.forEach((d) => {
             const data = d.data() || {};
             byId.set(d.id, {
                 repId: d.id,
                 name: data.repName || d.id,
-                team: data.team || team,
+                team: data.team || '',
                 isEditor: !!data.isEditor,
                 totalProducts: Math.max(0, Number(data.publicTotalProducts) || 0),
                 totalSeconds: Math.max(0, Number(data.publicTotalSeconds) || 0),
@@ -733,14 +726,14 @@ const kpiFetchTeamSummaries = async () => {
         });
         return Array.from(byId.values());
     } catch (err) {
-        console.error('[kpi] team leaderboard fetch failed:', err);
+        console.error('[kpi] leaderboard fetch failed:', err);
         return [];
     }
 };
 
 /* Merge the live own-row over the published summaries and compute the same
-   weighted score the manager report uses (normalised over the team). */
-const kpiComputeTeamBoard = (summaries, ownRow) => {
+   weighted score the manager report uses (normalised over the whole company). */
+const kpiComputeLeaderboard = (summaries, ownRow) => {
     const map = new Map();
     (summaries || []).forEach((r) => map.set(r.repId, Object.assign({}, r)));
     if (ownRow) {
@@ -769,7 +762,7 @@ const kpiComputeTeamBoard = (summaries, ownRow) => {
     return { rows: field, total: field.length, ownRank: own ? own.rank : null };
 };
 
-const kpiTeamLeaderboardHtml = (board) => {
+const kpiLeaderboardHtml = (board) => {
     const rows = board && Array.isArray(board.rows) ? board.rows : [];
     if (!rows.length) return '';
     const maxScore = rows.reduce((m, r) => Math.max(m, Number(r.score) || 0), 0) || 1;
@@ -1974,16 +1967,17 @@ window.renderKpiDashboard = async () => {
             const ownId = window.kpiResolvePersonalRepId('');
             const ownReport = kpiScopeReportForRep(report, ownId);
             const ownRow = ownReport.rows[0] || null;
-            const summaries = await kpiFetchTeamSummaries();
-            const board = kpiComputeTeamBoard(summaries, ownRow);
-            /* The scoped report only carries one row, so restore the real team
-               denominator and this rep's true rank for the "المركز X من Y" badge. */
+            const summaries = await kpiFetchLeaderboardSummaries();
+            const board = kpiComputeLeaderboard(summaries, ownRow);
+            /* The scoped report only carries one row, so restore the GLOBAL
+               denominator and this rep's true company-wide rank for the
+               "المركز X من Y" badge (Y = all ranked reps, not just the team). */
             if (board.total > 0) ownReport.totals.teamReps = board.total;
             if (ownRow && !ownRow.isEditor && board.ownRank) ownRow.rank = board.ownRank;
             window._kpiLatestReport = ownReport;
             content.innerHTML =
                 `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>` +
-                kpiTeamLeaderboardHtml(board);
+                kpiLeaderboardHtml(board);
             return;
         }
 

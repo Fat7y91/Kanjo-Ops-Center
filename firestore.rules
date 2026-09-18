@@ -226,18 +226,13 @@ service cloud.firestore {
     // Managers read/write every rep; each rep (and the content editor) keeps
     // full access to their own repId.
     //
-    // GAMIFICATION (leaderboard): a rep may also READ peers' records when the
-    // record carries the same kanjoTeam. To keep product/pricing private, the
+    // GAMIFICATION (leaderboard): the leaderboard is GLOBAL, so any signed-in
+    // user may READ every rep's record. To keep product/pricing private, the
     // ONLY fields a rep may publish about themselves are the non-sensitive
     // leaderboard summary fields (counts + ratios), never merchants or money.
     match /rep_kpis/{repId} {
       function isOwnRep() {
         return isSignedIn() && claimRepId() != null && claimRepId() == repId;
-      }
-      function isTeammateSummary() {
-        return isRep()
-          && claimTeam() != null
-          && resource.data.team == claimTeam();
       }
       function summaryKeys() {
         return [
@@ -263,7 +258,8 @@ service cloud.firestore {
           && request.resource.data.get('team', '') == claimTeam()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(summaryKeys());
       }
-      allow read: if legacy() || isManagerViewer() || isOwnRep() || isTeammateSummary();
+      // GLOBAL leaderboard: every signed-in user may read every rep's summary.
+      allow read: if isSignedIn();
       allow create: if legacy() || isManagerViewer() || isOwnSummaryCreate();
       allow update: if legacy() || isManagerViewer() || isOwnSummaryUpdate();
       allow delete: if legacy() || isManagerViewer();
