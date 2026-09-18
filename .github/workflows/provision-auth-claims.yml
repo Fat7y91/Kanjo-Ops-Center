@@ -17,6 +17,7 @@ on:
           - "list"
           - "status"
           - "querycheck"
+          - "kpi-status"
           - "auto-dry"
           - "apply-auto"
           - "enforce"
@@ -65,6 +66,12 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: node scripts/set-auth-claims.mjs --querycheck
+
+      - name: Report KPI/time data coverage
+        if: inputs.mode == 'kpi-status'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/set-auth-claims.mjs --kpi-status
 
       - name: Auto-map (dry-run, writes nothing)
         if: inputs.mode == 'auto-dry'

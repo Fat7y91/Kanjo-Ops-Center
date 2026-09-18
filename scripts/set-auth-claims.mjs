@@ -181,6 +181,35 @@ const queryCheck = async () => {
   }
 };
 
+/* Read-only probe of the KPI/time data: which rep_kpis docs exist, what
+   historical time they carry, and how many daily_stats docs are under each.
+   Confirms whether "0 time" is missing data or a read/binding problem. */
+const kpiStatus = async () => {
+  const parents = await db.collection('rep_kpis').get();
+  console.log(`rep_kpis docs: ${parents.size}`);
+  for (const doc of parents.docs) {
+    const data = doc.data() || {};
+    let days = 0;
+    let activeSeconds = 0;
+    let imageEditSeconds = 0;
+    try {
+      const stats = await db.collection('rep_kpis').doc(doc.id).collection('daily_stats').get();
+      days = stats.size;
+      stats.forEach((s) => {
+        const d = s.data() || {};
+        activeSeconds += Math.max(0, Number(d.activeSeconds) || 0);
+        imageEditSeconds += Math.max(0, Number(d.imageEditSeconds) || 0);
+      });
+    } catch (err) {
+      console.log(`  ${doc.id}: daily_stats read failed: ${err && err.message ? err.message : err}`);
+    }
+    const h = Math.round((Number(data.historicalSeconds) || 0) / 3600 * 10) / 10;
+    const a = Math.round(activeSeconds / 3600 * 10) / 10;
+    const e = Math.round(imageEditSeconds / 3600 * 10) / 10;
+    console.log(`  ${doc.id} | team=${data.team || '(none)'} | name=${data.repName || '?'} | historical=${h}h | active=${a}h | imageEdit=${e}h | days=${days}`);
+  }
+};
+
 const verifyClaims = async () => {
   let claimed = 0;
   let total = 0;
@@ -264,6 +293,7 @@ const main = async () => {
   if (flag('--list')) return listUsers();
   if (flag('--status')) return statusReport();
   if (flag('--querycheck')) return queryCheck();
+  if (flag('--kpi-status')) return kpiStatus();
   if (flag('--verify')) return verifyClaims();
   if (flag('--enforce')) return setEnforce(true);
   if (flag('--unenforce')) return setEnforce(false);

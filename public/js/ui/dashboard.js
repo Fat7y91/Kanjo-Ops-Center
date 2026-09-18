@@ -1313,6 +1313,9 @@ function setupAdvancedFilterElements() {
    lists, so the spinner clears exactly when data is ready (never before). */
 window.showDashboardLoading = () => {
     if (window.firestoreIndexErrorActive) return;
+    /* Once the watchdog has shown the recovery card, do not overwrite it with
+       the spinner again on every visibility toggle (would spin forever). */
+    if (window._dashboardLoadFailed) return;
     const container = document.getElementById('tasksContainer');
     if (!container) return;
     container.innerHTML = `
@@ -1321,7 +1324,52 @@ window.showDashboardLoading = () => {
             <p style="margin-top:26px;font-size:19px;font-weight:700;color:#230535;">جارٍ تحميل بيانات المحلات والعقود...</p>
             <p style="margin-top:8px;font-size:14px;color:#9ca3af;">يتم عرض أحدث البيانات فور اكتمال التحميل</p>
         </div>`;
+    if (typeof window.startDashboardWatchdog === 'function') window.startDashboardWatchdog();
 };
+
+/* ─── Strict load watchdog (never hang on the spinner) ───
+   If the first batch of data has not arrived after this deadline, replace the
+   spinner with a recoverable card. Covers every stall cause: a denied listener,
+   a hung anonymous-auth handshake, a slow network, or a missing index. */
+const DASHBOARD_LOAD_TIMEOUT_MS = 15000;
+
+window.startDashboardWatchdog = () => {
+    window.clearDashboardWatchdog();
+    window._dashboardWatchdog = setTimeout(() => {
+        window._dashboardWatchdog = null;
+        if (window.hasRenderedData || window.firestoreIndexErrorActive) return;
+        console.warn('[boot] dashboard data did not arrive in time; showing recovery UI.');
+        window.showDashboardLoadFailure();
+    }, DASHBOARD_LOAD_TIMEOUT_MS);
+};
+
+window.clearDashboardWatchdog = () => {
+    if (window._dashboardWatchdog) {
+        clearTimeout(window._dashboardWatchdog);
+        window._dashboardWatchdog = null;
+    }
+};
+
+window.showDashboardLoadFailure = (err) => {
+    if (window.hasRenderedData) return;
+    const container = document.getElementById('tasksContainer');
+    if (!container) return;
+    if (container.dataset.loadFailure === '1') return;
+    container.dataset.loadFailure = '1';
+    window._dashboardLoadFailed = true;
+    window.clearDashboardWatchdog();
+    const indexUrl = window.lastFirestoreIndexUrl || '';
+    if (err) console.error('[dashboard] load failure:', err);
+    container.innerHTML = `
+        <div style="max-width:760px;margin:40px auto;padding:34px 26px;background:#fffbeb;border:4px solid #FFD700;border-radius:16px;text-align:center;font-family:'Segoe UI',Tahoma,sans-serif;box-shadow:0 12px 34px rgba(35,5,53,0.12);">
+            <div style="width:60px;height:60px;margin:0 auto;border-radius:50%;background:#230535;color:#FFD700;font-size:34px;font-weight:900;line-height:60px;"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+            <h2 style="color:#230535;font-size:23px;font-weight:800;margin:16px 0 10px;">تعذر تحميل البيانات في الوقت المحدد</h2>
+            <p style="color:#4b5563;font-size:15px;line-height:1.9;margin-bottom:20px;">قد يكون الاتصال بطيئًا أو منقطعًا. اضغط "إعادة المحاولة" لتحميل البيانات من جديد.</p>
+            <button type="button" onclick="window.location.reload()" style="background:#230535;color:#FFD700;padding:13px 30px;border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;">إعادة المحاولة</button>
+            ${indexUrl ? `<p style="color:#92400e;font-size:13px;line-height:1.8;margin-top:22px;">إذا تكررت المشكلة فقد يحتاج النظام إلى فهرس (Index) لقاعدة البيانات:<br><a href="${indexUrl}" target="_blank" rel="noopener noreferrer" style="color:#b45309;word-break:break-all;">إنشاء الفهرس تلقائيًا</a></p>` : ''}
+        </div>`;
+};
+
 
 /* ─── Firestore missing-index error box ───
    Invoked by the read-wrappers in js/config/firebase.js whenever a query fails
@@ -2113,7 +2161,10 @@ const renderDashboardNow = (snapshot) => {
     window.renderTasksDateNav(tasksSelectedDate ? `${renderedTaskCount} مهمة في يوم ${tasksSelectedDate}` : 'عرض المهام الجارية الآن');
 
     window.hasRenderedData = true;
+    window._dashboardLoadFailed = false;
+    if (typeof window.clearDashboardWatchdog === 'function') window.clearDashboardWatchdog();
 
+    container.dataset.loadFailure = '0';
     container.innerHTML = ''; 
 
     container.appendChild(fragment); 
