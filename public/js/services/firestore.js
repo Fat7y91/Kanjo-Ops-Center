@@ -1013,6 +1013,19 @@ window.listenToTasks = () => {
 
     let retriedForAuth = false;
 
+    /* Resolve the loading UI on any terminal error. The strict watchdog in
+       dashboard.js is the backstop, but surfacing the recovery card immediately
+       avoids a 15s dead spinner when we already know the read will not recover. */
+    const recoverOrToast = (error) => {
+        if (!window.hasRenderedData && typeof window.showDashboardLoadFailure === 'function') {
+            window.showDashboardLoadFailure(error);
+            return;
+        }
+        if (typeof showToast === 'function') {
+            showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
+        }
+    };
+
     const handleListenerError = (error) => {
         console.error("Firestore snapshot error:", error);
         if (!fallbackActive && isMissingIndex(error)) {
@@ -1027,16 +1040,18 @@ window.listenToTasks = () => {
             retriedForAuth = true;
             Promise.resolve(window.authReady).catch(() => null).then(() => {
                 if (window._tasksListenerStarted && !fallbackActive) {
-                    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, handleListenerError);
+                    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, (retryErr) => {
+                        console.error("Firestore snapshot error (post-auth retry):", retryErr);
+                        if (silenceError(retryErr)) { recoverOrToast(retryErr); return; }
+                        recoverOrToast(retryErr);
+                    });
                     registerUnsub();
                 }
             });
             return;
         }
-        if (silenceError(error)) return;
-        if (typeof showToast === 'function') {
-            showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
-        }
+        if (silenceError(error)) { recoverOrToast(error); return; }
+        recoverOrToast(error);
     };
 
     const startFallback = () => {
@@ -1049,10 +1064,7 @@ window.listenToTasks = () => {
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
         currentUnsub = onSnapshot(buildFallbackQuery(), handleSnapshot, (error) => {
             console.error("Firestore fallback snapshot error:", error);
-            if (silenceError(error)) return;
-            if (typeof showToast === 'function') {
-                showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
-            }
+            recoverOrToast(error);
         });
         registerUnsub();
     };
