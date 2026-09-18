@@ -22,7 +22,7 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
 
 const firebaseConfig = {
     apiKey: "AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0",
-    authDomain: "kanjo-desouk.firebaseapp.com",
+    authDomain: "kanjo-desouk.web.app",
     projectId: "kanjo-desouk",
     storageBucket: "kanjo-desouk.firebasestorage.app",
     messagingSenderId: "253872156774",

@@ -8,41 +8,61 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com
 // fallbacks below are the kanjo-desouk production values; Firebase web API keys are
 // public identifiers (not secrets) but they are kept out of source control via the
 // build-time env injection for hygiene.
-const firebaseConfig = { apiKey: "AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0", authDomain: "kanjo-desouk.firebaseapp.com", projectId: "kanjo-desouk", storageBucket: "kanjo-desouk.firebasestorage.app", messagingSenderId: "253872156774", appId: "1:253872156774:web:1d554b3bf0b78b98c77da7", measurementId: "G-FBM6G2RF1B" };
+const firebaseConfig = { apiKey: "AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0", authDomain: "kanjo-desouk.web.app", projectId: "kanjo-desouk", storageBucket: "kanjo-desouk.firebasestorage.app", messagingSenderId: "253872156774", appId: "1:253872156774:web:1d554b3bf0b78b98c77da7", measurementId: "G-FBM6G2RF1B" };
 
 const app = initializeApp(firebaseConfig);
 
+/* Persistent (IndexedDB) cache is a big win on normal browsers but is broken in
+   Safari Private Browsing and other storage-restricted/incognito modes: the SDK
+   then fails its reads with a failed-precondition/persistence error that used to
+   be misread as a "missing index" (the red banner) and left the dashboard empty.
+   Probe storage first and fall back to an in-memory cache when it isn't usable. */
+const canPersistLocalCache = (() => {
+    try {
+        if (typeof indexedDB === 'undefined' || !indexedDB) return false;
+        const probeKey = '__kanjo_persist_probe__';
+        localStorage.setItem(probeKey, '1');
+        localStorage.removeItem(probeKey);
+        return true;
+    } catch (_) {
+        return false;
+    }
+})();
+
 let db;
 
-try {
-    db = initializeFirestore(app, {
-        // Force HTTP long-polling instead of the default WebChannel/WebSocket
-        // transport. Many ISP/mobile/hotel Wi-Fi networks (and corporate proxies)
-        // silently block or break long-lived WebSocket streams, which used to leave
-        // the whole app stuck on the loading spinner while 4G worked fine. Long
-        // polling degrades gracefully over restrictive networks.
-        experimentalForceLongPolling: true,
-        localCache: persistentLocalCache({
-            // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
-            // and passing both silently falls back to an in-memory cache that refetches
-            // everything on every reload (main cause of the app being extremely heavy).
-            tabManager: persistentSingleTabManager(),
-            // 10 MB hard cap on the persistent (IndexedDB) cache. Prevents old/low-end
-            // devices from hanging while the SDK resolves indexes against a huge stale
-            // local cache during multi-city scale-up.
-            cacheSizeBytes: 10485760
-        })
-    });
-} catch (e) {
-    // Persistent-cache init failed (e.g. IndexedDB blocked/conflicting across tabs).
-    // Clear any half-initialized persisted cache BEFORE falling back to memory so a
-    // stale IndexedDB state can never poison reads again.
-    console.error("initializeFirestore (persistent cache) failed:", e);
-    db = getFirestore(app); // Fallback to memory cache immediately
-    if (typeof clearIndexedDbPersistence === 'function') {
-        clearIndexedDbPersistence(db).then(() => {
-            console.log("Firestore persisted cache cleared; falling back to memory cache.");
-        }).catch((ce) => console.error("clearIndexedDbPersistence error:", ce));
+if (canPersistLocalCache) {
+    try {
+        db = initializeFirestore(app, {
+            // Force HTTP long-polling instead of the default WebChannel/WebSocket
+            // transport. Many ISP/mobile/hotel Wi-Fi networks (and corporate proxies)
+            // silently block or break long-lived WebSocket streams, which used to leave
+            // the whole app stuck on the loading spinner while 4G worked fine. Long
+            // polling degrades gracefully over restrictive networks.
+            experimentalForceLongPolling: true,
+            localCache: persistentLocalCache({
+                // Single-tab persistence: cacheSizeBytes is NOT supported with multi-tab,
+                // and passing both silently falls back to an in-memory cache that refetches
+                // everything on every reload (main cause of the app being extremely heavy).
+                tabManager: persistentSingleTabManager(),
+                // 10 MB hard cap on the persistent (IndexedDB) cache. Prevents old/low-end
+                // devices from hanging while the SDK resolves indexes against a huge stale
+                // local cache during multi-city scale-up.
+                cacheSizeBytes: 10485760
+            })
+        });
+    } catch (e) {
+        // Persistent-cache init failed (e.g. IndexedDB blocked/conflicting across tabs).
+        console.error("initializeFirestore (persistent cache) failed; using memory cache:", e);
+        db = getFirestore(app);
+    }
+} else {
+    // Storage-restricted context (e.g. Safari Private Browsing): memory cache only.
+    try {
+        db = initializeFirestore(app, { experimentalForceLongPolling: true });
+    } catch (e) {
+        console.error("initializeFirestore failed; using default memory cache:", e);
+        db = getFirestore(app);
     }
 }
 
@@ -95,11 +115,13 @@ const FIREBASE_INDEX_URL_RE = /https?:\/\/console\.firebase\.google\.com\/[^\s"'
 
 const isFirestoreIndexError = (err) => {
     if (!err) return false;
-    const code = String(err.code || '').toLowerCase();
     const msg = String(err.message || '');
-    return code === 'failed-precondition'
-        || msg.indexOf('FAILED_PRECONDITION') !== -1
-        || msg.indexOf('indexes?create_composite') !== -1
+    /* Require index-specific text. Previously ANY failed-precondition was treated
+       as a missing index, so the IndexedDB persistence failure seen in Safari
+       Private Browsing was shown to users as a scary "Firebase needs an index"
+       banner. Persistence errors must never be misclassified this way. */
+    return msg.indexOf('create_composite') !== -1
+        || /requires an index/i.test(msg)
         || FIREBASE_INDEX_URL_RE.test(msg);
 };
 
@@ -108,10 +130,11 @@ const reportFirestoreIndexError = (err) => {
     const msg = String(err.message || '');
     const urlMatch = msg.match(FIREBASE_INDEX_URL_RE);
     const url = urlMatch ? urlMatch[0] : '';
-    console.error("Firestore index error detected:", url || msg);
-    if (typeof window.showFirestoreIndexError === 'function') {
-        window.showFirestoreIndexError(url, err);
-    }
+    /* Record the URL for operators (console/diagnostics) but never replace the
+       dashboard with a full-screen developer error: callers either recover with
+       a fallback query or surface a neutral message. */
+    window.lastFirestoreIndexUrl = url || window.lastFirestoreIndexUrl || '';
+    console.error("Firestore missing-index error (handled without user banner):", url || msg);
 };
 
 const wrappedGetDocs = (queryRef, ...rest) => {
@@ -163,6 +186,7 @@ window.getDocs = wrappedGetDocs;
 window.writeBatch = writeBatch;
 window.setDoc = setDoc;
 window.getDoc = wrappedGetDoc;
+window.isFirestoreIndexError = isFirestoreIndexError;
 
 
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */

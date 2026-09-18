@@ -16,7 +16,7 @@ const publicDir = path.join(root, 'public');
 // falls back to the kanjo-desouk production value when the env var is absent.
 const firebaseEnv = {
   apiKey: process.env.FIREBASE_API_KEY || 'AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0',
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN || 'kanjo-desouk.firebaseapp.com',
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || 'kanjo-desouk.web.app',
   projectId: process.env.FIREBASE_PROJECT_ID || 'kanjo-desouk',
   storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'kanjo-desouk.firebasestorage.app',
   messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '253872156774',

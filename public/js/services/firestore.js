@@ -1004,6 +1004,41 @@ window.listenToTasks = () => {
         if (typeof currentUnsub === 'function') window._appListenerUnsubscribers.push(currentUnsub);
     };
 
+    const silenceError = (error) => {
+        const code = String((error && error.code) || '').toLowerCase();
+        if (code === 'permission-denied') return true;
+        if (typeof window.isFirestoreIndexError === 'function' && window.isFirestoreIndexError(error)) return true;
+        return false;
+    };
+
+    let retriedForAuth = false;
+
+    const handleListenerError = (error) => {
+        console.error("Firestore snapshot error:", error);
+        if (!fallbackActive && isMissingIndex(error)) {
+            if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
+            startFallback();
+            return;
+        }
+        const code = String((error && error.code) || '').toLowerCase();
+        if (!retriedForAuth && code === 'permission-denied') {
+            /* Anonymous auth can still be settling on slow/private mobile
+               sessions. Retry once it resolves instead of alarming the user. */
+            retriedForAuth = true;
+            Promise.resolve(window.authReady).catch(() => null).then(() => {
+                if (window._tasksListenerStarted && !fallbackActive) {
+                    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, handleListenerError);
+                    registerUnsub();
+                }
+            });
+            return;
+        }
+        if (silenceError(error)) return;
+        if (typeof showToast === 'function') {
+            showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
+        }
+    };
+
     const startFallback = () => {
         fallbackActive = true;
         const page = window._tasksPage;
@@ -1014,6 +1049,7 @@ window.listenToTasks = () => {
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
         currentUnsub = onSnapshot(buildFallbackQuery(), handleSnapshot, (error) => {
             console.error("Firestore fallback snapshot error:", error);
+            if (silenceError(error)) return;
             if (typeof showToast === 'function') {
                 showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
             }
@@ -1021,17 +1057,7 @@ window.listenToTasks = () => {
         registerUnsub();
     };
 
-    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, (error) => {
-        console.error("Firestore snapshot error:", error);
-        if (!fallbackActive && isMissingIndex(error)) {
-            if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
-            startFallback();
-            return;
-        }
-        if (typeof showToast === 'function') {
-            showToast("حدث خطأ أثناء جلب البيانات من السيرفر. برجاء فحص الاتصال.", false);
-        }
-    });
+    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, handleListenerError);
     registerUnsub();
 
     /* Prime the server-side aggregate summary for this scope (P1.4). This runs
