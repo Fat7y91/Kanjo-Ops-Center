@@ -624,6 +624,168 @@ const kpiFetchDailyStats = async (repId) => {
     return { activeSeconds, imageEditSeconds, days };
 };
 
+/* ───────────── Team leaderboard (gamification) ─────────────
+   Reps may see each other on a shared board, but NOT each other's products or
+   pricing. We publish only non-sensitive raw stats onto rep_kpis/{repId}:
+   product count, net seconds and the two quality ratios. The Kanjo score is
+   then recomputed client-side over the team so every viewer sees the exact
+   same ranking without ever reading merchant_products. */
+const KPI_TEAM_SUMMARY_FIELDS = [
+    'repId', 'repName', 'team', 'isEditor',
+    'publicTotalProducts', 'publicTotalSeconds',
+    'publicValidRatio', 'publicImageRatio', 'publicUpdatedAt'
+];
+
+const kpiRepTeamName = (repName) => {
+    const name = String(repName || '').trim();
+    if (!name) return '';
+    const payroll = Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [];
+    const match = payroll.find((p) => String(p.name || '').trim() === name);
+    if (match && match.team) return String(match.team).trim();
+    if (window.currentUser && String(window.currentUser.name || '').trim() === name) {
+        return String(window.currentUser.team || '').trim();
+    }
+    return '';
+};
+
+const kpiSummaryPayload = (row) => {
+    const team = kpiRepTeamName(row.name);
+    if (!team) return null;
+    return {
+        repId: row.repId,
+        repName: row.name,
+        team,
+        isEditor: !!row.isEditor,
+        publicTotalProducts: Math.max(0, Number(row.totalProducts) || 0),
+        publicTotalSeconds: Math.max(0, Number(row.totalSeconds) || 0),
+        publicValidRatio: Math.max(0, Number(row.validRatioRaw) || 0),
+        publicImageRatio: Math.max(0, Number(row.imageRatioRaw) || 0),
+        publicUpdatedAt: new Date()
+    };
+};
+
+const kpiPublishSummary = async (row) => {
+    const payload = kpiSummaryPayload(row);
+    if (!payload) return;
+    try {
+        await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, payload.repId), payload, { merge: true });
+    } catch (err) {
+        /* Non-fatal: a rep publishes only their own row; managers publish all. */
+        console.error('[kpi] leaderboard summary publish failed for ' + payload.repId + ':', err);
+    }
+};
+
+/* Reps publish only their own row; managers publish the whole roster so the
+   board is populated even for reps who have not opened their screen. */
+const kpiPublishSummaries = (rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    const isRep = window.isFieldRepUser();
+    const ownId = isRep ? window.kpiResolvePersonalRepId('') : '';
+    const targets = isRep ? list.filter((r) => r.repId === ownId) : list;
+    return Promise.all(targets.map(kpiPublishSummary));
+};
+
+/* Read the team's published summaries. Rule-gated: only same-kanjoTeam rows are
+   returned to a rep (managers/legacy users see all). */
+const kpiFetchTeamSummaries = async () => {
+    const u = window.currentUser || {};
+    const team = String(u.team || kpiRepTeamName(u.name) || '').trim();
+    if (!team) return [];
+    try {
+        const snap = await window.getDocs(window.query(
+            window.collection(window.db, KPI_REP_COLLECTION),
+            window.where('team', '==', team)
+        ));
+        const rows = [];
+        snap.forEach((d) => {
+            const data = d.data() || {};
+            rows.push({
+                repId: d.id,
+                name: data.repName || d.id,
+                team: data.team || team,
+                isEditor: !!data.isEditor,
+                totalProducts: Math.max(0, Number(data.publicTotalProducts) || 0),
+                totalSeconds: Math.max(0, Number(data.publicTotalSeconds) || 0),
+                validRatio: Math.max(0, Number(data.publicValidRatio) || 0),
+                imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
+            });
+        });
+        return rows;
+    } catch (err) {
+        console.error('[kpi] team leaderboard fetch failed:', err);
+        return [];
+    }
+};
+
+/* Merge the live own-row over the published summaries and compute the same
+   weighted score the manager report uses (normalised over the team). */
+const kpiComputeTeamBoard = (summaries, ownRow) => {
+    const map = new Map();
+    (summaries || []).forEach((r) => map.set(r.repId, Object.assign({}, r)));
+    if (ownRow) {
+        const prev = map.get(ownRow.repId) || {};
+        map.set(ownRow.repId, {
+            repId: ownRow.repId,
+            name: ownRow.name,
+            isEditor: !!ownRow.isEditor,
+            totalProducts: Math.max(Number(prev.totalProducts) || 0, Number(ownRow.totalProducts) || 0),
+            totalSeconds: Math.max(Number(prev.totalSeconds) || 0, Number(ownRow.totalSeconds) || 0),
+            validRatio: Number(ownRow.validRatioRaw) || 0,
+            imageRatio: Number(ownRow.imageRatioRaw) || 0
+        });
+    }
+    const field = Array.from(map.values()).filter((r) => !r.isEditor);
+    const maxProducts = field.reduce((m, r) => Math.max(m, Number(r.totalProducts) || 0), 0);
+    const maxSeconds = field.reduce((m, r) => Math.max(m, Number(r.totalSeconds) || 0), 0);
+    field.forEach((r) => {
+        const volume = maxProducts ? ((Number(r.totalProducts) || 0) / maxProducts) * 20 : 0;
+        const effort = maxSeconds ? ((Number(r.totalSeconds) || 0) / maxSeconds) * 10 : 0;
+        r.score = volume + effort + ((Number(r.validRatio) || 0) * 35) + ((Number(r.imageRatio) || 0) * 35);
+    });
+    field.sort((a, b) => (b.score - a.score) || String(a.name).localeCompare(String(b.name), 'ar'));
+    field.forEach((r, idx) => { r.rank = idx + 1; });
+    const own = ownRow ? field.find((r) => r.repId === ownRow.repId) : null;
+    return { rows: field, total: field.length, ownRank: own ? own.rank : null };
+};
+
+const kpiTeamLeaderboardHtml = (board) => {
+    const rows = board && Array.isArray(board.rows) ? board.rows : [];
+    if (!rows.length) return '';
+    const maxScore = rows.reduce((m, r) => Math.max(m, Number(r.score) || 0), 0) || 1;
+    const ownId = window.kpiResolvePersonalRepId('');
+    const medals = ['fa-crown', 'fa-medal', 'fa-award'];
+    const cards = rows.map((r, idx) => {
+        const isOwn = r.repId === ownId;
+        const pct = Math.round(((Number(r.score) || 0) / maxScore) * 100);
+        const medal = idx < 3
+            ? `<i class="fa-solid ${medals[idx]} text-[#FFD700]"></i>`
+            : `<span class="text-[10px] font-black text-slate-400">#${idx + 1}</span>`;
+        return `<div class="kpi-leaderboard-row${isOwn ? ' kpi-leaderboard-row-own' : ''}">
+            <span class="kpi-leaderboard-rank">${medal}</span>
+            <span class="min-w-0 flex-1">
+                <span class="block text-[12px] font-black text-[#230535] truncate">${kpiEscape(r.name)}${isOwn ? ' (أنت)' : ''}</span>
+                <span class="block kpi-leaderboard-bar"><span style="width:${pct}%"></span></span>
+            </span>
+            <span class="text-left shrink-0">
+                <span class="block text-sm font-black text-[#E57723]">${(Number(r.score) || 0).toFixed(1)}%</span>
+                <span class="block text-[10px] font-bold text-slate-400">${r.totalProducts} منتج</span>
+            </span>
+        </div>`;
+    }).join('');
+    return `<section class="kpi-panel kpi-leaderboard">
+        <div class="kpi-panel-head">
+            <div class="flex items-center gap-2">
+                <span class="kpi-panel-icon"><i class="fa-solid fa-ranking-star"></i></span>
+                <div>
+                    <h3 class="font-black text-sm text-[#230535]">ترتيب فريقك</h3>
+                    <p class="text-[11px] font-bold text-slate-400">منافسة ودية بين مناديب فريقك — شفافية كاملة لرفع الأداء</p>
+                </div>
+            </div>
+        </div>
+        <div class="kpi-leaderboard-rows">${cards}</div>
+    </section>`;
+};
+
 /* Exact duration, always showing hours/mins/secs for bonus-grade precision. */
 const kpiFormatDurationExact = (seconds) => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -728,6 +890,13 @@ const kpiBuildReport = async () => {
     const editorRowName = kpiResolveImageEditorName();
     const editorRankId = kpiRepId(editorRowName);
     ensureRep(editorRowName).editedImagesCount = editedImagesTotal;
+
+    /* Materialize every payroll rep for managers so the leaderboard still lists
+       teammates who have not added a product yet (they render with zeros). */
+    if (!window.isFieldRepUser()) {
+        (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
+            .forEach((p) => { if (p && p.name) ensureRep(p.name); });
+    }
 
     /* Always materialize the signed-in rep's own row so their personal screen
        renders (with zeros) even before they add their first product. */
@@ -865,6 +1034,10 @@ const kpiBuildReport = async () => {
     totals.validRatioRaw = globalDescBase ? (totals.valid / globalDescBase) : 0;
     totals.junkRatioRaw = globalDescBase ? (totals.junk / globalDescBase) : 0;
     totals.minutesPerProductRaw = kpiMinutesPerProductRaw(totals.seconds, totals.products);
+
+    /* Fire-and-forget so ranking never waits on the network. Reps publish only
+       their own summary; managers publish the whole roster. */
+    kpiPublishSummaries(rows).catch(() => { /* non-fatal */ });
 
     return { rows, totals, generatedAt: new Date() };
 };
@@ -1783,14 +1956,21 @@ window.renderKpiDashboard = async () => {
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
 
-        /* Live rep view: strictly scoped to the logged-in rep's own row. */
+        /* Live rep view: personal row + team-scoped gamification leaderboard. */
         if (isRep) {
             const ownId = window.kpiResolvePersonalRepId('');
             const ownReport = kpiScopeReportForRep(report, ownId);
-            window._kpiLatestReport = ownReport;
             const ownRow = ownReport.rows[0] || null;
+            const summaries = await kpiFetchTeamSummaries();
+            const board = kpiComputeTeamBoard(summaries, ownRow);
+            /* The scoped report only carries one row, so restore the real team
+               denominator and this rep's true rank for the "المركز X من Y" badge. */
+            if (board.total > 0) ownReport.totals.reps = board.total;
+            if (ownRow && !ownRow.isEditor && board.ownRank) ownRow.rank = board.ownRank;
+            window._kpiLatestReport = ownReport;
             content.innerHTML =
-                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>`;
+                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>` +
+                kpiTeamLeaderboardHtml(board);
             return;
         }
 

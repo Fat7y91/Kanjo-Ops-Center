@@ -223,14 +223,50 @@ service cloud.firestore {
     }
 
     // KPI & quality tracking (`rep_kpis/{repId}` + daily_stats subcollection).
-    // Managers read every rep; each rep (and the content editor) is hard-locked
-    // to their own repId.
+    // Managers read/write every rep; each rep (and the content editor) keeps
+    // full access to their own repId.
+    //
+    // GAMIFICATION (leaderboard): a rep may also READ peers' records when the
+    // record carries the same kanjoTeam. To keep product/pricing private, the
+    // ONLY fields a rep may publish about themselves are the non-sensitive
+    // leaderboard summary fields (counts + ratios), never merchants or money.
     match /rep_kpis/{repId} {
       function isOwnRep() {
         return isSignedIn() && claimRepId() != null && claimRepId() == repId;
       }
-      allow read: if legacy() || isManagerViewer() || isOwnRep();
-      allow write: if legacy() || isManagerViewer();
+      function isTeammateSummary() {
+        return isRep()
+          && claimTeam() != null
+          && resource.data.get('team', '') == claimTeam();
+      }
+      function summaryKeys() {
+        return [
+          'repId', 'repName', 'team', 'isEditor',
+          'publicTotalProducts', 'publicTotalSeconds',
+          'publicValidRatio', 'publicImageRatio', 'publicUpdatedAt'
+        ];
+      }
+      function isOwnSummaryCreate() {
+        return isRep()
+          && claimRepId() != null
+          && repId == claimRepId()
+          && claimTeam() != null
+          && request.resource.data.repId == claimRepId()
+          && request.resource.data.team == claimTeam()
+          && request.resource.data.keys().hasOnly(summaryKeys());
+      }
+      function isOwnSummaryUpdate() {
+        return isRep()
+          && claimRepId() != null
+          && repId == claimRepId()
+          && claimTeam() != null
+          && request.resource.data.get('team', '') == claimTeam()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(summaryKeys());
+      }
+      allow read: if legacy() || isManagerViewer() || isOwnRep() || isTeammateSummary();
+      allow create: if legacy() || isManagerViewer() || isOwnSummaryCreate();
+      allow update: if legacy() || isManagerViewer() || isOwnSummaryUpdate();
+      allow delete: if legacy() || isManagerViewer();
 
       match /daily_stats/{date} {
         allow read: if legacy() || isManagerViewer() || isOwnRep();
