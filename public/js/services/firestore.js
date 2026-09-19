@@ -949,32 +949,8 @@ window.listenToTasks = () => {
         return mutated;
     };
 
-    /* One-time signed/achieved correction over the COMPLETE dataset. Runs on the
-       background archive listener's first (full) snapshot rather than the
-       partial date snapshot, so historical tasks are migrated exactly as they
-       were when the listener streamed everything up front. */
-    const runSignedMigrationIfNeeded = (snapshot) => {
-        if (window.hasRunSignedMigration) return;
-        window.hasRunSignedMigration = true;
-        const migrationBatch = writeBatch(db);
-        let migrationCount = 0;
-        snapshot.forEach((docSnap) => {
-            const tData = docSnap.data();
-            const currentAch = Number(tData.achieved) || 0;
-            if (tData.isSigned && currentAch === 0) {
-                migrationBatch.update(docSnap.ref, {
-                    isSigned: false,
-                    isProvisional: true
-                });
-                migrationCount++;
-            }
-        });
-        if (migrationCount > 0) {
-            migrationBatch.commit().then(() => {
-                showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0%!`);
-            }).catch(err => console.error("Data Migration Error:", err));
-        }
-    };
+    /* One-time signed/achieved correction intentionally removed: the archive
+       fetch below is a read cycle and must never run heavy synchronous writes. */
 
     let firstSnapshot = true;
     const handleSnapshot = (snapshot) => {
@@ -1070,45 +1046,46 @@ window.listenToTasks = () => {
         registerUnsub();
     };
 
-    /* Background archive listener (non-blocking). It streams the complete task
-       set once the first day's snapshot has painted so `allTasksCache`, the
-       unique-merchant map and the global counters fill in without holding the
-       initial render hostage. Historical reads are best-effort: a failure here
-       logs and degrades to the date-scoped data instead of alarming the user. */
+    /* Background archive fetch (non-blocking, one-shot). Starts 5s AFTER the
+       first day has painted, reads the complete task set once with getDocs
+       (never a live listener over thousands of archived docs), merges the
+       documents into tasksMemory and re-renders exactly once at the end.
+       Historical reads are best-effort: a failure logs and degrades to the
+       date-scoped data instead of alarming the user. */
     let historyStarted = false;
     function startHistoricalListener() {
         if (historyStarted) return;
         historyStarted = true;
-        let historyFirst = true;
-        let historyUnsub = null;
-        let historyFallbackActive = false;
-        const registerHistoryUnsub = () => {
-            if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
-            if (typeof historyUnsub === 'function') window._appListenerUnsubscribers.push(historyUnsub);
+        const page = window._tasksPage;
+        const mergeDocs = (snapshot) => {
+            let mutated = false;
+            snapshot.docs.forEach((docSnap) => {
+                window.tasksMemory.set(docSnap.id, docSnap.data());
+                mutated = true;
+            });
+            return mutated;
         };
-        const historyHandler = (snapshot) => {
-            const mutated = applySnapshotToMemory(snapshot);
-            if (historyFirst) runSignedMigrationIfNeeded(snapshot);
-            historyFirst = false;
-            if (mutated) {
+        const applyHistory = (snapshot) => {
+            /* Drop a fetch that belongs to a previous session/identity. */
+            if (window._tasksPage !== page) return;
+            if (mergeDocs(snapshot)) {
                 window.tasksMemoryVersion = tasksMemoryVersion() + 1;
                 scheduleTaskSync();
             }
         };
-        const historyError = (error) => {
-            console.error("Firestore history snapshot error:", error);
-            if (!historyFallbackActive && isMissingIndex(error)) {
-                if (typeof historyUnsub === 'function') { try { historyUnsub(); } catch (e) {} }
-                historyFallbackActive = true;
-                historyUnsub = onSnapshot(buildHistoryFallback(), historyHandler, (err) => {
-                    console.error("Firestore history fallback snapshot error:", err);
-                });
-                registerHistoryUnsub();
+        window.setTimeout(async () => {
+            try {
+                applyHistory(await getDocs(buildHistoryQuery()));
+            } catch (error) {
+                console.error("Firestore history fetch error:", error);
+                if (!isMissingIndex(error)) return;
+                try {
+                    applyHistory(await getDocs(buildHistoryFallback()));
+                } catch (fallbackError) {
+                    console.error("Firestore history fallback fetch error:", fallbackError);
+                }
             }
-            /* Otherwise best-effort only: no toast, no watchdog impact. */
-        };
-        historyUnsub = onSnapshot(buildHistoryQuery(), historyHandler, historyError);
-        registerHistoryUnsub();
+        }, 5000);
     }
 
     currentUnsub = onSnapshot(buildDateQuery(), handleSnapshot, handleListenerError);

@@ -162,7 +162,7 @@ window.syncAuthClaims = async () => {
 };
 
 async function login(pinOverride = null) {
-    if (window.authReady) { try { await Promise.race([window.authReady, new Promise(r => setTimeout(r, 5000))]); } catch (e) {} }
+    if (window.authReady) { try { await window.authReady; } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
     if(users[pin]) {
         currentUser = users[pin];
@@ -196,10 +196,7 @@ async function login(pinOverride = null) {
 }
 window.login = login;
 
-const afterAuthReady = () => Promise.race([
-    Promise.resolve(window.authReady).catch(() => null),
-    new Promise((res) => setTimeout(() => res(null), 5000))
-]);
+const afterAuthReady = () => Promise.resolve(window.authReady).catch(() => null);
 
 function applyThemeAndShowDashboard() {
     // هذه الأسطر ستقوم بمزامنة المستخدم لو كان هناك تسجيل دخول تلقائي

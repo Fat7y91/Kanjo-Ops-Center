@@ -30,27 +30,10 @@ categories.sort().forEach(c => {
    (injected by dashboard.js) stays visible until the first batch of Firestore
    data arrives and renderDashboard() replaces it.
 
-   On restrictive Wi-Fi networks the anonymous sign-in handshake can hang for a
-   very long time; we race it against a deadline so the app always boots instead
-   of freezing on the spinner forever. Firestore reads may briefly fail until auth
-   lands, but the UI recovers as soon as the session is ready. */
-const AUTH_READY_TIMEOUT_MS = 8000;
-const authReadyWithTimeout = new Promise((resolve) => {
-    let settled = false;
-    const finish = (reason) => {
-        if (settled) return;
-        settled = true;
-        if (reason === 'timeout') {
-            console.warn('[boot] Firebase auth handshake timed out; restoring session optimistically.');
-            if (typeof window.showToast === 'function') {
-                window.showToast('الاتصال بالسيرفر بطيء، سيتم استئناف الجلسة عند توفّر الشبكة', false);
-            }
-        }
-        resolve(null);
-    };
-    Promise.resolve(window.authReady).then(() => finish('ready')).catch(() => finish('error'));
-    setTimeout(() => finish('timeout'), AUTH_READY_TIMEOUT_MS);
-});
+   No client-side deadline: boot waits for Firebase's real auth state to settle.
+   A slow handshake keeps the spinner up instead of restoring the session while
+   Firestore is still unauthenticated (which would paint empty lists). */
+const authReadyWithTimeout = Promise.resolve(window.authReady).catch(() => null);
 
 authReadyWithTimeout.then(() => {
     const savedUser = localStorage.getItem(SESSION_KEY);
