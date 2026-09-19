@@ -2131,6 +2131,28 @@ const renderCatalogAllProductCard = (p) => {
 
 const catalogAllProductsEmptyHtml = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
 
+/* Neutral skeleton placeholder used while the first REST response is in flight.
+   It prevents the widgets from flashing an empty-state message or a "(0)" badge
+   before real data arrives, which reads as broken/dummy data to employees. */
+const catalogSkeletonCardHtml = () => `
+    <div class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm animate-pulse">
+        <div class="flex items-start gap-3">
+            <div class="w-16 h-16 rounded-xl bg-slate-200 shrink-0"></div>
+            <div class="flex-1 space-y-2 py-1">
+                <div class="h-3.5 bg-slate-200 rounded-full w-3/4"></div>
+                <div class="h-2.5 bg-slate-100 rounded-full w-1/2"></div>
+                <div class="h-2.5 bg-slate-100 rounded-full w-2/3"></div>
+            </div>
+        </div>
+    </div>`;
+const catalogLoadingStateHtml = (count = 6) =>
+    `<div class="col-span-full grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">${
+        Array.from({ length: count }).map(catalogSkeletonCardHtml).join('')
+    }</div>`;
+const catalogInlineSpinnerHtml = (label) =>
+    `<div class="text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>${label}</div></div>`;
+
+
 window.openCatalogAllProductsMerchant = (encodedName, event) => {
     if (event && typeof event.preventDefault === 'function') {
         event.preventDefault();
@@ -2387,6 +2409,13 @@ const renderCatalogAllProductsListNow = () => {
     if (countEl) countEl.textContent = String(products.length);
     window.renderCatalogRepLeaderboard(allProducts);
     if (!list) return;
+    /* First load, nothing in cache yet: show skeletons, never an empty state. */
+    if (!products.length && !window._catalogAllProductsLoaded) {
+        if (countEl) countEl.textContent = '…';
+        list.className = 'catalog-card-grid';
+        list.innerHTML = catalogLoadingStateHtml();
+        return;
+    }
     if (!products.length) {
         if (toolbar) {
             if (selectedRep && searchQuery) {
@@ -2495,7 +2524,11 @@ window.renderCatalogAllProductsWidget = () => {
     const canView = window.canViewAllCatalogProducts();
     widget.classList.toggle('hidden', !canView);
     const countEl = document.getElementById('catalogAllProductsCount');
-    if (countEl) countEl.textContent = String((window.allCatalogProductsCache || []).length);
+    if (countEl) {
+        countEl.textContent = !window._catalogAllProductsLoaded && !(window.allCatalogProductsCache || []).length
+            ? '…'
+            : String((window.allCatalogProductsCache || []).length);
+    }
     const body = document.getElementById('catalogAllProductsBody');
     /* The leaderboard is rendered inside renderCatalogAllProductsListNow(), so we
        no longer render it twice per widget refresh. */
@@ -2582,6 +2615,11 @@ const renderCatalogDeleteRequestsList = () => {
     const countEl = document.getElementById('catalogDeleteRequestsCount');
     const products = window.catalogDeleteRequestsCache || [];
     if (countEl) countEl.textContent = String(products.length);
+    if (!products.length && !window._catalogDeleteRequestsLoaded) {
+        if (countEl) countEl.textContent = '…';
+        if (list) list.innerHTML = catalogInlineSpinnerHtml('جاري تحميل طلبات الحذف...');
+        return;
+    }
     renderCatalogMerchantAccordionList(
         list,
         products,
@@ -2601,7 +2639,11 @@ window.renderCatalogDeleteRequestsWidget = () => {
     if (!widget) return;
     widget.classList.remove('hidden');
     const countEl = document.getElementById('catalogDeleteRequestsCount');
-    if (countEl) countEl.textContent = String((window.catalogDeleteRequestsCache || []).length);
+    if (countEl) {
+        countEl.textContent = !window._catalogDeleteRequestsLoaded && !(window.catalogDeleteRequestsCache || []).length
+            ? '…'
+            : String((window.catalogDeleteRequestsCache || []).length);
+    }
     const body = document.getElementById('catalogDeleteRequestsBody');
     if (body && !body.classList.contains('hidden')) renderCatalogDeleteRequestsList();
 };
@@ -2625,6 +2667,7 @@ window.refreshCatalogDeleteRequestsFromServer = async () => {
             snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
         }
         window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+        window._catalogDeleteRequestsLoaded = true;
         window.renderCatalogDeleteRequestsWidget();
         renderCatalogDeleteRequestsList();
     } catch (err) {
@@ -3072,6 +3115,11 @@ const renderCatalogPendingCards = () => {
     const pending = (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
     if (countEl) countEl.textContent = String(pending.length);
     if (!list) return;
+    if (pending.length === 0 && !window._catalogPendingLoaded) {
+        if (countEl) countEl.textContent = '…';
+        list.innerHTML = catalogLoadingStateHtml();
+        return;
+    }
     if (pending.length === 0) {
         markCatalogPendingEmpty(list);
         return;
@@ -3155,7 +3203,7 @@ window.renderCatalogWidgets = () => {
         else {
             const countEl = document.getElementById('catalogPendingCount');
             const pending = (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
-            if (countEl) countEl.textContent = String(pending.length);
+            if (countEl) countEl.textContent = !window._catalogPendingLoaded && !pending.length ? '…' : String(pending.length);
         }
     }
 
@@ -3881,6 +3929,11 @@ window.startCatalogListeners = () => {
     window.repCatalogProductsCache = [];
     window.catalogDeleteRequestsCache = [];
     window.allCatalogProductsCache = [];
+    /* Loading flags: while false and a cache is empty the widgets render a
+       neutral skeleton instead of an empty-state / "(0)" placeholder. */
+    window._catalogPendingLoaded = false;
+    window._catalogAllProductsLoaded = false;
+    window._catalogDeleteRequestsLoaded = false;
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
 
     const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
@@ -3893,6 +3946,7 @@ window.startCatalogListeners = () => {
         try {
             const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]);
             window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
+            window._catalogPendingLoaded = true;
             if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
         } catch (err) {
             console.error('[catalog] pending REST fetch failed:', err);
@@ -3901,6 +3955,7 @@ window.startCatalogListeners = () => {
             try {
                 const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, []);
                 window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+                window._catalogAllProductsLoaded = true;
                 if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
                 if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
             } catch (err) {
@@ -3911,6 +3966,7 @@ window.startCatalogListeners = () => {
             try {
                 const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]);
                 window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+                window._catalogDeleteRequestsLoaded = true;
                 if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
             } catch (err) {
                 console.error('[catalog] delete-requests REST fetch failed:', err);
@@ -3925,9 +3981,11 @@ window.startCatalogListeners = () => {
     const pollId = setInterval(refreshFromRest, 30000);
     window._appListenerUnsubscribers.push(() => clearInterval(pollId));
 
-    /* Best-effort real-time. Guarded so an offline SDK snapshot that is empty
-       can never overwrite a cache already populated over REST. */
-    if (typeof window.onSnapshot === 'function' && typeof window.collection === 'function' && window.db) {
+    /* Best-effort real-time, ONLY when REST is not available. When REST is the
+       transport we deliberately do not attach SDK listeners: the blocked
+       streaming transport is what produced the offline timeout / Listen-channel
+       errors. The 30s REST poll above keeps the widgets fresh instead. */
+    if (!useRest && typeof window.onSnapshot === 'function' && typeof window.collection === 'function' && window.db) {
         const unsubPending = window.onSnapshot(
             window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending')),
             (snap) => {
@@ -3935,6 +3993,7 @@ window.startCatalogListeners = () => {
                 snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
                 if (!items.length && (window.merchantProductsCache || []).length) return;
                 window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
+                window._catalogPendingLoaded = true;
                 if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
             },
             (err) => console.error('[catalog] pending listener failed:', err)
@@ -3950,6 +4009,7 @@ window.startCatalogListeners = () => {
                     if (items.length || !(window.allCatalogProductsCache || []).length) {
                         window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
                     }
+                    window._catalogAllProductsLoaded = true;
                     if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
                     if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
                 },
@@ -3966,6 +4026,7 @@ window.startCatalogListeners = () => {
                     snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
                     if (!items.length && (window.catalogDeleteRequestsCache || []).length) return;
                     window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+                    window._catalogDeleteRequestsLoaded = true;
                     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
                 },
                 (err) => console.error('[catalog] delete requests listener failed:', err)

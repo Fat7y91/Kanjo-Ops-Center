@@ -969,11 +969,13 @@ window.listenToTasks = () => {
         return mutated;
     };
 
-    /* Apply a direct-REST document list ([{ id, data }]) to memory. Used as the
-       primary read path because it bypasses the SDK transport entirely. */
+    /* Apply a direct-REST document list ([{ id, ...fields }]) to memory. Used as
+       the primary read path because it bypasses the SDK transport entirely. */
     const applyRestDocsToMemory = (docs) => {
         let mutated = false;
-        docs.forEach(({ id, data }) => {
+        docs.forEach((doc) => {
+            if (!doc || !doc.id) return;
+            const { id, ...data } = doc;
             window.tasksMemory.set(id, data);
             mutated = true;
         });
@@ -1258,7 +1260,11 @@ window.listenToTasks = () => {
                 const docs = await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate });
                 console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', docs.length);
                 handleRestDocs(docs);
-                if (attachRealtime) attachRealtimeListener();
+                /* REST is the primary transport. Never wake the SDK's streaming
+                   transport (blocked here, so it only produces the 10s offline
+                   timeout and Listen-channel errors): refresh the day through
+                   the silent REST poller instead of a live onSnapshot. */
+                startSilentPolling();
                 return;
             } catch (restError) {
                 console.warn('[tasks] direct REST initial fetch failed; falling back to SDK getDocs:', restError);
@@ -1296,11 +1302,11 @@ window.listenToTasks = () => {
 
     bootstrapInitialData();
 
-    /* Prime the server-side aggregate summary for this scope (P1.4). This runs
-       entirely off the main computation path: the browser asks Firestore to
-       count/sum/average the tasks, merchants, products and financial profiles
-       and caches the result instead of iterating the data locally. */
-    if (window.kanjoAggregates && typeof window.kanjoAggregates.getServerSummary === 'function') {
+    /* Prime the server-side aggregate summary for this scope (P1.4). Only when
+       REST is unavailable: the aggregate API also travels the SDK streaming
+       transport, which is blocked here and only produces offline/timeout noise.
+       When REST is present the dashboard already computes these locally. */
+    if (!window.kanjoRest && window.kanjoAggregates && typeof window.kanjoAggregates.getServerSummary === 'function') {
         Promise.resolve(window.kanjoAggregates.getServerSummary({ team: repTeam })).catch(() => {});
     }
 };

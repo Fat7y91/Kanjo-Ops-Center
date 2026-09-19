@@ -253,11 +253,14 @@ const restAuthHeaders = async () => {
 
 const restDocId = (name) => String(name || '').split('/').pop();
 
+/* Flatten a REST document to the exact same shape the SDK's
+   `{ id: d.id, ...d.data() }` produces, so REST is a true drop-in for every
+   consumer (catalog cards, KPI attribution, tasks memory). */
 const restRowsToDocs = (rows) => {
     const docs = [];
     (rows || []).forEach((row) => {
         if (!row || !row.document) return;
-        docs.push({ id: restDocId(row.document.name), data: restFieldsToJs(row.document.fields || {}) });
+        docs.push({ id: restDocId(row.document.name), ...restFieldsToJs(row.document.fields || {}) });
     });
     return docs;
 };
@@ -271,6 +274,22 @@ const restJsToValue = (value) => {
         return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
     }
     return value;
+};
+
+/* Deep JS -> Firestore REST Value (objects become mapValue, arrays become
+   arrayValue, Date becomes timestampValue). Required for REST writes. */
+const restJsToRestValue = (value) => {
+    if (value === null || value === undefined) return { nullValue: null };
+    if (value instanceof Date) return { timestampValue: value.toISOString() };
+    if (Array.isArray(value)) return { arrayValue: { values: value.map(restJsToRestValue) } };
+    if (typeof value === 'object') return { mapValue: { fields: restJsToFields(value) } };
+    return restJsToValue(value);
+};
+
+const restJsToFields = (obj) => {
+    const fields = {};
+    Object.keys(obj || {}).forEach((key) => { fields[key] = restJsToRestValue(obj[key]); });
+    return fields;
 };
 
 /* The REST API wants operator enum names (EQUAL, LESS_THAN, ...), not the SDK's
@@ -288,7 +307,8 @@ const REST_OP_ALIASES = {
 const restNormalizeOp = (op) => REST_OP_ALIASES[op] || op;
 
 /* Query a top-level collection over REST. `filters` is an array of
-   `[fieldPath, op, value]` clauses combined with AND. Returns `[{ id, data }]`. */
+   `[fieldPath, op, value]` clauses combined with AND. Returns flat
+   `[{ id, ...fields }]`, matching the SDK snapshot shape. */
 const restRunQuery = async (collectionId, filters = [], limit = null) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
         fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
@@ -312,7 +332,8 @@ const restRunQuery = async (collectionId, filters = [], limit = null) => {
 };
 
 /* List a collection or subcollection by path segments, following page tokens.
-   Returns `[{ id, data }]`; a missing path is an empty list, never an error. */
+   Returns flat `[{ id, ...fields }]`; a missing path is an empty list, never an
+   error. */
 const restListCollection = async (segments, { pageSize = 300, maxPages = 20 } = {}) => {
     const path = segments.map(encodeURIComponent).join('/');
     const build = (pageToken) => {
@@ -332,7 +353,7 @@ const restListCollection = async (segments, { pageSize = 300, maxPages = 20 } = 
         }
         const body = await response.json();
         (body.documents || []).forEach((doc) => {
-            docs.push({ id: restDocId(doc.name), data: restFieldsToJs(doc.fields || {}) });
+            docs.push({ id: restDocId(doc.name), ...restFieldsToJs(doc.fields || {}) });
         });
         token = body.nextPageToken || null;
         pages += 1;
@@ -340,7 +361,9 @@ const restListCollection = async (segments, { pageSize = 300, maxPages = 20 } = 
     return docs;
 };
 
-/* Read one document by path segments. Returns `{ id, data }` or null. */
+/* Read one document by path segments. Returns a flat `{ id, ...fields }` or null.
+   A missing document yields 404, which is a normal "not created yet" outcome for
+   subcollection parents — handled silently, never thrown. */
 const restGetDocument = async (segments) => {
     const path = segments.map(encodeURIComponent).join('/');
     const url = REST_DOCUMENTS_URL + '/' + path + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
@@ -351,7 +374,31 @@ const restGetDocument = async (segments) => {
         throw new Error('Firestore REST doc fetch failed (' + response.status + '): ' + body.slice(0, 200));
     }
     const body = await response.json();
-    return { id: restDocId(body.name), data: restFieldsToJs(body.fields || {}) };
+    return { id: restDocId(body.name), ...restFieldsToJs(body.fields || {}) };
+};
+
+/* Merge-write plain JS fields over REST (PATCH + updateMask), mirroring the
+   SDK's `setDoc(ref, data, { merge: true })`. Used so KPI writes never have to
+   wake the SDK streaming transport (the source of the offline/timeout noise). */
+const restPatchDocument = async (segments, data) => {
+    const path = segments.map(encodeURIComponent).join('/');
+    const fieldPaths = Object.keys(data || {})
+        .map((f) => 'updateMask.fieldPaths=' + encodeURIComponent(f))
+        .join('&');
+    const url = REST_DOCUMENTS_URL + '/' + path
+        + '?key=' + encodeURIComponent(firebaseConfig.apiKey)
+        + (fieldPaths ? '&' + fieldPaths : '');
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: await restAuthHeaders(),
+        body: JSON.stringify({ fields: restJsToFields(data) })
+    });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST patch failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    const body = await response.json();
+    return { id: restDocId(body.name), ...restFieldsToJs(body.fields || {}) };
 };
 
 /* Reads the `tasks` collection straight over REST. `team` scopes a rep to their
@@ -363,7 +410,7 @@ const restFetchTasks = async ({ team = null, date = null } = {}) => {
     const docs = await restRunQuery('tasks', filters);
     /* runQuery preserves no order without an explicit orderBy; the dashboard
        expects newest-first, so sort by the `time` field descending. */
-    docs.sort((a, b) => String(b.data.time || '').localeCompare(String(a.data.time || '')));
+    docs.sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')));
     return docs;
 };
 
@@ -372,6 +419,7 @@ window.kanjoRest = {
     runQuery: restRunQuery,
     list: restListCollection,
     getDocument: restGetDocument,
+    patch: restPatchDocument,
     parseValue: restValueToJs,
     parseFields: restFieldsToJs
 };

@@ -94,6 +94,16 @@ const kpiRepId = (name) => {
     return clean || 'unknown';
 };
 
+/* Merge-write a document over direct REST when available, mirroring
+   `setDoc(ref, data, { merge: true })`. Keeps KPI writes off the SDK streaming
+   transport (the blocked channel behind the offline/timeout console noise).
+   Returns true when the REST write was used. */
+const kpiRestMerge = async (segments, data) => {
+    if (!window.kanjoRest || typeof window.kanjoRest.patch !== 'function') return false;
+    await window.kanjoRest.patch(segments, data);
+    return true;
+};
+
 const kpiToMillis = (value) => {
     if (!value) return 0;
     if (typeof value.toMillis === 'function') return value.toMillis();
@@ -214,7 +224,6 @@ window.kpiSyncActiveTime = async (extra) => {
     const repName = String(window.currentUser.name || '').trim();
     const repId = kpiRepId(repName);
     try {
-        const ref = window.doc(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today);
         const payload = {
             repId,
             repName,
@@ -225,7 +234,10 @@ window.kpiSyncActiveTime = async (extra) => {
             updatedAt: new Date()
         };
         if (extra && typeof extra === 'object') Object.assign(payload, extra);
-        await window.setDoc(ref, payload, { merge: true });
+        if (!(await kpiRestMerge([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today], payload))) {
+            const ref = window.doc(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today);
+            await window.setDoc(ref, payload, { merge: true });
+        }
     } catch (err) {
         console.error('[kpi] active time sync failed:', err);
     }
@@ -613,7 +625,7 @@ const kpiFetchParentRecords = async () => {
             let data = null;
             if (useRest && typeof window.kanjoRest.getDocument === 'function') {
                 const doc = await window.kanjoRest.getDocument([KPI_REP_COLLECTION, ownId]);
-                data = doc ? (doc.data || {}) : null;
+                if (doc) { const { id, ...rest } = doc; data = rest; }
             } else {
                 const snap = await window.getDoc(window.doc(window.db, KPI_REP_COLLECTION, ownId));
                 data = (snap && snap.exists && snap.exists()) ? (snap.data() || {}) : null;
@@ -623,7 +635,7 @@ const kpiFetchParentRecords = async () => {
         }
         if (useRest && typeof window.kanjoRest.runQuery === 'function') {
             const items = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, []);
-            items.forEach((it) => map.set(it.id, it.data || {}));
+            items.forEach((it) => { const { id, ...data } = it; map.set(id, data); });
             return map;
         }
         const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
@@ -703,7 +715,9 @@ const kpiPublishSummary = async (row) => {
     const payload = kpiSummaryPayload(row);
     if (!payload) return;
     try {
-        await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, payload.repId), payload, { merge: true });
+        if (!(await kpiRestMerge([KPI_REP_COLLECTION, payload.repId], payload))) {
+            await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, payload.repId), payload, { merge: true });
+        }
     } catch (err) {
         /* Non-fatal: a rep publishes only their own row; managers publish all. */
         console.error('[kpi] leaderboard summary publish failed for ' + payload.repId + ':', err);
@@ -756,9 +770,10 @@ const kpiFetchLeaderboardSummaries = async () => {
         if (!rows) {
             const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
             rows = [];
-            snap.forEach((d) => rows.push({ id: d.id, data: d.data() || {} }));
+            snap.forEach((d) => rows.push({ id: d.id, ...(d.data() || {}) }));
         }
-        rows.forEach(({ id, data }) => {
+        rows.forEach((row) => {
+            const { id, ...data } = row;
             byId.set(id, {
                 repId: id,
                 name: data.repName || id,
@@ -1880,7 +1895,10 @@ window.kpiSaveFixedDescription = async (productId) => {
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري الحفظ...'; }
     try {
-        await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), { description_ar: value });
+        const descPatch = { description_ar: value };
+        if (!(await kpiRestMerge([KPI_PRODUCTS_COLLECTION, productId], descPatch))) {
+            await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), descPatch);
+        }
         const item = document.querySelector('[data-fix-id="' + productId + '"]');
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixList [data-fix-id]').length;
@@ -2007,13 +2025,16 @@ window.kpiUploadMissingImage = async (productId, input) => {
         }
         const merchantName = product.merchantName || product.merchant || product.merchant_name || 'Unknown';
         const url = await window.uploadCatalogRawImage(file, merchantName);
-        await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), {
+        const imagePatch = {
             rawImageUrl: url,
             rawImageUrls: [url],
             image_url: url,
             status: 'pending',
             updatedAt: new Date()
-        });
+        };
+        if (!(await kpiRestMerge([KPI_PRODUCTS_COLLECTION, productId], imagePatch))) {
+            await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), imagePatch);
+        }
         const item = document.querySelector('[data-fix-img-id="' + productId + '"]');
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixImagesList [data-fix-img-id]').length;
