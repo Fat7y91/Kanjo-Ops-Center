@@ -1176,12 +1176,13 @@ window.listenToTasks = () => {
         }, 5000);
     }
 
-    /* ─── Hybrid bootstrap: REST first, real-time second ───
-       1) getDocs paints the current day over plain HTTP, which survives a
-          firewall that blocks the WebChannel stream.
-       2) Only after that REST paint resolves do we attach the onSnapshot
+    /* ─── Hybrid bootstrap: REST-first full-history load, real-time second ───
+       1) getDocs loads the COMPLETE task archive over plain HTTP, which
+          survives a firewall that blocks the WebChannel stream, so the counts
+          and the archive are populated immediately (not just the current day).
+       2) Only after that REST paint resolves do we attach the day onSnapshot
           listener for live updates.
-       3) If the stream is killed, the silent poller keeps the REST data fresh
+       3) If the stream is killed, the silent poller keeps the data fresh
           instead of showing the 0-count recovery UI. */
     const handleInitialError = (error) => {
         console.error("Firestore initial fetch error:", error);
@@ -1201,15 +1202,17 @@ window.listenToTasks = () => {
         let snapshot = null;
         let attachRealtime = true;
         try {
-            snapshot = await getDocs(buildDateQuery());
+            snapshot = await getDocs(buildHistoryQuery());
+            console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', snapshot.size);
         } catch (error) {
             if (isMissingIndex(error)) {
                 fallbackActive = true;
                 const page = window._tasksPage;
-                if (page) { page.fallback = true; page.buildQuery = buildDateFallback; }
+                if (page) { page.fallback = true; page.buildQuery = buildHistoryFallback; }
                 console.warn('[tasks] composite index missing on initial fetch; loading without ordering.');
                 try {
-                    snapshot = await getDocs(buildDateFallback());
+                    snapshot = await getDocs(buildHistoryFallback());
+                    console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', snapshot.size);
                 } catch (fallbackError) {
                     handleInitialError(fallbackError);
                     return;
@@ -1222,7 +1225,9 @@ window.listenToTasks = () => {
                 return;
             }
         }
-        if (snapshot) handleDocsSnapshot(snapshot);
+        /* The initial REST fetch already streamed the complete archive, so the
+           delayed background history fetch would be a redundant full read. */
+        if (snapshot) { historyStarted = true; handleDocsSnapshot(snapshot); }
         if (attachRealtime) attachRealtimeListener();
     };
 
