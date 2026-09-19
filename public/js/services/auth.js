@@ -250,16 +250,16 @@ function applyThemeAndShowDashboard() {
     
     if (!isAccounting) {
         document.getElementById('advancedDashboard').classList.toggle('hidden', !canViewLive);
-        document.getElementById('liveFeedToggle').classList.toggle('hidden', !canViewLive);
-        document.getElementById('taskFormWrapper').classList.toggle('hidden', !isMahmoud || isDataEntry);
-        document.getElementById('adminPanel').classList.toggle('hidden', !isAdmin || isDataEntry);
-        document.getElementById('exportBtn').classList.toggle('hidden', !canViewLive);
+        /* Compact action buttons; the bulky forms now live inside their modals.
+           The assign-task form was only ever usable by admins, so keep the
+           exact same gate (canManageContracts && admin && not data entry). */
+        const assignTaskBtn = document.getElementById('assignTaskBtn');
+        if (assignTaskBtn) assignTaskBtn.classList.toggle('hidden', !(isMahmoud && isAdmin && !isDataEntry));
+        const exportProductsBtn = document.getElementById('openExportProductsBtn');
+        if (exportProductsBtn) exportProductsBtn.classList.toggle('hidden', !canViewLive);
         document.getElementById('notificationsWrapper').classList.toggle('hidden', !canViewLive);
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput && searchInput.closest) {
-            const searchWrap = searchInput.closest('.sticky');
-            if (searchWrap) searchWrap.classList.toggle('hidden', isDataEntry);
-        }
+        const searchWrapper = document.getElementById('tasksSearchWrapper');
+        if (searchWrapper) searchWrapper.classList.toggle('hidden', isDataEntry);
         const tasksContainer = document.getElementById('tasksContainer');
         if (tasksContainer) tasksContainer.classList.toggle('hidden', isDataEntry);
         const tasksDateNav = document.getElementById('tasksDateNav');

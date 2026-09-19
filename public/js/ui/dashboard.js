@@ -1217,14 +1217,32 @@ window.showCardDetails = (cardType) => {
 
 window.applySearch = () => renderDashboard(window.lastSnapshot);
 
-window.toggleLiveView = () => { 
+/* ─── Compact action modals (assign task / products export) ───
+   The bulky inline forms now live inside standard Kanjo modals so the page
+   stays clean; each is opened from a compact button in the action area. */
+window.openAssignTaskModal = () => {
+    const modal = document.getElementById('assignTaskModal');
+    if (modal) modal.classList.remove('hidden');
+};
 
-    isLiveView = !isLiveView; 
+window.closeAssignTaskModal = () => {
+    const modal = document.getElementById('assignTaskModal');
+    if (modal) modal.classList.add('hidden');
+};
 
-    document.getElementById('toggleText').innerText = isLiveView ? "العودة للقائمة الكاملة" : "عرض المهام الجارية (LIVE)"; 
+window.openExportProductsModal = () => {
+    const modal = document.getElementById('exportProductsModal');
+    if (modal) modal.classList.remove('hidden');
+};
 
-    renderDashboard(window.lastSnapshot); 
+window.closeExportProductsModal = () => {
+    const modal = document.getElementById('exportProductsModal');
+    if (modal) modal.classList.add('hidden');
+};
 
+window.openGeneralExportFromProducts = () => {
+    window.closeExportProductsModal();
+    if (typeof window.openExportModal === 'function') window.openExportModal();
 };
 
 function setupAdvancedFilterElements() {
@@ -1487,6 +1505,10 @@ const renderDashboardNow = (snapshot) => {
 
     const searchQuery = normalizeArabic(rawSearchVal);
 
+    /* A non-empty search spans the whole archive; the single-day restriction
+       only applies while the search box is empty. */
+    const isSearching = rawSearchVal.trim() !== '';
+
     const groupedByTeam = { 'Fox Team': {}, 'Power Team': {} }; 
 
     window.allTasksCache = []; 
@@ -1672,10 +1694,6 @@ const renderDashboardNow = (snapshot) => {
         }
 
 
-
-        if (isLiveView && (!task.attendances || task.attendances.length === 0)) return; 
-
-        
 
         if (currentUser.role === 'rep' && task.team !== currentUser.team) return;
 
@@ -2072,8 +2090,9 @@ const renderDashboardNow = (snapshot) => {
     const fragment = document.createDocumentFragment();
 
     /* Single-day restriction: keep only the selected date's buckets so the DOM
-       never grows with the full historical archive. Live view keeps all dates. */
-    const tasksSelectedDate = isLiveView ? '' : window.getTasksSelectedDate();
+       never grows with the full historical archive. A live search spans the
+       entire archive (all dates) until the search box is cleared. */
+    const tasksSelectedDate = isSearching ? '' : window.getTasksSelectedDate();
     const visibleGroupedByTeam = {};
     ['Fox Team', 'Power Team'].forEach((team) => {
         const byDate = groupedByTeam[team] || {};
@@ -2123,7 +2142,7 @@ const renderDashboardNow = (snapshot) => {
 
                 const dayLabel = tasksSelectedDate ? ` — يوم ${tasksSelectedDate}` : '';
 
-                details.innerHTML = `<summary class="font-black text-sm sm:text-base text-kanjo-dark cursor-pointer select-none">${isLiveView ? '🔴 المهام الجارية الآن' : 'فريق ' + team} (${teamMembers[team] || ''})${dayLabel}</summary><div class="mt-4 space-y-3 h-auto">${window.renderTasks(visibleGroupedByTeam[team])}</div>`;
+                details.innerHTML = `<summary class="font-black text-sm sm:text-base text-kanjo-dark cursor-pointer select-none">فريق ${team} (${teamMembers[team] || ''})${dayLabel}</summary><div class="mt-4 space-y-3 h-auto">${window.renderTasks(visibleGroupedByTeam[team])}</div>`;
 
                 fragment.appendChild(details);
 
@@ -2155,10 +2174,14 @@ const renderDashboardNow = (snapshot) => {
     if (renderedTaskCount === 0 && !crossTeamSearchAlertHtml) {
         const empty = document.createElement('div');
         empty.className = 'text-center py-10 text-slate-400 font-bold bg-white rounded-3xl border border-purple-100';
-        empty.innerHTML = `<i class="fa-regular fa-calendar-xmark text-4xl text-[#230535]/20 mb-2"></i><div>لا توجد مهام في يوم ${tasksSelectedDate || ''}</div>`;
+        empty.innerHTML = isSearching
+            ? `<i class="fa-solid fa-magnifying-glass text-4xl text-[#230535]/20 mb-2"></i><div>لا توجد نتائج مطابقة لبحثك في كل التواريخ</div>`
+            : `<i class="fa-regular fa-calendar-xmark text-4xl text-[#230535]/20 mb-2"></i><div>لا توجد مهام في يوم ${tasksSelectedDate || ''}</div>`;
         fragment.appendChild(empty);
     }
-    window.renderTasksDateNav(tasksSelectedDate ? `${renderedTaskCount} مهمة في يوم ${tasksSelectedDate}` : 'عرض المهام الجارية الآن');
+    window.renderTasksDateNav(isSearching
+        ? `${renderedTaskCount} نتيجة بحث في كل التواريخ`
+        : (tasksSelectedDate ? `${renderedTaskCount} مهمة في يوم ${tasksSelectedDate}` : ''));
 
     window.hasRenderedData = true;
     window._dashboardLoadFailed = false;
@@ -2480,7 +2503,7 @@ window.renderTasks = (grouped) => {
 
             <summary class="font-black text-sm sm:text-base text-kanjo-dark p-3.5 bg-kanjo-light rounded-3xl cursor-pointer select-none flex justify-between items-center group-open:rounded-b-none transition-all">
 
-                <div class="flex items-center gap-2"><i class="fa-regular fa-calendar-days text-kanjo-primary text-base"></i><span>${isLiveView ? '🔴 المهام الجارية الآن' : 'يوم: ' + date} ${isToday ? '<span class="text-[10px] sm:text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full mr-1">اليوم</span>' : ''}</span></div>
+                <div class="flex items-center gap-2"><i class="fa-regular fa-calendar-days text-kanjo-primary text-base"></i><span>يوم: ${date} ${isToday ? '<span class="text-[10px] sm:text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full mr-1">اليوم</span>' : ''}</span></div>
 
                 <span class="bg-kanjo-primary text-white text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold shadow-sm">${grouped[date].length} مهام</span>
 

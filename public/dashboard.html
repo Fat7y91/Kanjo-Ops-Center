@@ -766,6 +766,86 @@
 
 
 
+    <!-- ═══════════ ASSIGN NEW TASK MODAL (moved from inline form) ═══════════ -->
+
+    <div id="assignTaskModal" onclick="if(event.target===this)closeAssignTaskModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[105]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 class="font-black text-lg sm:text-xl text-kanjo-dark">إسناد مهمة جديدة</h3>
+
+                <button type="button" onclick="closeAssignTaskModal()" class="text-slate-400 hover:text-red-500 p-1" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <form id="taskForm" onsubmit="submitTask(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+
+                <input type="text" id="mName" placeholder="اسم التاجر" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                <select id="mCat" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required><option value="">الفئة...</option></select>
+
+                <select id="mTeam" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                    <option value="Fox Team">فريق Fox Team</option>
+
+                    <option value="Power Team">فريق Power Team</option>
+
+                </select>
+
+                <input type="date" id="mTime" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                <input type="number" id="mTarget" placeholder="نسبة التارجت المقترحة (مثال: 5 أو 10)" step="0.1" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
+
+                <input type="text" id="mNotes" placeholder="ملاحظات توجيهية" class="p-3.5 bg-kanjo-light border rounded-xl w-full">
+
+                <button type="submit" class="bg-kanjo-primary text-white py-3.5 rounded-xl col-span-full font-bold hover:bg-violet-800 transition shadow-md">إضافة المهمة</button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+    <!-- ═══════════ PRODUCTS EXPORT / TRANSLATION MODAL (moved from inline) ═══════════ -->
+
+    <div id="exportProductsModal" onclick="if(event.target===this)closeExportProductsModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[105]">
+
+        <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
+
+            <div class="flex justify-between items-center mb-4">
+
+                <h3 class="font-black text-lg sm:text-xl text-kanjo-dark"><i class="fa-solid fa-file-export ml-2"></i>تصدير منتجات المناديب</h3>
+
+                <button type="button" onclick="closeExportProductsModal()" class="text-slate-400 hover:text-red-500 p-1" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+            </div>
+
+            <div class="space-y-3">
+
+                <button id="exportBtn" onclick="openGeneralExportFromProducts()" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير البيانات العامة (Excel)</button>
+
+                <div id="catalogExportSection" class="hidden space-y-3">
+
+                    <select id="merchantExportFilter" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
+
+                        <option value="" disabled selected>اختر التاجر للتصدير...</option>
+
+                    </select>
+
+                    <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel (Products + Variants)</button>
+
+                    <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
     <div id="deleteModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
 
         <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center m-4">
@@ -2161,21 +2241,19 @@
 
 
 
-            <div class="sticky top-[70px] z-30 space-y-3">
+            <div class="sticky top-[70px] z-30">
 
-                <div class="relative group">
+                <div id="dashboardActionBar" class="flex flex-col sm:flex-row gap-2">
 
-                    <input type="text" id="searchInput" oninput="applySearch()" placeholder="🔍 ابحث عن اسم المطعم..." class="w-full p-4 pl-12 bg-white border border-purple-100 rounded-2xl shadow-sm outline-none focus:border-kanjo-primary focus:ring-1 focus:ring-kanjo-primary transition-all font-bold text-slate-700">
+                    <button id="assignTaskBtn" type="button" onclick="openAssignTaskModal()" class="hidden flex-1 bg-kanjo-primary text-white py-3.5 rounded-2xl font-black hover:bg-violet-800 transition shadow-md flex items-center justify-center gap-2">
 
-                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-kanjo-primary"></i>
+                        <i class="fa-solid fa-plus"></i> إسناد مهمة جديدة ➕
 
-                </div>
+                    </button>
 
-                <div id="liveFeedToggle" class="hidden">
+                    <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden flex-1 bg-[#230535] text-[#FFD700] py-3.5 rounded-2xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
 
-                    <button onclick="toggleLiveView()" class="w-full bg-slate-800 text-white py-3 rounded-2xl font-bold text-sm hover:bg-black transition flex items-center justify-center gap-2">
-
-                        <i class="fa-solid fa-satellite-dish pulse-live text-red-500"></i> <span id="toggleText">عرض المهام الجارية (LIVE)</span>
+                        <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥
 
                     </button>
 
@@ -2183,63 +2261,9 @@
 
             </div>
 
-
-
-            <div id="taskFormWrapper" class="hidden">
-
-                <div id="adminPanel" class="bg-white p-5 sm:p-6 rounded-3xl shadow-sm border border-purple-100 space-y-4">
-
-                    <h3 class="font-black text-lg sm:text-xl text-kanjo-dark">إسناد مهمة جديدة</h3>
-
-                    <form id="taskForm" onsubmit="submitTask(event)" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-
-                        <input type="text" id="mName" placeholder="اسم التاجر" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
-
-                        <select id="mCat" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required><option value="">الفئة...</option></select>
-
-                        <select id="mTeam" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
-
-                            <option value="Fox Team">فريق Fox Team</option>
-
-                            <option value="Power Team">فريق Power Team</option>
-
-                        </select>
-
-                        <input type="date" id="mTime" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
-
-                        <input type="number" id="mTarget" placeholder="نسبة التارجت المقترحة (مثال: 5 أو 10)" step="0.1" class="p-3.5 bg-kanjo-light border rounded-xl w-full" required>
-
-                        <input type="text" id="mNotes" placeholder="ملاحظات توجيهية" class="p-3.5 bg-kanjo-light border rounded-xl w-full">
-
-                        <button type="submit" class="bg-kanjo-primary text-white py-3.5 rounded-xl col-span-full font-bold hover:bg-violet-800 transition shadow-md">إضافة المهمة</button>
-
-                    </form>
-
-                </div>
-
-            </div>
-
             
 
-            <button id="exportBtn" onclick="openExportModal()" class="hidden w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md">تصدير البيانات العامة (Excel)</button>
-
-
-
-            <div id="catalogExportSection" class="hidden space-y-3">
-
-                <select id="merchantExportFilter" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
-
-                    <option value="" disabled selected>اختر التاجر للتصدير...</option>
-
-                </select>
-
-                <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel (Products + Variants)</button>
-
-                <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
-
-            </div>
-
-            
+            <!-- Action modals (assign task / export products) live at the end of the body. -->
 
             <!-- شريط التنقل بين أيام المهام (عرض يوم واحد لتقليل الضغط على الصفحة) -->
 
@@ -2276,6 +2300,17 @@
             </div>
 
 
+
+            <!-- Search sits directly above the tasks list; while it has text it
+                 searches every date, not just the selected day. -->
+
+            <div id="tasksSearchWrapper" class="relative group">
+
+                <input type="text" id="searchInput" oninput="applySearch()" placeholder="🔍 ابحث عن اسم المطعم..." class="w-full p-4 pl-12 bg-white border border-purple-100 rounded-2xl shadow-sm outline-none focus:border-kanjo-primary focus:ring-1 focus:ring-kanjo-primary transition-all font-bold text-slate-700">
+
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-kanjo-primary"></i>
+
+            </div>
 
             <div id="tasksContainer" class="space-y-4"></div>
 

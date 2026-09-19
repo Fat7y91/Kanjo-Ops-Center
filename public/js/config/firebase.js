@@ -183,7 +183,6 @@ window.isFirestoreIndexError = isFirestoreIndexError;
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */
 window.editTaskId = null;
 window.taskToDelete = null;
-window.isLiveView = false;
 window.currentTarget = 0;
 window.currentNotes = "";
 window.allTasksCache = [];

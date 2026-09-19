@@ -370,6 +370,7 @@ window.submitTask = async (e) => {
     }); 
     document.getElementById('taskForm').reset(); 
     showToast("تم إضافة المهمة بنجاح"); 
+    if (typeof window.closeAssignTaskModal === 'function') window.closeAssignTaskModal();
     if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
 };
 
@@ -891,11 +892,19 @@ window.listenToTasks = () => {
     const repTeam = (currentUser && currentUser.role === 'rep' && currentUser.team) ? currentUser.team : null;
     const baseConstraints = repTeam ? [where("team", "==", repTeam)] : [];
 
-    /* No limit / no cursor: stream the complete ordered dataset. Persistence
-       keeps it in IndexedDB, so this is paid once and then served from cache. */
-    const buildOrderedQuery = () => query(
+    /* Initial fetch is scoped to the day the dashboard is showing (today by
+       default) so the first paint never waits on the full historical archive.
+       Persistence keeps it in IndexedDB, so it is paid once and then served
+       from cache. The archive is streamed afterwards by `startHistoricalListener`
+       (see below) without blocking the main thread. */
+    const selectedDate = (typeof window.getTasksSelectedDate === 'function')
+        ? window.getTasksSelectedDate()
+        : new Date().toISOString().slice(0, 10);
+
+    const buildDateQuery = () => query(
         collection(db, "tasks"),
         ...baseConstraints,
+        where(TASKS_ORDER_FIELD, "==", selectedDate),
         orderBy(TASKS_ORDER_FIELD, "desc")
     );
 
@@ -904,17 +913,29 @@ window.listenToTasks = () => {
        with FAILED_PRECONDITION (surfaced to users as the generic fetch error).
        Dropping orderBy removes the index requirement so the dashboard still
        loads — in this degraded mode newest-first ordering is not guaranteed. */
-    const buildFallbackQuery = () => query(
+    const buildDateFallback = () => query(
+        collection(db, "tasks"),
+        ...baseConstraints,
+        where(TASKS_ORDER_FIELD, "==", selectedDate)
+    );
+
+    /* Complete dataset (all dates) for the background archive listener. */
+    const buildHistoryQuery = () => query(
+        collection(db, "tasks"),
+        ...baseConstraints,
+        orderBy(TASKS_ORDER_FIELD, "desc")
+    );
+
+    const buildHistoryFallback = () => query(
         collection(db, "tasks"),
         ...baseConstraints
     );
 
-    window._tasksPage = { repTeam, buildQuery: buildOrderedQuery, fallback: false };
+    window._tasksPage = { repTeam, buildQuery: buildDateQuery, fallback: false };
 
-    let firstSnapshot = true;
-    const handleSnapshot = (snapshot) => {
-        /* Apply only the changed documents instead of clearing and rebuilding the
-           whole Map on every write (the main source of lag at scale). */
+    /* Apply only the changed documents instead of clearing and rebuilding the
+       whole Map on every write (the main source of lag at scale). */
+    const applySnapshotToMemory = (snapshot) => {
         let mutated = false;
         snapshot.docChanges().forEach((change) => {
             const id = change.doc.id;
@@ -925,35 +946,47 @@ window.listenToTasks = () => {
                 mutated = true;
             }
         });
+        return mutated;
+    };
 
-        /* One-time signed/achieved correction, still based on the initial set. */
-        if (!window.hasRunSignedMigration) {
-            window.hasRunSignedMigration = true;
-            const migrationBatch = writeBatch(db);
-            let migrationCount = 0;
-            snapshot.forEach((docSnap) => {
-                const tData = docSnap.data();
-                const currentAch = Number(tData.achieved) || 0;
-                if (tData.isSigned && currentAch === 0) {
-                    migrationBatch.update(docSnap.ref, {
-                        isSigned: false,
-                        isProvisional: true
-                    });
-                    migrationCount++;
-                }
-            });
-            if (migrationCount > 0) {
-                migrationBatch.commit().then(() => {
-                    showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0%!`);
-                }).catch(err => console.error("Data Migration Error:", err));
+    /* One-time signed/achieved correction over the COMPLETE dataset. Runs on the
+       background archive listener's first (full) snapshot rather than the
+       partial date snapshot, so historical tasks are migrated exactly as they
+       were when the listener streamed everything up front. */
+    const runSignedMigrationIfNeeded = (snapshot) => {
+        if (window.hasRunSignedMigration) return;
+        window.hasRunSignedMigration = true;
+        const migrationBatch = writeBatch(db);
+        let migrationCount = 0;
+        snapshot.forEach((docSnap) => {
+            const tData = docSnap.data();
+            const currentAch = Number(tData.achieved) || 0;
+            if (tData.isSigned && currentAch === 0) {
+                migrationBatch.update(docSnap.ref, {
+                    isSigned: false,
+                    isProvisional: true
+                });
+                migrationCount++;
             }
+        });
+        if (migrationCount > 0) {
+            migrationBatch.commit().then(() => {
+                showToast(`تم تصحيح وتحديث ${migrationCount} حسابات تعاقد بنسبة 0%!`);
+            }).catch(err => console.error("Data Migration Error:", err));
         }
+    };
 
+    let firstSnapshot = true;
+    const handleSnapshot = (snapshot) => {
+        const mutated = applySnapshotToMemory(snapshot);
         if (mutated || firstSnapshot) {
             if (mutated) window.tasksMemoryVersion = tasksMemoryVersion() + 1;
             firstSnapshot = false;
             scheduleTaskSync();
         }
+        /* Paint the selected day first, then stream the archive in the
+           background so the global stats fill in without blocking the UI. */
+        startHistoricalListener();
     };
 
     const isMissingIndex = (error) => {
@@ -1010,7 +1043,7 @@ window.listenToTasks = () => {
                     /* Detach the failed listener before re-subscribing so a
                        permission-denied retry cannot accumulate duplicates. */
                     if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
-                    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, (retryErr) => {
+                    currentUnsub = onSnapshot(buildDateQuery(), handleSnapshot, (retryErr) => {
                         console.error("Firestore snapshot error (post-auth retry):", retryErr);
                         recoverOrToast(retryErr);
                     });
@@ -1026,18 +1059,59 @@ window.listenToTasks = () => {
         fallbackActive = true;
         const page = window._tasksPage;
         page.fallback = true;
-        page.buildQuery = buildFallbackQuery;
+        page.buildQuery = buildDateFallback;
         page.cursor = null;
         page.exhausted = true;
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
-        currentUnsub = onSnapshot(buildFallbackQuery(), handleSnapshot, (error) => {
+        currentUnsub = onSnapshot(buildDateFallback(), handleSnapshot, (error) => {
             console.error("Firestore fallback snapshot error:", error);
             recoverOrToast(error);
         });
         registerUnsub();
     };
 
-    currentUnsub = onSnapshot(buildOrderedQuery(null), handleSnapshot, handleListenerError);
+    /* Background archive listener (non-blocking). It streams the complete task
+       set once the first day's snapshot has painted so `allTasksCache`, the
+       unique-merchant map and the global counters fill in without holding the
+       initial render hostage. Historical reads are best-effort: a failure here
+       logs and degrades to the date-scoped data instead of alarming the user. */
+    let historyStarted = false;
+    function startHistoricalListener() {
+        if (historyStarted) return;
+        historyStarted = true;
+        let historyFirst = true;
+        let historyUnsub = null;
+        let historyFallbackActive = false;
+        const registerHistoryUnsub = () => {
+            if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+            if (typeof historyUnsub === 'function') window._appListenerUnsubscribers.push(historyUnsub);
+        };
+        const historyHandler = (snapshot) => {
+            const mutated = applySnapshotToMemory(snapshot);
+            if (historyFirst) runSignedMigrationIfNeeded(snapshot);
+            historyFirst = false;
+            if (mutated) {
+                window.tasksMemoryVersion = tasksMemoryVersion() + 1;
+                scheduleTaskSync();
+            }
+        };
+        const historyError = (error) => {
+            console.error("Firestore history snapshot error:", error);
+            if (!historyFallbackActive && isMissingIndex(error)) {
+                if (typeof historyUnsub === 'function') { try { historyUnsub(); } catch (e) {} }
+                historyFallbackActive = true;
+                historyUnsub = onSnapshot(buildHistoryFallback(), historyHandler, (err) => {
+                    console.error("Firestore history fallback snapshot error:", err);
+                });
+                registerHistoryUnsub();
+            }
+            /* Otherwise best-effort only: no toast, no watchdog impact. */
+        };
+        historyUnsub = onSnapshot(buildHistoryQuery(), historyHandler, historyError);
+        registerHistoryUnsub();
+    }
+
+    currentUnsub = onSnapshot(buildDateQuery(), handleSnapshot, handleListenerError);
     registerUnsub();
 
     /* Prime the server-side aggregate summary for this scope (P1.4). This runs
