@@ -40,11 +40,13 @@ if (canPersistLocalCache) {
                 // the SDK resolved indexes against a huge stale IndexedDB cache.
                 tabManager: persistentSingleTabManager()
             }),
-            // Some regions/ISPs (notably in Egypt) throttle or block the
-            // WebSocket/WebChannel stream, which drops the client into a permanent
-            // "offline" state and locks the recovery UI. Force plain HTTP
-            // long-polling so the SDK never attempts the WebChannel stream.
-            experimentalForceLongPolling: true
+            // Let the SDK auto-detect the transport. Forcing long-polling was
+            // keeping the client pinned to a long-lived streaming fetch that
+            // some networks reset ("WebChannelConnection ... transport
+            // errored"), which drops the SDK into offline mode. Auto-detect
+            // uses the standard transport when it works and only falls back to
+            // long-polling when the stream is genuinely blocked.
+            experimentalAutoDetectLongPolling: true
         });
     } catch (e) {
         // Persistent-cache init failed (e.g. IndexedDB blocked/conflicting across tabs).
@@ -55,8 +57,8 @@ if (canPersistLocalCache) {
     // Storage-restricted context (e.g. Safari Private Browsing): memory cache only.
     try {
         db = initializeFirestore(app, {
-            // Memory-cache contexts still need the long-polling transport.
-            experimentalForceLongPolling: true
+            // Memory-cache contexts get the same auto-detected transport.
+            experimentalAutoDetectLongPolling: true
         });
     } catch (e) {
         console.error("initializeFirestore failed; using default memory cache:", e);
@@ -186,6 +188,96 @@ window.writeBatch = writeBatch;
 window.setDoc = setDoc;
 window.getDoc = wrappedGetDoc;
 window.isFirestoreIndexError = isFirestoreIndexError;
+
+/* ─── Direct Firestore REST reads (transport-independent) ───
+   Some networks reset the SDK's long-lived streaming transport
+   (WebChannel/long-polling) even when ordinary HTTPS to the same host works.
+   The SDK then reports "Backend didn't respond within 10 seconds", flips to
+   offline mode and makes getDocs resolve from the local cache — which is empty
+   on a fresh profile, so the dashboard shows 0 everywhere. The plain REST
+   endpoint is a normal request/response call that survives those networks, so
+   the task read paths use it directly and keep the SDK for real-time deltas and
+   writes. `runQuery` is CORS-enabled for web origins. */
+
+/* Mirrors the Firestore Timestamp shape closely enough that both guarded
+   (`.toDate ? ... : new Date(x)`) and unguarded timestamp consumers keep
+   working after a REST read. */
+class KanjoRestTimestamp {
+    constructor(iso) { this._date = new Date(iso); }
+    toDate() { return this._date; }
+    toMillis() { return this._date.getTime(); }
+    valueOf() { return this._date.getTime(); }
+    toString() { return this._date.toISOString(); }
+    get seconds() { return Math.floor(this._date.getTime() / 1000); }
+}
+
+const restValueToJs = (value) => {
+    if (!value || typeof value !== 'object') return null;
+    if ('stringValue' in value) return value.stringValue;
+    if ('integerValue' in value) return Number(value.integerValue);
+    if ('doubleValue' in value) return Number(value.doubleValue);
+    if ('booleanValue' in value) return value.booleanValue;
+    if ('nullValue' in value) return null;
+    if ('timestampValue' in value) return new KanjoRestTimestamp(value.timestampValue);
+    if ('arrayValue' in value) return (value.arrayValue.values || []).map(restValueToJs);
+    if ('mapValue' in value) return restFieldsToJs(value.mapValue.fields || {});
+    if ('referenceValue' in value) return value.referenceValue;
+    if ('geoPointValue' in value) return value.geoPointValue;
+    return null;
+};
+
+const restFieldsToJs = (fields) => {
+    const out = {};
+    Object.keys(fields).forEach((key) => { out[key] = restValueToJs(fields[key]); });
+    return out;
+};
+
+/* Reads the `tasks` collection straight over REST. `team` scopes a rep to their
+   own team; `date` scopes to a single day (omit for the full archive). Returns
+   an array of `{ id, data }` shaped exactly like SDK documents. */
+const restFetchTasks = async ({ team = null, date = null } = {}) => {
+    const filters = [];
+    if (team) filters.push({ fieldFilter: { field: { fieldPath: 'team' }, op: 'EQUAL', value: { stringValue: team } } });
+    if (date) filters.push({ fieldFilter: { field: { fieldPath: 'time' }, op: 'EQUAL', value: { stringValue: date } } });
+
+    const structuredQuery = { from: [{ collectionId: 'tasks' }] };
+    if (filters.length === 1) structuredQuery.where = filters[0];
+    else if (filters.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters } };
+
+    const user = auth.currentUser;
+    let token = '';
+    if (user && typeof user.getIdToken === 'function') {
+        try { token = await user.getIdToken(); } catch (_) { token = ''; }
+    }
+
+    const url = 'https://firestore.googleapis.com/v1/projects/' + firebaseConfig.projectId
+        + '/databases/(default)/documents:runQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: Object.assign(
+            { 'Content-Type': 'application/json' },
+            token ? { Authorization: 'Bearer ' + token } : {}
+        ),
+        body: JSON.stringify({ structuredQuery })
+    });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST runQuery failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    const rows = await response.json();
+    const docs = [];
+    rows.forEach((row) => {
+        if (!row || !row.document) return;
+        const name = row.document.name || '';
+        docs.push({ id: name.split('/').pop(), data: restFieldsToJs(row.document.fields || {}) });
+    });
+    /* runQuery preserves no order without an explicit orderBy; the dashboard
+       expects newest-first, so sort by the `time` field descending. */
+    docs.sort((a, b) => String(b.data.time || '').localeCompare(String(a.data.time || '')));
+    return docs;
+};
+
+window.kanjoRestTasks = { fetchTasks: restFetchTasks };
 
 
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */

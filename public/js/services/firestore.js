@@ -969,6 +969,17 @@ window.listenToTasks = () => {
         return mutated;
     };
 
+    /* Apply a direct-REST document list ([{ id, data }]) to memory. Used as the
+       primary read path because it bypasses the SDK transport entirely. */
+    const applyRestDocsToMemory = (docs) => {
+        let mutated = false;
+        docs.forEach(({ id, data }) => {
+            window.tasksMemory.set(id, data);
+            mutated = true;
+        });
+        return mutated;
+    };
+
     const commitRenderIfNeeded = (mutated) => {
         if (window._tasksPage !== sessionPage) return;
         if (mutated || firstSnapshot) {
@@ -989,6 +1000,11 @@ window.listenToTasks = () => {
     /* REST handler (getDocs): the very first paint and every silent poll. */
     const handleDocsSnapshot = (snapshot) => {
         commitRenderIfNeeded(applyDocsToMemory(snapshot));
+    };
+
+    /* Direct-REST handler: same render path, transport-independent payload. */
+    const handleRestDocs = (docs) => {
+        commitRenderIfNeeded(applyRestDocsToMemory(docs));
     };
 
     const isMissingIndex = (error) => {
@@ -1057,6 +1073,16 @@ window.listenToTasks = () => {
         console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every 30s.');
         const poll = async () => {
             if (!window._tasksListenerStarted) return;
+            /* Direct REST first: it works even while the SDK transport is
+               offline, which is exactly the case that starts this poller. */
+            if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+                try {
+                    handleRestDocs(await window.kanjoRestTasks.fetchTasks({ team: repTeam, date: selectedDate }));
+                    return;
+                } catch (restError) {
+                    console.warn('[tasks] silent REST poll failed; trying SDK getDocs:', restError);
+                }
+            }
             try {
                 const snapshot = await getDocs(fallbackActive ? buildDateFallback() : buildDateQuery());
                 handleDocsSnapshot(snapshot);
@@ -1161,7 +1187,26 @@ window.listenToTasks = () => {
                 scheduleTaskSync();
             }
         };
+        const applyHistoryDocs = (docs) => {
+            if (window._tasksPage !== page) return;
+            if (applyRestDocsToMemory(docs)) {
+                window.tasksMemoryVersion = tasksMemoryVersion() + 1;
+                scheduleTaskSync();
+            }
+        };
         window.setTimeout(async () => {
+            /* Direct REST first: the whole archive must load even when the SDK
+               is stuck offline, otherwise global counts stay at 0. */
+            if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+                try {
+                    const docs = await window.kanjoRestTasks.fetchTasks({ team: page ? page.repTeam : repTeam });
+                    console.log('[KANJO-DIAGNOSTIC] Background history REST fetch completed. Tasks loaded:', docs.length);
+                    applyHistoryDocs(docs);
+                    return;
+                } catch (restError) {
+                    console.warn('[tasks] REST history fetch failed; trying SDK getDocs:', restError);
+                }
+            }
             try {
                 applyHistory(await getDocs(buildHistoryQuery()));
             } catch (error) {
@@ -1177,17 +1222,17 @@ window.listenToTasks = () => {
     }
 
     /* ─── Hybrid bootstrap: fast day paint first, full archive in background ───
-       1) getDocs paints TODAY over plain HTTP in under a second. Fetching the
-          whole archive up front exceeds the SDK's hardcoded 10s connection
-          timeout on throttled enterprise networks, which flips the client to
-          offline mode and resolves from an empty cache (0 tasks).
-       2) Only after that fast REST paint resolves do we attach the day
-          onSnapshot listener for live updates.
+       1) A direct REST runQuery paints TODAY in under a second. It is a plain
+           request/response call, so it still works when the SDK transport is
+           reset/offline (which makes the SDK serve an empty local cache → the
+           0-count dashboard). The SDK getDocs is kept as a fallback.
+       2) Only after that fast paint resolves do we attach the day onSnapshot
+          listener for live updates.
        3) startHistoricalListener then reads the COMPLETE archive 5s later in
           the background (guarded by historyStarted) so global search and global
           stats fill in without blocking first paint.
-       4) If the stream is killed, the silent poller keeps the day fresh
-          instead of showing the 0-count recovery UI. */
+       4) If the stream is killed, the silent poller keeps the day fresh over
+          REST instead of showing the 0-count recovery UI. */
     const handleInitialError = (error) => {
         console.error("Firestore initial fetch error:", error);
         const code = String((error && error.code) || '').toLowerCase();
@@ -1205,6 +1250,20 @@ window.listenToTasks = () => {
     const bootstrapInitialData = async () => {
         let snapshot = null;
         let attachRealtime = true;
+        /* Primary read: direct REST. It is a plain request/response call that
+           succeeds even when the SDK has dropped into offline mode, which is
+           the failure mode that otherwise leaves the dashboard at 0. */
+        if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+            try {
+                const docs = await window.kanjoRestTasks.fetchTasks({ team: repTeam, date: selectedDate });
+                console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', docs.length);
+                handleRestDocs(docs);
+                if (attachRealtime) attachRealtimeListener();
+                return;
+            } catch (restError) {
+                console.warn('[tasks] direct REST initial fetch failed; falling back to SDK getDocs:', restError);
+            }
+        }
         try {
             snapshot = await getDocs(buildDateQuery());
             console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', snapshot.size);
