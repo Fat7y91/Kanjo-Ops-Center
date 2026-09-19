@@ -16,15 +16,29 @@ window.currentFinancialProfileData = null;
 window.financialProfilesCache = new Map();
 
 let _payrollConfigCache = null;
+let _payrollConfigFailedAt = 0;
 
 window.getPayrollConfigCached = async () => {
     if (_payrollConfigCache) return _payrollConfigCache;
-    const docSnap = await getDoc(doc(db, "settings", "payrollConfig"));
-    _payrollConfigCache = docSnap.exists() ? docSnap.data() : {};
-    return _payrollConfigCache;
+    /* Offline/firewall cooldown: once the read fails, stop hammering it on
+       every render and hand callers the default config until the cooldown
+       expires. This guarantees the summary/render cycle can never be halted
+       by a failing Firestore read. */
+    if (_payrollConfigFailedAt && (Date.now() - _payrollConfigFailedAt) < 30000) return {};
+    try {
+        const docSnap = await getDoc(doc(db, "settings", "payrollConfig"));
+        _payrollConfigCache = docSnap.exists() ? docSnap.data() : {};
+        _payrollConfigFailedAt = 0;
+        return _payrollConfigCache;
+    } catch (e) {
+        /* Never reject: an offline client must not halt rerenderDashboard. */
+        console.warn('[accounting] payrollConfig unavailable; using defaults:', e && e.message);
+        _payrollConfigFailedAt = Date.now();
+        return {};
+    }
 };
 
-window.invalidatePayrollConfigCache = () => { _payrollConfigCache = null; };
+window.invalidatePayrollConfigCache = () => { _payrollConfigCache = null; _payrollConfigFailedAt = 0; };
 
 window.isValidEgyptPhone = (v) => /^01[0125][0-9]{8}$/.test((v || '').trim());
 window.isValidIBAN = (v) => /^EG[0-9]{27}$/.test((v || '').trim().toUpperCase());
