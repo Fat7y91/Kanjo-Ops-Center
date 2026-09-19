@@ -5,6 +5,28 @@ const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzWid4xw-1Vo4y3
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 
+/* ─── REST-first writes ───
+   Field reps work on strict mobile networks where the SDK streaming transport
+   is trapped offline, so updateDoc/setDoc/addDoc/deleteDoc hang and the modal
+   reports "فشل حفظ التعديلات". These helpers write straight to the Firestore
+   REST API with the Auth Bearer token and only set the SDK as a last resort.
+   Each returns true (delete/create: the result) when REST handled the call, or
+   false/null when no REST helper is available so the caller can use the SDK. */
+const catalogRestMerge = async (segments, data) => {
+    if (!window.kanjoRest || typeof window.kanjoRest.patch !== 'function') return false;
+    await window.kanjoRest.patch(segments, data);
+    return true;
+};
+const catalogRestCreate = async (collectionId, data) => {
+    if (!window.kanjoRest || typeof window.kanjoRest.create !== 'function') return null;
+    return window.kanjoRest.create(collectionId, data);
+};
+const catalogRestDelete = async (segments) => {
+    if (!window.kanjoRest || typeof window.kanjoRest.remove !== 'function') return false;
+    await window.kanjoRest.remove(segments);
+    return true;
+};
+
 window.merchantProductsCache = window.merchantProductsCache || [];
 window.repCatalogProductsCache = window.repCatalogProductsCache || [];
 window.catalogDeleteRequestsCache = window.catalogDeleteRequestsCache || [];
@@ -1808,7 +1830,11 @@ const updateCatalogProductDirect = async () => {
         } else if (editing.status) {
             payload.status = editing.status;
         }
-        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, editing.id), payload);
+        /* REST-first write: the SDK is trapped offline on strict field networks,
+           so this PATCH is what actually persists Sara's edit from her mobile. */
+        if (!(await catalogRestMerge([CATALOG_COLLECTION, editing.id], payload))) {
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, editing.id), payload);
+        }
         /* Update the rep list locally instead of re-reading the collection. */
         if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
         window._catalogMyProductsSignature = '';
@@ -2552,11 +2578,14 @@ window.requestCatalogProductDeletion = async (productId) => {
     const ok = window.confirm('هل أنت متأكد من طلب حذف هذا المنتج؟');
     if (!ok) return;
     try {
-        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), {
+        const deletionRequest = {
             deleteRequested: true,
             deleteRequestedAt: new Date(),
             deleteRequestedBy: (window.currentUser && window.currentUser.name) || ''
-        });
+        };
+        if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], deletionRequest))) {
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), deletionRequest);
+        }
         /* Reflect the pending deletion locally without re-fetching. */
         if (window.patchRepCatalogProductLocally) {
             window.patchRepCatalogProductLocally(productId, { deleteRequested: true });
@@ -2683,7 +2712,9 @@ window.approveCatalogProductDeletion = async (productId) => {
     const ok = window.confirm('سيتم حذف المنتج نهائياً. هل أنت متأكد؟');
     if (!ok) return;
     try {
-        await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, productId));
+        if (!(await catalogRestDelete([CATALOG_COLLECTION, productId]))) {
+            await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, productId));
+        }
         window.showToast('تم حذف المنتج نهائياً');
     } catch (err) {
         console.error('[catalog] approve deletion failed:', err);
@@ -2697,13 +2728,21 @@ window.rejectCatalogProductDeletion = async (productId) => {
         return;
     }
     try {
-        const patch = {
-            deleteRequestedAt: window.deleteField ? window.deleteField() : null,
-            deleteRequestedBy: window.deleteField ? window.deleteField() : null
-        };
-        if (window.deleteField) patch.deleteRequested = window.deleteField();
-        else patch.deleteRequested = false;
-        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
+        /* REST has no FieldValue.delete sentinel: clearing the fields to null
+           removes them from the delete queue just the same. */
+        if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], {
+            deleteRequested: false,
+            deleteRequestedAt: null,
+            deleteRequestedBy: null
+        }))) {
+            const patch = {
+                deleteRequestedAt: window.deleteField ? window.deleteField() : null,
+                deleteRequestedBy: window.deleteField ? window.deleteField() : null
+            };
+            if (window.deleteField) patch.deleteRequested = window.deleteField();
+            else patch.deleteRequested = false;
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
+        }
         window.showToast('تم رفض طلب الحذف وإعادة المنتج');
     } catch (err) {
         console.error('[catalog] reject deletion failed:', err);
@@ -2842,7 +2881,9 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
         }
         payload.variations = variantPayload;
     }
-    await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
+    if (!(await catalogRestCreate(CATALOG_COLLECTION, payload))) {
+        await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
+    }
 };
 
 window.syncAllCatalogDrafts = async () => {
@@ -2969,13 +3010,16 @@ const removeCatalogPendingProductFromUi = (productId, merchantName) => {
 const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount) => {
     const filled = enhancedUrls.filter(Boolean);
     if (filled.length !== rawCount) return false;
-    await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), {
+    const completePatch = {
         enhancedImageUrl: filled[0] || '',
         enhancedImageUrls: enhancedUrls.slice(0, rawCount),
         status: 'done',
         updatedAt: new Date(),
         updatedBy: (window.currentUser && window.currentUser.name) || ''
-    });
+    };
+    if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], completePatch))) {
+        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), completePatch);
+    }
     delete window._catalogEnhancedUploads[productId];
     removeCatalogPendingProductFromUi(productId, (product && product.merchantName) || '');
     window.showToast('تم اعتماد المنتج بعد رفع كل الصور المحسّنة');
@@ -3837,7 +3881,9 @@ window.fixCatalogProductTranslations = async () => {
             if (nameEn) patch.name_en = nameEn;
             if (descriptionEn) patch.description_en = descriptionEn;
             if (!Object.keys(patch).length) continue;
-            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, product.id), patch);
+            if (!(await catalogRestMerge([CATALOG_COLLECTION, product.id], patch))) {
+                await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, product.id), patch);
+            }
         }
         window.showToast('تم إصلاح ترجمة المنتجات بنجاح');
         if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();

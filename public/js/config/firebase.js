@@ -377,9 +377,40 @@ const restGetDocument = async (segments) => {
     return { id: restDocId(body.name), ...restFieldsToJs(body.fields || {}) };
 };
 
+/* Create a document with a server-generated id over REST (mirrors addDoc). */
+const restCreateDocument = async (collectionId, data) => {
+    const url = REST_DOCUMENTS_URL + '/' + encodeURIComponent(collectionId)
+        + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: await restAuthHeaders(),
+        body: JSON.stringify({ fields: restJsToFields(data) })
+    });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST create failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    const body = await response.json();
+    return { id: restDocId(body.name), ...restFieldsToJs(body.fields || {}) };
+};
+
+/* Delete a document over REST (mirrors deleteDoc). A 404 means it is already
+   gone, which is the desired end state, so it is treated as success. */
+const restDeleteDocument = async (segments) => {
+    const path = segments.map(encodeURIComponent).join('/');
+    const url = REST_DOCUMENTS_URL + '/' + path + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, { method: 'DELETE', headers: await restAuthHeaders() });
+    if (response.status === 404) return true;
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST delete failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    return true;
+};
+
 /* Merge-write plain JS fields over REST (PATCH + updateMask), mirroring the
-   SDK's `setDoc(ref, data, { merge: true })`. Used so KPI writes never have to
-   wake the SDK streaming transport (the source of the offline/timeout noise). */
+   SDK's `setDoc(ref, data, { merge: true })`. Used so writes never have to wake
+   the SDK streaming transport (the blocked channel behind the offline state). */
 const restPatchDocument = async (segments, data) => {
     const path = segments.map(encodeURIComponent).join('/');
     const fieldPaths = Object.keys(data || {})
@@ -420,6 +451,8 @@ window.kanjoRest = {
     list: restListCollection,
     getDocument: restGetDocument,
     patch: restPatchDocument,
+    create: restCreateDocument,
+    remove: restDeleteDocument,
     parseValue: restValueToJs,
     parseFields: restFieldsToJs
 };
