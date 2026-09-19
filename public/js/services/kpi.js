@@ -248,18 +248,21 @@ window.kpiStartActiveTracker = () => {
     if (!window.isKpiTrackedUser || !window.isKpiTrackedUser()) return;
     window._kpiTrackerStarted = true;
     const events = ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'scroll', 'keydown', 'wheel', 'pointerdown'];
-    events.forEach((ev) => window.addEventListener(ev, kpiMarkActivity, { passive: true }));
-    document.addEventListener('visibilitychange', () => {
+    const onVisibility = () => {
         if (document.hidden) {
             kpiPersistActive();
             window.kpiSyncActiveTime();
         }
-    });
-    window.addEventListener('online', () => window.kpiSyncActiveTime());
-    window.addEventListener('beforeunload', () => {
+    };
+    const onOnline = () => window.kpiSyncActiveTime();
+    const onUnload = () => {
         kpiPersistActive();
         window.kpiSyncActiveTime();
-    });
+    };
+    events.forEach((ev) => window.addEventListener(ev, kpiMarkActivity, { passive: true }));
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('beforeunload', onUnload);
     window._kpiTickHandle = setInterval(() => {
         if (document.hidden) return;
         if ((Date.now() - window._kpiLastActivity) > KPI_IDLE_MS) {
@@ -271,6 +274,21 @@ window.kpiStartActiveTracker = () => {
         if (window._kpiActiveSeconds % 60 === 0) window.kpiSyncActiveTime();
     }, 1000);
     window.kpiSyncActiveTime();
+    /* Never leak the 1s tick, the input listeners or the lifecycle listeners
+       across logout / re-auth: register a single teardown that also re-arms
+       the tracker for the next session. */
+    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+    window._appListenerUnsubscribers.push(() => {
+        events.forEach((ev) => window.removeEventListener(ev, kpiMarkActivity));
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('online', onOnline);
+        window.removeEventListener('beforeunload', onUnload);
+        if (window._kpiTickHandle) {
+            clearInterval(window._kpiTickHandle);
+            window._kpiTickHandle = null;
+        }
+        window._kpiTrackerStarted = false;
+    });
 };
 
 /* ─────────────────── image editor workflow time tracker ───────────────────
@@ -2126,6 +2144,10 @@ window.renderKpiDashboard = async () => {
 
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
     try {
+        /* The rep's personal view needs the published leaderboard, and those
+           two reads are independent — start both before awaiting either so the
+           rank/benchmark round-trip overlaps the report build. */
+        const summariesPromise = isRep ? kpiFetchLeaderboardSummaries() : null;
         const report = await kpiBuildReport();
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
@@ -2138,7 +2160,7 @@ window.renderKpiDashboard = async () => {
             const ownRow = ownReport.rows[0] || null;
             /* Published summaries feed the rank and the best-value side; the
                rep's own side comes from the live local report above. */
-            const summaries = await kpiFetchLeaderboardSummaries();
+            const summaries = await summariesPromise;
             const benchmark = kpiComputeBenchmark(summaries, ownRow);
             const personalRank = kpiComputePersonalRank(summaries, ownRow);
             window._kpiLatestReport = ownReport;

@@ -1495,7 +1495,9 @@ const renderDashboardNow = (snapshot) => {
 
     const container = document.getElementById('tasksContainer'); 
 
-    const rawSearchVal = document.getElementById('searchInput').value;
+    const searchInputEl = document.getElementById('searchInput');
+
+    const rawSearchVal = searchInputEl ? String(searchInputEl.value || '') : '';
 
     const searchQuery = normalizeArabic(rawSearchVal);
 
@@ -2227,15 +2229,19 @@ function calculateTopPerformer(tasks) {
 
             t.reports.forEach(r => {
 
-                if (!usersData.has(r.name)) {
+                const repName = r && r.name;
 
-                    usersData.set(r.name, { contracts: [], totalAchieved: 0, countAchieved: 0 });
+                if (!repName) return;
+
+                if (!usersData.has(repName)) {
+
+                    usersData.set(repName, { contracts: [], totalAchieved: 0, countAchieved: 0 });
 
                 }
 
-                let uData = usersData.get(r.name);
+                let uData = usersData.get(repName);
 
-                uData.contracts.push({ name: baseName, achieved: ach, target: t.target, cat: t.cat, rep: r.name });
+                uData.contracts.push({ name: baseName, achieved: ach, target: t.target, cat: t.cat, rep: repName });
 
                 if (ach > 0) {
 
@@ -2365,7 +2371,9 @@ function calculateTopTeam(tasks) {
 
             if (ach > 100) ach = 0; 
 
-            let repName = t.reports && t.reports.length > 0 ? t.reports[t.reports.length - 1].name : '-';
+            const lastReport = t.reports && t.reports.length > 0 ? t.reports[t.reports.length - 1] : null;
+
+            let repName = (lastReport && lastReport.name) ? lastReport.name : '-';
 
 
 

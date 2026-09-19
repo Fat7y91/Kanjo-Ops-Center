@@ -783,13 +783,19 @@ window.loadPayrollSettingsAndCalculateFounderSummary = async () => {
 
 
 
-        const combinedTier1Count = teamStats['Fox Team'].tier1Count + teamStats['Power Team'].tier1Count;
+        const emptyTeamStats = { tier1: 0, tier2: 0, tier3: 0, extraCount: 0, tier1Count: 0, tier2Count: 0, tier3Count: 0 };
 
-        const combinedTier2Count = teamStats['Fox Team'].tier2Count + teamStats['Power Team'].tier2Count;
+        const foxStats = teamStats['Fox Team'] || emptyTeamStats;
 
-        const combinedTier3Count = teamStats['Fox Team'].tier3Count + teamStats['Power Team'].tier3Count;
+        const powerStats = teamStats['Power Team'] || emptyTeamStats;
 
-        const combinedExtraCount = teamStats['Fox Team'].extraCount + teamStats['Power Team'].extraCount;
+        const combinedTier1Count = foxStats.tier1Count + powerStats.tier1Count;
+
+        const combinedTier2Count = foxStats.tier2Count + powerStats.tier2Count;
+
+        const combinedTier3Count = foxStats.tier3Count + powerStats.tier3Count;
+
+        const combinedExtraCount = foxStats.extraCount + powerStats.extraCount;
 
 
 
@@ -821,7 +827,7 @@ window.loadPayrollSettingsAndCalculateFounderSummary = async () => {
 
             let base = rep.base;
 
-            let tComms = teamStats[rep.team];
+            let tComms = teamStats[rep.team] || emptyTeamStats;
 
             let repCommission = tComms.tier1 + tComms.tier2 + tComms.tier3; 
 

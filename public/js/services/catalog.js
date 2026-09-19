@@ -3988,39 +3988,66 @@ window.startCatalogListeners = () => {
        be blocked, which used to leave these widgets stuck at 0. The caches are
        refreshed every 30s so they stay current without a live listener. */
     const refreshFromRest = async () => {
-        if (!useRest) return;
+        /* Skip if the previous poll is still in flight: a slow network must not
+           stack overlapping full-collection reads every 30s. */
+        if (!useRest || window._catalogRestRefreshInFlight) return;
+        window._catalogRestRefreshInFlight = true;
         try {
-            const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]);
-            window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
-            window._catalogPendingLoaded = true;
-            if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
-        } catch (err) {
-            console.error('[catalog] pending REST fetch failed:', err);
-        }
-        if (window.canViewAllCatalogProducts()) {
-            try {
-                const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, []);
-                window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
-                window._catalogAllProductsLoaded = true;
-                if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
-                if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
-            } catch (err) {
-                console.error('[catalog] all-products REST fetch failed:', err);
-            }
-        }
-        if (window.isMahmoudUser()) {
-            try {
-                const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]);
-                window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
-                window._catalogDeleteRequestsLoaded = true;
+            const canViewAll = window.canViewAllCatalogProducts();
+            const isMahmoud = window.isMahmoudUser();
+            /* The unfiltered read is a superset of the pending and delete-request
+               queries, so a manager needs ONE request instead of three. Reps keep
+               the narrow pending query. All independent reads run concurrently and
+               the rep's own-products read (self-guarded) overlaps them too. */
+            const jobs = [window.loadMyCatalogProducts()];
+            if (canViewAll) {
+                jobs.push((async () => {
+                    try {
+                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, []));
+                        window.allCatalogProductsCache = items;
+                        window._catalogAllProductsLoaded = true;
+                        window.merchantProductsCache = items.filter((p) => p.status === 'pending');
+                        window._catalogPendingLoaded = true;
+                        if (isMahmoud) {
+                            window.catalogDeleteRequestsCache = items.filter((p) => p.deleteRequested === true);
+                            window._catalogDeleteRequestsLoaded = true;
+                        }
+                        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+                        if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+                        if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
+                        if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+                    } catch (err) {
+                        console.error('[catalog] all-products REST fetch failed:', err);
+                    }
+                })());
+            } else {
+                jobs.push((async () => {
+                    try {
+                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]));
+                        window.merchantProductsCache = items;
+                        window._catalogPendingLoaded = true;
+                        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+                    } catch (err) {
+                        console.error('[catalog] pending REST fetch failed:', err);
+                    }
+                })());
+                if (isMahmoud) {
+                    jobs.push((async () => {
+                        try {
+                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]));
+                            window.catalogDeleteRequestsCache = items;
+                            window._catalogDeleteRequestsLoaded = true;
+                        } catch (err) {
+                            console.error('[catalog] delete-requests REST fetch failed:', err);
+                        }
+                    })());
+                }
                 if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
-            } catch (err) {
-                console.error('[catalog] delete-requests REST fetch failed:', err);
             }
-        } else if (typeof window.renderCatalogDeleteRequestsWidget === 'function') {
-            window.renderCatalogDeleteRequestsWidget();
+            await Promise.all(jobs);
+        } finally {
+            window._catalogRestRefreshInFlight = false;
         }
-        window.loadMyCatalogProducts();
     };
 
     refreshFromRest();

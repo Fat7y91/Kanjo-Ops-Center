@@ -942,7 +942,14 @@ window.openViewArchivedReportsModal = async () => {
 
     /* Managers must not be shown a stale IndexedDB cache of the moderation
        bin; force the initial read to hit the server. The list is small. */
-    const snap = await getDocs(q, { source: 'server' });
+    let snap = null;
+    try {
+        snap = await getDocs(q, { source: 'server' });
+    } catch (err) {
+        console.error('[archived-reports] load failed:', err);
+        container.innerHTML = '<div class="text-center text-red-500 py-8 font-bold">تعذر تحميل التقارير المستبعدة، برجاء إعادة المحاولة</div>';
+        return;
+    }
 
 
 

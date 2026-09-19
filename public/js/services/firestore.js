@@ -520,6 +520,10 @@ window.openAdminTransferQueueLive = () => {
             if (typeof showToast === 'function') showToast('تعذر تحديث طلبات النقل مباشرة، برجاء إعادة المحاولة', false);
         }
     );
+    /* Tie this listener to the app-wide detach registry so logout / re-auth
+       does not leave a live transfer-requests subscription behind. */
+    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+    window._appListenerUnsubscribers.push(() => window.detachAdminTransferQueue());
 };
 
 window.openAdminTransferModal = () => window.openAdminTransferQueueLive();
@@ -736,9 +740,21 @@ window.submitReport = async () => {
         }
     } 
 
-    await batch.commit();
+    try {
+        await batch.commit();
+    } catch (err) {
+        console.error('[report] batch commit failed:', err);
+        showToast('تعذر حفظ التقرير، برجاء المحاولة مرة أخرى', false);
+        return;
+    }
 
-    await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
+    try {
+        await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
+    } catch (err) {
+        /* The report itself is already saved; a failed notification must not
+           make the user think the save failed. */
+        console.error('[report] notify manager failed:', err);
+    }
 
     if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
 
@@ -1300,7 +1316,10 @@ window.listenToTasks = () => {
         if (attachRealtime) attachRealtimeListener();
     };
 
-    bootstrapInitialData();
+    bootstrapInitialData().catch((err) => {
+        console.error('[tasks] initial bootstrap failed:', err);
+        if (typeof handleInitialError === 'function') handleInitialError(err);
+    });
 
     /* Prime the server-side aggregate summary for this scope (P1.4). Only when
        REST is unavailable: the aggregate API also travels the SDK streaming
@@ -1319,9 +1338,11 @@ function updateQuickLinksWalletCounter() {
         if (t.team !== currentUser.team) return;
         let hasV = (t.attendances && t.attendances.length > 0) || t.isSigned || t.isProvisional;
         if (hasV) {
-            let hasMissing = !t.fbPage || !t.fbGroup || !t.insta || !t.website || 
-                           t.fbPage.trim() === '' || t.fbGroup.trim() === '' || t.insta.trim() === '' || t.website.trim() === '';
-            if (hasMissing) {
+            const fbPage = String(t.fbPage || '').trim();
+            const fbGroup = String(t.fbGroup || '').trim();
+            const insta = String(t.insta || '').trim();
+            const website = String(t.website || '').trim();
+            if (!fbPage || !fbGroup || !insta || !website) {
                 missingCount++;
             }
         }

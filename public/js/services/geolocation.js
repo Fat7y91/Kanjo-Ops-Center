@@ -124,7 +124,21 @@ async function checkAndUpdateMissingAddresses(tasksCache) {
 
     }
 
-    if (updateCount > 0) await batch.commit();
+    if (updateCount > 0) {
+
+        try {
+
+            await batch.commit();
+
+        } catch (err) {
+
+            /* Fire-and-forget backfill: never let a failed commit surface as an
+               unhandled rejection. hasRunGeoUpdate already prevents retry loops. */
+            console.error('[geo] address backfill commit failed:', err);
+
+        }
+
+    }
 
 }
 
