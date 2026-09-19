@@ -861,14 +861,12 @@ const kpiBenchmarkHtml = (benchmark) => {
             <span class="kpi-panel-icon"><i class="fa-solid fa-scale-balanced"></i></span>
             <div>
                 <h3 class="font-black text-sm text-[#230535]">أنت مقابل أفضل أداء في الشركة</h3>
-                <p class="text-[11px] font-bold text-slate-400">مقارنة مجهولة الهوية — قيمك لحظية، وأفضل أداء رقم فقط بدون أسماء أو مراكز</p>
             </div>
         </div>
-        <span class="kpi-chip"><i class="fa-solid fa-user-secret"></i> بدون كشف هوية</span>
     </div>`;
     if (!benchmark || !benchmark.hasBenchmark) {
         return `<section class="kpi-panel kpi-benchmark">${head}
-            <div class="kpi-benchmark-empty"><i class="fa-solid fa-hourglass-half"></i> لا توجد بيانات كافية للمقارنة بعد — ابدأ بإضافة منتجاتك وستظهر مقارنتك تلقائياً.</div>
+            <div class="kpi-benchmark-empty"><i class="fa-solid fa-hourglass-half"></i> لا توجد بيانات للمقارنة بعد.</div>
         </section>`;
     }
     const own = benchmark.own || {};
@@ -1549,6 +1547,42 @@ const kpiPersonalRank = (row, report) => {
     return { rank: row.isEditor ? null : (row.rank || null), total };
 };
 
+/* Exact rank for a rep's OWN screen. A field rep only receives their own row,
+   so peers are taken from the published, non-sensitive rep_kpis summaries and
+   scored with the same Kanjo formula the manager leaderboard uses. Only the
+   resulting rank number and the total are ever exposed — never a peer name,
+   team or identity. Editors are never ranked. */
+const kpiComputePersonalRank = (summaries, ownRow) => {
+    if (!ownRow || ownRow.isEditor) return { rank: null, total: 0 };
+    const peers = (summaries || [])
+        .filter((r) => r && !r.isEditor && r.repId !== ownRow.repId)
+        .map((r) => ({
+            repId: r.repId,
+            totalProducts: Math.max(0, Number(r.totalProducts) || 0),
+            totalSeconds: Math.max(0, Number(r.totalSeconds) || 0),
+            validRatio: Math.max(0, Number(r.validRatio) || 0),
+            imageRatio: Math.max(0, Number(r.imageRatio) || 0)
+        }))
+        .filter((r) => r.totalProducts > 0);
+    const own = {
+        repId: ownRow.repId,
+        totalProducts: Math.max(0, Number(ownRow.totalProducts) || 0),
+        totalSeconds: Math.max(0, Number(ownRow.totalSeconds) || 0),
+        validRatio: Math.max(0, Number(ownRow.validRatioRaw) || 0),
+        imageRatio: Math.max(0, Number(ownRow.imageRatioRaw) || 0)
+    };
+    const active = own.totalProducts > 0 ? peers.concat([own]) : peers;
+    if (!active.length) return { rank: null, total: 0 };
+    const maxProducts = active.reduce((m, r) => Math.max(m, r.totalProducts), 0);
+    const maxTime = active.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
+    const scoreOf = (r) => (maxProducts > 0 ? (r.totalProducts / maxProducts) * 20 : 0)
+        + (maxTime > 0 ? (r.totalSeconds / maxTime) * 10 : 0)
+        + r.validRatio * 35 + r.imageRatio * 35;
+    if (own.totalProducts <= 0) return { rank: null, total: active.length };
+    own.score = scoreOf(own);
+    return { rank: 1 + peers.filter((r) => scoreOf(r) > own.score).length, total: active.length };
+};
+
 const kpiPersonalSmartTips = (row, report) => {
     if (row.isEditor) {
         return [{ tone: 'info', icon: 'fa-wand-magic-sparkles', text: 'أنت مسؤول عن تحرير صور المنتجات — التقييم التنافسي مخصص للمناديب فقط، وتحتفظ شاشتك بإحصائياتك الخاصة.' }];
@@ -1693,11 +1727,10 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
             <div>${liveMode ? 'لا توجد بيانات بعد — ابدأ بإضافة منتجاتك لتظهر مؤشراتك هنا' : 'اختر مندوباً من القائمة أعلاه لمعاينة شاشته الشخصية'}</div>
         </div></section>`;
     }
-    const rankInfo = kpiPersonalRank(row, report);
+    const rankInfo = (opts && opts.personalRank) ? opts.personalRank : kpiPersonalRank(row, report);
     const isEditor = !!row.isEditor;
-    /* Peer ranks are private: managers still see them, but on the rep's own
-       live screen we show an anonymous benchmark instead of a rank badge. */
-    const showRank = !liveMode && !isEditor;
+    /* A rep always sees their own exact rank (e.g. "المركز الثاني من 3"); peers
+       stay private, so only the number and the total are ever rendered. */
     const medalIcon = rankInfo.rank === 1 ? 'fa-crown' : (rankInfo.rank && rankInfo.rank <= 3) ? 'fa-medal' : 'fa-ranking-star';
     const validPct = row.validRatioRaw * 100;
     const imgPct = row.imageRatioRaw * 100;
@@ -1760,11 +1793,11 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                     <h4 class="font-black text-lg text-[#FFD700] truncate">${kpiEscape(row.name)}</h4>
                     ${isEditor
                         ? '<span class="kpi-rank-badge kpi-rank-badge-editor"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</span>'
-                        : showRank
-                            ? `<span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank || '—'} من ${rankInfo.total}</span>`
+                        : rankInfo.rank
+                            ? `<span class="kpi-rank-badge"><i class="fa-solid ${medalIcon}"></i> المركز ${rankInfo.rank} من ${rankInfo.total}</span>`
                             : '<span class="kpi-rank-badge"><i class="fa-solid fa-chart-simple"></i> مؤشراتك لحظياً</span>'}
                 </div>
-                <p class="text-[11px] font-bold text-white/70 mt-1">${isEditor ? 'إحصائياتك الشخصية كاملة بدون تقييم تنافسي' : 'تابع إنتاجك، وحسّن أوصافك وصورك، وقارن أداءك بأفضل أداء في الشركة'}</p>
+                <p class="text-[11px] font-bold text-white/70 mt-1">${isEditor ? 'إحصائياتك الشخصية كاملة بدون تقييم تنافسي' : 'تابع إنتاجك وجودة أوصافك وصورك'}</p>
             </div>
             <div class="text-center shrink-0">
                 ${isEditor
@@ -1780,7 +1813,7 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
         <div class="kpi-personal-cards">
             ${isEditor
                 ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'عدد الصور المُحررة', foot: 'إجمالي الصور التي حررتها' })
-                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: showRank ? (row.rank ? 'المركز #' + row.rank + ' من ' + rankInfo.total : diffFoot) : 'قارن أداءك بأفضل أداء في الشركة بالأسفل', onclick: "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')" })}
+                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')" })}
             ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
             ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })}
             ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: imgPct.toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })}
@@ -2097,19 +2130,20 @@ window.renderKpiDashboard = async () => {
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
 
-        /* Live rep view: personal row + an anonymous benchmark against the
-           company best. Peer names, ranks and individual bars are never shown. */
+        /* Live rep view: their own row, their exact rank, and a nameless
+           comparison against the company best. Peers are never shown. */
         if (isRep) {
             const ownId = window.kpiResolvePersonalRepId('');
             const ownReport = kpiScopeReportForRep(report, ownId);
             const ownRow = ownReport.rows[0] || null;
-            /* Published summaries only feed the ANONYMOUS best-value side; the
+            /* Published summaries feed the rank and the best-value side; the
                rep's own side comes from the live local report above. */
             const summaries = await kpiFetchLeaderboardSummaries();
             const benchmark = kpiComputeBenchmark(summaries, ownRow);
+            const personalRank = kpiComputePersonalRank(summaries, ownRow);
             window._kpiLatestReport = ownReport;
             content.innerHTML =
-                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true })}</div>` +
+                `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true, personalRank })}</div>` +
                 kpiBenchmarkHtml(benchmark);
             return;
         }
