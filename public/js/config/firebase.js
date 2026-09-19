@@ -232,52 +232,149 @@ const restFieldsToJs = (fields) => {
     return out;
 };
 
-/* Reads the `tasks` collection straight over REST. `team` scopes a rep to their
-   own team; `date` scopes to a single day (omit for the full archive). Returns
-   an array of `{ id, data }` shaped exactly like SDK documents. */
-const restFetchTasks = async ({ team = null, date = null } = {}) => {
-    const filters = [];
-    if (team) filters.push({ fieldFilter: { field: { fieldPath: 'team' }, op: 'EQUAL', value: { stringValue: team } } });
-    if (date) filters.push({ fieldFilter: { field: { fieldPath: 'time' }, op: 'EQUAL', value: { stringValue: date } } });
+/* ─── Generic REST transport helpers ───
+   Everything below speaks the plain Firestore REST API over `fetch`, so it
+   keeps working when the SDK's streaming transport is blocked/reset. */
 
-    const structuredQuery = { from: [{ collectionId: 'tasks' }] };
-    if (filters.length === 1) structuredQuery.where = filters[0];
-    else if (filters.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters } };
+const REST_DOCUMENTS_URL = 'https://firestore.googleapis.com/v1/projects/'
+    + firebaseConfig.projectId + '/databases/(default)/documents';
 
+const restAuthHeaders = async () => {
     const user = auth.currentUser;
     let token = '';
     if (user && typeof user.getIdToken === 'function') {
         try { token = await user.getIdToken(); } catch (_) { token = ''; }
     }
+    return Object.assign(
+        { 'Content-Type': 'application/json' },
+        token ? { Authorization: 'Bearer ' + token } : {}
+    );
+};
 
-    const url = 'https://firestore.googleapis.com/v1/projects/' + firebaseConfig.projectId
-        + '/databases/(default)/documents:runQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
+const restDocId = (name) => String(name || '').split('/').pop();
+
+const restRowsToDocs = (rows) => {
+    const docs = [];
+    (rows || []).forEach((row) => {
+        if (!row || !row.document) return;
+        docs.push({ id: restDocId(row.document.name), data: restFieldsToJs(row.document.fields || {}) });
+    });
+    return docs;
+};
+
+/* Primitive -> Firestore REST Value, so call sites can pass plain JS values. */
+const restJsToValue = (value) => {
+    if (value === null || value === undefined) return { nullValue: null };
+    if (typeof value === 'string') return { stringValue: value };
+    if (typeof value === 'boolean') return { booleanValue: value };
+    if (typeof value === 'number') {
+        return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+    }
+    return value;
+};
+
+/* The REST API wants operator enum names (EQUAL, LESS_THAN, ...), not the SDK's
+   symbolic operators (`==`, `<`, ...). Without this mapping every filtered REST
+   query fails with HTTP 400 "Invalid value ... FieldFilter.Operator". */
+const REST_OP_ALIASES = {
+    '==': 'EQUAL', '=': 'EQUAL',
+    '!=': 'NOT_EQUAL',
+    '<': 'LESS_THAN', '<=': 'LESS_THAN_OR_EQUAL',
+    '>': 'GREATER_THAN', '>=': 'GREATER_THAN_OR_EQUAL',
+    'in': 'IN', 'not-in': 'NOT_IN',
+    'array-contains': 'ARRAY_CONTAINS',
+    'array-contains-any': 'ARRAY_CONTAINS_ANY'
+};
+const restNormalizeOp = (op) => REST_OP_ALIASES[op] || op;
+
+/* Query a top-level collection over REST. `filters` is an array of
+   `[fieldPath, op, value]` clauses combined with AND. Returns `[{ id, data }]`. */
+const restRunQuery = async (collectionId, filters = [], limit = null) => {
+    const clauses = (filters || []).map(([field, op, value]) => ({
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+    }));
+    const structuredQuery = { from: [{ collectionId }] };
+    if (clauses.length === 1) structuredQuery.where = clauses[0];
+    else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
+    if (limit) structuredQuery.limit = limit;
+
+    const url = REST_DOCUMENTS_URL + ':runQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
     const response = await fetch(url, {
         method: 'POST',
-        headers: Object.assign(
-            { 'Content-Type': 'application/json' },
-            token ? { Authorization: 'Bearer ' + token } : {}
-        ),
+        headers: await restAuthHeaders(),
         body: JSON.stringify({ structuredQuery })
     });
     if (!response.ok) {
         const body = await response.text().catch(() => '');
         throw new Error('Firestore REST runQuery failed (' + response.status + '): ' + body.slice(0, 200));
     }
-    const rows = await response.json();
+    return restRowsToDocs(await response.json());
+};
+
+/* List a collection or subcollection by path segments, following page tokens.
+   Returns `[{ id, data }]`; a missing path is an empty list, never an error. */
+const restListCollection = async (segments, { pageSize = 300, maxPages = 20 } = {}) => {
+    const path = segments.map(encodeURIComponent).join('/');
+    const build = (pageToken) => {
+        let u = REST_DOCUMENTS_URL + '/' + path + '?pageSize=' + pageSize + '&key=' + encodeURIComponent(firebaseConfig.apiKey);
+        if (pageToken) u += '&pageToken=' + encodeURIComponent(pageToken);
+        return u;
+    };
     const docs = [];
-    rows.forEach((row) => {
-        if (!row || !row.document) return;
-        const name = row.document.name || '';
-        docs.push({ id: name.split('/').pop(), data: restFieldsToJs(row.document.fields || {}) });
-    });
+    let token = null;
+    let pages = 0;
+    do {
+        const response = await fetch(build(token), { method: 'GET', headers: await restAuthHeaders() });
+        if (response.status === 404) break;
+        if (!response.ok) {
+            const body = await response.text().catch(() => '');
+            throw new Error('Firestore REST list failed (' + response.status + '): ' + body.slice(0, 200));
+        }
+        const body = await response.json();
+        (body.documents || []).forEach((doc) => {
+            docs.push({ id: restDocId(doc.name), data: restFieldsToJs(doc.fields || {}) });
+        });
+        token = body.nextPageToken || null;
+        pages += 1;
+    } while (token && pages < maxPages);
+    return docs;
+};
+
+/* Read one document by path segments. Returns `{ id, data }` or null. */
+const restGetDocument = async (segments) => {
+    const path = segments.map(encodeURIComponent).join('/');
+    const url = REST_DOCUMENTS_URL + '/' + path + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, { method: 'GET', headers: await restAuthHeaders() });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST doc fetch failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    const body = await response.json();
+    return { id: restDocId(body.name), data: restFieldsToJs(body.fields || {}) };
+};
+
+/* Reads the `tasks` collection straight over REST. `team` scopes a rep to their
+   own team; `date` scopes to a single day (omit for the full archive). */
+const restFetchTasks = async ({ team = null, date = null } = {}) => {
+    const filters = [];
+    if (team) filters.push(['team', 'EQUAL', team]);
+    if (date) filters.push(['time', 'EQUAL', date]);
+    const docs = await restRunQuery('tasks', filters);
     /* runQuery preserves no order without an explicit orderBy; the dashboard
        expects newest-first, so sort by the `time` field descending. */
     docs.sort((a, b) => String(b.data.time || '').localeCompare(String(a.data.time || '')));
     return docs;
 };
 
-window.kanjoRestTasks = { fetchTasks: restFetchTasks };
+window.kanjoRest = {
+    fetchTasks: restFetchTasks,
+    runQuery: restRunQuery,
+    list: restListCollection,
+    getDocument: restGetDocument,
+    parseValue: restValueToJs,
+    parseFields: restFieldsToJs
+};
 
 
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */

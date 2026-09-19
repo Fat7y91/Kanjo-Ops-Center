@@ -2611,14 +2611,19 @@ window.renderCatalogDeleteRequestsWidget = () => {
    live onSnapshot listener keeps the widget fresh afterwards. */
 window.refreshCatalogDeleteRequestsFromServer = async () => {
     if (!window.isMahmoudUser()) return;
-    if (typeof window.getDocs !== 'function' || !window.db || typeof window.collection !== 'function' || typeof window.where !== 'function' || typeof window.query !== 'function') return;
     try {
-        const snap = await window.getDocs(
-            window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true)),
-            { source: 'server' }
-        );
-        const items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        let items = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+            items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]);
+        } else {
+            if (typeof window.getDocs !== 'function' || !window.db) return;
+            const snap = await window.getDocs(
+                window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true)),
+                { source: 'server' }
+            );
+            items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        }
         window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
         window.renderCatalogDeleteRequestsWidget();
         renderCatalogDeleteRequestsList();
@@ -3824,19 +3829,31 @@ const sortCatalogProductsByCreatedAt = (items) => {
 
 /* Static (one-shot) loader for the rep's own catalog products. This replaces
    the previous real-time onSnapshot: overlapping listeners (tasks + catalog)
-   repainted the same list continuously and made the rep dashboard blink. */
+   repainted the same list continuously and made the rep dashboard blink.
+   Reads go over direct REST first so they survive a blocked SDK transport. */
 window.loadMyCatalogProducts = async () => {
     if (!window.isCatalogRepUser()) return;
     const createdBy = (window.currentUser && window.currentUser.name) || '';
-    if (!createdBy || typeof window.getDocs !== 'function' || !window.db) return;
+    if (!createdBy) return;
     try {
-        const ref = window.query(
-            window.collection(window.db, CATALOG_COLLECTION),
-            window.where('createdBy', '==', createdBy)
-        );
-        const snap = await window.getDocs(ref);
-        const items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        let items = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+            try {
+                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['createdBy', '==', createdBy]]);
+            } catch (restErr) {
+                console.warn('[catalog] REST my-products fetch failed; trying SDK:', restErr);
+            }
+        }
+        if (!items) {
+            if (typeof window.getDocs !== 'function' || !window.db) return;
+            const ref = window.query(
+                window.collection(window.db, CATALOG_COLLECTION),
+                window.where('createdBy', '==', createdBy)
+            );
+            const snap = await window.getDocs(ref);
+            items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        }
         window.repCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
         window._catalogMyProductsSignature = '';
         if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
@@ -3859,55 +3876,102 @@ window.patchRepCatalogProductLocally = patchRepCatalogProductLocally;
 
 window.startCatalogListeners = () => {
     if (window._catalogListenerStarted) return;
-    if (typeof window.onSnapshot !== 'function' || typeof window.collection !== 'function' || !window.db) return;
     window._catalogListenerStarted = true;
     window.merchantProductsCache = [];
     window.repCatalogProductsCache = [];
     window.catalogDeleteRequestsCache = [];
     window.allCatalogProductsCache = [];
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
-    const pendingRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending'));
-    const unsubPending = window.onSnapshot(pendingRef, (snap) => {
-        const items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
-        window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
-        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
-    }, (err) => {
-        console.error('[catalog] pending listener failed:', err);
-    });
-    window._appListenerUnsubscribers.push(unsubPending);
 
-    /* Rep "My Products" is loaded once with a static .get() and then patched
-       locally in memory; no live listener is attached here. */
-    window.loadMyCatalogProducts();
+    const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
 
-    if (window.canViewAllCatalogProducts()) {
-        const allRef = window.collection(window.db, CATALOG_COLLECTION);
-        const unsubAll = window.onSnapshot(allRef, (snap) => {
-            const items = [];
-            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
-            window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
-            if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
-            if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
-        }, (err) => {
-            console.error('[catalog] all products listener failed:', err);
-        });
-        window._appListenerUnsubscribers.push(unsubAll);
-    }
+    /* Direct REST is the primary read path: the SDK's streaming transport can
+       be blocked, which used to leave these widgets stuck at 0. The caches are
+       refreshed every 30s so they stay current without a live listener. */
+    const refreshFromRest = async () => {
+        if (!useRest) return;
+        try {
+            const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]);
+            window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
+            if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+        } catch (err) {
+            console.error('[catalog] pending REST fetch failed:', err);
+        }
+        if (window.canViewAllCatalogProducts()) {
+            try {
+                const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, []);
+                window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+                if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+                if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
+            } catch (err) {
+                console.error('[catalog] all-products REST fetch failed:', err);
+            }
+        }
+        if (window.isMahmoudUser()) {
+            try {
+                const items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]);
+                window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+                if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+            } catch (err) {
+                console.error('[catalog] delete-requests REST fetch failed:', err);
+            }
+        } else if (typeof window.renderCatalogDeleteRequestsWidget === 'function') {
+            window.renderCatalogDeleteRequestsWidget();
+        }
+        window.loadMyCatalogProducts();
+    };
 
-    if (window.isMahmoudUser()) {
-        const deleteReqRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true));
-        const unsubDeleteReq = window.onSnapshot(deleteReqRef, (snap) => {
-            const items = [];
-            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
-            window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
-            if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
-        }, (err) => {
-            console.error('[catalog] delete requests listener failed:', err);
-        });
-        window._appListenerUnsubscribers.push(unsubDeleteReq);
-    } else if (typeof window.renderCatalogDeleteRequestsWidget === 'function') {
-        window.renderCatalogDeleteRequestsWidget();
+    refreshFromRest();
+    const pollId = setInterval(refreshFromRest, 30000);
+    window._appListenerUnsubscribers.push(() => clearInterval(pollId));
+
+    /* Best-effort real-time. Guarded so an offline SDK snapshot that is empty
+       can never overwrite a cache already populated over REST. */
+    if (typeof window.onSnapshot === 'function' && typeof window.collection === 'function' && window.db) {
+        const unsubPending = window.onSnapshot(
+            window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending')),
+            (snap) => {
+                const items = [];
+                snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+                if (!items.length && (window.merchantProductsCache || []).length) return;
+                window.merchantProductsCache = sortCatalogProductsByCreatedAt(items);
+                if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+            },
+            (err) => console.error('[catalog] pending listener failed:', err)
+        );
+        window._appListenerUnsubscribers.push(unsubPending);
+
+        if (window.canViewAllCatalogProducts()) {
+            const unsubAll = window.onSnapshot(
+                window.collection(window.db, CATALOG_COLLECTION),
+                (snap) => {
+                    const items = [];
+                    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+                    if (items.length || !(window.allCatalogProductsCache || []).length) {
+                        window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+                    }
+                    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+                    if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
+                },
+                (err) => console.error('[catalog] all products listener failed:', err)
+            );
+            window._appListenerUnsubscribers.push(unsubAll);
+        }
+
+        if (window.isMahmoudUser()) {
+            const unsubDeleteReq = window.onSnapshot(
+                window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('deleteRequested', '==', true)),
+                (snap) => {
+                    const items = [];
+                    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+                    if (!items.length && (window.catalogDeleteRequestsCache || []).length) return;
+                    window.catalogDeleteRequestsCache = sortCatalogProductsByCreatedAt(items);
+                    if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+                },
+                (err) => console.error('[catalog] delete requests listener failed:', err)
+            );
+            window._appListenerUnsubscribers.push(unsubDeleteReq);
+        }
     }
 };
 

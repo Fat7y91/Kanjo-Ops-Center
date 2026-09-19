@@ -554,6 +554,13 @@ window._kpiSelectedRepId = window._kpiSelectedRepId || null;
 window._kpiCharts = window._kpiCharts || {};
 
 const kpiFetchAllProducts = async () => {
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, []);
+        } catch (restErr) {
+            console.warn('[kpi] REST products fetch failed; trying SDK:', restErr);
+        }
+    }
     const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
     const items = [];
     snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
@@ -565,18 +572,26 @@ const kpiFetchAllProducts = async () => {
    common author fields). Managers keep the full view. */
 const kpiFetchProductsForRep = async (repName) => {
     const name = String(repName || '').trim();
-    if (!name || typeof window.query !== 'function' || typeof window.where !== 'function') return [];
+    if (!name) return [];
     const found = new Map();
-    const collect = (snap) => snap.forEach((d) => found.set(d.id, { id: d.id, ...(d.data() || {}) }));
     const authorFields = ['added_by', 'createdBy'];
+    const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
     /* Query both author aliases concurrently instead of serially. */
-    const results = await Promise.all(authorFields.map((field) =>
-        window.getDocs(window.query(
+    const results = await Promise.all(authorFields.map((field) => {
+        if (useRest) {
+            return window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [[field, '==', name]]).catch(() => null);
+        }
+        if (typeof window.query !== 'function' || typeof window.where !== 'function') return Promise.resolve(null);
+        return window.getDocs(window.query(
             window.collection(window.db, KPI_PRODUCTS_COLLECTION),
             window.where(field, '==', name)
-        )).catch(() => null)
-    ));
-    results.forEach((snap) => { if (snap) collect(snap); });
+        )).then((snap) => {
+            const items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+            return items;
+        }).catch(() => null);
+    }));
+    results.forEach((items) => { if (items) items.forEach((it) => found.set(it.id, it)); });
     return Array.from(found.values());
 };
 
@@ -589,13 +604,26 @@ const kpiFetchProductsForScope = async (repName) => {
 
 const kpiFetchParentRecords = async () => {
     const map = new Map();
+    const useRest = !!(window.kanjoRest && (typeof window.kanjoRest.runQuery === 'function' || typeof window.kanjoRest.getDocument === 'function'));
     try {
         /* Field reps are hard-scoped to their own parent record; only managers
            may enumerate every rep. Mirrors the rep_kpis security rules. */
         if (window.isFieldRepUser() && window.currentUser && window.currentUser.name) {
             const ownId = kpiRepId(window.currentUser.name);
-            const snap = await window.getDoc(window.doc(window.db, KPI_REP_COLLECTION, ownId));
-            if (snap && snap.exists && snap.exists()) map.set(ownId, snap.data() || {});
+            let data = null;
+            if (useRest && typeof window.kanjoRest.getDocument === 'function') {
+                const doc = await window.kanjoRest.getDocument([KPI_REP_COLLECTION, ownId]);
+                data = doc ? (doc.data || {}) : null;
+            } else {
+                const snap = await window.getDoc(window.doc(window.db, KPI_REP_COLLECTION, ownId));
+                data = (snap && snap.exists && snap.exists()) ? (snap.data() || {}) : null;
+            }
+            if (data) map.set(ownId, data);
+            return map;
+        }
+        if (useRest && typeof window.kanjoRest.runQuery === 'function') {
+            const items = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, []);
+            items.forEach((it) => map.set(it.id, it.data || {}));
             return map;
         }
         const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
@@ -611,9 +639,16 @@ const kpiFetchDailyStats = async (repId) => {
     let imageEditSeconds = 0;
     let days = 0;
     try {
-        const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION));
-        snap.forEach((d) => {
-            const data = d.data() || {};
+        let items = null;
+        if (!repId) return { activeSeconds, imageEditSeconds, days };
+        if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+            items = await window.kanjoRest.list([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION]);
+        } else {
+            const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION));
+            items = [];
+            snap.forEach((d) => items.push(d.data() || {}));
+        }
+        (items || []).forEach((data) => {
             activeSeconds += Math.max(0, Number(data.activeSeconds) || 0);
             imageEditSeconds += Math.max(0, Number(data.imageEditSeconds) || 0);
             days += 1;
@@ -710,12 +745,23 @@ const kpiFetchLeaderboardSummaries = async () => {
                 });
             });
         /* No team filter: rank against every rep company-wide. */
-        const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
-        snap.forEach((d) => {
-            const data = d.data() || {};
-            byId.set(d.id, {
-                repId: d.id,
-                name: data.repName || d.id,
+        let rows = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+            try {
+                rows = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, []);
+            } catch (restErr) {
+                console.warn('[kpi] REST leaderboard fetch failed; trying SDK:', restErr);
+            }
+        }
+        if (!rows) {
+            const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
+            rows = [];
+            snap.forEach((d) => rows.push({ id: d.id, data: d.data() || {} }));
+        }
+        rows.forEach(({ id, data }) => {
+            byId.set(id, {
+                repId: id,
+                name: data.repName || id,
                 team: data.team || '',
                 isEditor: !!data.isEditor,
                 totalProducts: Math.max(0, Number(data.publicTotalProducts) || 0),

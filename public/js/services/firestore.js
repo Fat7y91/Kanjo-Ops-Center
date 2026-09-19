@@ -1075,9 +1075,9 @@ window.listenToTasks = () => {
             if (!window._tasksListenerStarted) return;
             /* Direct REST first: it works even while the SDK transport is
                offline, which is exactly the case that starts this poller. */
-            if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+            if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
                 try {
-                    handleRestDocs(await window.kanjoRestTasks.fetchTasks({ team: repTeam, date: selectedDate }));
+                    handleRestDocs(await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate }));
                     return;
                 } catch (restError) {
                     console.warn('[tasks] silent REST poll failed; trying SDK getDocs:', restError);
@@ -1197,9 +1197,9 @@ window.listenToTasks = () => {
         window.setTimeout(async () => {
             /* Direct REST first: the whole archive must load even when the SDK
                is stuck offline, otherwise global counts stay at 0. */
-            if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+            if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
                 try {
-                    const docs = await window.kanjoRestTasks.fetchTasks({ team: page ? page.repTeam : repTeam });
+                    const docs = await window.kanjoRest.fetchTasks({ team: page ? page.repTeam : repTeam });
                     console.log('[KANJO-DIAGNOSTIC] Background history REST fetch completed. Tasks loaded:', docs.length);
                     applyHistoryDocs(docs);
                     return;
@@ -1253,9 +1253,9 @@ window.listenToTasks = () => {
         /* Primary read: direct REST. It is a plain request/response call that
            succeeds even when the SDK has dropped into offline mode, which is
            the failure mode that otherwise leaves the dashboard at 0. */
-        if (window.kanjoRestTasks && typeof window.kanjoRestTasks.fetchTasks === 'function') {
+        if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
             try {
-                const docs = await window.kanjoRestTasks.fetchTasks({ team: repTeam, date: selectedDate });
+                const docs = await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate });
                 console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', docs.length);
                 handleRestDocs(docs);
                 if (attachRealtime) attachRealtimeListener();
