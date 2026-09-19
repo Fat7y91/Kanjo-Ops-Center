@@ -39,7 +39,12 @@ if (canPersistLocalCache) {
                 // SDK default: a custom/unlimited cap made low-end devices hang while
                 // the SDK resolved indexes against a huge stale IndexedDB cache.
                 tabManager: persistentSingleTabManager()
-            })
+            }),
+            // Some regions/ISPs (notably in Egypt) throttle or block the
+            // WebSocket/WebChannel stream, which drops the client into a permanent
+            // "offline" state and locks the recovery UI. Force plain HTTP
+            // long-polling so the SDK never attempts the WebChannel stream.
+            experimentalForceLongPolling: true
         });
     } catch (e) {
         // Persistent-cache init failed (e.g. IndexedDB blocked/conflicting across tabs).
@@ -49,7 +54,10 @@ if (canPersistLocalCache) {
 } else {
     // Storage-restricted context (e.g. Safari Private Browsing): memory cache only.
     try {
-        db = initializeFirestore(app);
+        db = initializeFirestore(app, {
+            // Memory-cache contexts still need the long-polling transport.
+            experimentalForceLongPolling: true
+        });
     } catch (e) {
         console.error("initializeFirestore failed; using default memory cache:", e);
         db = getFirestore(app);
