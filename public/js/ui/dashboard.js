@@ -1345,20 +1345,14 @@ window.showDashboardLoading = () => {
     if (typeof window.startDashboardWatchdog === 'function') window.startDashboardWatchdog();
 };
 
-/* ─── Strict load watchdog (never hang on the spinner) ───
-   If the first batch of data has not arrived after this deadline, replace the
-   spinner with a recoverable card. Covers every stall cause: a denied listener,
-   a hung anonymous-auth handshake, a slow network, or a missing index. */
-const DASHBOARD_LOAD_TIMEOUT_MS = 30000;
-
+/* ─── Load watchdog intentionally disabled ───
+   There is no artificial deadline any more: the dashboard waits for the
+   Firestore snapshot for as long as the (long-polling) transport needs, so a
+   slow/blocked network can never force a premature 0-count recovery card.
+   Terminal read failures still surface the recovery card directly through
+   showDashboardLoadFailure() from the listener error handlers. */
 window.startDashboardWatchdog = () => {
     window.clearDashboardWatchdog();
-    window._dashboardWatchdog = setTimeout(() => {
-        window._dashboardWatchdog = null;
-        if (window.hasRenderedData || window.firestoreIndexErrorActive) return;
-        console.warn('[boot] dashboard data did not arrive in time; showing recovery UI.');
-        window.showDashboardLoadFailure();
-    }, DASHBOARD_LOAD_TIMEOUT_MS);
 };
 
 window.clearDashboardWatchdog = () => {
