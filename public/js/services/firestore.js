@@ -952,9 +952,25 @@ window.listenToTasks = () => {
     /* One-time signed/achieved correction intentionally removed: the archive
        fetch below is a read cycle and must never run heavy synchronous writes. */
 
+    /* Identity of this listener session: a re-login replaces window._tasksPage,
+       so any in-flight REST promise from the previous session is discarded
+       instead of merging a stale team's documents into the new memory. */
+    const sessionPage = window._tasksPage;
+
     let firstSnapshot = true;
-    const handleSnapshot = (snapshot) => {
-        const mutated = applySnapshotToMemory(snapshot);
+
+    /* Apply a getDocs (REST) result to memory: merge every document directly. */
+    const applyDocsToMemory = (snapshot) => {
+        let mutated = false;
+        snapshot.docs.forEach((docSnap) => {
+            window.tasksMemory.set(docSnap.id, docSnap.data());
+            mutated = true;
+        });
+        return mutated;
+    };
+
+    const commitRenderIfNeeded = (mutated) => {
+        if (window._tasksPage !== sessionPage) return;
         if (mutated || firstSnapshot) {
             if (mutated) window.tasksMemoryVersion = tasksMemoryVersion() + 1;
             firstSnapshot = false;
@@ -965,25 +981,56 @@ window.listenToTasks = () => {
         startHistoricalListener();
     };
 
+    /* Real-time delta handler (onSnapshot -> docChanges). */
+    const handleSnapshot = (snapshot) => {
+        commitRenderIfNeeded(applySnapshotToMemory(snapshot));
+    };
+
+    /* REST handler (getDocs): the very first paint and every silent poll. */
+    const handleDocsSnapshot = (snapshot) => {
+        commitRenderIfNeeded(applyDocsToMemory(snapshot));
+    };
+
     const isMissingIndex = (error) => {
         const code = (error && error.code) || '';
         const msg = (error && error.message) || '';
         return code === 'failed-precondition' || /requires an index/i.test(msg);
     };
 
+    /* Strict enterprise firewalls kill the WebSocket/WebChannel transport: the
+       SDK then reports unavailable/deadline/internal or a transport/offline
+       message. That is NOT a data error, so we degrade to REST polling instead
+       of showing the 0-count recovery card. */
+    const isTransportError = (error) => {
+        const code = String((error && error.code) || '').toLowerCase();
+        const msg = String((error && error.message) || '');
+        if (code === 'unavailable' || code === 'deadline-exceeded' || code === 'internal') return true;
+        return /transport errored/i.test(msg)
+            || /WebChannelConnection/i.test(msg)
+            || /Could not reach Cloud Firestore backend/i.test(msg)
+            || /client is offline/i.test(msg);
+    };
+
     let currentUnsub = null;
     let fallbackActive = false;
+    let retriedForAuth = false;
+    let pollingTimer = null;
+    let realtimeFailed = false;
 
     const registerUnsub = () => {
         if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
         if (typeof currentUnsub === 'function') window._appListenerUnsubscribers.push(currentUnsub);
     };
 
-    let retriedForAuth = false;
+    const detachCurrentUnsub = () => {
+        if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
+        currentUnsub = null;
+    };
 
-    /* Resolve the loading UI on any terminal error. The strict watchdog in
-       dashboard.js is the backstop, but surfacing the recovery card immediately
-       avoids a 15s dead spinner when we already know the read will not recover. */
+    /* Resolve the loading UI on any terminal error. Surfacing the recovery card
+       immediately avoids a dead spinner when we already know the read cannot
+       recover; transport errors are excluded because the silent poller keeps
+       the REST data live instead. */
     const recoverOrToast = (error) => {
         if (!window.hasRenderedData && typeof window.showDashboardLoadFailure === 'function') {
             window.showDashboardLoadFailure(error);
@@ -1002,11 +1049,51 @@ window.listenToTasks = () => {
         }
     };
 
-    const handleListenerError = (error) => {
+    /* Silent REST polling: graceful degradation when the real-time stream is
+       unavailable. No user-facing error and no recovery UI — the current-day
+       data keeps refreshing every 30s over plain HTTP. */
+    const startSilentPolling = () => {
+        if (pollingTimer) return;
+        console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every 30s.');
+        const poll = async () => {
+            if (!window._tasksListenerStarted) return;
+            try {
+                const snapshot = await getDocs(fallbackActive ? buildDateFallback() : buildDateQuery());
+                handleDocsSnapshot(snapshot);
+            } catch (error) {
+                if (isMissingIndex(error)) {
+                    fallbackActive = true;
+                    const page = window._tasksPage;
+                    if (page) { page.fallback = true; page.buildQuery = buildDateFallback; }
+                    try {
+                        handleDocsSnapshot(await getDocs(buildDateFallback()));
+                    } catch (fallbackError) {
+                        console.error('[tasks] polling fallback failed:', fallbackError);
+                    }
+                } else {
+                    console.error('[tasks] silent poll failed:', error);
+                }
+            }
+        };
+        pollingTimer = setInterval(poll, 30000);
+        if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+        window._appListenerUnsubscribers.push(() => {
+            if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+        });
+    };
+
+    /* Real-time error handling with silent degradation. */
+    const handleRealtimeError = (error) => {
         console.error("Firestore snapshot error:", error);
         if (!fallbackActive && isMissingIndex(error)) {
-            if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
+            detachCurrentUnsub();
             startFallback();
+            return;
+        }
+        if (isTransportError(error)) {
+            realtimeFailed = true;
+            detachCurrentUnsub();
+            startSilentPolling();
             return;
         }
         const code = String((error && error.code) || '').toLowerCase();
@@ -1014,16 +1101,10 @@ window.listenToTasks = () => {
             /* Anonymous auth can still be settling on slow/private mobile
                sessions. Retry once it resolves instead of alarming the user. */
             retriedForAuth = true;
+            detachCurrentUnsub();
             Promise.resolve(window.authReady).catch(() => null).then(() => {
                 if (window._tasksListenerStarted && !fallbackActive) {
-                    /* Detach the failed listener before re-subscribing so a
-                       permission-denied retry cannot accumulate duplicates. */
-                    if (typeof currentUnsub === 'function') { try { currentUnsub(); } catch (e) {} }
-                    currentUnsub = onSnapshot(buildDateQuery(), handleSnapshot, (retryErr) => {
-                        console.error("Firestore snapshot error (post-auth retry):", retryErr);
-                        recoverOrToast(retryErr);
-                    });
-                    registerUnsub();
+                    attachRealtimeListener();
                 }
             });
             return;
@@ -1034,15 +1115,22 @@ window.listenToTasks = () => {
     const startFallback = () => {
         fallbackActive = true;
         const page = window._tasksPage;
-        page.fallback = true;
-        page.buildQuery = buildDateFallback;
-        page.cursor = null;
-        page.exhausted = true;
+        if (page) {
+            page.fallback = true;
+            page.buildQuery = buildDateFallback;
+            page.cursor = null;
+            page.exhausted = true;
+        }
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
-        currentUnsub = onSnapshot(buildDateFallback(), handleSnapshot, (error) => {
-            console.error("Firestore fallback snapshot error:", error);
-            recoverOrToast(error);
-        });
+        currentUnsub = onSnapshot(buildDateFallback(), handleSnapshot, handleRealtimeError);
+        registerUnsub();
+    };
+
+    /* Attach the real-time day listener. Called only AFTER the REST paint (or a
+       permission-denied retry) — never as the initial fetch. */
+    const attachRealtimeListener = () => {
+        if (!window._tasksListenerStarted || realtimeFailed || typeof currentUnsub === 'function') return;
+        currentUnsub = onSnapshot(fallbackActive ? buildDateFallback() : buildDateQuery(), handleSnapshot, handleRealtimeError);
         registerUnsub();
     };
 
@@ -1088,8 +1176,57 @@ window.listenToTasks = () => {
         }, 5000);
     }
 
-    currentUnsub = onSnapshot(buildDateQuery(), handleSnapshot, handleListenerError);
-    registerUnsub();
+    /* ─── Hybrid bootstrap: REST first, real-time second ───
+       1) getDocs paints the current day over plain HTTP, which survives a
+          firewall that blocks the WebChannel stream.
+       2) Only after that REST paint resolves do we attach the onSnapshot
+          listener for live updates.
+       3) If the stream is killed, the silent poller keeps the REST data fresh
+          instead of showing the 0-count recovery UI. */
+    const handleInitialError = (error) => {
+        console.error("Firestore initial fetch error:", error);
+        const code = String((error && error.code) || '').toLowerCase();
+        if (isTransportError(error)) { startSilentPolling(); return; }
+        if (code === 'permission-denied' && !retriedForAuth) {
+            retriedForAuth = true;
+            Promise.resolve(window.authReady).catch(() => null).then(() => {
+                if (window._tasksListenerStarted) bootstrapInitialData();
+            });
+            return;
+        }
+        recoverOrToast(error);
+    };
+
+    const bootstrapInitialData = async () => {
+        let snapshot = null;
+        let attachRealtime = true;
+        try {
+            snapshot = await getDocs(buildDateQuery());
+        } catch (error) {
+            if (isMissingIndex(error)) {
+                fallbackActive = true;
+                const page = window._tasksPage;
+                if (page) { page.fallback = true; page.buildQuery = buildDateFallback; }
+                console.warn('[tasks] composite index missing on initial fetch; loading without ordering.');
+                try {
+                    snapshot = await getDocs(buildDateFallback());
+                } catch (fallbackError) {
+                    handleInitialError(fallbackError);
+                    return;
+                }
+            } else if (isTransportError(error)) {
+                attachRealtime = false;
+                handleInitialError(error);
+            } else {
+                handleInitialError(error);
+                return;
+            }
+        }
+        if (snapshot) handleDocsSnapshot(snapshot);
+        if (attachRealtime) attachRealtimeListener();
+    };
+
+    bootstrapInitialData();
 
     /* Prime the server-side aggregate summary for this scope (P1.4). This runs
        entirely off the main computation path: the browser asks Firestore to
