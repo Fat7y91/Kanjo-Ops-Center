@@ -32,6 +32,21 @@ const cache = new Map();
 const inFlight = new Map();
 let apiPromise = null;
 
+/* Circuit breaker: once Firestore rejects an aggregation as unindexed or
+   precondition-failed, stop issuing server aggregates for the rest of the
+   session and serve every summary from the local fallback. This prevents the
+   repeated failing RPCs that can drag the Firestore transport into offline
+   mode, and it guarantees a summary can never reject and halt the render. */
+let serverAggregationDisabled = false;
+
+const isIndexOrPreconditionError = (err) => {
+    const code = String((err && err.code) || '').toLowerCase();
+    const msg = String((err && err.message) || '') + ' ' + String((err && err.details) || '');
+    return code === 'failed-precondition'
+        || code === 'permission-denied'
+        || /requires an index/i.test(msg);
+};
+
 const now = () => Date.now();
 
 const loadAggregationApi = () => {
@@ -81,11 +96,13 @@ const buildQuery = (collectionName, filters) => {
 const safeCount = async (collectionName, filters) => {
     const api = await loadAggregationApi();
     if (!api || typeof api.getCountFromServer !== 'function') return null;
+    if (serverAggregationDisabled) return null;
     try {
         const snap = await api.getCountFromServer(buildQuery(collectionName, filters));
         const data = snap.data();
         return (data && typeof data.count === 'number') ? data.count : null;
     } catch (err) {
+        if (isIndexOrPreconditionError(err)) serverAggregationDisabled = true;
         console.warn('[aggregates] count(' + collectionName + ') failed:', err && err.message);
         return null;
     }
@@ -101,10 +118,12 @@ const safeAggregate = async (collectionName, filters, specFactory) => {
         spec = null;
     }
     if (!spec) return null;
+    if (serverAggregationDisabled) return null;
     try {
         const snap = await api.getAggregateFromServer(buildQuery(collectionName, filters), spec);
         return snap.data();
     } catch (err) {
+        if (isIndexOrPreconditionError(err)) serverAggregationDisabled = true;
         console.warn('[aggregates] aggregate(' + collectionName + ') failed:', err && err.message);
         return null;
     }
@@ -187,20 +206,44 @@ const getServerSummary = async (options) => {
         if (hit !== undefined) return hit;
     }
     return dedupe(key, async () => {
-        const results = await Promise.all([
-            getTaskTotals({ team: team, force: opts.force }),
-            getCollectionCount('merchants', { force: opts.force }),
-            getCollectionCount('merchant_products', { force: opts.force }),
-            getCollectionCount('financial_profiles', { force: opts.force })
-        ]);
-        const summary = {
-            generatedAt: now(),
-            team: team,
-            tasks: results[0],
-            merchants: results[1],
-            products: results[2],
-            financialProfiles: results[3]
-        };
+        let summary;
+        try {
+            const results = await Promise.all([
+                getTaskTotals({ team: team, force: opts.force }),
+                getCollectionCount('merchants', { force: opts.force }),
+                getCollectionCount('merchant_products', { force: opts.force }),
+                getCollectionCount('financial_profiles', { force: opts.force })
+            ]);
+            summary = {
+                generatedAt: now(),
+                team: team,
+                tasks: results[0],
+                merchants: results[1],
+                products: results[2],
+                financialProfiles: results[3]
+            };
+        } catch (err) {
+            /* Never reject: a failed summary must not halt the dashboard render. */
+            console.warn('[aggregates] server summary failed; using local fallback:', err && err.message);
+            const localTotals = localTaskTotals();
+            summary = {
+                generatedAt: now(),
+                team: team,
+                tasks: {
+                    total: localTotals.total,
+                    signed: localTotals.signed,
+                    provisional: localTotals.provisional,
+                    targetSum: null,
+                    achievedSum: null,
+                    targetAvg: null,
+                    achievedAvg: null,
+                    source: 'local'
+                },
+                merchants: null,
+                products: null,
+                financialProfiles: null
+            };
+        }
         cacheSet(key, summary);
         window.kanjoServerSummary = summary;
         try {
