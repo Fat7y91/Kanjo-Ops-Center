@@ -33,24 +33,23 @@ const AUTHORIZATION_HTML = `
                 <div class="auth-header-logo"><img src="logo.png" alt="Kanjo"></div>
                 <div class="auth-header-company">
                     <div class="auth-header-name">شركة كاند جوو لخدمات التوصيل والتجاره الالكترونيه</div>
-                    <div class="auth-header-sub">(شركة ذات مسئولية محدودة) — المقيدة بالسجل التجاري استثمار القاهرة برقم (٢٠٨٢٣٤)</div>
+                    <div class="auth-header-sub">(شركة ذات مسئولية محدودة) — المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٣٠٨٢٣٤</span>)</div>
                 </div>
                 <div class="auth-header-badge">وثيقة رسمية</div>
             </div>
 
             <div class="auth-title">تفويض خاص بإبرام التعاقدات والتسويات التجارية</div>
 
-            <div class="auth-date">إنه في يوم: ...................... الموافق: .... / .... / ٢٠٢...م</div>
+            <div class="auth-date">إنه في يوم: ...................... الموافق: <span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">.... / .... / ٢٠٢٦ م</span></div>
 
-            <p class="auth-p">أقر أنا الموقع أدناه السيد/ فتحي عمر محمد علي، مصري الجنسية، أحمل بطاقة رقم قومي: (٢٥٩١٢١٨٣٢٠٠٠٥٨)، بصفتي الممثل القانوني والمدير لشركة / كاند جوو لخدمات التوصيل والتجاره الالكترونيه، شركة ذات مسئولية محدودة، المقيدة بالسجل التجاري استثمار القاهرة برقم (٢٠٨٢٣٤) ورقم المنشأة القومي (٠٠٠٥٢٠١٠٨٢٣٤) والبطاقة الضريبية رقم (٧٨٣-٤١٠-٨٥٩).</p>
+            <p class="auth-p">أقر أنا الموقع أدناه السيد/ فتحي عمر محمد علي، مصري الجنسية، أحمل بطاقة رقم قومي: (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٢٥٩١٢١٨٣٢٠٠٠٥٨</span>)، بصفتي الممثل القانوني والمدير لشركة / كاند جوو لخدمات التوصيل والتجاره الالكترونيه، شركة ذات مسئولية محدودة، المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٣٠٨٢٣٤</span>) والبطاقة الضريبية رقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٧٨٣-٤١٠-٨٥٩</span>).</p>
 
-            <p class="auth-p">بأنني قد فوضت ووكلت السيد/</p>
-            <p class="auth-p auth-delegate">محمود محمد عبده احمد الجمل، مصري الجنسية، يحمل بطاقة رقم قومي: (٢٩٧٠٧٠٧١٥٠٠٠٥١).</p>
+            <p class="auth-p">بأنني قد فوضت ووكلت السيد/ محمود محمد عبده احمد الجمل، مصري الجنسية، يحمل بطاقة رقم قومي: (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٢٩٧٠٧٠٧١٥٠٠٠٥١</span>).</p>
 
             <p class="auth-p">وذلك لتمثيل الشركة والقيام بمهام (إدارة التشغيل والتعاقدات) وتفويضه للقيام بالأعمال الآتية نيابة عن الشركة وباسمها:</p>
 
             <ol class="auth-list">
-                <li>التمثيل والتعاقد: تمثيل الشركة أمام كافة التجار والمطاعم والكافيهات ومزودي الخدمات لغرض ضمهم لشبكة منصة (كانجو - Kanjo).</li>
+                <li>التمثيل والتعاقد: تمثيل الشركة أمام شركاء كانجو (التجار ومقدمي الخدمات بكافة أنواعهم) لغرض عرض منتجاتهم وخدماتهم على شبكة منصة (كانجو - Kanjo).</li>
                 <li>إبرام العقود: التفاوض، وإبرام، والتوقيع على "عقود انضمام التجار" نيابة عن الشركة، والاتفاق على نسب العمولات التشغيلية وفقاً للوائح وسياسات التسعير المعتمدة من إدارة الشركة.</li>
                 <li>المستندات التجارية: استلام وتسليم المستندات التجارية والضريبية والصحية الخاصة بالتجار اللازمة لإتمام ومراجعة عمليات التشغيل.</li>
                 <li>الملاحق التشغيلية: التوقيع على أي ملاحق تنظيمية أو إقرارات تشغيلية تابعة لعقود الانضمام الأساسية والتي تنظم العمل اليومي.</li>
@@ -72,8 +71,8 @@ const AUTHORIZATION_HTML = `
                     <div class="auth-signature-line">التوقيع: ....................................</div>
                 </div>
                 <div class="auth-stamp">
-                    <div class="auth-stamp-box"></div>
-                    <div class="auth-stamp-label">الختم الرسمي للشركة: مربع مخصص للختم</div>
+                    <div class="auth-stamp-label">الختم:</div>
+                    <div class="auth-stamp-space"></div>
                 </div>
             </div>
 

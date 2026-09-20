@@ -1758,7 +1758,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 .auth-date { font-size: 0.82rem; font-weight: 900; color: #1e293b; margin-bottom: 0.9rem; }
 .auth-p { font-size: 0.82rem; font-weight: 700; line-height: 1.95; margin: 0 0 0.7rem; color: #1e293b; }
-.auth-delegate { font-weight: 900; color: #4B0082; }
 .auth-list { font-size: 0.82rem; font-weight: 700; line-height: 1.9; margin: 0 0 0.9rem; padding-inline-start: 1.4rem; list-style-type: arabic-indic; }
 .auth-list li { margin-bottom: 0.35rem; }
 .auth-section-title { font-size: 0.86rem; font-weight: 900; color: #4B0082; margin: 0.9rem 0 0.4rem; }
@@ -1768,8 +1767,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 .auth-signature-name { margin-bottom: 0.6rem; }
 .auth-signature-line { margin-top: 1rem; }
 .auth-stamp { display: table-cell; width: 40%; vertical-align: top; text-align: center; }
-.auth-stamp-box { display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 0.5rem; background: #fff; }
-.auth-stamp-label { font-size: 0.66rem; font-weight: 800; color: #4B0082; margin-top: 0.4rem; }
+.auth-stamp-space { min-height: 80px; background: #fff; }
+.auth-stamp-label { font-size: 0.72rem; font-weight: 900; color: #4B0082; margin-bottom: 0.3rem; }
 .auth-footer { margin-top: 1.2rem; padding-top: 0.6rem; border-top: 2px dashed #E2E8F0; text-align: center; font-size: 0.64rem; font-weight: 800; color: #64748b; }
 
 @media (max-width: 768px) {

@@ -876,6 +876,13 @@ const toArabicNumerals = (value) => String(value === null || value === undefined
 
 window.toArabicNumerals = toArabicNumerals;
 
+/* Identification numbers are digit strings that an RTL text flow would
+   otherwise reorder (e.g. `٧٨٣-٤١٠-٨٥٩`). Isolating them LTR keeps them
+   rendering exactly as typed. */
+const ltrNumber = (value) => `<span style="direction: ltr; display: inline-block; unicode-bidi: isolate;" dir="ltr">${value}</span>`;
+
+window.kanjoLtrNumber = ltrNumber;
+
 const formatContractDate = (dateStr) => {
 
     if (!dateStr) return { day: '............', date: '............' };
@@ -893,9 +900,8 @@ const formatContractDate = (dateStr) => {
 /* Official registration data of the First Party (كانجو). */
 const KANJO_FIRST_PARTY = {
     tradeName: 'شركة كاند جوو لخدمات التوصيل والتجاره الالكترونيه (شركة ذات مسئولية محدودة)',
-    commercialRegister: '٢٠٨٢٣٤',
+    commercialRegister: '٣٠٨٢٣٤',
     commercialRegisterOffice: 'استثمار القاهرة',
-    facilityNationalId: '٠٠٠٥٢٠١٠٨٢٣٤',
     taxCard: '٧٨٣-٤١٠-٨٥٩',
     taxOffice: 'مأمورية ضرائب الشركات المساهمة بالقاهرة',
     address: 'شارع درب الجرن من شارع المديرية، قسم أول طنطا، محافظة الغربية'
@@ -1651,16 +1657,15 @@ window.buildContractHTML = (task) => {
 
     }
 
-    const nationalIdBoxes = Array.from({ length: 14 }).map(() => '<span style="display: inline-block; width: 24px; height: 30px; border: 1.5px solid #4B0082; border-radius: 4px; margin: 0 2px; vertical-align: middle; background: #fff;"></span>').join('');
+    const nationalIdBoxes = '<span style="display: inline-block; white-space: nowrap; direction: ltr; unicode-bidi: isolate;" dir="ltr">' + Array.from({ length: 14 }).map(() => '<span style="display: inline-block; width: 20px; height: 28px; border: 1.5px solid #4B0082; border-radius: 4px; margin: 0 1px; vertical-align: middle; background: #fff;"></span>').join('') + '</span>';
 
     const fillBlank = '....................................';
 
     const firstPartyBlockHtml = `
                 <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #4B0082; padding: 12px; border-radius: 8px; margin-bottom: 18px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                     <strong>الطرف الأول:</strong> ${KANJO_FIRST_PARTY.tradeName}
-                    <div style="margin-top: 8px;">السجل التجاري رقم (${KANJO_FIRST_PARTY.commercialRegister}) — ${KANJO_FIRST_PARTY.commercialRegisterOffice}</div>
-                    <div>الرقم القومي للمنشأة (${KANJO_FIRST_PARTY.facilityNationalId})</div>
-                    <div>البطاقة الضريبية رقم (${KANJO_FIRST_PARTY.taxCard}) — ${KANJO_FIRST_PARTY.taxOffice}</div>
+                    <div style="margin-top: 8px;">السجل التجاري رقم (${ltrNumber(KANJO_FIRST_PARTY.commercialRegister)}) — ${KANJO_FIRST_PARTY.commercialRegisterOffice}</div>
+                    <div>البطاقة الضريبية رقم (${ltrNumber(KANJO_FIRST_PARTY.taxCard)}) — ${KANJO_FIRST_PARTY.taxOffice}</div>
                     <div>المقر: ${KANJO_FIRST_PARTY.address}</div>
                     <div>ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.</div>
                 </div>`;
@@ -1672,8 +1677,8 @@ window.buildContractHTML = (task) => {
                         <tr><td style="padding: 5px 0; width: 42%; vertical-align: top;">اسم المنشأة / المحل:</td><td style="padding: 5px 0;">${merchantName}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">اسم المفوض / صاحب النشاط:</td><td style="padding: 5px 0;">${window.safeString(contactName) || fillBlank}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">بطاقة الرقم القومي (١٤ رقمًا):</td><td style="padding: 5px 0;">${nationalIdBoxes}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري (إن وجد):</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي (إن وجد):</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم الهاتف / واتساب:</td><td style="padding: 5px 0;"><span dir="ltr">${phone}</span></td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${address}</td></tr>
                     </table>
@@ -1682,7 +1687,7 @@ window.buildContractHTML = (task) => {
     const tableBody = `
         <tbody>
             <tr><td style="padding: 0;">
-                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
+                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${ltrNumber(`${cDate.date} م`)}، تم الاتفاق والتراضي بين كل من:</div>
                 ${firstPartyBlockHtml}
                 ${secondPartyBlockHtml}
                 ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
@@ -1699,25 +1704,25 @@ window.buildContractHTML = (task) => {
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
                     <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${toArabicNumerals(displayRate)}% ]</strong></div>
                     ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: [ ${toArabicNumerals(ex.rate)}% ]`).join(' — ')}</div>` : ''}
-                    <div class="contract-signatures" style="display: table; width: 100%; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold; border-spacing: 12px 0;">
-                        <div style="display: table-cell; width: 50%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff; vertical-align: top;">
+                    <div class="contract-signatures" style="display: flex; align-items: stretch; gap: 12px; width: 100%; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
+                        <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: ${KANJO_FIRST_PARTY.tradeName}</div>
                             <div>الاسم: م/ محمود الجمل</div>
                             <div>الصفة: مدير التشغيل والتعاقدات</div>
-                            <div style="margin-top: 18px; font-weight: bold;">توقيع المفوض: ..............................</div>
-                            <div style="margin-top: 14px; text-align: center;">
-                                <div style="display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 8px; background: #fff;"></div>
-                                <div style="font-size: 12px; color: #4B0082; margin-top: 6px;">مربع الختم الرسمي</div>
+                            <div style="margin-top: auto; padding-top: 18px;">
+                                <div style="font-weight: bold;">توقيع المفوض: ..............................</div>
+                                <div style="margin-top: 14px; font-weight: bold;">الختم:</div>
+                                <div style="min-height: 80px; background: #fff;"></div>
                             </div>
                         </div>
-                        <div style="display: table-cell; width: 50%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff; vertical-align: top;">
+                        <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${merchantName}</div>
                             <div>الاسم: ${window.safeString(contactName) || '....................'}</div>
                             <div>الصفة: صاحب النشاط</div>
-                            <div style="margin-top: 18px; font-weight: bold;">توقيع صاحب النشاط: ..............................</div>
-                            <div style="margin-top: 14px; text-align: center;">
-                                <div style="display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 8px; background: #fff;"></div>
-                                <div style="font-size: 12px; color: #4B0082; margin-top: 6px;">مربع الختم</div>
+                            <div style="margin-top: auto; padding-top: 18px;">
+                                <div style="font-weight: bold;">توقيع صاحب النشاط: ..............................</div>
+                                <div style="margin-top: 14px; font-weight: bold;">الختم:</div>
+                                <div style="min-height: 80px; background: #fff;"></div>
                             </div>
                         </div>
                     </div>
