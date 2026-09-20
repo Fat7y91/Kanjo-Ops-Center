@@ -217,10 +217,11 @@ service cloud.firestore {
     // - Append-only: any signed-in session may CREATE its own trail entry (reps
     //   perform the catalog edits that must be recorded), but nobody can update
     //   or delete, which keeps the log tamper-evident.
-    // - Read is restricted to Founder/Admin (legacy() keeps the migration window
-    //   lockout-free, exactly like the other sensitive collections above).
+    // - READ is STRICTLY FOUNDER-ONLY (claimRole == 'founder'). Admins such as
+    //   محمود, reps, accounting and every other manager are denied by the rules
+    //   themselves, independently of the client-side gate.
     match /audit_logs/{docId} {
-      allow read: if legacy() || isPrivileged();
+      allow read: if isFounder();
       allow create: if isSignedIn();
       allow update, delete: if false;
     }

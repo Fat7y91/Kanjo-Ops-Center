@@ -1,6 +1,6 @@
-/* Kanjo Ops — Black Box (سجل النظام الشامل)
+/* Kanjo Ops — Black Box (system-wide audit trail)
  *
- * Founder/Admin-only, tamper-evident audit trail. Every meaningful write in the
+ * Founder-only, tamper-evident audit trail. Every meaningful write in the
  * operational app is mirrored into the `audit_logs` collection with WHO did it,
  * WHAT they touched and a human-readable Arabic description, so the Black Box can
  * reconstruct exactly what happened and when.
@@ -62,10 +62,34 @@ const auditCurrentIdentity = () => {
     };
 };
 
-/* Founder/Admin only. Reps and staff must never reach this surface. */
+/* ─── Strict founder-only access ────────────────────────────────────────
+ * The Black Box is reserved EXCLUSIVELY for the primary system founders/owners.
+ * The `founder` role is mandatory, and the identity must additionally match the
+ * explicit whitelist below (or carry the dedicated `isFounder` flag). Admins
+ * such as محمود, reps, and every other manager are hard-blocked. Extend the
+ * whitelist to onboard another owner. */
+const AUDIT_FOUNDER_WHITELIST = {
+    ids: ['3715', 'المؤسسين'],
+    names: ['المؤسسين'],
+    emails: []
+};
+
+const auditNormalizeIdentity = (value) => String(value == null ? '' : value).trim().toLowerCase();
+
 window.kanjoAuditCanView = () => {
-    const role = String((window.currentUser && window.currentUser.role) || '');
-    return role === 'founder' || role === 'admin';
+    const u = window.currentUser;
+    if (!u) return false;
+    /* Dedicated founder role flag is mandatory. */
+    if (String(u.role || '') !== 'founder') return false;
+    /* Explicit owner flag short-circuits the whitelist. */
+    if (u.isFounder === true || u.kanjoFounder === true) return true;
+    const id = auditNormalizeIdentity(u.id || u.uid || u.repId || '');
+    const name = auditNormalizeIdentity(u.name);
+    const email = auditNormalizeIdentity(u.email);
+    const inList = (list, value) => !!value && list.map(auditNormalizeIdentity).includes(value);
+    return inList(AUDIT_FOUNDER_WHITELIST.ids, id)
+        || inList(AUDIT_FOUNDER_WHITELIST.names, name)
+        || inList(AUDIT_FOUNDER_WHITELIST.emails, email);
 };
 
 /* ─── Value helpers ─────────────────────────────────────────────────── */
@@ -258,7 +282,7 @@ const auditMirrorWrite = (collectionId, entry) => {
     if (!collectionId || collectionId === AUDIT_COLLECTION) return;
     if (!AUDIT_WATCHED_COLLECTIONS[collectionId]) return;
     /* Every session's writes are recorded (reps do the catalog work); the
-       founder/admin gate applies to READING the Black Box, never to appending. */
+       founder gate applies to READING the Black Box, never to appending. */
     auditWrite(entry);
 };
 
@@ -387,7 +411,7 @@ window.kanjoAuditReconstruct = async ({ persist = false } = {}) => {
 
 window.runBlackBoxReconstruction = async () => {
     if (!window.kanjoAuditCanView()) {
-        if (window.showToast) window.showToast('هذه الميزة متاحة للمؤسسين والإدارة فقط', false);
+        if (window.showToast) window.showToast('This feature is available to founders only', false);
         return;
     }
     const btn = document.getElementById('blackBoxReconBtn');
@@ -397,7 +421,7 @@ window.runBlackBoxReconstruction = async () => {
         const alreadyBackfilled = auditState.entries.some((e) => e.source === 'reconstructed');
         let persist = false;
         if (!alreadyBackfilled && !localStorage.getItem(AUDIT_BACKFILL_KEY)) {
-            persist = window.confirm('سيتم فحص كل المنتجات السابقة وتوليد سجل أثر رجعي وحفظه في الصندوق الأسود. هل تريد المتابعة؟');
+            persist = window.confirm('سيتم فحص كل المنتجات السابقة وتوليد سجل أثر رجعي وحفظه في Black Box. هل تريد المتابعة؟');
         }
         const entries = await window.kanjoAuditReconstruct({ persist });
         if (persist) {
@@ -562,7 +586,7 @@ const auditLoadEntries = async () => {
 
 window.openBlackBox = async () => {
     if (!window.kanjoAuditCanView()) {
-        if (window.showToast) window.showToast('الصندوق الأسود متاح للمؤسسين والإدارة فقط', false);
+        if (window.showToast) window.showToast('Black Box is available to founders only', false);
         return;
     }
     const modal = document.getElementById('blackBoxModal');
@@ -591,7 +615,7 @@ window.openBlackBox = async () => {
         auditRenderBlackBox();
     } catch (err) {
         console.error('[audit] load failed:', err);
-        if (list) list.innerHTML = '<div class="text-center py-12 text-red-500 font-bold">تعذر تحميل سجل الصندوق الأسود</div>';
+        if (list) list.innerHTML = '<div class="text-center py-12 text-red-500 font-bold">Unable to load the Black Box log</div>';
     }
 };
 
