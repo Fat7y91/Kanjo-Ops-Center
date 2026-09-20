@@ -2958,8 +2958,9 @@ window.onCatalogDescriptionInput = () => {
     const field = document.getElementById('catalogDescriptionAr');
     const warning = document.getElementById('catalogDescriptionWarning');
     if (!field || !warning) return;
+    const nameField = document.getElementById('catalogNameAr');
     const result = (typeof window.kpiValidateDescription === 'function')
-        ? window.kpiValidateDescription(field.value)
+        ? window.kpiValidateDescription(field.value, nameField ? nameField.value : '')
         : null;
     const show = result
         ? (!result.isEmpty && !result.isValid)

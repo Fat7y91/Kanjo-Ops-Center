@@ -26,6 +26,16 @@ const KPI_STANDARD_ADD_MS = 4 * 60 * 1000;   // assumed time for the first produ
 /* Only real word tokens (Arabic or Latin, 3+ letters) make a description valid. */
 const KPI_WORD_RE = /[a-zA-Z\u0600-\u06FF]{3,}/;
 
+/* Kanjo Score weights — MUST sum to exactly 100. The former 20-pt volume block
+   is split into 10 pts of raw quantity + 10 pts of average description length,
+   so the total budget (and every other weight) is unchanged. */
+const KPI_VOLUME_MAX = 10;   // normalized against the top rep's product count
+const KPI_LENGTH_MAX = 10;   // absolute target: avg >= KPI_DESC_TARGET_LENGTH chars
+const KPI_EFFORT_MAX = 10;   // normalized against the top rep's net time
+const KPI_TEXT_MAX = 35;     // valid-description ratio
+const KPI_MEDIA_MAX = 35;    // products-with-images ratio
+const KPI_DESC_TARGET_LENGTH = 50; // healthy average description length (chars)
+
 const KPI_COLORS = {
     purple: '#230535',
     gold: '#FFD700',
@@ -143,21 +153,45 @@ const kpiProductHasImage = (p) => kpiImageUrls(p).length > 0;
 const kpiProductVariations = (p) => (Array.isArray(p && p.variations) ? p.variations : [])
     .filter((v) => v && String(v.name || '').trim());
 
+/* Normalize a name/description for the copy-paste comparison: trim, lowercase
+   and collapse internal whitespace so "Nike  Air" === "nike air". */
+const kpiNormalizeForCompare = (value) => String(value == null ? '' : value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+/* A description that is a 100% case-insensitive copy of the product name is a
+   fake "وصف وهمي" regardless of its length. `name` may be a single string or a
+   list of candidates (Arabic/Latin name fields). */
+const kpiDescriptionCopiesName = (description, name) => {
+    const normalizedDesc = kpiNormalizeForCompare(description);
+    if (!normalizedDesc) return false;
+    const candidates = Array.isArray(name) ? name : [name];
+    return candidates.some((candidate) => {
+        const normalizedName = kpiNormalizeForCompare(candidate);
+        return normalizedName !== '' && normalizedName === normalizedDesc;
+    });
+};
+
 /* Strict description validation — anti-gaming. A description is valid ONLY if
-   it is longer than 10 characters AND contains a real word token. Anything
-   non-empty that fails (e.g. "-", ".", "جيد") is flagged as junk/fake. */
-window.kpiValidateDescription = (description) => {
+   it is longer than 10 characters, contains a real word token, AND is not a
+   copy of the product name. Anything non-empty that fails (e.g. "-", ".", "جيد"
+   or a name echo) is flagged as junk/fake. Passing `name` is optional; when it
+   is omitted only the length/word rules apply (backwards compatible). */
+window.kpiValidateDescription = (description, name) => {
     const text = String(description == null ? '' : description).trim();
     const isEmpty = text.length === 0;
     const lengthOk = text.length > 10;
     const hasWords = KPI_WORD_RE.test(text);
-    const isValid = !isEmpty && lengthOk && hasWords;
+    const copiesName = !isEmpty && kpiDescriptionCopiesName(text, name);
+    const isValid = !isEmpty && lengthOk && hasWords && !copiesName;
     return {
         text,
         length: text.length,
         isEmpty,
         lengthOk,
         hasWords,
+        copiesName,
         isValid,
         isJunk: !isEmpty && !isValid
     };
@@ -698,7 +732,7 @@ const kpiFetchDailyStats = async (repId) => {
 const KPI_TEAM_SUMMARY_FIELDS = [
     'repId', 'repName', 'team', 'isEditor',
     'publicTotalProducts', 'publicTotalSeconds',
-    'publicValidRatio', 'publicImageRatio', 'publicUpdatedAt'
+    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicUpdatedAt'
 ];
 
 const kpiRepTeamName = (repName) => {
@@ -723,6 +757,7 @@ const kpiSummaryPayload = (row) => {
         isEditor: !!row.isEditor,
         publicTotalProducts: Math.max(0, Number(row.totalProducts) || 0),
         publicTotalSeconds: Math.max(0, Number(row.totalSeconds) || 0),
+        publicAvgDescriptionLength: Math.max(0, Number(row.avgDescriptionLength) || 0),
         publicValidRatio: Math.max(0, Number(row.validRatioRaw) || 0),
         publicImageRatio: Math.max(0, Number(row.imageRatioRaw) || 0),
         publicUpdatedAt: new Date()
@@ -772,6 +807,7 @@ const kpiFetchLeaderboardSummaries = async () => {
                     isEditor: false,
                     totalProducts: 0,
                     totalSeconds: 0,
+                    avgDescriptionLength: 0,
                     validRatio: 0,
                     imageRatio: 0
                 });
@@ -799,6 +835,7 @@ const kpiFetchLeaderboardSummaries = async () => {
                 isEditor: !!data.isEditor,
                 totalProducts: Math.max(0, Number(data.publicTotalProducts) || 0),
                 totalSeconds: Math.max(0, Number(data.publicTotalSeconds) || 0),
+                avgDescriptionLength: Math.max(0, Number(data.publicAvgDescriptionLength) || 0),
                 validRatio: Math.max(0, Number(data.publicValidRatio) || 0),
                 imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
             });
@@ -840,8 +877,11 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
         const image = Number(r.imageRatio) || 0;
         /* Mirror the score a rep sees on their own top card: the live local
            report normalises volume/effort against the rep themselves, so the
-           only variable part is the two quality ratios (35 + 35). */
-        const selfScore = (seconds > 0 ? 10 : 0) + 20 + (valid * 35) + (image * 35);
+           only variable parts are the description-length target and the two
+           quality ratios (10 + 35 + 35). */
+        const avgLen = Number(r.avgDescriptionLength) || 0;
+        const lengthPts = Math.min(1, avgLen / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
+        const selfScore = (seconds > 0 ? KPI_EFFORT_MAX : 0) + KPI_VOLUME_MAX + lengthPts + (valid * KPI_TEXT_MAX) + (image * KPI_MEDIA_MAX);
         best.score = Math.max(best.score, selfScore);
         best.validRatio = Math.max(best.validRatio, valid);
         best.imageRatio = Math.max(best.imageRatio, image);
@@ -984,6 +1024,7 @@ const kpiBuildReport = async () => {
                 nonEmptyDescriptions: 0,
                 junkDescriptions: 0,
                 emptyDescriptions: 0,
+                descriptionCharsTotal: 0,
                 dailyCounts: new Map()
             });
         }
@@ -1009,7 +1050,13 @@ const kpiBuildReport = async () => {
             rep.variationCount += variations.length;
         }
 
-        const desc = window.kpiValidateDescription(p.description_ar || p.description_en || p.description || '');
+        const desc = window.kpiValidateDescription(
+            p.description_ar || p.description_en || p.description || '',
+            [p.name_ar, p.name_en, p.name]
+        );
+        /* Count the raw character length of every product (empty = 0) so the
+           average reflects the whole dataset, not only the non-empty rows. */
+        rep.descriptionCharsTotal += desc.length;
         if (desc.isEmpty) rep.emptyDescriptions += 1;
         else {
             rep.nonEmptyDescriptions += 1;
@@ -1065,6 +1112,7 @@ const kpiBuildReport = async () => {
         const validRatioRaw = descBase ? (rep.validDescriptions / descBase) : 0;
         const junkRatioRaw = descBase ? (rep.junkDescriptions / descBase) : 0;
         const emptyRatioRaw = descBase ? (rep.emptyDescriptions / descBase) : 0;
+        const avgDescriptionLength = totalProducts ? (rep.descriptionCharsTotal / totalProducts) : 0;
         const avgVariablesRaw = totalProducts ? (rep.variationCount / totalProducts) : 0;
         const minutesPerProductRaw = kpiMinutesPerProductRaw(totalSeconds, totalProducts);
         const dailyCounts = Array.from(rep.dailyCounts.entries())
@@ -1093,6 +1141,7 @@ const kpiBuildReport = async () => {
             validRatioRaw,
             junkRatioRaw,
             emptyRatioRaw,
+            avgDescriptionLength,
             avgVariablesRaw,
             minutesPerProductRaw,
             avgSecondsPerProduct: totalProducts ? totalSeconds / totalProducts : 0,
@@ -1105,11 +1154,12 @@ const kpiBuildReport = async () => {
 
     /* ─────────── Kanjo Weighted Score (out of 100) & competitive ranking ───────────
        Normalize the absolute counts against the top field performer so counts and
-       percentages can be mixed on one scale:
-         a) Volume   20 pts = (products / maxProducts) * 20
-         b) Effort   10 pts = (net time / maxTime) * 10
-         c) Text     35 pts = valid-descriptions ratio * 35
-         d) Media    35 pts = products-with-images ratio * 35
+       percentages can be mixed on one scale (weights sum to exactly 100):
+         a) Volume    10 pts = (products / maxProducts) * 10
+         b) Length    10 pts = min(avg desc chars / 50, 1) * 10
+         c) Effort    10 pts = (net time / maxTime) * 10
+         d) Text      35 pts = valid-descriptions ratio * 35
+         e) Media     35 pts = products-with-images ratio * 35
        The Media Editor (يوسف) is EXCLUDED from max-product/max-time normalization,
        scoring and the ranking loop; he only keeps his personal stats card. */
     const fieldRows = rows.filter((r) => !r.isEditor);
@@ -1123,17 +1173,18 @@ const kpiBuildReport = async () => {
             row.rank = null;
             return;
         }
-        const volumeWeight = maxProducts > 0 ? (row.totalProducts / maxProducts) * 20 : 0;
-        const effortWeight = maxTime > 0 ? (row.totalSeconds / maxTime) * 10 : 0;
-        const textWeight = row.validRatioRaw * 35;
-        const mediaWeight = row.imageRatioRaw * 35;
-        row.kanjoBreakdown = { volumeWeight, effortWeight, textWeight, mediaWeight };
+        const volumeWeight = maxProducts > 0 ? (row.totalProducts / maxProducts) * KPI_VOLUME_MAX : 0;
+        const lengthWeight = Math.min(1, (Number(row.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
+        const effortWeight = maxTime > 0 ? (row.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0;
+        const textWeight = row.validRatioRaw * KPI_TEXT_MAX;
+        const mediaWeight = row.imageRatioRaw * KPI_MEDIA_MAX;
+        row.kanjoBreakdown = { volumeWeight, lengthWeight, effortWeight, textWeight, mediaWeight };
         /* Keep the normalization baselines on the row so the transparent
            "Score Breakdown" modal can explain the exact math (X / max). */
         row.kanjoMaxProducts = maxProducts;
         row.kanjoMaxTime = maxTime;
         // RAW 0..100 — rounding happens only at render time.
-        row.kanjoScore = volumeWeight + effortWeight + textWeight + mediaWeight;
+        row.kanjoScore = volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight;
     });
 
     // Ranking (1st/2nd/3rd…) applies to FIELD REPS ONLY, strictly by Kanjo score.
@@ -1488,11 +1539,13 @@ const kpiDeepDiveHtml = (row) => {
                     <div class="kpi-fin-row"><span>أوصاف صحيحة</span><span class="kpi-fin-val text-emerald-600">${row.validDescriptions} (${validPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>أوصاف وهمية</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>بدون وصف</span><span class="kpi-fin-val text-slate-500">${row.emptyDescriptions} (${emptyPct.toFixed(1)}%)</span></div>
+                    <div class="kpi-fin-row"><span>متوسط طول الوصف</span><span class="kpi-fin-val">${Math.round(Number(row.avgDescriptionLength) || 0)} حرف</span></div>
                     <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
                     <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>منتجات بخيارات (Variable)</span><span class="kpi-fin-val">${row.variableProducts}</span></div>
                     ${row.kanjoBreakdown ? `
-                    <div class="kpi-fin-row"><span>وزن الكمية (20 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.volumeWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>وزن الكمية (10 نقاط)</span><span class="kpi-fin-val">${row.kanjoBreakdown.volumeWeight.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span>وزن متوسط طول الوصف (10 نقاط)</span><span class="kpi-fin-val">${row.kanjoBreakdown.lengthWeight.toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>وزن الجهد / الوقت (10 نقاط)</span><span class="kpi-fin-val">${row.kanjoBreakdown.effortWeight.toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>وزن جودة النص (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.textWeight.toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>وزن جودة الوسائط (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.mediaWeight.toFixed(2)}</span></div>
@@ -1578,6 +1631,7 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
             repId: r.repId,
             totalProducts: Math.max(0, Number(r.totalProducts) || 0),
             totalSeconds: Math.max(0, Number(r.totalSeconds) || 0),
+            avgDescriptionLength: Math.max(0, Number(r.avgDescriptionLength) || 0),
             validRatio: Math.max(0, Number(r.validRatio) || 0),
             imageRatio: Math.max(0, Number(r.imageRatio) || 0)
         }))
@@ -1586,6 +1640,7 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
         repId: ownRow.repId,
         totalProducts: Math.max(0, Number(ownRow.totalProducts) || 0),
         totalSeconds: Math.max(0, Number(ownRow.totalSeconds) || 0),
+        avgDescriptionLength: Math.max(0, Number(ownRow.avgDescriptionLength) || 0),
         validRatio: Math.max(0, Number(ownRow.validRatioRaw) || 0),
         imageRatio: Math.max(0, Number(ownRow.imageRatioRaw) || 0)
     };
@@ -1593,9 +1648,10 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
     if (!active.length) return { rank: null, total: 0 };
     const maxProducts = active.reduce((m, r) => Math.max(m, r.totalProducts), 0);
     const maxTime = active.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
-    const scoreOf = (r) => (maxProducts > 0 ? (r.totalProducts / maxProducts) * 20 : 0)
-        + (maxTime > 0 ? (r.totalSeconds / maxTime) * 10 : 0)
-        + r.validRatio * 35 + r.imageRatio * 35;
+    const scoreOf = (r) => (maxProducts > 0 ? (r.totalProducts / maxProducts) * KPI_VOLUME_MAX : 0)
+        + Math.min(1, (Number(r.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX
+        + (maxTime > 0 ? (r.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0)
+        + r.validRatio * KPI_TEXT_MAX + r.imageRatio * KPI_MEDIA_MAX;
     if (own.totalProducts <= 0) return { rank: null, total: active.length };
     own.score = scoreOf(own);
     return { rank: 1 + peers.filter((r) => scoreOf(r) > own.score).length, total: active.length };
@@ -1616,6 +1672,9 @@ const kpiPersonalSmartTips = (row, report) => {
     }
     if (row.emptyDescriptions > 0) {
         tips.push({ tone: 'info', icon: 'fa-pen-to-square', text: 'نصيحة: ' + row.emptyDescriptions + ' منتج بدون وصف — أضف وصفاً حقيقياً ليرتفع مؤشر الجودة.' });
+    }
+    if (row.totalProducts > 0 && (Number(row.avgDescriptionLength) || 0) < KPI_DESC_TARGET_LENGTH) {
+        tips.push({ tone: 'info', icon: 'fa-text-width', text: 'نصيحة: متوسط طول وصفك ' + Math.round(Number(row.avgDescriptionLength) || 0) + ' حرف — اكتب أوصافاً أطول (' + KPI_DESC_TARGET_LENGTH + '+ حرفاً) لرفع نقاط جودة الوصف.' });
     }
     if (row.imageRatioRaw < 0.8) {
         tips.push({ tone: 'info', icon: 'fa-image', text: 'نصيحة: أضف صوراً لمنتجاتك لرفع نسبة الجاهزية والترتيب.' });
@@ -1643,10 +1702,11 @@ const kpiPersonalCard = (opts) => `
  *  Points shown here MUST sum exactly to row.kanjoScore (raw 0..100).
  * ------------------------------------------------------------------ */
 const KPI_SCORE_CRITERIA = [
-    { key: 'volumeWeight', icon: 'fa-box-open', color: '#6D28D9', max: 20, name: 'حجم المنتجات (الكمية)' },
-    { key: 'effortWeight', icon: 'fa-stopwatch', color: '#E57723', max: 10, name: 'الجهد / الكفاءة الزمنية' },
-    { key: 'textWeight', icon: 'fa-star', color: '#37d99a', max: 35, name: 'جودة الأوصاف الصحيحة' },
-    { key: 'mediaWeight', icon: 'fa-image', color: '#230535', max: 35, name: 'جودة الوسائط (الصور)' },
+    { key: 'volumeWeight', icon: 'fa-box-open', color: '#6D28D9', max: KPI_VOLUME_MAX, name: 'حجم المنتجات (الكمية)' },
+    { key: 'lengthWeight', icon: 'fa-text-width', color: '#0ea5e9', max: KPI_LENGTH_MAX, name: 'متوسط طول الوصف' },
+    { key: 'effortWeight', icon: 'fa-stopwatch', color: '#E57723', max: KPI_EFFORT_MAX, name: 'الجهد / الكفاءة الزمنية' },
+    { key: 'textWeight', icon: 'fa-star', color: '#37d99a', max: KPI_TEXT_MAX, name: 'جودة الأوصاف الصحيحة' },
+    { key: 'mediaWeight', icon: 'fa-image', color: '#230535', max: KPI_MEDIA_MAX, name: 'جودة الوسائط (الصور)' },
 ];
 
 const kpiScoreCriterionHtml = (crit, earned, basis) => {
@@ -1672,15 +1732,17 @@ const kpiScoreBreakdownHtml = (row) => {
     const maxTime = Number(row.kanjoMaxTime || row.totalSeconds || 0);
     const earned = {
         volumeWeight: Number(b.volumeWeight || 0),
+        lengthWeight: Number(b.lengthWeight || 0),
         effortWeight: Number(b.effortWeight || 0),
         textWeight: Number(b.textWeight || 0),
         mediaWeight: Number(b.mediaWeight || 0),
     };
     const basis = {
-        volumeWeight: `${row.totalProducts} منتج — مقارنةً بأعلى مندوب (${maxProducts} منتج) × 20 نقطة`,
-        effortWeight: `وقت صافٍ ${kpiFormatDurationShort(row.totalSeconds)} — مقارنةً بالأعلى (${kpiFormatDurationShort(maxTime)}) × 10 نقاط`,
-        textWeight: `${validPct.toFixed(1)}% أوصاف صحيحة (${row.validDescriptions} وصف صحيح من ${row.totalProducts}) × 35 نقطة`,
-        mediaWeight: `${imgPct.toFixed(1)}% منتجات بصور (${row.withImage} بصور • ${row.withoutImage} بدون) × 35 نقطة`,
+        volumeWeight: `${row.totalProducts} منتج — مقارنةً بأعلى مندوب (${maxProducts} منتج) × ${KPI_VOLUME_MAX} نقاط`,
+        lengthWeight: `متوسط ${Math.round(Number(row.avgDescriptionLength) || 0)} حرف/منتج — الهدف ${KPI_DESC_TARGET_LENGTH}+ حرف × ${KPI_LENGTH_MAX} نقاط`,
+        effortWeight: `وقت صافٍ ${kpiFormatDurationShort(row.totalSeconds)} — مقارنةً بالأعلى (${kpiFormatDurationShort(maxTime)}) × ${KPI_EFFORT_MAX} نقاط`,
+        textWeight: `${validPct.toFixed(1)}% أوصاف صحيحة (${row.validDescriptions} وصف صحيح من ${row.totalProducts}) × ${KPI_TEXT_MAX} نقطة`,
+        mediaWeight: `${imgPct.toFixed(1)}% منتجات بصور (${row.withImage} بصور • ${row.withoutImage} بدون) × ${KPI_MEDIA_MAX} نقطة`,
     };
     return `
     <div class="kpi-score-final">
@@ -1905,8 +1967,14 @@ window.openKpiFixDescriptions = async (repId) => {
         if (sub) sub.textContent = repName + ' • جاري التحميل...';
         const all = await kpiFetchProductsForScope(repName);
         const junk = all.filter((p) => kpiProductRepName(p) === repName
-            && window.kpiValidateDescription(p.description_ar || p.description_en || p.description || '').isJunk);
+            && window.kpiValidateDescription(
+                p.description_ar || p.description_en || p.description || '',
+                [p.name_ar, p.name_en, p.name]
+            ).isJunk);
         window._kpiFixAllowedIds = new Set(junk.map((p) => p.id));
+        /* Keep each product's name candidates so a "fix" cannot simply re-enter
+           the product name as the description (that is still a fake description). */
+        window._kpiFixNames = new Map(junk.map((p) => [p.id, [p.name_ar, p.name_en, p.name]]));
         if (sub) sub.textContent = repName + ' • ' + junk.length + ' منتج بحاجة لإصلاح';
         if (!junk.length) {
             list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>لا توجد أوصاف وهمية — عمل رائع!</div></div>';
@@ -1936,9 +2004,10 @@ window.kpiSaveFixedDescription = async (productId) => {
     }
     const input = document.getElementById('kpiFixInput_' + productId);
     const value = (input ? input.value : '').trim();
-    const check = window.kpiValidateDescription(value);
+    const nameCandidates = window._kpiFixNames instanceof Map ? window._kpiFixNames.get(productId) : null;
+    const check = window.kpiValidateDescription(value, nameCandidates);
     if (!check.isValid) {
-        if (window.showToast) window.showToast('الرجاء إدخال وصف حقيقي (أكثر من 10 أحرف)', false);
+        if (window.showToast) window.showToast('الرجاء إدخال وصف حقيقي (أكثر من 10 أحرف وغير مطابق لاسم المنتج)', false);
         if (input) input.focus();
         return;
     }
