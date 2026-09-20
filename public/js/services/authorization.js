@@ -33,18 +33,18 @@ const AUTHORIZATION_HTML = `
                 <div class="auth-header-logo"><img src="logo.png" alt="Kanjo"></div>
                 <div class="auth-header-company">
                     <div class="auth-header-name">شركة كاند جوو لخدمات التوصيل والتجاره الالكترونيه</div>
-                    <div class="auth-header-sub">(شركة ذات مسئولية محدودة) — المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٣٠٨٢٣٤</span>)</div>
+                    <div class="auth-header-sub">(شركة ذات مسئولية محدودة) — المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">٣٠٨٢٣٤</span>)</div>
                 </div>
                 <div class="auth-header-badge">وثيقة رسمية</div>
             </div>
 
             <div class="auth-title">تفويض خاص بإبرام التعاقدات والتسويات التجارية</div>
 
-            <div class="auth-date">إنه في يوم: ...................... الموافق: <span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">.... / .... / ٢٠٢٦ م</span></div>
+            <div class="auth-date">إنه في يوم: ...................... الموافق: <span dir="rtl" style="unicode-bidi: isolate;">.... / .... / ٢٠٢٦م</span></div>
 
-            <p class="auth-p">أقر أنا الموقع أدناه السيد/ فتحي عمر محمد علي، مصري الجنسية، أحمل بطاقة رقم قومي: (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٢٥٩١٢١٨٣٢٠٠٠٥٨</span>)، بصفتي الممثل القانوني والمدير لشركة / كاند جوو لخدمات التوصيل والتجاره الالكترونيه، شركة ذات مسئولية محدودة، المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٣٠٨٢٣٤</span>) والبطاقة الضريبية رقم (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٧٨٣-٤١٠-٨٥٩</span>).</p>
+            <p class="auth-p">أقر أنا الموقع أدناه السيد/ فتحي عمر محمد علي، مصري الجنسية، أحمل بطاقة رقم قومي: (<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">٢٥٩١٢١٨٣٢٠٠٠٥٨</span>)، بصفتي الممثل القانوني والمدير لشركة / كاند جوو لخدمات التوصيل والتجاره الالكترونيه، شركة ذات مسئولية محدودة، المقيدة بالسجل التجاري استثمار القاهرة برقم (<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">٣٠٨٢٣٤</span>) والبطاقة الضريبية رقم (<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">٧٨٣-٤١٠-٨٥٩</span>).</p>
 
-            <p class="auth-p">بأنني قد فوضت ووكلت السيد/ محمود محمد عبده احمد الجمل، مصري الجنسية، يحمل بطاقة رقم قومي: (<span dir="ltr" style="direction: ltr; display: inline-block; unicode-bidi: isolate;">٢٩٧٠٧٠٧١٥٠٠٠٥١</span>).</p>
+            <p class="auth-p">بأنني قد فوضت ووكلت السيد/ محمود محمد عبده احمد الجمل، مصري الجنسية، يحمل بطاقة رقم قومي: (<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">٢٩٧٠٧٠٧١٥٠٠٠٥١</span>).</p>
 
             <p class="auth-p">وذلك لتمثيل الشركة والقيام بمهام (إدارة التشغيل والتعاقدات) وتفويضه للقيام بالأعمال الآتية نيابة عن الشركة وباسمها:</p>
 

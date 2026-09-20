@@ -876,12 +876,19 @@ const toArabicNumerals = (value) => String(value === null || value === undefined
 
 window.toArabicNumerals = toArabicNumerals;
 
-/* Identification numbers are digit strings that an RTL text flow would
-   otherwise reorder (e.g. `٧٨٣-٤١٠-٨٥٩`). Isolating them LTR keeps them
-   rendering exactly as typed. */
-const ltrNumber = (value) => `<span style="direction: ltr; display: inline-block; unicode-bidi: isolate;" dir="ltr">${value}</span>`;
+/* Identification numbers mix Arabic-Indic digits (bidi class AN) with
+   hyphens; a plain `isolate` still lets the bidi algorithm reverse the run
+   (٧٨٣-٤١٠-٨٥٩ -> ٨٥٩-٤١٠-٧٨٣). `isolate-override` forces the embedding
+   direction so the digits render exactly as typed. */
+const ltrNumber = (value) => `<span dir="ltr" style="display: inline-block; direction: ltr; unicode-bidi: isolate-override;">${value}</span>`;
 
 window.kanjoLtrNumber = ltrNumber;
+
+/* Arabic dates read chronologically right-to-left (day on the right, year on
+   the far left), so the year must be the last token in an RTL run. */
+const rtlText = (value) => `<span dir="rtl" style="unicode-bidi: isolate;">${value}</span>`;
+
+window.kanjoRtlText = rtlText;
 
 const formatContractDate = (dateStr) => {
 
@@ -1680,6 +1687,7 @@ window.buildContractHTML = (task) => {
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم الهاتف / واتساب:</td><td style="padding: 5px 0;"><span dir="ltr">${phone}</span></td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">البريد الإلكتروني:</td><td style="padding: 5px 0;">..................................................</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${address}</td></tr>
                     </table>
                 </div>`;
@@ -1687,7 +1695,7 @@ window.buildContractHTML = (task) => {
     const tableBody = `
         <tbody>
             <tr><td style="padding: 0;">
-                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${ltrNumber(`${cDate.date} م`)}، تم الاتفاق والتراضي بين كل من:</div>
+                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${rtlText(`${cDate.date}م`)}، تم الاتفاق والتراضي بين كل من:</div>
                 ${firstPartyBlockHtml}
                 ${secondPartyBlockHtml}
                 ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
