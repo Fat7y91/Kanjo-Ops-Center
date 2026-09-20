@@ -890,20 +890,6 @@ const rtlText = (value) => `<span dir="rtl" style="unicode-bidi: isolate;">${val
 
 window.kanjoRtlText = rtlText;
 
-const formatContractDate = (dateStr) => {
-
-    if (!dateStr) return { day: '............', date: '............' };
-
-    const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00');
-
-    if (isNaN(d.getTime())) return { day: '............', date: '............' };
-
-    const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-
-    return { day: days[d.getDay()], date: toArabicNumerals(`${d.getDate()} / ${d.getMonth() + 1} / ${d.getFullYear()}`) };
-
-};
-
 /* Official registration data of the First Party (كانجو). */
 const KANJO_FIRST_PARTY = {
     tradeName: 'شركة كاند جوو لخدمات التوصيل والتجاره الالكترونيه (شركة ذات مسئولية محدودة)',
@@ -1436,8 +1422,6 @@ window.buildContractHTML = (task) => {
 
     const phone = contactPhone || '........................';
 
-    const cDate = formatContractDate((typeof window.extractTaskContractDate === 'function') ? window.extractTaskContractDate(task) : task.time);
-
     let headerHtml = '';
 
     if (window.currentMerchantLogoBase64) {
@@ -1728,7 +1712,7 @@ window.buildContractHTML = (task) => {
     const tableBody = `
         <tbody>
             <tr><td style="padding: 0;">
-                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${rtlText(`${cDate.date}م`)}، تم الاتفاق والتراضي بين كل من:</div>
+                <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم: ............................ الموافق: ...... / ...... / ${toArabicNumerals(new Date().getFullYear())}م، تم الاتفاق والتراضي بين كل من:</div>
                 ${firstPartyBlockHtml}
                 ${secondPartyBlockHtml}
                 ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
