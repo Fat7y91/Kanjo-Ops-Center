@@ -866,6 +866,16 @@ const sanitizeFileName = (name) => {
 
 };
 
+const EASTERN_ARABIC_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+
+/* Official Egyptian documents use Eastern Arabic numerals (٠-٩) for every
+   date and identification number, so contracts and authorizations must never
+   leak Western digits. */
+const toArabicNumerals = (value) => String(value === null || value === undefined ? '' : value)
+    .replace(/[0-9]/g, (digit) => EASTERN_ARABIC_DIGITS[Number(digit)]);
+
+window.toArabicNumerals = toArabicNumerals;
+
 const formatContractDate = (dateStr) => {
 
     if (!dateStr) return { day: '............', date: '............' };
@@ -876,8 +886,19 @@ const formatContractDate = (dateStr) => {
 
     const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
-    return { day: days[d.getDay()], date: `${d.getDate()} / ${d.getMonth() + 1} / ${d.getFullYear()}` };
+    return { day: days[d.getDay()], date: toArabicNumerals(`${d.getDate()} / ${d.getMonth() + 1} / ${d.getFullYear()}`) };
 
+};
+
+/* Official registration data of the First Party (كانجو). */
+const KANJO_FIRST_PARTY = {
+    tradeName: 'شركة كاند جوو لخدمات التوصيل والتجاره الالكترونيه (شركة ذات مسئولية محدودة)',
+    commercialRegister: '٢٠٨٢٣٤',
+    commercialRegisterOffice: 'استثمار القاهرة',
+    facilityNationalId: '٠٠٠٥٢٠١٠٨٢٣٤',
+    taxCard: '٧٨٣-٤١٠-٨٥٩',
+    taxOffice: 'مأمورية ضرائب الشركات المساهمة بالقاهرة',
+    address: 'شارع درب الجرن من شارع المديرية، قسم أول طنطا، محافظة الغربية'
 };
 
 const CONTRACT_PLACEHOLDER_CATS = ['متابعة', 'متابعه'];
@@ -1363,8 +1384,6 @@ window.buildContractHTML = (task) => {
 
     if (contactName && typeof window.sanitizeLegalText === 'function') contactName = window.sanitizeLegalText(contactName) || contactName;
 
-    const formalContactRole = (typeof window.sanitizeLegalRole === 'function') ? window.sanitizeLegalRole(contactRole) : '';
-
     const sanitizedNotes = (typeof window.sanitizeLegalText === 'function') ? window.sanitizeLegalText(task.notes || '') : String(task.notes || '');
 
     const address = task.address || '........................';
@@ -1441,7 +1460,7 @@ window.buildContractHTML = (task) => {
 
             title: 'رسوم تقديم الخدمات والتشغيل',
 
-            body: `تحصل كانجو مقابل خدمات المنصة والتشغيل على نسبة <strong>[ ${achieved}% ]</strong> من كل طلب أو عملية بيع أو توريد أو خدمة تتم أو تبدأ من خلال المنصة، ويجوز تحديد نسب مختلفة بحسب النشاط أو فئة المنتج أو المدينة أو حجم المبيعات وفق ملحق العمولات المعتمد. وتُعرض هذه النسبة بوضوح في كشف الحساب الدوري قبل التسوية، ولا تُخصم أي رسوم خفية من مستحقات الطرف الثاني. وأي طلب يبدأ من كانجو ثم ينفذ خارجها يستحق عنه كامل رسوم كانجو، ولا يجوز للطرف الثاني الالتفاف على المنصة بتقسيم الطلبات أو تغيير التصنيف أو الإلغاء بقصد التعامل الخارجي.`
+            body: `تحصل كانجو مقابل خدمات المنصة والتشغيل على نسبة <strong>[ ${toArabicNumerals(achieved)}% ]</strong> من كل طلب أو عملية بيع أو توريد أو خدمة تتم أو تبدأ من خلال المنصة، ويجوز تحديد نسب مختلفة بحسب النشاط أو فئة المنتج أو المدينة أو حجم المبيعات وفق ملحق العمولات المعتمد. وتُعرض هذه النسبة بوضوح في كشف الحساب الدوري قبل التسوية، ولا تُخصم أي رسوم خفية من مستحقات الطرف الثاني. وأي طلب يبدأ من كانجو ثم ينفذ خارجها يستحق عنه كامل رسوم كانجو، ولا يجوز للطرف الثاني الالتفاف على المنصة بتقسيم الطلبات أو تغيير التصنيف أو الإلغاء بقصد التعامل الخارجي.`
 
         },
 
@@ -1610,11 +1629,11 @@ window.buildContractHTML = (task) => {
 
         if (baseCommission !== null) {
 
-            rateRows += `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">العمولة الأساسية (جميع المنتجات)</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${baseCommission}%</td></tr>`;
+            rateRows += `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">العمولة الأساسية (جميع المنتجات)</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${toArabicNumerals(baseCommission)}%</td></tr>`;
 
         }
 
-        rateRows += exceptions.map(ex => `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">${window.safeString(ex.category)}</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${ex.rate}%</td></tr>`).join('');
+        rateRows += exceptions.map(ex => `<tr><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: right;">${window.safeString(ex.category)}</td><td style="border: 1px solid #E2E8F0; padding: 8px; text-align: center;">${toArabicNumerals(ex.rate)}%</td></tr>`).join('');
 
         commissionTableHtml = `
             <div style="page-break-inside: avoid; break-inside: avoid; margin: 15px 0;">
@@ -1632,15 +1651,40 @@ window.buildContractHTML = (task) => {
 
     }
 
+    const nationalIdBoxes = Array.from({ length: 14 }).map(() => '<span style="display: inline-block; width: 24px; height: 30px; border: 1.5px solid #4B0082; border-radius: 4px; margin: 0 2px; vertical-align: middle; background: #fff;"></span>').join('');
+
+    const fillBlank = '....................................';
+
+    const firstPartyBlockHtml = `
+                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #4B0082; padding: 12px; border-radius: 8px; margin-bottom: 18px; font-size: 14px; line-height: 1.8; font-weight: bold;">
+                    <strong>الطرف الأول:</strong> ${KANJO_FIRST_PARTY.tradeName}
+                    <div style="margin-top: 8px;">السجل التجاري رقم (${KANJO_FIRST_PARTY.commercialRegister}) — ${KANJO_FIRST_PARTY.commercialRegisterOffice}</div>
+                    <div>الرقم القومي للمنشأة (${KANJO_FIRST_PARTY.facilityNationalId})</div>
+                    <div>البطاقة الضريبية رقم (${KANJO_FIRST_PARTY.taxCard}) — ${KANJO_FIRST_PARTY.taxOffice}</div>
+                    <div>المقر: ${KANJO_FIRST_PARTY.address}</div>
+                    <div>ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.</div>
+                </div>`;
+
+    const secondPartyBlockHtml = `
+                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #F59E0B; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
+                    <strong>الطرف الثاني:</strong> ${titleBusinessType}: ${merchantName}
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px;">
+                        <tr><td style="padding: 5px 0; width: 42%; vertical-align: top;">اسم المنشأة / المحل:</td><td style="padding: 5px 0;">${merchantName}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">اسم المفوض / صاحب النشاط:</td><td style="padding: 5px 0;">${window.safeString(contactName) || fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">بطاقة الرقم القومي (١٤ رقمًا):</td><td style="padding: 5px 0;">${nationalIdBoxes}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري (إن وجد):</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي (إن وجد):</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم الهاتف / واتساب:</td><td style="padding: 5px 0;"><span dir="ltr">${phone}</span></td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${address}</td></tr>
+                    </table>
+                </div>`;
+
     const tableBody = `
         <tbody>
             <tr><td style="padding: 0;">
                 <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم ${cDate.day} الموافق ${cDate.date}م، تم الاتفاق والتراضي بين كل من:</div>
-                <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
-                    <strong>الطرف الأول:</strong> شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية، المالكة والمشغلة للعلامة التجارية (كانجو)، ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.<br><br>
-                    <strong>الطرف الثاني:</strong> ${titleBusinessType}: ${merchantName}<br>
-                    بيانات التواصل والتسوية | العنوان: ${address} | الهاتف: <span dir="ltr">${phone}</span>
-                </div>
+                ${firstPartyBlockHtml}
+                ${secondPartyBlockHtml}
                 ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
@@ -1653,18 +1697,28 @@ window.buildContractHTML = (task) => {
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
-                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRate}% ]</strong></div>
-                    ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: [ ${ex.rate}% ]`).join(' — ')}</div>` : ''}
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
-                        <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
-                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: شركة كاند جوو لخدمات التوصيل والتجارة الالكترونية</div>
-                            <div>الاسم: م/ محمود الجمل</div><div>الصفة: مدير التشغيل والتعاقدات</div>
-                            <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${toArabicNumerals(displayRate)}% ]</strong></div>
+                    ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: [ ${toArabicNumerals(ex.rate)}% ]`).join(' — ')}</div>` : ''}
+                    <div class="contract-signatures" style="display: table; width: 100%; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold; border-spacing: 12px 0;">
+                        <div style="display: table-cell; width: 50%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff; vertical-align: top;">
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الأول: ${KANJO_FIRST_PARTY.tradeName}</div>
+                            <div>الاسم: م/ محمود الجمل</div>
+                            <div>الصفة: مدير التشغيل والتعاقدات</div>
+                            <div style="margin-top: 18px; font-weight: bold;">توقيع المفوض: ..............................</div>
+                            <div style="margin-top: 14px; text-align: center;">
+                                <div style="display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 8px; background: #fff;"></div>
+                                <div style="font-size: 12px; color: #4B0082; margin-top: 6px;">مربع الختم الرسمي</div>
+                            </div>
                         </div>
-                        <div style="width: 45%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
+                        <div style="display: table-cell; width: 50%; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff; vertical-align: top;">
                             <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${merchantName}</div>
-                            <div>الاسم: ${window.safeString(contactName) || '....................'}</div><div>الصفة: ${window.safeString(formalContactRole) || '....................'}</div>
-                            <div style="margin-top: 30px; font-weight: bold;">التوقيع/الختم: ..............................</div>
+                            <div>الاسم: ${window.safeString(contactName) || '....................'}</div>
+                            <div>الصفة: صاحب النشاط</div>
+                            <div style="margin-top: 18px; font-weight: bold;">توقيع صاحب النشاط: ..............................</div>
+                            <div style="margin-top: 14px; text-align: center;">
+                                <div style="display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 8px; background: #fff;"></div>
+                                <div style="font-size: 12px; color: #4B0082; margin-top: 6px;">مربع الختم</div>
+                            </div>
                         </div>
                     </div>
                     <!-- Social Footer -->

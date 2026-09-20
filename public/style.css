@@ -1653,3 +1653,163 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .audit-row { flex-direction: column; gap: 0.35rem; }
     .audit-row-time { width: auto; }
 }
+
+/* ─── تفويض إبرام التعاقدات (authorization issuance) ─── */
+.auth-letter {
+    position: relative;
+    background: #eef0f4;
+    padding: 1rem;
+    border-radius: 1rem;
+}
+.auth-watermark {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 460px;
+    max-width: 70vw;
+    opacity: 0.05;
+    z-index: 0;
+    pointer-events: none;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+}
+.auth-watermark img { width: 100%; height: auto; display: block; filter: grayscale(100%); }
+.auth-toolbar {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    background: linear-gradient(to left, #230535, #4C1D95);
+    color: #fff;
+    padding: 0.65rem 0.9rem;
+    border-radius: 0.9rem;
+    margin-bottom: 1rem;
+}
+.auth-toolbar-title { font-size: 0.8rem; font-weight: 900; display: flex; align-items: center; gap: 0.4rem; }
+.auth-btn {
+    border: none;
+    cursor: pointer;
+    font-weight: 900;
+    font-size: 0.72rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: opacity 0.15s ease;
+}
+.auth-btn:hover { opacity: 0.9; }
+.auth-btn-ghost { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.auth-btn-gold { background: #FFD700; color: #230535; }
+.auth-page {
+    position: relative;
+    z-index: 1;
+    width: 210mm;
+    max-width: 100%;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 16mm 16mm 12mm;
+    background: #ffffff;
+    color: #1e293b;
+    direction: rtl;
+    text-align: justify;
+    font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
+    box-shadow: 0 10px 30px rgba(35, 5, 53, 0.18);
+    border-top: 6px solid #4B0082;
+    border-radius: 0.4rem;
+}
+.auth-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    border-bottom: 3px solid #4B0082;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1rem;
+}
+.auth-header-logo img { max-height: 60px; max-width: 120px; object-fit: contain; }
+.auth-header-company { flex: 1; text-align: center; }
+.auth-header-name { font-size: 0.95rem; font-weight: 900; color: #4B0082; }
+.auth-header-sub { font-size: 0.66rem; font-weight: 800; color: #64748b; margin-top: 0.2rem; }
+.auth-header-badge {
+    background: #FFD700;
+    color: #230535;
+    font-size: 0.64rem;
+    font-weight: 900;
+    padding: 0.28rem 0.6rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.auth-title {
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #4B0082;
+    background: #F5F3FF;
+    border-right: 5px solid #F59E0B;
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.9rem;
+}
+.auth-date { font-size: 0.82rem; font-weight: 900; color: #1e293b; margin-bottom: 0.9rem; }
+.auth-p { font-size: 0.82rem; font-weight: 700; line-height: 1.95; margin: 0 0 0.7rem; color: #1e293b; }
+.auth-delegate { font-weight: 900; color: #4B0082; }
+.auth-list { font-size: 0.82rem; font-weight: 700; line-height: 1.9; margin: 0 0 0.9rem; padding-inline-start: 1.4rem; list-style-type: arabic-indic; }
+.auth-list li { margin-bottom: 0.35rem; }
+.auth-section-title { font-size: 0.86rem; font-weight: 900; color: #4B0082; margin: 0.9rem 0 0.4rem; }
+.auth-signature { display: table; width: 100%; margin-top: 1.4rem; page-break-inside: avoid; }
+.auth-signature-text { display: table-cell; width: 60%; vertical-align: top; font-size: 0.82rem; font-weight: 800; }
+.auth-signature-title { color: #4B0082; font-weight: 900; margin-bottom: 0.35rem; }
+.auth-signature-name { margin-bottom: 0.6rem; }
+.auth-signature-line { margin-top: 1rem; }
+.auth-stamp { display: table-cell; width: 40%; vertical-align: top; text-align: center; }
+.auth-stamp-box { display: inline-block; width: 120px; height: 120px; border: 2px dashed #4B0082; border-radius: 0.5rem; background: #fff; }
+.auth-stamp-label { font-size: 0.66rem; font-weight: 800; color: #4B0082; margin-top: 0.4rem; }
+.auth-footer { margin-top: 1.2rem; padding-top: 0.6rem; border-top: 2px dashed #E2E8F0; text-align: center; font-size: 0.64rem; font-weight: 800; color: #64748b; }
+
+@media (max-width: 768px) {
+    .auth-page { width: 100%; min-height: auto; padding: 14px; }
+    .auth-header { flex-wrap: wrap; }
+    .auth-signature-text { width: 55%; }
+    .auth-stamp { width: 45%; }
+}
+
+/* A4 print for the authorization letter: strip the app chrome and print only
+   the document. */
+@media print {
+    @page { size: A4; margin: 12mm; }
+    #authorizationView,
+    #authorizationView * { visibility: visible !important; }
+    #authorizationView {
+        display: block !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        z-index: 999999 !important;
+    }
+    .auth-letter { background: #ffffff !important; padding: 0 !important; border-radius: 0 !important; }
+    .auth-toolbar { display: none !important; }
+    .auth-page {
+        width: 100% !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        border-top: none !important;
+    }
+    .auth-watermark { opacity: 0.05 !important; }
+    .auth-section-title,
+    .auth-signature,
+    .auth-list li { page-break-inside: avoid !important; break-inside: avoid !important; }
+}

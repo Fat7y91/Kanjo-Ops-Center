@@ -1,6 +1,7 @@
 /* Kanjo Ops — Application Entry Point */
 import './config/firebase.js';
 import './services/audit.js';
+import './services/authorization.js';
 import { categories } from './config/constants.js';
 import './utils/helpers.js';
 import './utils/exportWorker.js';

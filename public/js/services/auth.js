@@ -165,7 +165,10 @@ async function login(pinOverride = null) {
     if (window.authReady) { try { await window.authReady; } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
     if(users[pin]) {
-        currentUser = users[pin];
+        /* Keep the PIN on the session identity (without mutating the shared
+           constants entry) so PIN-scoped screens such as the authorization
+           issuance view can re-check the operator after a reload. */
+        currentUser = Object.assign({}, users[pin], { pin: String(pin) });
         window.currentUser = currentUser;
         window.saveSession(currentUser);
         if (window.kanjoAuditLogLogin) window.kanjoAuditLogLogin();
@@ -326,6 +329,21 @@ function applyThemeAndShowDashboard() {
                 ? window.kanjoAuditCanView()
                 : false;
             blackBoxNavBtnWrapper.classList.toggle('hidden', !canBlackBox);
+        }
+
+        const canIssueAuthorization = (typeof window.kanjoCanIssueAuthorization === 'function')
+            ? window.kanjoCanIssueAuthorization()
+            : false;
+        const authorizationNavBtnWrapper = document.getElementById('authorizationNavBtnWrapper');
+        if (authorizationNavBtnWrapper) {
+            authorizationNavBtnWrapper.classList.toggle('hidden', !canIssueAuthorization);
+        }
+        /* A non-authorized session must never inherit the letter view left open
+           by a previous operator on a shared device. */
+        const authorizationView = document.getElementById('authorizationView');
+        if (authorizationView && !canIssueAuthorization) {
+            authorizationView.classList.add('hidden');
+            authorizationView.removeAttribute('data-built');
         }
 
         if (typeof window.kpiStartActiveTracker === 'function') {
