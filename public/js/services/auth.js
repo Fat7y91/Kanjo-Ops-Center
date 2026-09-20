@@ -168,6 +168,7 @@ async function login(pinOverride = null) {
         currentUser = users[pin];
         window.currentUser = currentUser;
         window.saveSession(currentUser);
+        if (window.kanjoAuditLogLogin) window.kanjoAuditLogLogin();
         /* Paint the dashboard and attach listeners immediately: never block the
            UI on the token/claims round-trip. Claims reconciliation runs in the
            background and re-applies the theme if it changes the identity. */
@@ -317,6 +318,14 @@ function applyThemeAndShowDashboard() {
             kpiNavBtnWrapper.classList.toggle('hidden', !canViewKpi);
             const kpiNavLabel = kpiNavBtnWrapper.querySelector('span');
             if (kpiNavLabel) kpiNavLabel.textContent = isRep ? 'لوحة أدائي' : 'لوحة المؤشرات';
+        }
+
+        const blackBoxNavBtnWrapper = document.getElementById('blackBoxNavBtnWrapper');
+        if (blackBoxNavBtnWrapper) {
+            const canBlackBox = (typeof window.kanjoAuditCanView === 'function')
+                ? window.kanjoAuditCanView()
+                : false;
+            blackBoxNavBtnWrapper.classList.toggle('hidden', !canBlackBox);
         }
 
         if (typeof window.kpiStartActiveTracker === 'function') {

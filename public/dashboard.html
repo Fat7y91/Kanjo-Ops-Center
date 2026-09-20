@@ -1061,6 +1061,20 @@
 
 
 
+                <div id="blackBoxNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openBlackBox()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-box-archive text-[#230535]"></i>
+
+                        <span>الصندوق الأسود</span>
+
+                    </button>
+
+                </div>
+
+
+
 
                 <div id="notificationsWrapper" class="hidden relative mr-2">
 
@@ -3055,6 +3069,98 @@
             </div>
 
             <div id="docsAuditList" class="space-y-3"></div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ═══════════ BLACK BOX — SYSTEM AUDIT LOG (founder/admin only) ═══════════ -->
+
+    <div id="blackBoxModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[200]">
+
+        <div class="bg-white rounded-3xl w-full max-w-4xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
+
+            <div class="bg-gradient-to-l from-[#230535] to-[#4C1D95] text-white p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+
+                <div class="flex items-center gap-2.5 min-w-0">
+
+                    <span class="bg-[#FFD700] text-[#230535] p-2 rounded-xl"><i class="fa-solid fa-box-archive"></i></span>
+
+                    <div class="min-w-0">
+
+                        <h3 class="font-black text-sm sm:text-base truncate">الصندوق الأسود — سجل النظام الشامل</h3>
+
+                        <p class="text-[10px] font-bold text-white/70">كل حركة في النظام: من فعلها، ماذا عدّل ومتى — متاح للمؤسسين والإدارة فقط</p>
+
+                    </div>
+
+                </div>
+
+                <div class="flex items-center gap-2">
+
+                    <button type="button" id="blackBoxReconBtn" onclick="runBlackBoxReconstruction()" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left"></i> توليد الأثر الرجعي</button>
+
+                    <button type="button" onclick="openBlackBox()" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-rotate"></i> تحديث</button>
+
+                    <button type="button" onclick="closeBlackBox()" class="bg-[#FFD700] text-[#230535] hover:opacity-90 w-8 h-8 rounded-lg transition" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+
+                </div>
+
+            </div>
+
+            <div class="p-3 border-b border-purple-100 bg-slate-50 shrink-0 space-y-2">
+
+                <div class="flex flex-wrap items-center gap-2">
+
+                    <div class="relative flex-1 min-w-[180px]">
+
+                        <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+
+                        <input id="blackBoxSearchInput" type="text" oninput="blackBoxSearch(this.value)" placeholder="ابحث باسم المستخدم أو المنتج أو الوصف..." class="w-full pr-9 pl-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-bold text-kanjo-dark outline-none focus:border-kanjo-dark">
+
+                    </div>
+
+                    <select id="blackBoxActionFilter" onchange="blackBoxSetAction(this.value)" class="py-2 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-kanjo-dark">
+
+                        <option value="">كل الأحداث</option>
+
+                        <option value="create">إنشاء</option>
+
+                        <option value="update">تعديل</option>
+
+                        <option value="delete">حذف</option>
+
+                        <option value="delete_request">طلب حذف</option>
+
+                        <option value="delete_reject">رفض حذف</option>
+
+                        <option value="login">دخول</option>
+
+                    </select>
+
+                    <select id="blackBoxUserFilter" onchange="blackBoxSetUser(this.value)" class="py-2 px-3 bg-white border border-purple-200 rounded-xl text-xs font-bold text-kanjo-dark"></select>
+
+                    <label class="flex items-center gap-1.5 text-[11px] font-black text-slate-500 cursor-pointer select-none">
+
+                        <input type="checkbox" checked onchange="blackBoxToggleReconstructed(this.checked)" class="accent-[#230535]"> تضمين الأثر الرجعي
+
+                    </label>
+
+                    <span id="blackBoxCount" class="text-[11px] font-black text-slate-400 mr-auto">—</span>
+
+                </div>
+
+            </div>
+
+            <div id="blackBoxList" class="flex-1 overflow-y-auto hide-scrollbar p-3 space-y-2 bg-slate-50"></div>
+
+            <div class="p-3 border-t border-purple-100 bg-white text-center shrink-0">
+
+                <button type="button" id="blackBoxMoreBtn" onclick="blackBoxLoadMore()" class="hidden text-xs font-black text-kanjo-dark bg-kanjo-light hover:bg-purple-100 px-4 py-2 rounded-xl transition"><i class="fa-solid fa-chevron-down"></i> عرض المزيد</button>
+
+            </div>
 
         </div>
 

@@ -213,6 +213,18 @@ service cloud.firestore {
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 
+    // Black Box — immutable, system-wide audit trail (`audit_logs`).
+    // - Append-only: any signed-in session may CREATE its own trail entry (reps
+    //   perform the catalog edits that must be recorded), but nobody can update
+    //   or delete, which keeps the log tamper-evident.
+    // - Read is restricted to Founder/Admin (legacy() keeps the migration window
+    //   lockout-free, exactly like the other sensitive collections above).
+    match /audit_logs/{docId} {
+      allow read: if legacy() || isPrivileged();
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
     // JSON catalog importer staging (`staging_catalogs`) — data-entry tooling.
     match /staging_catalogs/{docId} {
       allow read, write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();

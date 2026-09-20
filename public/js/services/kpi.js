@@ -1813,7 +1813,6 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
        stay private, so only the number and the total are ever rendered. */
     const medalIcon = rankInfo.rank === 1 ? 'fa-crown' : (rankInfo.rank && rankInfo.rank <= 3) ? 'fa-medal' : 'fa-ranking-star';
     const validPct = row.validRatioRaw * 100;
-    const imgPct = row.imageRatioRaw * 100;
     const avgProducts = report.totals.reps ? (report.totals.products / report.totals.reps) : 0;
     const diffProducts = Math.round(row.totalProducts - avgProducts);
     const diffFoot = diffProducts > 0
@@ -1824,6 +1823,9 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
     const tips = kpiPersonalSmartTips(row, report);
     const junk = row.junkDescriptions;
     const missingImages = isEditor ? 0 : (row.withoutImage || 0);
+    const breakdown = row.kanjoBreakdown || {};
+    const avgDescLength = Math.round(Number(row.avgDescriptionLength) || 0);
+    const breakdownCall = "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')";
 
     const warningHtml = junk > 0
         ? `<button type="button" class="kpi-warn-box" onclick="openKpiFixDescriptions('${kpiEscape(row.repId)}')">
@@ -1893,10 +1895,16 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
         <div class="kpi-personal-cards">
             ${isEditor
                 ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'عدد الصور المُحررة', foot: 'إجمالي الصور التي حررتها' })
-                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: "openKpiScoreBreakdown('" + kpiEscape(row.repId) + "')" })}
+                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: breakdownCall })}
+            ${isEditor ? '' : kpiPersonalCard({ tone: 'indigo', icon: 'fa-box-open', value: Number(breakdown.volumeWeight || 0).toFixed(1) + ' / ' + KPI_VOLUME_MAX, label: 'حجم المنتجات', foot: row.totalProducts + ' منتج مسجل', onclick: breakdownCall })}
+            ${isEditor ? '' : kpiPersonalCard({ tone: 'purple', icon: 'fa-text-width', value: Number(breakdown.lengthWeight || 0).toFixed(1) + ' / ' + KPI_LENGTH_MAX, label: 'متوسط طول الوصف', foot: 'متوسط ' + avgDescLength + ' حرف/منتج', onclick: breakdownCall })}
+            ${isEditor
+                ? kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })
+                : kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: Number(breakdown.textWeight || 0).toFixed(1) + ' / ' + KPI_TEXT_MAX, label: 'جودة الأوصاف', foot: validPct.toFixed(1) + '% وصف صحيح' + (junk > 0 ? ' • ' + junk + ' وهمي' : ''), onclick: breakdownCall })}
+            ${isEditor
+                ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: (row.imageRatioRaw * 100).toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })
+                : kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: Number(breakdown.mediaWeight || 0).toFixed(1) + ' / ' + KPI_MEDIA_MAX, label: 'جودة الوسائط (الصور)', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور', onclick: breakdownCall })}
             ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
-            ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })}
-            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: imgPct.toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })}
         </div>
 
         ${warningHtml}
