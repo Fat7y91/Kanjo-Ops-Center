@@ -450,6 +450,11 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 /* —— الطباعة عبر window.print() —— */
 @media print {
+    /* Zero page margin drops the browser's default header/footer (which prints
+       the document URL and page numbers). Inner padding supplies the paper
+       margin for each printable document instead. */
+    @page { size: A4; margin: 0; }
+
     body * {
         visibility: hidden !important;
     }
@@ -467,7 +472,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         width: 100% !important;
         max-width: none !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 1.5cm !important;
+        box-sizing: border-box !important;
         display: block !important;
         background: #ffffff !important;
         box-shadow: none !important;
@@ -1781,7 +1787,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 /* A4 print for the authorization letter: strip the app chrome and print only
    the document. */
 @media print {
-    @page { size: A4; margin: 12mm; }
+    @page { size: A4; margin: 0; }
     #authorizationView,
     #authorizationView * { visibility: visible !important; }
     #authorizationView {
@@ -1802,7 +1808,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         width: 100% !important;
         min-height: auto !important;
         margin: 0 !important;
-        padding: 0 !important;
+        padding: 12mm !important;
+        box-sizing: border-box !important;
         box-shadow: none !important;
         border-radius: 0 !important;
         border-top: none !important;

@@ -1217,9 +1217,34 @@ window.exportContractPDF = async () => {
 
     source.style.visibility = 'visible';
 
+    const originalTitle = document.title;
+
+    const baseMerchantName = window.getBaseName ? window.getBaseName(task.name) : task.name;
+
+    const printFileName = `عقد انضمام متجر ${String(baseMerchantName || 'متعاقد').trim()}`;
+
+    const restoreTitle = () => {
+
+        document.title = originalTitle;
+
+        window.removeEventListener('afterprint', restoreTitle);
+
+    };
+
+    /* The browser derives the "Save as PDF" filename from document.title, so
+       swap it for the contract title while the dialog is open. */
+    document.title = printFileName;
+
+    window.addEventListener('afterprint', restoreTitle);
+
     window.showToast("🖨️ جاري فتح نافذة الطباعة... (اختر حفظ كملف PDF)", true);
 
     window.print();
+
+    /* print() blocks until the dialog closes in Chrome/Firefox/Safari, so this
+       restores the dashboard title immediately; the afterprint hook covers
+       engines that print asynchronously. */
+    restoreTitle();
 
     setTimeout(() => {
 
