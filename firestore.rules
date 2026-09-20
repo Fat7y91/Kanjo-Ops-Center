@@ -217,11 +217,15 @@ service cloud.firestore {
     // - Append-only: any signed-in session may CREATE its own trail entry (reps
     //   perform the catalog edits that must be recorded), but nobody can update
     //   or delete, which keeps the log tamper-evident.
-    // - READ is STRICTLY FOUNDER-ONLY (claimRole == 'founder'). Admins such as
-    //   محمود, reps, accounting and every other manager are denied by the rules
-    //   themselves, independently of the client-side gate.
+    // - READ: founder-only. During the RBAC migration window (enforceRbac is not
+    //   true) the anonymous PIN sessions carry NO kanjoRole claim, so a strict
+    //   isFounder() check would lock the founder out with a 403 — exactly the
+    //   same lockout-free contract every other sensitive collection above relies
+    //   on, hence the legacy() fallback. The moment app_security/config.enforceRbac
+    //   is switched on, legacy() becomes false and ONLY tokens with
+    //   kanjoRole == 'founder' can read (admins such as محمود stay denied).
     match /audit_logs/{docId} {
-      allow read: if isFounder();
+      allow read: if legacy() || isFounder();
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
