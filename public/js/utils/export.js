@@ -1381,7 +1381,14 @@ window.buildContractHTML = (task) => {
         ? ' استثناء خاص: يتم تصفية الحسابات وإجراء التسويات المالية كل شهر أو شهرين بناءً على طلب الطرف الثاني.'
         : '';
 
-    const jurisdictionClause = merchantNameKey.includes('الحيطاوي')
+    /* Court jurisdiction is keyed off the merchant ID, not the merchant name
+       (name matching was brittle and failed to match الحيطاوي). Accepts the
+       numeric 1014 or the string "1014" across the id-bearing fields. */
+    const merchantIdCandidates = [task && task.id, task && task.merchantId, task && task.merchant_id]
+        .filter((v) => v !== undefined && v !== null)
+        .map((v) => String(v).trim());
+
+    const jurisdictionClause = merchantIdCandidates.includes('1014')
         ? 'ثم تختص محكمة دسوق.'
         : 'ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك.';
 
