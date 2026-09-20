@@ -1381,14 +1381,38 @@ window.buildContractHTML = (task) => {
         ? ' استثناء خاص: يتم تصفية الحسابات وإجراء التسويات المالية كل شهر أو شهرين بناءً على طلب الطرف الثاني.'
         : '';
 
-    /* Court jurisdiction is keyed off the merchant ID, not the merchant name
-       (name matching was brittle and failed to match الحيطاوي). Accepts the
-       numeric 1014 or the string "1014" across the id-bearing fields. */
-    const merchantIdCandidates = [task && task.id, task && task.merchantId, task && task.merchant_id]
-        .filter((v) => v !== undefined && v !== null)
-        .map((v) => String(v).trim());
+    /* Court jurisdiction for merchant "الحيطاوي". Traced against the live data
+       (tasks + merchants REST collections): this merchant is task doc
+       uwvkHFPQJVVKVluPhp65 with the immutable merchantId "KJ-9EXVP8"
+       (merchants/KJ-9EXVP8). No document anywhere carries id "1014" — but we
+       still accept it as an alias in case the identifier scheme changes.
+       Matching is done on the stable merchantId plus an Arabic-normalized name
+       fallback (covers variants such as "محل جزارة الحيطاوي العطاوي"). */
+    const normalizeArabicName = (s) => String(s || '')
+        .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
+        .replace(/[أإآٱ]/g, 'ا')
+        .replace(/ى/g, 'ي')
+        .replace(/ئ/g, 'ي')
+        .replace(/ؤ/g, 'و')
+        .replace(/ة/g, 'ه')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    const jurisdictionClause = merchantIdCandidates.includes('1014')
+    const normalizedMerchantName = normalizeArabicName(merchantNameKey);
+
+    const resolvedMerchantId = String(
+        (task && (task.merchantId || task.merchant_id))
+        || (window.findMerchantIdForBase && merchantName ? window.findMerchantIdForBase(merchantName) : '')
+        || (task && task.id)
+        || ''
+    ).trim();
+
+    const isDesoukMerchant = resolvedMerchantId === 'KJ-9EXVP8'
+        || resolvedMerchantId === '1014'
+        || normalizedMerchantName.includes('الحيطاوي')
+        || normalizedMerchantName.includes('العطاوي');
+
+    const jurisdictionClause = isDesoukMerchant
         ? 'ثم تختص محكمة دسوق.'
         : 'ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك.';
 
