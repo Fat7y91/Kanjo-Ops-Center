@@ -539,6 +539,8 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
     #contract-template-container .contract-clause-wrapper {
         margin-bottom: 18px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
     }
 
     #contract-template-container .contract-text {
