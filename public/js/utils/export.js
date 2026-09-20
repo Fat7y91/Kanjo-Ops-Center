@@ -1219,15 +1219,19 @@ window.exportContractPDF = async () => {
 
     const originalTitle = document.title;
 
+    const originalPath = window.location.pathname + window.location.search;
+
     const baseMerchantName = window.getBaseName ? window.getBaseName(task.name) : task.name;
 
     const printFileName = `عقد انضمام متجر ${String(baseMerchantName || 'متعاقد').trim()}`;
 
-    const restoreTitle = () => {
+    const restorePrintState = () => {
 
         document.title = originalTitle;
 
-        window.removeEventListener('afterprint', restoreTitle);
+        try { window.history.replaceState(null, '', originalPath); } catch (_) {}
+
+        window.removeEventListener('afterprint', restorePrintState);
 
     };
 
@@ -1235,16 +1239,20 @@ window.exportContractPDF = async () => {
        swap it for the contract title while the dialog is open. */
     document.title = printFileName;
 
-    window.addEventListener('afterprint', restoreTitle);
+    /* The native print header prints the current URL; collapse the path so it
+       shows only the domain instead of ".../dashboard.html". */
+    try { window.history.replaceState(null, '', '/'); } catch (_) {}
+
+    window.addEventListener('afterprint', restorePrintState);
 
     window.showToast("🖨️ جاري فتح نافذة الطباعة... (اختر حفظ كملف PDF)", true);
 
     window.print();
 
     /* print() blocks until the dialog closes in Chrome/Firefox/Safari, so this
-       restores the dashboard title immediately; the afterprint hook covers
+       restores the dashboard title/URL immediately; the afterprint hook covers
        engines that print asynchronously. */
-    restoreTitle();
+    restorePrintState();
 
     setTimeout(() => {
 
