@@ -1703,7 +1703,12 @@ window.buildContractHTML = (task) => {
                         <tr><td style="padding: 5px 0; vertical-align: top;">بطاقة الرقم القومي (١٤ رقمًا):</td><td style="padding: 5px 0;">${nationalIdBoxes}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم الهاتف / واتساب:</td><td style="padding: 5px 0;"><span dir="ltr">${phone}</span></td></tr>
+                        <tr><td colspan="2" style="padding: 5px 0; vertical-align: top;">
+                            <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 18px;">
+                                <span>رقم الهاتف / واتساب: <span dir="ltr">${phone}</span></span>
+                                <span>رقم إضافي (إن وجد): ........................................</span>
+                            </div>
+                        </td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">البريد الإلكتروني:</td><td style="padding: 5px 0;">..................................................</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${address}</td></tr>
                     </table>
