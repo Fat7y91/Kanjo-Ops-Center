@@ -450,9 +450,23 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 /* —— الطباعة عبر window.print() —— */
 @media print {
-    /* 15mm page margin leaves room for the browser's native Headers & Footers
-       (page numbers) that Chrome prints when the user enables them. */
-    @page { size: A4; margin: 15mm; }
+    /* 15mm side/top margin and an 18mm bottom margin give the centered page
+       number plenty of safe space. Chrome 131+/Safari 18.2+ natively render
+       @page margin boxes and, once one is defined, suppress the browser's own
+       header/footer (URL, date, corner page count). */
+    @page {
+        size: A4;
+        margin: 15mm 15mm 18mm;
+
+        @bottom-center {
+            content: "صفحة " counter(page) " من " counter(pages);
+            font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
+            font-size: 10pt;
+            font-weight: 700;
+            color: #4B0082;
+            vertical-align: middle;
+        }
+    }
 
     body * {
         visibility: hidden !important;
@@ -1826,7 +1840,19 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 /* A4 print for the authorization letter: strip the app chrome and print only
    the document. */
 @media print {
-    @page { size: A4; margin: 15mm; }
+    @page {
+        size: A4;
+        margin: 15mm 15mm 18mm;
+
+        @bottom-center {
+            content: "صفحة " counter(page) " من " counter(pages);
+            font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
+            font-size: 10pt;
+            font-weight: 700;
+            color: #4B0082;
+            vertical-align: middle;
+        }
+    }
     #authorizationView,
     #authorizationView * { visibility: visible !important; }
     #authorizationView {

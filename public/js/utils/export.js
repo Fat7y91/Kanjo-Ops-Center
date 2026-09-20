@@ -1381,24 +1381,16 @@ window.buildContractHTML = (task) => {
         ? ' استثناء خاص: يتم تصفية الحسابات وإجراء التسويات المالية كل شهر أو شهرين بناءً على طلب الطرف الثاني.'
         : '';
 
-    /* Court jurisdiction for merchant "الحيطاوي". Traced against the live data
-       (tasks + merchants REST collections): this merchant is task doc
-       uwvkHFPQJVVKVluPhp65 with the immutable merchantId "KJ-9EXVP8"
-       (merchants/KJ-9EXVP8). No document anywhere carries id "1014" — but we
-       still accept it as an alias in case the identifier scheme changes.
-       Matching is done on the stable merchantId plus an Arabic-normalized name
-       fallback (covers variants such as "محل جزارة الحيطاوي العطاوي"). */
-    const normalizeArabicName = (s) => String(s || '')
-        .replace(/[\u064B-\u0652\u0670\u0640]/g, '')
-        .replace(/[أإآٱ]/g, 'ا')
-        .replace(/ى/g, 'ي')
-        .replace(/ئ/g, 'ي')
-        .replace(/ؤ/g, 'و')
-        .replace(/ة/g, 'ه')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const normalizedMerchantName = normalizeArabicName(merchantNameKey);
+    /* Court jurisdiction for the BUTCHER "الحيطاوى" (serial #1014). Live data
+       shows TWO near-identical merchants whose names differ only in the last
+       letter, so name matching (especially any ى->ي normalization) incorrectly
+       merged them:
+         - merchants/KJ-N3K4DG  "الحيطاوى" (ends ى U+0649)  🥩 جزارة -> #1014
+         - merchants/KJ-9EXVP8  "الحيطاوي" (ends ي U+064A)  🐟 أسماك -> #1015
+       The contract serial (#1001+index) is derived and unstable, so it is not
+       a safe key either. Match ONLY the butcher's immutable merchantId; the
+       fish merchant keeps the default Kanjo HQ court. */
+    const DESOUK_MERCHANT_IDS = ['KJ-N3K4DG'];
 
     const resolvedMerchantId = String(
         (task && (task.merchantId || task.merchant_id))
@@ -1407,10 +1399,7 @@ window.buildContractHTML = (task) => {
         || ''
     ).trim();
 
-    const isDesoukMerchant = resolvedMerchantId === 'KJ-9EXVP8'
-        || resolvedMerchantId === '1014'
-        || normalizedMerchantName.includes('الحيطاوي')
-        || normalizedMerchantName.includes('العطاوي');
+    const isDesoukMerchant = DESOUK_MERCHANT_IDS.includes(resolvedMerchantId);
 
     const jurisdictionClause = isDesoukMerchant
         ? 'ثم تختص محكمة دسوق.'
