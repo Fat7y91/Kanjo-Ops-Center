@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Kanjo Ops Center — Cloud Storage rules.
+//
+// Generated contract PDFs are written exclusively by the Cloud Function using
+// the Admin SDK (which bypasses these rules) and are shared with users through
+// time-limited signed download URLs. Direct client reads/writes are therefore
+// denied, and every other path is locked down as well.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /contracts/{merchantId}/{fileName} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -39,6 +39,23 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
           CI: true
         run: npx -y firebase-tools@latest deploy --only firestore:indexes --project kanjo-desouk
+      # Server-side contract PDF microservice (functions/). Dependencies are
+      # installed locally so the CLI can analyse the source before uploading.
+      - name: Install function dependencies
+        run: npm install --prefix functions --omit=dev --no-audit --no-fund
+      - name: Deploy Cloud Functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true
+        run: npx -y firebase-tools@latest deploy --only functions --project kanjo-desouk
+      # Locked-down Storage rules for the contracts bucket. Best-effort so a
+      # first-time bucket provisioning hiccup never blocks a release.
+      - name: Deploy Storage rules (best-effort)
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true
+        run: npx -y firebase-tools@latest deploy --only storage --project kanjo-desouk
       # Record the successful deployment in the Black Box audit trail so the
       # founder can track codebase releases. Never fail the deploy on logging.
       - name: Log deployment to Black Box
