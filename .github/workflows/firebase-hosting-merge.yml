@@ -26,6 +26,12 @@ jobs:
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+      # Diagnostic: surface which principal the deploy authenticates as, so IAM
+      # bindings can be verified against the correct service account.
+      - name: Show deploy service account
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+        run: node -e "console.log('Deployer service account: ' + require(process.env.GOOGLE_APPLICATION_CREDENTIALS).client_email)"
       - name: Deploy Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
