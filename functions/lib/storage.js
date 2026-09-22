@@ -2,10 +2,12 @@
 
 /* Cloud Storage persistence for generated contracts.
  *
- * Objects live under `contracts/<merchantId>/<timestamp>_<name>.pdf` in the
- * project's default Firebase Storage bucket. Reads are served through a
- * short-lived V4 signed URL; if the runtime service account cannot sign blobs
- * (missing roles/iam.serviceAccountTokenCreator) we fall back to a Firebase
+ * Objects live under `contracts/<merchantId>/contract.pdf` in the project's
+ * default Firebase Storage bucket. The path is static per merchant so that
+ * regenerating a contract overwrites the previous version instead of
+ * accumulating duplicate files. Reads are served through a short-lived V4
+ * signed URL; if the runtime service account cannot sign blobs (missing
+ * roles/iam.serviceAccountTokenCreator) we fall back to a Firebase
  * download-token URL, which is equally unguessable and revocable. */
 
 const crypto = require('node:crypto');
@@ -40,9 +42,7 @@ async function createDownloadUrl(file, bucket, ttlMs = DEFAULT_SIGNED_URL_TTL_MS
 async function persistContractPdf({ buffer, input, uid }) {
     const bucket = getStorage().bucket();
     const merchantId = sanitizeSegment(input.merchantId, 'unknown');
-    const namePart = sanitizeSegment(input.merchantName, 'متعاقد');
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const objectPath = `${CONTRACT_ROOT}/${merchantId}/${stamp}_${namePart}.pdf`;
+    const objectPath = `${CONTRACT_ROOT}/${merchantId}/contract.pdf`;
     const file = bucket.file(objectPath);
 
     await file.save(buffer, {
