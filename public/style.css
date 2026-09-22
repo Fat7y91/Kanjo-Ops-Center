@@ -1788,6 +1788,22 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     background: #f8fafc;
     font-size: 0.6rem;
 }
+/* Legacy update rows (written before diff tracking) show a muted notice. */
+.audit-legacy-badge {
+    margin-top: 0.45rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.66rem;
+    font-weight: 800;
+    color: #64748b;
+    background: #f1f5f9;
+    border: 1px dashed #cbd5e1;
+    border-radius: 0.55rem;
+    padding: 0.18rem 0.6rem;
+}
+.audit-legacy-badge i { font-size: 0.62rem; opacity: 0.75; }
+
 /* Entity previews open above the Black Box while it is visible. */
 body.black-box-open #catalogProductDetailsModal,
 body.black-box-open #merchantProfileModal,

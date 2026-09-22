@@ -120,6 +120,7 @@ const AUDIT_ACTIONS = {
     delete_reject: { label: 'رفض حذف', color: '#6D28D9', icon: 'fa-rotate-left' },
     login: { label: 'دخول', color: '#230535', icon: 'fa-right-to-bracket' },
     view: { label: 'عرض', color: '#0d9488', icon: 'fa-eye' },
+    deploy: { label: 'تحديث نظام', color: '#7c3aed', icon: 'fa-rocket' },
     generate: { label: 'أثر رجعي', color: '#64748b', icon: 'fa-clock-rotate-left' }
 };
 
@@ -162,7 +163,8 @@ const AUDIT_ENTITY_KINDS = {
     merchants: 'merchant',
     contracts: 'contract',
     master_catalog: 'master_product',
-    staging_catalogs: 'staging'
+    staging_catalogs: 'staging',
+    system: 'system'
 };
 const auditEntityKind = (collectionId) => AUDIT_ENTITY_KINDS[collectionId] || '';
 
@@ -181,7 +183,9 @@ const AUDIT_FIELD_LABELS = {
     contactRole: 'صفة مسؤول التواصل', team: 'الفريق', notes: 'ملاحظات',
     fbPage: 'فيسبوك', fbGroup: 'جروب فيسبوك', insta: 'إنستجرام', website: 'الموقع الإلكتروني',
     driveFolderLink: 'مجلد الملفات', driveFolderId: 'معرف مجلد الملفات', deleteRequested: 'طلب الحذف',
-    archived: 'مؤرشف', syncedFromDraft: 'من مسودة'
+    archived: 'مؤرشف', syncedFromDraft: 'من مسودة',
+    commit: 'إصدار الكود', version: 'الإصدار', message: 'وصف التحديث', actor: 'بواسطة',
+    branch: 'الفرع', runUrl: 'رابط التنفيذ'
 };
 const auditFieldLabel = (field) => AUDIT_FIELD_LABELS[field] || field;
 
@@ -642,10 +646,35 @@ const auditEntityButtonHtml = (e) => {
     return `<button type="button" class="audit-entity-link" title="${title}" data-bb-kind="${auditEscapeHtml(kind)}" data-bb-id="${auditEscapeHtml(e.targetId)}" data-bb-name="${auditEscapeHtml(e.targetName || '')}"><i class="fa-solid fa-up-right-from-square"></i> ${auditEscapeHtml(name)}</button>`;
 };
 
-/* Expandable old vs. new diff for Update entries. */
+/* Expandable old vs. new diff for Update entries. Legacy updates written before
+   the diff patch carry no `changes`/`previousData`, so we show a muted notice
+   instead of an empty/broken row. */
+const auditLegacyUpdateBadgeHtml = () =>
+    '<div class="audit-legacy-badge"><i class="fa-solid fa-circle-question"></i> تفاصيل هذا التعديل غير مسجلة (نسخة قديمة)</div>';
+
+const auditChangesFromSnapshots = (e) => {
+    const before = (e && e.previousData) || null;
+    const after = (e && e.newData) || null;
+    if (!before && !after) return [];
+    const fields = new Set(Object.keys(before || {}).concat(Object.keys(after || {})));
+    const changes = [];
+    fields.forEach((field) => {
+        changes.push({
+            field,
+            label: auditFieldLabel(field),
+            before: (before || {})[field],
+            after: (after || {})[field]
+        });
+    });
+    return changes;
+};
+
 const auditDiffHtml = (e) => {
-    const changes = Array.isArray(e.changes) ? e.changes : [];
-    if (!changes.length) return '';
+    let changes = Array.isArray(e.changes) ? e.changes : [];
+    if (!changes.length) changes = auditChangesFromSnapshots(e);
+    if (!changes.length) {
+        return String((e && e.actionType) || '') === 'update' ? auditLegacyUpdateBadgeHtml() : '';
+    }
     const rows = changes.map((c) => {
         const before = (c.before === '' || c.before == null) ? '—' : c.before;
         const after = (c.after === '' || c.after == null) ? '—' : c.after;
@@ -663,7 +692,9 @@ const auditRowHtml = (e) => {
     const meta = auditActionMeta(e.actionType);
     const sourceBadge = e.source === 'reconstructed'
         ? '<span class="audit-src-badge"><i class="fa-solid fa-clock-rotate-left"></i> أثر رجعي</span>'
-        : '';
+        : (e.source === 'ci'
+            ? '<span class="audit-src-badge"><i class="fa-solid fa-rocket"></i> نشر آلي</span>'
+            : '');
     const who = e.userName || 'مستخدم';
     const role = e.userRole ? ` (${auditEscapeHtml(e.userRole)})` : '';
     return `
