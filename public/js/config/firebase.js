@@ -466,13 +466,25 @@ const restFetchSignedMerchantTasks = async ({ team = null } = {}) => {
     const filters = [['isSigned', 'EQUAL', true]];
     if (team) filters.push(['team', 'EQUAL', team]);
     return restRunQuery('tasks', filters, null, {
-        select: ['name', 'merchantId', 'cat', 'team', 'achieved', 'isSigned', 'time']
+        select: ['name', 'merchantId', 'cat', 'team', 'achieved', 'isSigned', 'vipPreContract', 'time']
+    });
+};
+
+/* Merchants the admin flagged as "under negotiation (VIP / pre-contract)".
+   Same lightweight shape as the signed read so reps can list them in the catalog
+   product picker without pulling the full ~15MB archive. */
+const restFetchVipPreContractMerchantTasks = async ({ team = null } = {}) => {
+    const filters = [['vipPreContract', 'EQUAL', true]];
+    if (team) filters.push(['team', 'EQUAL', team]);
+    return restRunQuery('tasks', filters, null, {
+        select: ['name', 'merchantId', 'cat', 'team', 'achieved', 'isSigned', 'vipPreContract', 'time']
     });
 };
 
 window.kanjoRest = {
     fetchTasks: restFetchTasks,
     fetchSignedMerchantTasks: restFetchSignedMerchantTasks,
+    fetchVipPreContractMerchantTasks: restFetchVipPreContractMerchantTasks,
     runQuery: restRunQuery,
     list: restListCollection,
     getDocument: restGetDocument,

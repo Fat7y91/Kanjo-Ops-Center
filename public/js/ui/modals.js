@@ -78,6 +78,8 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     let isProvisional = false;
 
+    let vipPreContract = false;
+
     let contractAchieved = 0;
 
     let totalVisits = 0;
@@ -101,6 +103,8 @@ window.openMerchantProfile = (merchantBaseName) => {
         if (t.isSigned && taskAchieved > 0) isSigned = true;
 
         if (t.isProvisional || (t.isSigned && taskAchieved === 0)) isProvisional = true;
+
+        if (t.vipPreContract === true) vipPreContract = true;
 
         if ((t.isSigned || t.isProvisional) && taskAchieved > contractAchieved) contractAchieved = taskAchieved;
 
@@ -239,6 +243,19 @@ window.openMerchantProfile = (merchantBaseName) => {
         window.toggleMerchantContractPercentage();
 
     }
+
+    /* VIP pre-contract flag: visible and actionable for the designated admin
+       (Mahmoud) only. It is a marketing/sales-enablement switch — it never sets
+       a final contract or a commission. */
+    const canToggleVipPreContract = window.isMahmoudOpsUser ? window.isMahmoudOpsUser() : false;
+
+    const vipPreContractSection = document.getElementById('mpVipPreContractSection');
+
+    if (vipPreContractSection) vipPreContractSection.classList.toggle('hidden', !canToggleVipPreContract);
+
+    const vipPreContractToggle = document.getElementById('mpVipPreContractToggle');
+
+    if (vipPreContractToggle) vipPreContractToggle.checked = vipPreContract;
 
 
 
@@ -472,6 +489,119 @@ window.saveMerchantContract = async () => {
     closeMerchantProfileModal();
 
     showToast("تم تحديث حالة التعاقد لجميع مهام التاجر بنجاح");
+
+};
+
+/* VIP / pre-contract flag. Purely operational: it lets reps stage a product
+   catalog for a merchant still under negotiation. It is intentionally written
+   ONLY as `vipPreContract` on the merchant's task docs — never isSigned,
+   achieved or commission — so no final contract or payout is triggered. */
+window.toggleMerchantVipPreContract = async (checked) => {
+
+    const toggle = document.getElementById('mpVipPreContractToggle');
+
+    const isMahmoud = window.isMahmoudOpsUser ? window.isMahmoudOpsUser() : false;
+
+    if (!isMahmoud) {
+
+        if (toggle) toggle.checked = !checked;
+
+        showToast('هذا الخيار متاح لحساب الإدارة المخصص (أ/ محمود) فقط', false);
+
+        return;
+
+    }
+
+    if (!activeMerchantBaseName) return;
+
+    const flag = checked === true;
+
+    /* Collect every known doc for this merchant from both the paged cache and
+       the live listener map, keyed by id so the write always targets real docs. */
+    const targets = [];
+
+    const seenIds = new Set();
+
+    const addTarget = (id, docData) => {
+
+        if (!id || seenIds.has(id)) return;
+
+        seenIds.add(id);
+
+        targets.push({ id, docData: docData || {} });
+
+    };
+
+    (window.allTasksCache || []).forEach(t => {
+
+        if (t && getBaseName(t.name) === activeMerchantBaseName) addTarget(t.id, t);
+
+    });
+
+    if (window.tasksMemory && window.tasksMemory.size > 0) {
+
+        window.tasksMemory.forEach((tData, id) => {
+
+            if (tData && getBaseName(tData.name) === activeMerchantBaseName) addTarget(id, tData);
+
+        });
+
+    }
+
+    try {
+
+        if (targets.length > 0) {
+
+            const batch = writeBatch(db);
+
+            targets.forEach(t => batch.update(doc(db, 'tasks', t.id), { vipPreContract: flag }));
+
+            await batch.commit();
+
+        }
+
+        targets.forEach(t => { t.docData.vipPreContract = flag; });
+
+        if (Array.isArray(window.finalizedMerchantsCache)) {
+
+            window.finalizedMerchantsCache.forEach(t => {
+
+                if (t && getBaseName(t.name) === activeMerchantBaseName) t.vipPreContract = flag;
+
+            });
+
+        }
+
+        if (window.kanjoAuditLog) {
+
+            const mid = window.findMerchantIdForBase ? window.findMerchantIdForBase(activeMerchantBaseName) : '';
+
+            window.kanjoAuditLog({
+                actionType: 'update',
+                targetEntity: 'تاجر',
+                targetId: mid || '',
+                targetName: activeMerchantBaseName,
+                description: flag
+                    ? `تفعيل حالة «تحت التعاقد (VIP / عرض مبدئي)» للتاجر «${activeMerchantBaseName}»`
+                    : `إلغاء حالة «تحت التعاقد (VIP / عرض مبدئي)» للتاجر «${activeMerchantBaseName}»`,
+                collection: 'tasks'
+            });
+
+        }
+
+        showToast(flag
+            ? 'تم تفعيل «تحت التعاقد (VIP)» — يمكن للمندوبين الآن إضافة منتجات لعرضها'
+            : 'تم إلغاء حالة «تحت التعاقد (VIP)»');
+
+    } catch (err) {
+
+        console.error('toggleMerchantVipPreContract failed', err);
+
+        if (toggle) toggle.checked = !flag;
+
+        showToast('فشل تحديث حالة «تحت التعاقد (VIP)»', false);
+
+    }
 
 };
 

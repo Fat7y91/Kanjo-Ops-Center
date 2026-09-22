@@ -1029,6 +1029,8 @@ const getMerchantBusinessInfo = (task) => {
 
     let achieved = Number(task.achieved) || 0;
 
+    let vipPreContract = task.vipPreContract === true;
+
     candidates.forEach(t => {
 
         const c = String(t.cat || '').trim();
@@ -1042,6 +1044,8 @@ const getMerchantBusinessInfo = (task) => {
         const a = Number(t.achieved) || 0;
 
         if (a > achieved) achieved = a;
+
+        if (t.vipPreContract === true) vipPreContract = true;
 
     });
 
@@ -1075,7 +1079,7 @@ const getMerchantBusinessInfo = (task) => {
 
     }
 
-    return { baseName, cat, businessType, achieved };
+    return { baseName, cat, businessType, achieved, vipPreContract };
 
 };
 
@@ -1281,6 +1285,8 @@ window.buildContractHTML = (task) => {
     const businessType = info.businessType;
 
     const resolvedCat = info.cat;
+
+    const vipPreContract = info.vipPreContract === true;
 
     const isRestCafe = window.isRestaurantCafeCategoryExact ? window.isRestaurantCafeCategoryExact(resolvedCat) : window.isRestaurantCafeCategory(resolvedCat);
 
@@ -1704,6 +1710,7 @@ window.buildContractHTML = (task) => {
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
                     <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${window.safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${toArabicNumerals(displayRate)}% ]</strong></div>
+                    ${vipPreContract ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #92400e; background-color: #fffbeb; border: 1px solid #fcd34d; border-right: 4px solid #F59E0B; border-radius: 6px; padding: 10px 12px;">حالة التعاقد: عرض مبدئي / تحت التعاقد (VIP) — هذا المستند عرض مبدئي غير نهائي ولا يترتب عليه أي التزام تعاقدي أو عمولة.</div>` : ''}
                     ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map(ex => `${window.safeString(ex.category)}: [ ${toArabicNumerals(ex.rate)}% ]`).join(' — ')}</div>` : ''}
                     <div class="contract-signatures" style="display: flex; align-items: stretch; gap: 12px; width: 100%; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
                         <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">

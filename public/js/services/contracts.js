@@ -72,6 +72,7 @@ window.buildContractCallablePayload = (task) => {
         businessType: info.businessType,
         titleBusinessType: window.contractBusinessTypeOverride || '',
         commissionRate: Number(info.achieved) || 0,
+        vipPreContract: info.vipPreContract === true,
         commission: { baseCommission, exceptions },
         contactName,
         contactRole,

@@ -276,25 +276,33 @@ window.uploadCatalogRawImage = async (file, merchantName) => {
 
 const listFinalizedMerchants = () => {
     const map = new Map();
-    /* Cross-team collaboration: this picker intentionally lists finalized
+    /* Cross-team collaboration: this picker intentionally lists eligible
        merchants from EVERY team so reps/data-entry can help each other enter
-       catalog data. The "final agreement" requirement (isSigned && achieved>0)
-       is still enforced below. */
+       catalog data. Eligibility is the final agreement (isSigned && achieved>0)
+       OR the admin-granted VIP pre-contract flag, which lets reps stage products
+       for a merchant still under negotiation. The VIP flag never implies a final
+       contract or a commission — it is sales/visibility only. */
     const taskSource = (window.allTasksCache && window.allTasksCache.length)
         ? window.allTasksCache
         : Array.from((window.tasksMemory || new Map()).values());
-    /* Reps/data-entry skip the full archive, so signed merchants are supplied by
-       a lightweight field-masked read (window.finalizedMerchantsCache). Merge it
-       in — the baseName dedupe below keeps a single entry per merchant. */
+    /* Reps/data-entry skip the full archive, so eligible merchants are supplied
+       by lightweight field-masked reads (window.finalizedMerchantsCache). Merge
+       them in — the baseName dedupe below keeps a single entry per merchant. */
     const source = (Array.isArray(window.finalizedMerchantsCache) && window.finalizedMerchantsCache.length)
         ? taskSource.concat(window.finalizedMerchantsCache)
         : taskSource;
     source.forEach((t) => {
+        if (!t) return;
         const achieved = Number(t.achieved) || 0;
-        if (!t.isSigned || achieved <= 0) return;
+        const finalized = t.isSigned === true && achieved > 0;
+        const vipPreContract = t.vipPreContract === true;
+        if (!finalized && !vipPreContract) return;
         const baseName = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '');
         if (!baseName) return;
-        if (map.has(baseName)) return;
+        if (map.has(baseName)) {
+            if (vipPreContract) map.get(baseName).vipPreContract = true;
+            return;
+        }
         const mid = (window.findMerchantIdForBase && window.findMerchantIdForBase(baseName)) || t.merchantId || baseName;
         const rec = window.merchantsById && window.merchantsById.get(mid);
         const recCat = rec && String(rec.cat || rec.category || '').trim();
@@ -304,7 +312,8 @@ const listFinalizedMerchants = () => {
             merchantId: mid,
             merchantName: baseName,
             category: cat,
-            team: t.team || ''
+            team: t.team || '',
+            vipPreContract
         });
     });
     return Array.from(map.values()).sort((a, b) => String(a.merchantName).localeCompare(String(b.merchantName), 'ar'));
@@ -534,13 +543,14 @@ const fillCatalogMerchantOptions = (extraMerchant) => {
         window._catalogMerchantMap[extraMerchant.merchantId] = extraMerchant;
     }
     if (merchants.length === 0) {
-        select.innerHTML = '<option value="">لا يوجد تجار باتفاق نهائي</option>';
+        select.innerHTML = '<option value="">لا يوجد تجار متعاقدون أو تحت التعاقد (VIP)</option>';
         return;
     }
     select.innerHTML = '<option value="">اختر التاجر...</option>' + merchants.map((m) => {
         const id = catalogEscapeHtml(m.merchantId);
         const name = catalogEscapeHtml(m.merchantName);
-        return `<option value="${id}">${name}</option>`;
+        const marker = m.vipPreContract ? ' — تحت التعاقد (VIP)' : '';
+        return `<option value="${id}">${name}${marker}</option>`;
     }).join('');
 };
 

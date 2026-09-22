@@ -913,11 +913,30 @@ window.ensureFinalizedMerchantsLoaded = () => {
     }
     _finalizedMerchantsPromise = (async () => {
         try {
-            /* Cross-team: the catalog picker lists finalized merchants from every
-               team, so this lightweight read is intentionally NOT team-scoped. */
-            const docs = await window.kanjoRest.fetchSignedMerchantTasks();
-            window.finalizedMerchantsCache = Array.isArray(docs) ? docs : [];
-            console.log('[KANJO-DIAGNOSTIC] Finalized-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
+            /* Cross-team: the catalog picker lists eligible merchants from every
+               team, so these lightweight reads are intentionally NOT team-scoped.
+               Two reads: final signed agreements + admin-granted VIP pre-contract
+               merchants (so reps can stage products during negotiation). */
+            const fetchers = [window.kanjoRest.fetchSignedMerchantTasks()];
+            if (typeof window.kanjoRest.fetchVipPreContractMerchantTasks === 'function') {
+                fetchers.push(window.kanjoRest.fetchVipPreContractMerchantTasks());
+            }
+            const [signedDocs, vipDocs] = await Promise.all(fetchers);
+            const merged = [];
+            const seen = new Set();
+            const addDocs = (docs) => {
+                (docs || []).forEach((doc) => {
+                    if (!doc) return;
+                    const key = doc.merchantId || doc.id || (window.getBaseName ? window.getBaseName(doc.name) : doc.name);
+                    if (!key || seen.has(key)) return;
+                    seen.add(key);
+                    merged.push(doc);
+                });
+            };
+            addDocs(signedDocs);
+            addDocs(vipDocs);
+            window.finalizedMerchantsCache = merged;
+            console.log('[KANJO-DIAGNOSTIC] Eligible-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
             /* If the merchant picker is already open, repopulate it now. */
             if (typeof window.refreshCatalogMerchantOptions === 'function') window.refreshCatalogMerchantOptions();
             return window.finalizedMerchantsCache;
