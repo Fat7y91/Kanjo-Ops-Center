@@ -1,0 +1,32 @@
+# Manually-triggered maintenance job: purge throw-away contract objects that
+# early integration testing left in the Storage bucket, so the live bucket only
+# ever contains real merchant contracts. Safe to re-run; it lists then deletes.
+name: Cleanup contract placeholders
+on:
+  workflow_dispatch:
+    inputs:
+      prefixes:
+        description: "Space-separated object prefixes to delete (blank uses the dev defaults)"
+        required: false
+        default: ""
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write Firebase service account
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+      - name: Purge placeholder contract objects
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          FIREBASE_PROJECT_ID: kanjo-desouk
+        run: |
+          npm install firebase-admin@12
+          PREFIXES="${{ github.event.inputs.prefixes }}"
+          if [ -n "$PREFIXES" ]; then
+            node scripts/cleanup-contract-placeholders.mjs $PREFIXES
+          else
+            node scripts/cleanup-contract-placeholders.mjs
+          fi

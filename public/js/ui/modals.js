@@ -34,7 +34,9 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     const createContractBtn = document.getElementById('mpCreateContractBtn');
 
-    if (createContractBtn) createContractBtn.style.display = canManageContracts ? '' : 'none';
+    const canGenerateContracts = window.canGenerateContracts ? window.canGenerateContracts() : false;
+
+    if (createContractBtn) createContractBtn.style.display = canGenerateContracts ? '' : 'none';
 
 
 
@@ -704,6 +706,14 @@ window.saveMerchantNameEdit = async () => {
 };
 
 window.openMerchantContract = () => {
+
+    if (window.canGenerateContracts && !window.canGenerateContracts()) {
+
+        if (window.showToast) window.showToast('إصدار العقود متاح لمدير التشغيل (أ/ محمود) فقط', false);
+
+        return;
+
+    }
 
     const baseName = activeMerchantBaseName;
 
@@ -1674,6 +1684,9 @@ window.openContractsManagerModal = () => {
 
     } else {
 
+        /* Only the designated issuer (Mahmoud) gets the per-row action. */
+        const canIssueContract = window.canGenerateContracts ? window.canGenerateContracts() : false;
+
         listEl.innerHTML = uniqueTasks.map(t => {
 
             const achieved = Number(t.achieved) || 0;
@@ -1700,7 +1713,7 @@ window.openContractsManagerModal = () => {
 
                 </div>
 
-                <button onclick="openContractPreview('${t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>
+                ${canIssueContract ? `<button onclick="openContractPreview('${t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>` : ''}
 
             </div>`;
 
@@ -1713,6 +1726,14 @@ window.openContractsManagerModal = () => {
 };
 
 window.openContractPreview = (taskId) => {
+
+    if (window.canGenerateContracts && !window.canGenerateContracts()) {
+
+        if (window.showToast) window.showToast('إصدار العقود متاح لمدير التشغيل (أ/ محمود) فقط', false);
+
+        return;
+
+    }
 
     const task = (window.allTasksCache || []).find(t => t.id === taskId);
 

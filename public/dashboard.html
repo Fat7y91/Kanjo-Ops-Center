@@ -706,7 +706,7 @@
 
             <div class="flex gap-3">
 
-                <button onclick="exportContractPDF()" class="flex-1 bg-kanjo-primary hover:bg-kanjo-dark text-white font-bold py-2.5 rounded-xl transition-colors"><i class="fa-solid fa-file-pdf ml-2"></i>تصدير PDF</button>
+                <button id="cpGenerateContractBtn" onclick="generateContractViaBackend()" class="flex-1 bg-kanjo-primary hover:bg-kanjo-dark text-white font-bold py-2.5 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"><i class="fa-solid fa-file-pdf ml-2"></i><span>حفظ وإصدار العقد (PDF)</span></button>
 
                 <button onclick="exportContractWord()" class="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-bold py-2.5 rounded-xl transition-colors"><i class="fa-solid fa-file-word ml-2"></i>تصدير Word</button>
 

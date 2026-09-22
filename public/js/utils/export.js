@@ -1091,6 +1091,8 @@ const getMerchantBusinessInfo = (task) => {
 
 };
 
+window.getMerchantBusinessInfo = getMerchantBusinessInfo;
+
 const isFoodCategory = (cat) => {
 
     return ['مطاعم', 'كافيهات', 'سوبر ماركت', 'أسماك', 'جزارة', 'خضار', 'دواجن', 'عصائر', 'مخبوزات', 'مسليات', 'حلويات', 'عطارة', 'لبنة', 'أغذية'].some(k => (cat || '').includes(k));
@@ -1104,6 +1106,14 @@ const isMedicalCategory = (cat) => {
 };
 
 window.exportContractPDF = async () => {
+
+    /* Preferred path: the official PDF is produced on the server. The legacy
+       client-side print flow below remains only as an offline fallback. */
+    if (typeof window.generateContractViaBackend === 'function') {
+
+        return window.generateContractViaBackend();
+
+    }
 
     const task = getCurrentContractTask();
 
@@ -1336,7 +1346,7 @@ body { direction: rtl; text-align: justify; font-family: 'Cairo', 'Tahoma', 'Ari
 
 window.buildContractHTML = (task) => {
 
-    if (window.canManageContracts && !window.canManageContracts()) {
+    if (window.canGenerateContracts && !window.canGenerateContracts()) {
 
         alert('عفواً، لا تمتلك صلاحية إصدار العقود. يرجى الرجوع لمدير التشغيل (محمود).');
 
@@ -2037,7 +2047,7 @@ window.saveContractCommissions = async () => {
 
 window.generateContract = () => {
 
-    if (window.canManageContracts && !window.canManageContracts()) {
+    if (window.canGenerateContracts && !window.canGenerateContracts()) {
 
         alert('عفواً، لا تمتلك صلاحية إصدار العقود. يرجى الرجوع لمدير التشغيل (محمود).');
 

@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentSingleTabManager, collection, addDoc, onSnapshot, query, where, updateDoc, doc, arrayUnion, deleteDoc, deleteField, orderBy, getDocs, writeBatch, setDoc, getDoc, limit, startAfter, clearIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { getAuth, signInAnonymously, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check.js";
 
 // Firebase web config. Values are injected at build time by scripts/split-modules.mjs
@@ -11,6 +12,13 @@ import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com
 const firebaseConfig = { apiKey: "AIzaSyBVYed19A7ob4M24oPK7P3-9vzH_iSRKZ0", authDomain: "kanjo-desouk.web.app", projectId: "kanjo-desouk", storageBucket: "kanjo-desouk.firebasestorage.app", messagingSenderId: "253872156774", appId: "1:253872156774:web:1d554b3bf0b78b98c77da7", measurementId: "G-FBM6G2RF1B" };
 
 const app = initializeApp(firebaseConfig);
+
+/* Callable Cloud Functions. The region must match the deployed function
+   (`generateMerchantContract` lives in us-central1). Exposed on `window` so the
+   non-module UI helpers can invoke the server-side contract generator. */
+const functions = getFunctions(app, "us-central1");
+window.functions = functions;
+window.httpsCallable = httpsCallable;
 
 /* Persistent (IndexedDB) cache is a big win on normal browsers but is broken in
    Safari Private Browsing and other storage-restricted/incognito modes: the SDK

@@ -7,6 +7,7 @@ import './utils/helpers.js';
 import './utils/exportWorker.js';
 import './services/aggregates.js';
 import './utils/export.js';
+import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
