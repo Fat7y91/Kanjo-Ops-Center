@@ -911,11 +911,11 @@ window.ensureFinalizedMerchantsLoaded = () => {
     if (!window.kanjoRest || typeof window.kanjoRest.fetchSignedMerchantTasks !== 'function') {
         return Promise.resolve([]);
     }
-    const role = (window.currentUser && window.currentUser.role) || '';
-    const team = role === 'rep' ? ((window.currentUser && window.currentUser.team) || null) : null;
     _finalizedMerchantsPromise = (async () => {
         try {
-            const docs = await window.kanjoRest.fetchSignedMerchantTasks({ team });
+            /* Cross-team: the catalog picker lists finalized merchants from every
+               team, so this lightweight read is intentionally NOT team-scoped. */
+            const docs = await window.kanjoRest.fetchSignedMerchantTasks();
             window.finalizedMerchantsCache = Array.isArray(docs) ? docs : [];
             console.log('[KANJO-DIAGNOSTIC] Finalized-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
             /* If the merchant picker is already open, repopulate it now. */

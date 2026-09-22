@@ -276,7 +276,10 @@ window.uploadCatalogRawImage = async (file, merchantName) => {
 
 const listFinalizedMerchants = () => {
     const map = new Map();
-    const teamFilter = (window.currentUser && window.currentUser.role === 'rep') ? window.currentUser.team : null;
+    /* Cross-team collaboration: this picker intentionally lists finalized
+       merchants from EVERY team so reps/data-entry can help each other enter
+       catalog data. The "final agreement" requirement (isSigned && achieved>0)
+       is still enforced below. */
     const taskSource = (window.allTasksCache && window.allTasksCache.length)
         ? window.allTasksCache
         : Array.from((window.tasksMemory || new Map()).values());
@@ -287,7 +290,6 @@ const listFinalizedMerchants = () => {
         ? taskSource.concat(window.finalizedMerchantsCache)
         : taskSource;
     source.forEach((t) => {
-        if (teamFilter && t.team !== teamFilter) return;
         const achieved = Number(t.achieved) || 0;
         if (!t.isSigned || achieved <= 0) return;
         const baseName = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '');
