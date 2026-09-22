@@ -359,10 +359,14 @@ const catalogEnhancedImageUrls = (p) => {
     return source.map((u) => catalogDirectImageUrl(u)).filter(Boolean);
 };
 
-const getCatalogEnhancedLocal = (productId, length) => {
+const getCatalogEnhancedLocal = (productId, length, seedUrls) => {
     const store = window._catalogEnhancedUploads || {};
-    const current = Array.isArray(store[productId]) ? store[productId].slice() : [];
+    let current = Array.isArray(store[productId]) ? store[productId].slice() : null;
+    /* Seed from the product's already-saved enhanced images so a re-upload of a
+       single slot never drops the other (already existing) enhanced images. */
+    if (!current) current = Array.isArray(seedUrls) ? seedUrls.map((u) => u || '') : [];
     while (current.length < length) current.push('');
+    if (current.length > length) current = current.slice(0, length);
     store[productId] = current;
     window._catalogEnhancedUploads = store;
     return current;
@@ -3001,12 +3005,14 @@ window.onCatalogDescriptionInput = () => {
     warning.classList.toggle('hidden', !show);
 };
 
-window.triggerCatalogEnhancedSlot = (productId, imageIndex) => {
+window.triggerCatalogEnhancedSlot = (productId, imageIndex, mode) => {
     if (!window.isCatalogContentUser()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         return;
     }
-    const input = document.getElementById('catalogEnhanceInput-' + productId + '-' + imageIndex);
+    const modePrefix = mode === 'done' ? 'done' : 'pending';
+    const input = document.getElementById('catalogEnhanceInput-' + modePrefix + '-' + productId + '-' + imageIndex)
+        || document.getElementById('catalogEnhanceInput-' + productId + '-' + imageIndex);
     if (!input) return;
     input.value = '';
     input.click();
@@ -3034,33 +3040,42 @@ const removeCatalogPendingProductFromUi = (productId, merchantName) => {
             accordion.remove();
         }
     }
-    const remaining = (window.merchantProductsCache || []).filter((p) => p.id !== productId && p.status === 'pending');
-    const countEl = document.getElementById('catalogPendingCount');
-    if (countEl) countEl.textContent = String(remaining.length);
+    /* Drop it from the pending cache too, so a later re-render of the list does
+       not resurrect a product that just moved to the Completed tab. */
+    window.merchantProductsCache = (window.merchantProductsCache || []).filter((p) => p.id !== productId);
+    updateCatalogContentBadge();
     const list = document.getElementById('catalogPendingList');
-    if (list && remaining.length === 0) markCatalogPendingEmpty(list);
+    if (list && catalogPendingProducts().length === 0) markCatalogPendingEmpty(list);
+};
+
+const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
+    const urls = Array.isArray(enhancedUrls) ? enhancedUrls.slice() : [];
+    const patch = {
+        enhancedImageUrl: urls[0] || '',
+        enhancedImageUrls: urls,
+        updatedAt: new Date(),
+        updatedBy: (window.currentUser && window.currentUser.name) || ''
+    };
+    if (options && options.status) patch.status = options.status;
+    /* Merge-patch the SAME document: re-uploads overwrite the existing enhanced
+       image fields in place instead of creating a duplicate product. */
+    if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], patch))) {
+        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
+    }
+    return patch;
 };
 
 const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount) => {
     const filled = enhancedUrls.filter(Boolean);
     if (filled.length !== rawCount) return false;
-    const completePatch = {
-        enhancedImageUrl: filled[0] || '',
-        enhancedImageUrls: enhancedUrls.slice(0, rawCount),
-        status: 'done',
-        updatedAt: new Date(),
-        updatedBy: (window.currentUser && window.currentUser.name) || ''
-    };
-    if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], completePatch))) {
-        await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), completePatch);
-    }
+    await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, rawCount), { status: 'done' });
     delete window._catalogEnhancedUploads[productId];
     removeCatalogPendingProductFromUi(productId, (product && product.merchantName) || '');
     window.showToast('تم اعتماد المنتج بعد رفع كل الصور المحسّنة');
     return true;
 };
 
-window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
+window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) => {
     const input = event && event.target;
     const file = input && input.files && input.files[0];
     if (!file || !productId) return;
@@ -3074,7 +3089,8 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
         input.value = '';
         return;
     }
-    const product = (window.merchantProductsCache || []).find((p) => p.id === productId);
+    const product = (window.merchantProductsCache || []).find((p) => p.id === productId)
+        || (window.doneCatalogProductsCache || []).find((p) => p.id === productId);
     if (!product) {
         window.showToast('تعذر العثور على المنتج', false);
         return;
@@ -3082,7 +3098,11 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
     const rawUrls = catalogRawImageUrls(product);
     const targetCount = catalogEnhanceTargetCount(product);
     const idx = Number(imageIndex) || 0;
-    const slotBtn = document.getElementById('catalogEnhanceBtn-' + productId + '-' + idx);
+    const isCompleted = String(product.status || '') === 'done'
+        || catalogEnhancedImageUrls(product).some(Boolean);
+    const modePrefix = mode === 'done' ? 'done' : 'pending';
+    const slotBtn = document.getElementById('catalogEnhanceBtn-' + modePrefix + '-' + productId + '-' + idx)
+        || document.getElementById('catalogEnhanceBtn-' + productId + '-' + idx);
     const prevHtml = slotBtn ? slotBtn.innerHTML : '';
     if (slotBtn) {
         slotBtn.disabled = true;
@@ -3099,13 +3119,26 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
         if (typeof window.kpiCompleteImageEdit === 'function') {
             window.kpiCompleteImageEdit(productId);
         }
-        const enhancedUrls = getCatalogEnhancedLocal(productId, targetCount);
+        const enhancedUrls = getCatalogEnhancedLocal(productId, targetCount, catalogEnhancedImageUrls(product));
         enhancedUrls[idx] = uploadedUrl;
         window._catalogEnhancedUploads[productId] = enhancedUrls;
-        const done = await completeCatalogProductIfReady(productId, product, enhancedUrls, targetCount);
-        if (!done) {
-            window.showToast('تم رفع الصورة المحسّنة (' + enhancedUrls.filter(Boolean).length + '/' + rawUrls.length + ')');
-            renderCatalogPendingCards();
+        if (isCompleted) {
+            /* Already completed: overwrite the replaced slot in place, keep the
+               remaining enhanced images, and stay in the completed list. */
+            await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, targetCount), { status: 'done' });
+            delete window._catalogEnhancedUploads[productId];
+            if ((window.merchantProductsCache || []).some((p) => p.id === productId)) {
+                removeCatalogPendingProductFromUi(productId, product.merchantName || '');
+            }
+            updateDoneCatalogProductLocally(productId, enhancedUrls.slice(0, targetCount));
+            window.showToast('تم استبدال الصورة المحسّنة بنجاح');
+            renderCatalogDoneCards();
+        } else {
+            const done = await completeCatalogProductIfReady(productId, product, enhancedUrls, targetCount);
+            if (!done) {
+                window.showToast('تم رفع الصورة المحسّنة (' + enhancedUrls.filter(Boolean).length + '/' + rawUrls.length + ')');
+                renderCatalogPendingCards();
+            }
         }
     } catch (err) {
         console.error('[catalog] enhance failed:', err);
@@ -3119,82 +3152,179 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex) => {
     }
 };
 
-window.toggleCatalogMerchantAccordion = (domId) => {
-    const accordion = document.getElementById('catalogMerchantAccordion-' + String(domId || ''));
+window.toggleCatalogMerchantAccordion = (domId, mode) => {
+    const isDone = mode === 'done';
+    const prefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    const accordion = document.getElementById(prefix + String(domId || ''));
     if (!accordion) return;
     const body = accordion.querySelector('[data-catalog-merchant-body]');
     const chevron = accordion.querySelector('[data-catalog-merchant-chevron]');
     if (!body) return;
     const merchantName = accordion.getAttribute('data-catalog-merchant') || '';
-    const openMap = window._catalogPendingOpenMerchants || {};
+    const mapKey = isDone ? '_catalogDoneOpenMerchants' : '_catalogPendingOpenMerchants';
+    const openMap = window[mapKey] || {};
     const willOpen = body.classList.contains('hidden');
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     if (willOpen) openMap[merchantName] = true;
     else delete openMap[merchantName];
-    window._catalogPendingOpenMerchants = openMap;
+    window[mapKey] = openMap;
 };
 
-const renderCatalogPendingProductCard = (p) => {
+const catalogActiveTab = () => (window._catalogContentTab === 'done' ? 'done' : 'pending');
+
+const catalogPendingProducts = () => (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
+
+const catalogDoneProducts = () => (window.doneCatalogProductsCache || []);
+
+const updateCatalogContentBadge = () => {
+    const active = catalogActiveTab();
+    const pending = catalogPendingProducts();
+    const done = catalogDoneProducts();
+    const pendingText = (!window._catalogPendingLoaded && !pending.length) ? '…' : String(pending.length);
+    const doneText = (!window._catalogDoneLoaded && !done.length) ? '…' : String(done.length);
+    const headerEl = document.getElementById('catalogPendingCount');
+    if (headerEl) headerEl.textContent = active === 'done' ? doneText : pendingText;
+    const pendingTabEl = document.getElementById('catalogTabPendingCount');
+    if (pendingTabEl) pendingTabEl.textContent = pendingText;
+    const doneTabEl = document.getElementById('catalogTabDoneCount');
+    if (doneTabEl) doneTabEl.textContent = doneText;
+    const pendingBtn = document.getElementById('catalogTabPendingBtn');
+    const doneBtn = document.getElementById('catalogTabDoneBtn');
+    if (pendingBtn) pendingBtn.classList.toggle('is-active', active === 'pending');
+    if (doneBtn) doneBtn.classList.toggle('is-active', active === 'done');
+};
+
+const updateDoneCatalogProductLocally = (productId, enhancedUrls) => {
+    const cache = window.doneCatalogProductsCache || [];
+    const idx = cache.findIndex((p) => p.id === productId);
+    if (idx === -1) return false;
+    cache[idx] = {
+        ...cache[idx],
+        enhancedImageUrl: enhancedUrls[0] || '',
+        enhancedImageUrls: enhancedUrls.slice()
+    };
+    window.doneCatalogProductsCache = cache;
+    return true;
+};
+
+const renderCatalogProductCard = (p, mode) => {
+    const isDone = mode === 'done';
     const id = catalogEscapeHtml(p.id);
     const name = catalogEscapeHtml(p.name_ar);
     const category = catalogEscapeHtml(p.category);
     const price = catalogEscapeHtml(p.base_price);
     const rawUrls = catalogRawImageUrls(p);
     const targetCount = catalogEnhanceTargetCount(p);
-    const enhancedUrls = getCatalogEnhancedLocal(p.id, targetCount);
+    const storedEnhanced = catalogEnhancedImageUrls(p);
+    const enhancedUrls = isDone
+        ? storedEnhanced.concat(new Array(Math.max(0, targetCount - storedEnhanced.length)).fill('')).slice(0, targetCount)
+        : getCatalogEnhancedLocal(p.id, targetCount, storedEnhanced);
     const doneCount = enhancedUrls.filter(Boolean).length;
     const noRawImages = rawUrls.length === 0;
     const slots = (noRawImages ? [''] : rawUrls).map((u, i) => {
-        const thumb = u ? catalogEscapeHtml(catalogDriveThumbnailUrl(u) || u) : '';
-        const done = !!enhancedUrls[i];
-        const status = done
-            ? '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>'
-            : `<button type="button" id="catalogEnhanceBtn-${id}-${i}" onclick="triggerCatalogEnhancedSlot('${id}', ${i})" class="bg-[#230535] text-[#FFD700] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:opacity-90 transition flex items-center justify-center gap-1">
+        const enhanced = enhancedUrls[i] || '';
+        const preview = enhanced || u;
+        const thumb = preview ? catalogEscapeHtml(catalogDriveThumbnailUrl(preview) || catalogDirectImageUrl(preview)) : '';
+        const hasEnhanced = !!enhanced;
+        const uploadBtn = `<button type="button" id="catalogEnhanceBtn-${mode}-${id}-${i}" onclick="triggerCatalogEnhancedSlot('${id}', ${i}, '${mode}')" class="bg-[#230535] text-[#FFD700] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:opacity-90 transition flex items-center justify-center gap-1">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> ${noRawImages ? 'رفع صورة المنتج' : 'رفع المحسّنة'}
             </button>
-            <input type="file" id="catalogEnhanceInput-${id}-${i}" accept="image/*" class="hidden" onchange="handleCatalogEnhancedFile(event, '${id}', ${i})">`;
+            <input type="file" id="catalogEnhanceInput-${mode}-${id}-${i}" accept="image/*" class="hidden" onchange="handleCatalogEnhancedFile(event, '${id}', ${i}, '${mode}')">`;
+        let actionHtml = '';
+        if (isDone) {
+            if (hasEnhanced) {
+                actionHtml += `<button type="button" onclick="viewCatalogEnhancedImage('${id}', ${i})" class="bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-100 transition flex items-center justify-center gap-1">
+                    <i class="fa-regular fa-eye"></i> عرض المحسّنة
+                </button>`;
+            }
+            actionHtml += uploadBtn;
+        } else if (hasEnhanced) {
+            actionHtml = '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>';
+        } else {
+            actionHtml = uploadBtn;
+        }
         const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" class="w-14 h-14 rounded-lg object-cover border border-[#FFD700]/40 shrink-0" onerror="this.style.display='none'">`
+            ? `<img src="${thumb}" alt="" class="w-14 h-14 rounded-lg object-cover border ${hasEnhanced ? 'catalog-enhanced-thumb' : 'border-[#FFD700]/40'} shrink-0" onerror="this.style.display='none'">`
             : `<div class="w-14 h-14 rounded-lg grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image text-lg"></i></div>`;
         const downloadBtn = u
             ? `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
                     <i class="fa-solid fa-download"></i> تحميل
                 </button>`
-            : `<span class="text-[10px] font-black text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg">لا توجد صورة من المندوب</span>`;
+            : (noRawImages && !isDone ? '<span class="text-[10px] font-black text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-lg">لا توجد صورة من المندوب</span>' : '');
         return `<div class="flex items-center gap-2 bg-[#230535]/5 border border-[#FFD700]/30 rounded-xl p-2">
             ${thumbHtml}
             <div class="min-w-0 flex-1 space-y-1.5">
-                <div class="text-[10px] font-black text-[#230535]">${noRawImages ? 'صورة المنتج' : ('صورة ' + (i + 1))}</div>
+                <div class="text-[10px] font-black text-[#230535]">${noRawImages ? 'صورة المنتج' : ('صورة ' + (i + 1))}${hasEnhanced ? ' <span class="text-emerald-600">• محسّنة</span>' : ''}</div>
                 <div class="flex flex-wrap gap-1.5">
                     ${downloadBtn}
-                    ${status}
+                    ${actionHtml}
                 </div>
             </div>
         </div>`;
     }).join('');
-    return `<div id="catalogPendingCard-${id}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
+    const cardId = (isDone ? 'catalogDoneCard-' : 'catalogPendingCard-') + id;
+    return `<div id="${cardId}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
         <div class="min-w-0">
             <div class="font-black text-sm text-[#230535]">${name}</div>
             <div class="flex flex-wrap gap-1.5 mt-1.5">
                 <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                 ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
                 <span class="text-[10px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">${doneCount}/${targetCount}</span>
-                ${noRawImages ? '<span class="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">بانتظار صورة</span>' : ''}
+                ${isDone ? '<span class="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">مكتمل</span>' : ''}
+                ${noRawImages && !isDone ? '<span class="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">بانتظار صورة</span>' : ''}
             </div>
         </div>
         <div class="grid grid-cols-1 gap-2">${slots}</div>
     </div>`;
 };
 
-const renderCatalogPendingCards = () => {
-    const list = document.getElementById('catalogPendingList');
-    const countEl = document.getElementById('catalogPendingCount');
-    const pending = (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
-    if (countEl) countEl.textContent = String(pending.length);
+const buildCatalogGroupedMerchantsHtml = (products, mode) => {
+    const isDone = mode === 'done';
+    const grouped = products.reduce((acc, p) => {
+        const key = String(p.merchantName || 'تاجر غير معروف');
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(p);
+        return acc;
+    }, {});
+    const mapKey = isDone ? '_catalogDoneOpenMerchants' : '_catalogPendingOpenMerchants';
+    const openMap = window[mapKey] || {};
+    window[mapKey] = openMap;
+    const merchantNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar'));
+    const accordionPrefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    return merchantNames.map((merchantName) => {
+        const items = grouped[merchantName];
+        const safeName = catalogEscapeHtml(merchantName);
+        const accordionId = (isDone ? 'd-' : '') + catalogMerchantDomId(merchantName);
+        const isOpen = !!openMap[merchantName];
+        const cards = items.map((item) => renderCatalogProductCard(item, mode)).join('');
+        return `<div id="${accordionPrefix}${accordionId}" data-catalog-merchant="${safeName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
+            <button type="button" onclick="toggleCatalogMerchantAccordion('${accordionId}', '${mode}')" class="w-full ${isDone ? 'bg-emerald-700' : 'bg-[#230535]'} text-white px-4 py-3 flex items-center justify-between gap-3">
+                <span class="font-black text-sm truncate">${safeName}</span>
+                <span class="flex items-center gap-2 shrink-0">
+                    <span data-catalog-merchant-count class="text-[11px] font-black ${isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-[#FFD700] text-[#230535]'} px-2.5 py-0.5 rounded-full">${items.length} منتجات</span>
+                    <i data-catalog-merchant-chevron class="fa-solid fa-chevron-down ${isDone ? 'text-emerald-100' : 'text-[#FFD700]'} text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
+                </span>
+            </button>
+            <div data-catalog-merchant-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
+        </div>`;
+    }).join('');
+};
+
+const markCatalogDoneEmpty = (list) => {
     if (!list) return;
+    list.innerHTML = `<div class="text-center py-8 text-slate-400 font-bold">
+        <i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i>
+        <div>لا توجد مهام مكتملة بعد</div>
+    </div>`;
+};
+
+const renderCatalogPendingCards = () => {
+    updateCatalogContentBadge();
+    const list = document.getElementById('catalogPendingList');
+    if (!list) return;
+    const pending = catalogPendingProducts();
     if (pending.length === 0 && !window._catalogPendingLoaded) {
-        if (countEl) countEl.textContent = '…';
         list.innerHTML = catalogLoadingStateHtml();
         return;
     }
@@ -3202,32 +3332,84 @@ const renderCatalogPendingCards = () => {
         markCatalogPendingEmpty(list);
         return;
     }
-    const grouped = pending.reduce((acc, p) => {
-        const key = String(p.merchantName || 'تاجر غير معروف');
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(p);
-        return acc;
-    }, {});
-    const openMap = window._catalogPendingOpenMerchants || {};
-    window._catalogPendingOpenMerchants = openMap;
-    const merchantNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar'));
-    list.innerHTML = merchantNames.map((merchantName) => {
-        const products = grouped[merchantName];
-        const safeName = catalogEscapeHtml(merchantName);
-        const accordionId = catalogMerchantDomId(merchantName);
-        const isOpen = !!openMap[merchantName];
-        const cards = products.map(renderCatalogPendingProductCard).join('');
-        return `<div id="catalogMerchantAccordion-${accordionId}" data-catalog-merchant="${safeName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
-            <button type="button" onclick="toggleCatalogMerchantAccordion('${accordionId}')" class="w-full bg-[#230535] text-white px-4 py-3 flex items-center justify-between gap-3">
-                <span class="font-black text-sm truncate">${safeName}</span>
-                <span class="flex items-center gap-2 shrink-0">
-                    <span data-catalog-merchant-count class="text-[11px] font-black bg-[#FFD700] text-[#230535] px-2.5 py-0.5 rounded-full">${products.length} منتجات</span>
-                    <i data-catalog-merchant-chevron class="fa-solid fa-chevron-down text-[#FFD700] text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
-                </span>
-            </button>
-            <div data-catalog-merchant-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
-        </div>`;
-    }).join('');
+    list.innerHTML = buildCatalogGroupedMerchantsHtml(pending, 'pending');
+};
+
+const renderCatalogDoneCards = () => {
+    updateCatalogContentBadge();
+    const list = document.getElementById('catalogDoneList');
+    if (!list) return;
+    const done = catalogDoneProducts();
+    if (done.length === 0 && !window._catalogDoneLoaded) {
+        list.innerHTML = catalogLoadingStateHtml();
+        return;
+    }
+    if (done.length === 0) {
+        markCatalogDoneEmpty(list);
+        return;
+    }
+    list.innerHTML = buildCatalogGroupedMerchantsHtml(done, 'done');
+};
+
+window.viewCatalogEnhancedImage = (productId, imageIndex) => {
+    const product = (window.doneCatalogProductsCache || []).find((p) => p.id === productId)
+        || (window.merchantProductsCache || []).find((p) => p.id === productId);
+    const urls = catalogEnhancedImageUrls(product);
+    const idx = Number(imageIndex) || 0;
+    const target = urls[idx] || urls[0];
+    const url = catalogDriveViewUrl(target) || target || '';
+    if (!url) {
+        window.showToast('لا يوجد رابط للصورة المحسّنة', false);
+        return;
+    }
+    window.open(url, '_blank', 'noopener');
+};
+
+window.loadDoneCatalogProducts = async () => {
+    if (!window.isCatalogContentUser()) return;
+    try {
+        let items = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+            try {
+                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']]);
+            } catch (restErr) {
+                console.warn('[catalog] REST done-products fetch failed; trying SDK:', restErr);
+            }
+        }
+        if (!items) {
+            if (typeof window.getDocs !== 'function' || !window.db) return;
+            const ref = window.query(
+                window.collection(window.db, CATALOG_COLLECTION),
+                window.where('status', '==', 'done')
+            );
+            const snap = await window.getDocs(ref);
+            items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        }
+        window.doneCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+        window._catalogDoneLoaded = true;
+    } catch (err) {
+        console.error('[catalog] done products fetch failed:', err);
+    }
+};
+
+window.switchCatalogContentTab = async (tab) => {
+    if (!window.isCatalogContentUser()) return;
+    const target = tab === 'done' ? 'done' : 'pending';
+    window._catalogContentTab = target;
+    const pendingList = document.getElementById('catalogPendingList');
+    const doneList = document.getElementById('catalogDoneList');
+    if (pendingList) pendingList.classList.toggle('hidden', target !== 'pending');
+    if (doneList) doneList.classList.toggle('hidden', target !== 'done');
+    updateCatalogContentBadge();
+    if (target === 'done') {
+        if (window._catalogDoneLoaded) renderCatalogDoneCards();
+        else if (doneList) doneList.innerHTML = catalogLoadingStateHtml();
+        await window.loadDoneCatalogProducts();
+        renderCatalogDoneCards();
+    } else {
+        renderCatalogPendingCards();
+    }
 };
 
 window.toggleCatalogContentWidget = () => {
@@ -3238,7 +3420,10 @@ window.toggleCatalogContentWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogContentWidgetOpen = willOpen;
-    if (willOpen && window.isCatalogContentUser()) renderCatalogPendingCards();
+    if (willOpen && window.isCatalogContentUser()) {
+        if (catalogActiveTab() === 'done') window.switchCatalogContentTab('done');
+        else renderCatalogPendingCards();
+    }
 };
 
 window.renderCatalogWidgets = () => {
@@ -3277,11 +3462,15 @@ window.renderCatalogWidgets = () => {
 
     if (window.isCatalogContentUser()) {
         const body = document.getElementById('catalogContentBody');
-        if (body && !body.classList.contains('hidden')) renderCatalogPendingCards();
-        else {
-            const countEl = document.getElementById('catalogPendingCount');
-            const pending = (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
-            if (countEl) countEl.textContent = !window._catalogPendingLoaded && !pending.length ? '…' : String(pending.length);
+        if (body && !body.classList.contains('hidden')) {
+            if (catalogActiveTab() === 'done') {
+                if (window._catalogDoneLoaded) renderCatalogDoneCards();
+                else updateCatalogContentBadge();
+            } else {
+                renderCatalogPendingCards();
+            }
+        } else {
+            updateCatalogContentBadge();
         }
     }
 
@@ -4009,9 +4198,12 @@ window.startCatalogListeners = () => {
     window.repCatalogProductsCache = [];
     window.catalogDeleteRequestsCache = [];
     window.allCatalogProductsCache = [];
+    window.doneCatalogProductsCache = [];
+    window._catalogContentTab = window._catalogContentTab || 'pending';
     /* Loading flags: while false and a cache is empty the widgets render a
        neutral skeleton instead of an empty-state / "(0)" placeholder. */
     window._catalogPendingLoaded = false;
+    window._catalogDoneLoaded = false;
     window._catalogAllProductsLoaded = false;
     window._catalogDeleteRequestsLoaded = false;
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];

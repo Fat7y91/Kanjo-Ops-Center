@@ -1803,6 +1803,32 @@ body.black-box-open #contractPreviewModal { z-index: 260; }
     .audit-row-time { width: auto; }
 }
 
+/* Pending / Completed toggle inside the image-processing widget. */
+.catalog-content-tab {
+    background: transparent;
+    color: #64748b;
+    border: 0;
+    cursor: pointer;
+}
+.catalog-content-tab:hover { color: #230535; }
+.catalog-content-tab.is-active {
+    background: #230535;
+    color: #FFD700;
+    box-shadow: 0 4px 10px rgba(35, 5, 53, 0.18);
+}
+.catalog-content-tab.is-active #catalogTabPendingCount {
+    background: #FFD700;
+    color: #230535;
+}
+.catalog-content-tab.is-active #catalogTabDoneCount {
+    background: #10b981;
+    color: #ffffff;
+}
+.catalog-enhanced-thumb {
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+}
+
 /* ─── تفويض إبرام التعاقدات (authorization issuance) ─── */
 .auth-letter {
     position: relative;
