@@ -4,6 +4,15 @@ window.openMerchantProfile = (merchantBaseName) => {
 
     activeMerchantBaseName = merchantBaseName;
 
+    if (window.kanjoAuditLogView && merchantBaseName) {
+        window.kanjoAuditLogView({
+            entityKind: 'merchant',
+            targetEntity: 'تاجر',
+            targetName: merchantBaseName,
+            description: `عرض ملف التاجر «${merchantBaseName}»`
+        });
+    }
+
     document.getElementById('mpMerchantName').innerText = merchantBaseName;
 
     const merchantIdEl = document.getElementById('mpMerchantId');
@@ -1382,7 +1391,8 @@ window.handleMerchantLogoUpload = (event) => {
 
         window.currentMerchantLogoBase64 = e.target.result;
 
-        const task = (window.allTasksCache || []).find(t => t.id === taskId);
+    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+
 
         const baseName = task ? getBaseName(task.name) : '';
 
@@ -1709,6 +1719,18 @@ window.openContractPreview = (taskId) => {
     const modal = document.getElementById('contractPreviewModal');
 
     if (!modal) return;
+
+    if (window.kanjoAuditLogView && task) {
+        const baseN = getBaseName(task.name);
+        window.kanjoAuditLogView({
+            entityKind: 'contract',
+            targetEntity: 'عقد',
+            targetId: task.id,
+            targetName: baseN,
+            description: `عرض عقد «${baseN}»`,
+            collection: 'contracts'
+        });
+    }
 
     const taskNameEl = document.getElementById('cpTaskName');
 

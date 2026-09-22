@@ -1708,6 +1708,96 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     color: #94a3b8;
     direction: ltr;
 }
+.audit-entity-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font: inherit;
+    font-weight: 900;
+    color: #4C1D95;
+    background: #f3e8ff;
+    border: 1px solid #ddd6fe;
+    border-radius: 0.5rem;
+    padding: 0.08rem 0.45rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.audit-entity-link:hover { background: #4C1D95; color: #fff; }
+.audit-entity-link i { font-size: 0.55rem; }
+
+/* Expandable old-vs-new diff for Update entries. */
+.audit-diff { margin-top: 0.45rem; }
+.audit-diff > summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.66rem;
+    font-weight: 900;
+    color: #0ea5e9;
+    background: #e0f2fe;
+    border: 1px solid #bae6fd;
+    border-radius: 0.55rem;
+    padding: 0.15rem 0.55rem;
+    user-select: none;
+}
+.audit-diff > summary::-webkit-details-marker { display: none; }
+.audit-diff[open] > summary { background: #0ea5e9; color: #fff; border-color: #0ea5e9; }
+.audit-diff-body {
+    margin-top: 0.4rem;
+    border: 1px solid rgba(35, 5, 53, 0.08);
+    border-radius: 0.7rem;
+    overflow: hidden;
+    background: #fbfbfd;
+}
+.audit-diff-row {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr auto 1fr;
+    align-items: stretch;
+    border-bottom: 1px solid rgba(35, 5, 53, 0.06);
+}
+.audit-diff-row:last-child { border-bottom: 0; }
+.audit-diff-field {
+    font-size: 0.64rem;
+    font-weight: 900;
+    color: #230535;
+    background: #f8fafc;
+    padding: 0.4rem 0.5rem;
+    display: flex;
+    align-items: center;
+    border-inline-end: 1px solid rgba(35, 5, 53, 0.06);
+}
+.audit-diff-old, .audit-diff-new {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 0.4rem 0.55rem;
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+    line-height: 1.5;
+}
+.audit-diff-old { color: #b91c1c; background: #fef2f2; text-decoration: line-through; text-decoration-color: rgba(185, 28, 28, 0.4); }
+.audit-diff-new { color: #15803d; background: #f0fdf4; }
+.audit-diff-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    color: #94a3b8;
+    background: #f8fafc;
+    font-size: 0.6rem;
+}
+/* Entity previews open above the Black Box while it is visible. */
+body.black-box-open #catalogProductDetailsModal,
+body.black-box-open #merchantProfileModal,
+body.black-box-open #contractPreviewModal { z-index: 260; }
+@media (max-width: 640px) {
+    .audit-diff-row { grid-template-columns: 1fr; }
+    .audit-diff-old { text-decoration: none; }
+    .audit-diff-field { border-inline-end: 0; }
+    .audit-diff-arrow { transform: rotate(90deg); }
+}
 @media (max-width: 640px) {
     .audit-row { flex-direction: column; gap: 0.35rem; }
     .audit-row-time { width: auto; }

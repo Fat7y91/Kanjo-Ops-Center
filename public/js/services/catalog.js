@@ -725,6 +725,17 @@ window.openCatalogProductDetails = (productId) => {
         if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
         return;
     }
+    if (window.kanjoAuditLogView) {
+        const detailName = product.name_ar || product.name_en || product.name || productId;
+        window.kanjoAuditLogView({
+            entityKind: 'product',
+            targetEntity: 'منتج',
+            targetId: productId,
+            targetName: detailName,
+            description: `عرض تفاصيل المنتج «${detailName}»`,
+            collection: 'merchant_products'
+        });
+    }
     const modal = document.getElementById('catalogProductDetailsModal');
     const card = document.getElementById('catalogProductDetailsCard');
     const body = document.getElementById('catalogProductDetailsBody');
@@ -1507,6 +1518,14 @@ window.openCatalogProductModal = () => {
     if (!window.isCatalogRepUser()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
         return;
+    }
+    if (window.kanjoAuditLogView) {
+        window.kanjoAuditLogView({
+            entityKind: 'catalog',
+            targetEntity: 'كتالوج',
+            targetName: 'إضافة منتج للكتالوج',
+            description: 'فتح شاشة إضافة منتج للكتالوج'
+        });
     }
     resetCatalogEditState();
     fillCatalogMerchantOptions();

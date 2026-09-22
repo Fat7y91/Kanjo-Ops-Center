@@ -119,6 +119,7 @@ const AUDIT_ACTIONS = {
     delete_request: { label: 'طلب حذف', color: '#E57723', icon: 'fa-triangle-exclamation' },
     delete_reject: { label: 'رفض حذف', color: '#6D28D9', icon: 'fa-rotate-left' },
     login: { label: 'دخول', color: '#230535', icon: 'fa-right-to-bracket' },
+    view: { label: 'عرض', color: '#0d9488', icon: 'fa-eye' },
     generate: { label: 'أثر رجعي', color: '#64748b', icon: 'fa-clock-rotate-left' }
 };
 
@@ -152,23 +153,118 @@ const auditProductName = (id) => {
 /* Fields that are bookkeeping, not user intent. */
 const AUDIT_NOISE_FIELDS = new Set(['updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'syncedFromDraft']);
 
-const auditChangedFieldLabels = (before, after) => {
-    const labels = [];
-    const data = after || {};
-    const has = (key) => Object.prototype.hasOwnProperty.call(data, key);
-    const changed = (key, a, b) => has(key) && String(a == null ? '' : a) !== String(b == null ? '' : b);
-    if (changed('name_ar', before.name_ar, data.name_ar) || changed('name_en', before.name_en, data.name_en)) labels.push('الاسم');
-    if (changed('description_ar', before.description_ar, data.description_ar) || changed('description_en', before.description_en, data.description_en)) labels.push('الوصف');
-    if (changed('base_price', before.base_price, data.base_price)) labels.push('السعر');
-    if (changed('category', before.category, data.category)) labels.push('التصنيف');
-    if (changed('merchantName', before.merchantName, data.merchantName) || changed('merchantId', before.merchantId, data.merchantId)) labels.push('التاجر');
-    if (changed('status', before.status, data.status)) labels.push('الحالة');
-    const imagesBefore = JSON.stringify(before.rawImageUrls || before.rawImageUrl || '');
-    const imagesAfter = JSON.stringify(data.rawImageUrls || data.rawImageUrl || '');
-    if ((has('rawImageUrls') || has('rawImageUrl')) && imagesBefore !== imagesAfter) labels.push('الصور');
-    if (changed('enhancedImageUrl', before.enhancedImageUrl, data.enhancedImageUrl)) labels.push('الصور');
-    if (has('variations') && JSON.stringify(before.variations || []) !== JSON.stringify(data.variations || [])) labels.push('الخيارات');
-    return labels;
+/* ─── Exact change tracking (old vs. new) ─────────────────────────────── */
+
+/* Maps a watched collection to the entity kind used by the UI to open the right
+   preview modal for a clickable entity. */
+const AUDIT_ENTITY_KINDS = {
+    merchant_products: 'product',
+    merchants: 'merchant',
+    contracts: 'contract',
+    master_catalog: 'master_product',
+    staging_catalogs: 'staging'
+};
+const auditEntityKind = (collectionId) => AUDIT_ENTITY_KINDS[collectionId] || '';
+
+/* Friendly Arabic labels for the fields that show up in diffs. Unknown fields
+   fall back to their raw key so nothing is ever silently dropped. */
+const AUDIT_FIELD_LABELS = {
+    name_ar: 'الاسم العربي', name_en: 'الاسم الإنجليزي', name: 'الاسم', title: 'العنوان',
+    description_ar: 'الوصف العربي', description_en: 'الوصف الإنجليزي', description: 'الوصف',
+    base_price: 'السعر', price: 'السعر', category: 'التصنيف', cat: 'التصنيف', subcategory: 'التصنيف الفرعي',
+    merchantName: 'التاجر', merchantId: 'معرف التاجر',
+    status: 'الحالة', rawImageUrls: 'الصور الأصلية', rawImageUrl: 'الصورة الأصلية',
+    enhancedImageUrl: 'الصورة المحسّنة', enhancedImageUrls: 'الصور المحسّنة', variations: 'الخيارات',
+    barcode: 'الباركود', unit: 'الوحدة', stock: 'المخزون',
+    isSigned: 'التعاقد النهائي', isProvisional: 'اتفاق مبدئي', achieved: 'المُحقّق', target: 'المستهدف',
+    address: 'العنوان', phone: 'الهاتف', contactPhone: 'هاتف التواصل', contactName: 'مسؤول التواصل',
+    contactRole: 'صفة مسؤول التواصل', team: 'الفريق', notes: 'ملاحظات',
+    fbPage: 'فيسبوك', fbGroup: 'جروب فيسبوك', insta: 'إنستجرام', website: 'الموقع الإلكتروني',
+    driveFolderLink: 'مجلد الملفات', driveFolderId: 'معرف مجلد الملفات', deleteRequested: 'طلب الحذف',
+    archived: 'مؤرشف', syncedFromDraft: 'من مسودة'
+};
+const auditFieldLabel = (field) => AUDIT_FIELD_LABELS[field] || field;
+
+/* Heavy/opaque fields are summarised instead of dumped, so a diff remains a
+   compact, readable text log even for logo/image/attendance payloads. */
+const AUDIT_HEAVY_FIELDS = new Set([
+    'merchantLogo', 'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
+    'documents', 'variations', 'reports', 'attendances'
+]);
+
+const auditClip = (text, max = 400) => {
+    const s = String(text == null ? '' : text);
+    return s.length > max ? s.slice(0, max) + '… (' + s.length + ' حرف)' : s;
+};
+
+const auditSanitizeValue = (field, value) => {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'boolean') return value ? 'نعم' : 'لا';
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'string') return auditClip(value, AUDIT_HEAVY_FIELDS.has(field) ? 160 : 400);
+    if (Array.isArray(value)) {
+        if (field === 'rawImageUrls' || field === 'enhancedImageUrls' || field === 'rawImageUrl' || field === 'enhancedImageUrl') {
+            return 'عدد العناصر: ' + value.length;
+        }
+        try { return auditClip(JSON.stringify(value)); } catch (_) { return '[بيانات]'; }
+    }
+    if (typeof value === 'object') {
+        try { return auditClip(JSON.stringify(value)); } catch (_) { return '[بيانات]'; }
+    }
+    return auditClip(String(value));
+};
+
+/* Turn a full record into { field: displayValue }, skipping bookkeeping noise. */
+const auditSanitizeRecord = (record, maxFields = 40) => {
+    if (!record || typeof record !== 'object') return null;
+    const out = {};
+    let count = 0;
+    Object.keys(record).forEach((field) => {
+        if (AUDIT_NOISE_FIELDS.has(field) || field === 'id' || field === 'merchantLogo') return;
+        if (count >= maxFields) return;
+        out[field] = auditSanitizeValue(field, record[field]);
+        count += 1;
+    });
+    return count ? out : null;
+};
+
+const auditValuesEqual = (a, b) => {
+    const norm = (v) => {
+        if (v === undefined || v === null) return '';
+        if (typeof v === 'string') return v;
+        try { return JSON.stringify(v); } catch (_) { return String(v); }
+    };
+    return norm(a) === norm(b);
+};
+
+/* Field-level diff for an Update: only the fields actually present in the patch
+   and whose value changed. */
+const auditBuildChanges = (previous, next) => {
+    const prev = previous || {};
+    const data = next || {};
+    const changes = [];
+    Object.keys(data).forEach((field) => {
+        if (AUDIT_NOISE_FIELDS.has(field)) return;
+        if (!auditValuesEqual(prev[field], data[field])) {
+            changes.push({
+                field,
+                label: auditFieldLabel(field),
+                before: auditSanitizeValue(field, prev[field]),
+                after: auditSanitizeValue(field, data[field])
+            });
+        }
+    });
+    return changes;
+};
+
+const auditChangesToData = (changes) => {
+    const previousData = {};
+    const newData = {};
+    (changes || []).forEach((c) => {
+        previousData[c.field] = c.before;
+        newData[c.field] = c.after;
+    });
+    return { previousData, newData };
 };
 
 /* ─── Core writer ───────────────────────────────────────────────────── */
@@ -190,9 +286,14 @@ const auditAppendRaw = async (entry) => {
         targetEntity: entry.targetEntity || '',
         targetId: entry.targetId || '',
         targetName: entry.targetName || '',
+        entityKind: entry.entityKind || '',
         description: entry.description || '',
         collection: entry.collection || '',
-        source: entry.source || 'live'
+        source: entry.source || 'live',
+        /* Exact change tracking: old vs. new values + a ready-to-render diff. */
+        previousData: entry.previousData || null,
+        newData: entry.newData || null,
+        changes: Array.isArray(entry.changes) && entry.changes.length ? entry.changes : null
     };
     return _auditOriginalCreate(AUDIT_COLLECTION, payload);
 };
@@ -219,21 +320,26 @@ const auditDescribeCreate = (collectionId, data) => {
         : `أضاف ${entity}${name ? ': ' + name : ''}`;
     return {
         actionType: 'create',
+        entityKind: auditEntityKind(collectionId),
         targetEntity: entity,
         targetId: '',
         targetName: name,
         description: desc,
-        collection: collectionId
+        collection: collectionId,
+        newData: auditSanitizeRecord(data)
     };
 };
 
-const auditDescribePatch = (collectionId, segments, data) => {
+const auditDescribePatch = (collectionId, segments, data, previous) => {
     const entity = AUDIT_WATCHED_COLLECTIONS[collectionId] || collectionId;
     const id = segments && segments[1];
-    const name = (data && data.name_ar) || auditProductName(id);
+    const prev = previous || {};
+    const name = (data && data.name_ar) || prev.name_ar || prev.name || auditProductName(id);
+    const kind = auditEntityKind(collectionId);
     if (data && data.deleteRequested === true) {
         return {
             actionType: 'delete_request',
+            entityKind: kind,
             targetEntity: entity,
             targetId: id || '',
             targetName: name,
@@ -244,6 +350,7 @@ const auditDescribePatch = (collectionId, segments, data) => {
     if (data && Object.prototype.hasOwnProperty.call(data, 'deleteRequested') && data.deleteRequested !== true) {
         return {
             actionType: 'delete_reject',
+            entityKind: kind,
             targetEntity: entity,
             targetId: id || '',
             targetName: name,
@@ -251,16 +358,23 @@ const auditDescribePatch = (collectionId, segments, data) => {
             collection: collectionId
         };
     }
-    const before = auditFindProduct(id) || {};
-    const labels = auditChangedFieldLabels(before, data || {});
-    const detail = labels.length ? labels.join('، ') : 'بيانات';
+    /* Prefer the authoritative pre-write document; fall back to the client cache
+       so a failed pre-read still yields a best-effort diff. */
+    const before = (previous && Object.keys(previous).length) ? previous : (auditFindProduct(id) || {});
+    const changes = auditBuildChanges(before, data || {});
+    const { previousData, newData } = auditChangesToData(changes);
+    const detail = changes.length ? changes.map((c) => c.label).join('، ') : 'بيانات';
     return {
         actionType: 'update',
+        entityKind: kind,
         targetEntity: entity,
         targetId: id || '',
         targetName: name,
         description: `عدّل ${entity} «${name}» (${detail})`,
-        collection: collectionId
+        collection: collectionId,
+        previousData: Object.keys(previousData).length ? previousData : null,
+        newData: Object.keys(newData).length ? newData : null,
+        changes: changes.length ? changes : null
     };
 };
 
@@ -270,6 +384,7 @@ const auditDescribeRemove = (collectionId, segments) => {
     const name = auditProductName(id);
     return {
         actionType: 'delete',
+        entityKind: auditEntityKind(collectionId),
         targetEntity: entity,
         targetId: id || '',
         targetName: name,
@@ -302,13 +417,25 @@ const auditInstallHooks = () => {
         });
     };
     window.kanjoRest.patch = function (segments, data) {
-        return _auditOriginalPatch.call(this, segments, data).then((result) => {
-            try {
-                const collectionId = Array.isArray(segments) ? segments[0] : segments;
-                auditMirrorWrite(collectionId, auditDescribePatch(collectionId, segments, data));
-            } catch (_) {}
+        const collectionId = Array.isArray(segments) ? segments[0] : segments;
+        const watched = !!(collectionId && AUDIT_WATCHED_COLLECTIONS[collectionId]);
+        const write = () => _auditOriginalPatch.call(this, segments, data);
+        if (!watched) return write();
+        /* Capture the document BEFORE the write so the Update entry carries the
+           exact old vs. new values. The pre-read is best-effort: if it fails the
+           write still proceeds and the diff falls back to the client cache. */
+        let before;
+        try {
+            before = (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
+                ? window.kanjoRest.getDocument(segments)
+                : Promise.resolve(null);
+        } catch (_) {
+            before = Promise.resolve(null);
+        }
+        return Promise.resolve(before).catch(() => null).then((prevDoc) => write().then((result) => {
+            try { auditMirrorWrite(collectionId, auditDescribePatch(collectionId, segments, data, prevDoc)); } catch (_) {}
             return result;
-        });
+        }));
     };
     window.kanjoRest.remove = function (segments) {
         return _auditOriginalRemove.call(this, segments).then((result) => {
@@ -337,6 +464,22 @@ window.kanjoAuditLogLogin = () => {
         targetName: u.name || '',
         description: `سجّل «${u.name || 'مستخدم'}» الدخول إلى النظام`,
         collection: ''
+    });
+};
+
+/* Navigation / read tracking: log when a user opens a merchant profile, a
+   contract, a product's details or a catalog screen. Fire-and-forget, text-only. */
+window.kanjoAuditLogView = (entry) => {
+    if (!window.currentUser) return;
+    const e = entry || {};
+    auditWrite({
+        actionType: 'view',
+        entityKind: e.entityKind || '',
+        targetEntity: e.targetEntity || '',
+        targetId: e.targetId || '',
+        targetName: e.targetName || '',
+        description: e.description || '',
+        collection: e.collection || ''
     });
 };
 
@@ -487,6 +630,35 @@ const auditFormatTime = (value) => {
     }
 };
 
+/* Clickable entity: products open the product-details modal, merchants open the
+   merchant profile. Uses data-attributes + a delegated listener so names with
+   quotes/apostrophes can never break the markup. */
+const auditEntityButtonHtml = (e) => {
+    const name = e.targetName || e.targetId || '';
+    const kind = String(e.entityKind || '');
+    const clickable = !!e.targetId && (kind === 'product' || kind === 'merchant');
+    if (!clickable) return auditEscapeHtml(name);
+    const title = kind === 'product' ? 'عرض تفاصيل المنتج' : 'عرض ملف التاجر';
+    return `<button type="button" class="audit-entity-link" title="${title}" data-bb-kind="${auditEscapeHtml(kind)}" data-bb-id="${auditEscapeHtml(e.targetId)}" data-bb-name="${auditEscapeHtml(e.targetName || '')}"><i class="fa-solid fa-up-right-from-square"></i> ${auditEscapeHtml(name)}</button>`;
+};
+
+/* Expandable old vs. new diff for Update entries. */
+const auditDiffHtml = (e) => {
+    const changes = Array.isArray(e.changes) ? e.changes : [];
+    if (!changes.length) return '';
+    const rows = changes.map((c) => {
+        const before = (c.before === '' || c.before == null) ? '—' : c.before;
+        const after = (c.after === '' || c.after == null) ? '—' : c.after;
+        return `<div class="audit-diff-row">
+            <div class="audit-diff-field">${auditEscapeHtml(c.label || c.field || '')}</div>
+            <div class="audit-diff-old" dir="auto">${auditEscapeHtml(before)}</div>
+            <div class="audit-diff-arrow"><i class="fa-solid fa-arrow-left-long"></i></div>
+            <div class="audit-diff-new" dir="auto">${auditEscapeHtml(after)}</div>
+        </div>`;
+    }).join('');
+    return `<details class="audit-diff"><summary><i class="fa-solid fa-code-compare"></i> عرض التغييرات (${changes.length})</summary><div class="audit-diff-body">${rows}</div></details>`;
+};
+
 const auditRowHtml = (e) => {
     const meta = auditActionMeta(e.actionType);
     const sourceBadge = e.source === 'reconstructed'
@@ -512,12 +684,42 @@ const auditRowHtml = (e) => {
             <div class="audit-row-desc">${auditEscapeHtml(e.description || '')}</div>
             <div class="audit-row-target">
                 ${e.targetEntity ? `<span><i class="fa-solid fa-crosshairs"></i> ${auditEscapeHtml(e.targetEntity)}</span>` : ''}
-                ${e.targetName ? `<span><i class="fa-solid fa-tag"></i> ${auditEscapeHtml(e.targetName)}</span>` : ''}
+                ${(e.targetName || e.targetId) ? `<span><i class="fa-solid fa-tag"></i> ${auditEntityButtonHtml(e)}</span>` : ''}
                 ${e.targetId ? `<span class="audit-row-id">#${auditEscapeHtml(e.targetId)}</span>` : ''}
             </div>
+            ${auditDiffHtml(e)}
         </div>
     </div>`;
 };
+
+/* Open the standard preview modal for a logged entity (founder inspection). */
+window.blackBoxOpenEntity = (kind, id, name) => {
+    try {
+        if (kind === 'product' && typeof window.openCatalogProductDetails === 'function') {
+            window.openCatalogProductDetails(id);
+            return;
+        }
+        if (kind === 'merchant' && typeof window.openMerchantProfile === 'function') {
+            window.openMerchantProfile(name || id);
+        }
+    } catch (err) {
+        console.warn('[audit] entity preview failed:', err);
+    }
+};
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('.audit-entity-link') : null;
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        window.blackBoxOpenEntity(
+            btn.getAttribute('data-bb-kind'),
+            btn.getAttribute('data-bb-id'),
+            btn.getAttribute('data-bb-name')
+        );
+    });
+}
 
 const auditPopulateUserFilter = (entries) => {
     const select = document.getElementById('blackBoxUserFilter');
@@ -592,6 +794,9 @@ window.openBlackBox = async () => {
     const modal = document.getElementById('blackBoxModal');
     if (!modal) return;
     modal.classList.remove('hidden');
+    /* Raise the entity preview modals above the Black Box while it is open, so a
+       founder can inspect a product/merchant without leaving the log. */
+    if (document.body) document.body.classList.add('black-box-open');
     const list = document.getElementById('blackBoxList');
     if (list) list.innerHTML = '<div class="text-center py-12 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل السجل...</div></div>';
     try {
@@ -622,6 +827,7 @@ window.openBlackBox = async () => {
 window.closeBlackBox = () => {
     const modal = document.getElementById('blackBoxModal');
     if (modal) modal.classList.add('hidden');
+    if (document.body) document.body.classList.remove('black-box-open');
 };
 
 /* Install hooks at import time (REST helpers already exist) and re-assert once
@@ -635,6 +841,7 @@ window.kanjoAudit = {
     canView: window.kanjoAuditCanView,
     log: window.kanjoAuditLog,
     logLogin: window.kanjoAuditLogLogin,
+    logView: window.kanjoAuditLogView,
     reconstruct: window.kanjoAuditReconstruct,
     collection: AUDIT_COLLECTION
 };
