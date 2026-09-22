@@ -1821,6 +1821,12 @@ window.openContractPreview = (taskId) => {
 
     modal.classList.remove('hidden');
 
+    /* Decide between "generate" and the instant "view existing" action based on
+       whether a PDF is already stored for this merchant. */
+    if (typeof window.resetContractAvailabilityUI === 'function') window.resetContractAvailabilityUI();
+
+    if (typeof window.refreshContractAvailability === 'function') window.refreshContractAvailability();
+
 };
 
 export {};

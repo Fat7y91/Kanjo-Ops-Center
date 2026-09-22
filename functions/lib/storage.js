@@ -39,6 +39,36 @@ async function createDownloadUrl(file, bucket, ttlMs = DEFAULT_SIGNED_URL_TTL_MS
     return { url, kind: 'token', expiresAt: null };
 }
 
+/* Cheap lookup used by the "view existing contract" flow: does a PDF already
+ * exist for this merchant, and if so what is a fresh signed URL for it? Unlike
+ * persistContractPdf this never renders or uploads anything, so it returns in
+ * milliseconds and is safe to call every time the contract modal opens. */
+async function getContractPdf({ merchantId }) {
+    const bucket = getStorage().bucket();
+    const segment = sanitizeSegment(merchantId, 'unknown');
+    const objectPath = `${CONTRACT_ROOT}/${segment}/contract.pdf`;
+    const file = bucket.file(objectPath);
+
+    const [exists] = await file.exists();
+    if (!exists) {
+        return { exists: false, bucket: bucket.name, path: objectPath, fileName: 'contract.pdf' };
+    }
+
+    const [metadata] = await file.getMetadata();
+    const { url, kind, expiresAt } = await createDownloadUrl(file, bucket);
+    return {
+        exists: true,
+        url,
+        downloadUrlKind: kind,
+        expiresAt,
+        bucket: bucket.name,
+        path: objectPath,
+        fileName: 'contract.pdf',
+        size: Number(metadata.size) || 0,
+        updatedAt: metadata.updated || null
+    };
+}
+
 async function persistContractPdf({ buffer, input, uid }) {
     const bucket = getStorage().bucket();
     const merchantId = sanitizeSegment(input.merchantId, 'unknown');
@@ -70,4 +100,4 @@ async function persistContractPdf({ buffer, input, uid }) {
     };
 }
 
-module.exports = { persistContractPdf, CONTRACT_ROOT };
+module.exports = { persistContractPdf, getContractPdf, CONTRACT_ROOT };

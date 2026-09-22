@@ -854,18 +854,6 @@ const getCurrentContractTask = () => {
 
 };
 
-const sanitizeFileName = (name) => {
-
-    return String(name || '')
-
-        .replace(/[\\/:*?"<>|]/g, '')
-
-        .replace(/\s+/g, '_')
-
-        .trim();
-
-};
-
 const EASTERN_ARABIC_DIGITS = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
 
 /* Official Egyptian documents use Eastern Arabic numerals (٠-٩) for every
@@ -1257,90 +1245,6 @@ window.exportContractPDF = async () => {
         source.style.display = 'none';
 
     }, 1500);
-
-};
-
-window.exportContractWord = () => {
-
-    const element = document.getElementById('contract-template-container');
-
-    if (!element || !element.innerHTML.trim()) {
-
-        showToast("يرجى إنشاء العقد أولاً", false);
-
-        return;
-
-    }
-
-    const task = getCurrentContractTask();
-
-    const merchantName = sanitizeFileName(task ? (window.getBaseName ? window.getBaseName(task.name) : task.name) : 'متعاقد');
-
-    const contractHtml = element.innerHTML;
-
-    const fullHtml = `<html xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>عقد كانجو</title><style>
-
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;900&display=swap');
-
-body { direction: rtl; text-align: justify; font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; line-height: 1.6; color: #1e293b; }
-
-.contract-document { padding: 14px; }
-
-.contract-header { border-bottom: 3px solid #4B0082; padding-bottom: 12px; margin-bottom: 16px; }
-
-.contract-logo { max-height: 60px; }
-
-.contract-title { text-align: center; font-size: 17px; font-weight: bold; color: #4B0082; margin-bottom: 14px; }
-
-.contract-parties { background-color: #F8F9FA; border: 1px solid #E2E8F0; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
-
-.contract-clause-title { font-size: 13.5px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 6px 10px; border-right: 4px solid #F59E0B; margin-top: 12px; margin-bottom: 7px; }
-
-.contract-text { font-size: 12.5px; margin-bottom: 10px; }
-
-.contract-serial-badge { display: inline-block; font-size: 10px; font-weight: bold; color: #F59E0B; background-color: #F5F3FF; border: 1px solid #F59E0B; border-radius: 20px; padding: 2px 10px; margin-bottom: 8px; }
-
-.contract-signatures { display: table; width: 100%; margin-top: 24px; }
-
-.contract-sign-box { display: table-cell; width: 50%; text-align: center; font-weight: bold; font-size: 12.5px; }
-
-.contract-clause-wrapper { page-break-inside: avoid; break-inside: avoid; margin-bottom: 35px; }
-
-.contract-final-block { page-break-inside: avoid; break-inside: avoid; margin-top: 15px; }
-
-.contract-contact-footer { border-top: 2px dashed #E2E8F0; margin-top: 15px; padding-top: 15px; text-align: center; }
-
-.contract-footer-title { font-size: 12px; font-weight: bold; color: #4B0082; margin-bottom: 8px; }
-
-.contract-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; }
-
-.contract-footer-item { font-size: 11px; }
-
-.contract-footer-item a { color: #4B0082; text-decoration: none; }
-
-.contract-footer-copyright { font-size: 10px; color: #64748B; margin-top: 10px; line-height: 1.6; }
-
-</style></head><body>${contractHtml}</body></html>`;
-
-    const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword' });
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-
-    a.href = url;
-
-    a.download = `عقد_كانجو_${merchantName}.doc`;
-
-    document.body.appendChild(a);
-
-    a.click();
-
-    document.body.removeChild(a);
-
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-
-    showToast("تم تصدير العقد بصيغة Word بنجاح");
 
 };
 

@@ -2,10 +2,11 @@
 
 /* Kanjo Ops Center — Cloud Functions entry point.
  *
- * Phase 1 of the PDF-contract migration: a server-side microservice that builds
- * the merchant contract HTML and renders it to a PDF (offloading the CPU/RAM
- * cost from the field reps' mobile browsers). The frontend is intentionally not
- * wired to it yet. */
+ * Server-side microservice for merchant contracts. `generateMerchantContract`
+ * builds the contract HTML and renders it to a PDF (offloading the CPU/RAM cost
+ * from the field reps' mobile browsers); `getMerchantContract` is a lightweight
+ * companion that reports whether a PDF already exists and returns a signed URL
+ * for it, so the frontend can skip a costly re-render when nothing changed. */
 
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { logger } = require('firebase-functions');
@@ -13,7 +14,7 @@ const { initializeApp } = require('firebase-admin/app');
 
 const { buildContractHtml, normalizeContractInput } = require('./lib/contract');
 const { renderContractPdf, resetBrowser } = require('./lib/pdf');
-const { persistContractPdf } = require('./lib/storage');
+const { persistContractPdf, getContractPdf } = require('./lib/storage');
 
 initializeApp();
 
@@ -83,4 +84,40 @@ exports.generateMerchantContract = onCall(CALL_OPTIONS, async (request) => {
         generatedAt: new Date().toISOString(),
         ...stored
     };
+});
+
+/* Lightweight existence check + signed URL lookup. No Chromium, no upload, so
+   it is cheap enough to run every time the contract modal opens. */
+const LOOKUP_OPTIONS = {
+    region: 'us-central1',
+    memory: '256MiB',
+    cpu: 1,
+    timeoutSeconds: 30,
+    concurrency: 40,
+    maxInstances: 20,
+    cors: true
+};
+
+exports.getMerchantContract = onCall(LOOKUP_OPTIONS, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول لعرض العقد.');
+    }
+
+    const merchantId = String(
+        (request.data && (request.data.merchantId || request.data.merchant_id)) || ''
+    ).trim();
+    if (!merchantId) {
+        throw new HttpsError('invalid-argument', 'merchantId مطلوب لعرض العقد.');
+    }
+
+    try {
+        const stored = await getContractPdf({ merchantId });
+        return { ok: true, merchantId, ...stored };
+    } catch (err) {
+        logger.error('[getMerchantContract] lookup failed', {
+            merchantId,
+            message: err && err.message ? err.message : String(err)
+        });
+        throw new HttpsError('internal', 'تعذر التحقق من العقد الحالي.');
+    }
 });
