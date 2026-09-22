@@ -31,7 +31,8 @@ jobs:
       - name: Show deploy service account
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
-        run: node -e "console.log('Deployer service account: ' + require(process.env.GOOGLE_APPLICATION_CREDENTIALS).client_email)"
+        run: |
+          node -e "console.log('Deployer service account: ' + require(process.env.GOOGLE_APPLICATION_CREDENTIALS).client_email)"
       - name: Deploy Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
