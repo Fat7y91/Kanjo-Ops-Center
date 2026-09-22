@@ -4552,6 +4552,16 @@ const clearMasterCatalogCollection = async () => {
         await batch.commit();
         if (i + 400 < docs.length) await delay(300);
     }
+    /* Bulk batch deletions cannot be intercepted by the single-doc delete hook,
+       so the sweep is audited explicitly — deletions must never be invisible. */
+    if (docs.length && typeof window.kanjoAuditDelete === 'function') {
+        window.kanjoAuditDelete({
+            collectionId: MASTER_CATALOG_COLLECTION,
+            id: '',
+            name: `${docs.length} عنصر`,
+            description: `مسح الكتالوج الرئيسي بالكامل (${docs.length} عنصر)`
+        });
+    }
     return docs.length;
 };
 
@@ -5052,6 +5062,15 @@ window.clearStagingCatalogs = async () => {
             const batch = window.writeBatch(window.db);
             chunk.forEach((d) => batch.delete(d.ref));
             await batch.commit();
+        }
+        /* Bulk batch deletions bypass the single-doc hook; audit the sweep. */
+        if (docs.length && typeof window.kanjoAuditDelete === 'function') {
+            window.kanjoAuditDelete({
+                collectionId: STAGING_CATALOGS_COLLECTION,
+                id: '',
+                name: `${docs.length} عنصر`,
+                description: `مسح الكتالوج المرحلي بالكامل (${docs.length} عنصر)`
+            });
         }
         window.showToast('تم مسح جميع البيانات بنجاح.');
     } catch (err) {

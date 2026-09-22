@@ -30,6 +30,14 @@ const AUDIT_WATCHED_COLLECTIONS = {
     staging_catalogs: 'كتالوج مرحلي'
 };
 
+/* Collections covered by the deletion auditor. Tasks are the day-to-day
+   merchant records and are written/deleted through the SDK (never the REST
+   mirror), so they MUST be listed here to be captured on delete. */
+const AUDIT_DELETE_COLLECTIONS = Object.assign({
+    tasks: 'مهمة',
+    transferRequests: 'طلب نقل'
+}, AUDIT_WATCHED_COLLECTIONS);
+
 let _auditOriginalCreate = null;
 let _auditOriginalPatch = null;
 let _auditOriginalRemove = null;
@@ -164,6 +172,7 @@ const AUDIT_ENTITY_KINDS = {
     contracts: 'contract',
     master_catalog: 'master_product',
     staging_catalogs: 'staging',
+    tasks: 'task',
     system: 'system'
 };
 const auditEntityKind = (collectionId) => AUDIT_ENTITY_KINDS[collectionId] || '';
@@ -442,15 +451,156 @@ const auditInstallHooks = () => {
         }));
     };
     window.kanjoRest.remove = function (segments) {
-        return _auditOriginalRemove.call(this, segments).then((result) => {
+        const collectionId = Array.isArray(segments) ? segments[0] : segments;
+        const watched = !!(collectionId && AUDIT_DELETE_COLLECTIONS[collectionId]);
+        const write = () => _auditOriginalRemove.call(this, segments);
+        if (!watched) return write();
+        /* Snapshot the document BEFORE it is removed so the Delete entry carries
+           the deleted record's final contents (the SDK delete hook does the
+           same; this keeps the REST path equivalent). */
+        let before;
+        try {
+            before = (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
+                ? window.kanjoRest.getDocument(segments)
+                : Promise.resolve(null);
+        } catch (_) {
+            before = Promise.resolve(null);
+        }
+        return Promise.resolve(before).catch(() => null).then((prevDoc) => write().then((result) => {
             try {
-                const collectionId = Array.isArray(segments) ? segments[0] : segments;
-                auditMirrorWrite(collectionId, auditDescribeRemove(collectionId, segments));
+                const entry = auditDescribeRemove(collectionId, segments);
+                if (prevDoc && typeof prevDoc === 'object') {
+                    entry.previousData = auditSanitizeRecord(prevDoc);
+                    const nm = prevDoc.name_ar || prevDoc.name_en || prevDoc.name || prevDoc.title;
+                    if (nm) entry.targetName = nm;
+                }
+                auditMirrorWrite(collectionId, entry);
             } catch (_) {}
             return result;
-        });
+        }));
     };
     _auditHooked = true;
+};
+
+/* ─── Deletion auditing (authoritative, call-site independent) ─────────
+ * The REST mirror only sees `kanjoRest` writes, so SDK deletions made with
+ * `deleteDoc` / `batch.delete` were silently bypassing the Black Box. Deletions
+ * are the most sensitive event in the system, so they are captured centrally:
+ *   - `window.deleteDoc` is wrapped once, so EVERY SDK document deletion is
+ *     audited no matter which module calls it (bare `deleteDoc` resolves to the
+ *     same global property, so it is covered too);
+ *   - the document is snapshotted BEFORE the write, because afterwards it no
+ *     longer exists anywhere — this is what makes the deletion recoverable as a
+ *     record (contents, not the live doc);
+ *   - bulk `batch.delete` sweeps call `window.kanjoAuditDelete` explicitly.
+ * Failures here can never block or break the actual deletion. */
+
+const auditCollectionEntity = (collectionId, override) =>
+    override || AUDIT_DELETE_COLLECTIONS[collectionId] || collectionId;
+
+/* Best-effort in-memory lookup so the snapshot avoids a heavy network read
+   (task docs embed Base64 logos). Returns null when nothing is cached. */
+const auditLocateCachedDoc = (collectionId, id) => {
+    if (!id) return null;
+    try {
+        if (collectionId === 'tasks' && window.tasksMemory && typeof window.tasksMemory.get === 'function') {
+            const hit = window.tasksMemory.get(String(id));
+            if (hit) return hit.id ? hit : Object.assign({ id: String(id) }, hit);
+        }
+        const pools = {
+            tasks: [window.allTasksCache],
+            merchant_products: [
+                window.repCatalogProductsCache,
+                window.merchantProductsCache,
+                window.allCatalogProductsCache,
+                window.catalogDeleteRequestsCache
+            ],
+            merchants: [window.merchantsById instanceof Map ? Array.from(window.merchantsById.values()) : null],
+            master_catalog: [window.masterCatalogCache],
+            staging_catalogs: [window.stagingCatalogsCache, window.allStagingCatalogsCache]
+        }[collectionId] || [];
+        for (const pool of pools) {
+            if (!Array.isArray(pool)) continue;
+            const hit = pool.find((p) => p && String(p.id) === String(id));
+            if (hit) return hit;
+        }
+    } catch (_) {}
+    return null;
+};
+
+const auditBuildDeleteEntry = ({ collectionId, id, name, entity, entityKind, snapshot, description }) => {
+    const entityLabel = auditCollectionEntity(collectionId, entity);
+    const displayName = name
+        || (snapshot && (snapshot.name_ar || snapshot.name_en || snapshot.name || snapshot.title))
+        || id || '';
+    return {
+        actionType: 'delete',
+        entityKind: entityKind || auditEntityKind(collectionId),
+        targetEntity: entityLabel,
+        targetId: id || '',
+        targetName: displayName,
+        description: description || `حذف ${entityLabel} «${displayName || id}» نهائياً`,
+        collection: collectionId || '',
+        previousData: snapshot ? auditSanitizeRecord(snapshot) : null,
+        newData: null
+    };
+};
+
+/* Public API for call sites that delete through a batch or already hold the
+   document contents (e.g. bulk sweeps, pre-captured snapshots). */
+window.kanjoAuditDelete = (entry) => {
+    try {
+        auditWrite(auditBuildDeleteEntry(entry || {}));
+    } catch (err) {
+        console.warn('[audit] delete entry failed:', err);
+    }
+};
+
+/* Resolve a Firestore DocumentReference (or a raw path string) to
+   [collectionId, documentId]. */
+const auditRefPath = (ref) => {
+    let path = '';
+    if (ref && typeof ref.path === 'string') path = ref.path;
+    else if (ref && ref.parent && typeof ref.id === 'string') path = `${ref.parent.path || ref.parent.id || ''}/${ref.id}`;
+    if (!path) return ['', ''];
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length < 2) return ['', ''];
+    return [parts[parts.length - 2], parts[parts.length - 1]];
+};
+
+const auditCaptureDeletedDoc = async (collectionId, id) => {
+    if (!id) return null;
+    const cached = auditLocateCachedDoc(collectionId, id);
+    if (cached) return cached;
+    try {
+        if (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
+            return await window.kanjoRest.getDocument([collectionId, id]);
+        }
+    } catch (_) {}
+    return null;
+};
+
+let _auditOriginalDeleteDoc = null;
+let _auditDeleteHooked = false;
+
+const auditInstallDeleteHooks = () => {
+    if (_auditDeleteHooked) return;
+    if (typeof window.deleteDoc !== 'function') return;
+    _auditOriginalDeleteDoc = window.deleteDoc;
+    window.deleteDoc = function (ref) {
+        const args = Array.prototype.slice.call(arguments);
+        const [collectionId, id] = auditRefPath(ref);
+        const run = () => _auditOriginalDeleteDoc.apply(this, args);
+        /* Never audit the audit trail itself, and never touch non-document refs. */
+        if (!collectionId || collectionId === AUDIT_COLLECTION) return run();
+        return Promise.resolve(auditCaptureDeletedDoc(collectionId, id))
+            .catch(() => null)
+            .then((snapshot) => Promise.resolve(run()).then((result) => {
+                window.kanjoAuditDelete({ collectionId, id, snapshot });
+                return result;
+            }));
+    };
+    _auditDeleteHooked = true;
 };
 
 /* ─── Public API ────────────────────────────────────────────────────── */
@@ -864,8 +1014,9 @@ window.closeBlackBox = () => {
 /* Install hooks at import time (REST helpers already exist) and re-assert once
    the first authenticated session is painted, in case the wrap was reset. */
 auditInstallHooks();
+auditInstallDeleteHooks();
 if (typeof window.addEventListener === 'function') {
-    window.addEventListener('load', () => auditInstallHooks());
+    window.addEventListener('load', () => { auditInstallHooks(); auditInstallDeleteHooks(); });
 }
 
 window.kanjoAudit = {
@@ -873,6 +1024,7 @@ window.kanjoAudit = {
     log: window.kanjoAuditLog,
     logLogin: window.kanjoAuditLogLogin,
     logView: window.kanjoAuditLogView,
+    logDelete: window.kanjoAuditDelete,
     reconstruct: window.kanjoAuditReconstruct,
     collection: AUDIT_COLLECTION
 };

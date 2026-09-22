@@ -1708,6 +1708,17 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     color: #94a3b8;
     direction: ltr;
 }
+/* Deletions are destructive and irreversible, so they are highlighted above
+   every other event type: red tint, red border and a bolder description. */
+.audit-row[data-action="delete"] {
+    background: linear-gradient(0deg, #fff5f5, #fff5f5);
+    border-color: rgba(220, 38, 38, 0.3);
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.06);
+}
+.audit-row[data-action="delete"] .audit-row-desc { color: #b91c1c; }
+.audit-row[data-action="delete"] .audit-row-target { color: #b91c1c; }
+.audit-row[data-action="delete"] .audit-row-target i { color: #ef4444; }
+.audit-row[data-action="delete"] .audit-action-chip { box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.1); }
 .audit-entity-link {
     display: inline-flex;
     align-items: center;
