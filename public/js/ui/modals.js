@@ -818,6 +818,7 @@ window.saveMerchantNameEdit = async () => {
             if (window.merchantsById && window.merchantsById.has(existingMid)) {
                 window.merchantsById.get(existingMid).name = newName;
             }
+            if (typeof window.invalidateMerchantsCache === 'function') window.invalidateMerchantsCache();
         } catch (err) {
             console.error("[merchantId] merchant record name sync failed:", err);
         }

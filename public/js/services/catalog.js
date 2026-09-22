@@ -2134,6 +2134,12 @@ window.toggleCatalogAllProductsWidget = () => {
         const clearBtn = document.getElementById('catalogGlobalSearchClear');
         if (clearBtn) clearBtn.classList.toggle('hidden', !String(window._catalogSearchQuery || '').trim());
         renderCatalogAllProductsList();
+        /* Opening pulls fresh data on demand (throttled to once a minute) so the
+           full collection is only read while the user is actually looking. */
+        const age = Date.now() - (window._catalogAllProductsFetchedAt || 0);
+        if (age > 60000 && typeof window.refreshCatalogFromRest === 'function') {
+            window.refreshCatalogFromRest();
+        }
     }
 };
 
@@ -4222,26 +4228,35 @@ window.startCatalogListeners = () => {
 
     /* Direct REST is the primary read path: the SDK's streaming transport can
        be blocked, which used to leave these widgets stuck at 0. The caches are
-       refreshed every 30s so they stay current without a live listener. */
+       refreshed on a slow poll so they stay current without a live listener.
+       Cost model: a manager's poll now pulls only the small pending (+ delete
+       request) sets; the full collection is fetched once at boot and again only
+       while the "all products" widget is open. */
     const refreshFromRest = async () => {
         /* Skip if the previous poll is still in flight: a slow network must not
-           stack overlapping full-collection reads every 30s. */
+           stack overlapping full-collection reads. Also skip hidden tabs — a
+           backgrounded Ops Center has no user watching the widgets. */
         if (!useRest || window._catalogRestRefreshInFlight) return;
+        if (typeof document !== 'undefined' && document.hidden) return;
         window._catalogRestRefreshInFlight = true;
         try {
             const canViewAll = window.canViewAllCatalogProducts();
             const isMahmoud = window.isMahmoudUser();
-            /* The unfiltered read is a superset of the pending and delete-request
-               queries, so a manager needs ONE request instead of three. Reps keep
-               the narrow pending query. All independent reads run concurrently and
-               the rep's own-products read (self-guarded) overlaps them too. */
+            /* A full-collection read is expensive, so a manager only pulls it on
+               boot (to populate counts / export filters) or while the "all
+               products" widget is open. Otherwise the poll fetches just the small
+               pending (+ delete request) sets, which is all the always-visible
+               widgets need. Reps keep the narrow pending query. All independent
+               reads run concurrently with the rep's own-products read. */
+            const wantAllProducts = canViewAll && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
             const jobs = [window.loadMyCatalogProducts()];
-            if (canViewAll) {
+            if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
                         const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, []));
                         window.allCatalogProductsCache = items;
                         window._catalogAllProductsLoaded = true;
+                        window._catalogAllProductsFetchedAt = Date.now();
                         window.merchantProductsCache = items.filter((p) => p.status === 'pending');
                         window._catalogPendingLoaded = true;
                         if (isMahmoud) {
@@ -4287,13 +4302,23 @@ window.startCatalogListeners = () => {
     };
 
     refreshFromRest();
-    const pollId = setInterval(refreshFromRest, 30000);
+    /* Exposed so opening the "all products" widget can pull the full set on
+       demand instead of relying on a fast background poll. */
+    window.refreshCatalogFromRest = refreshFromRest;
+    const pollId = setInterval(refreshFromRest, 120000);
     window._appListenerUnsubscribers.push(() => clearInterval(pollId));
+    /* A hidden tab skips polls; refresh once when the user returns so the
+       widgets are not up to two minutes stale. */
+    if (typeof document !== 'undefined') {
+        const onCatalogVisibility = () => { if (!document.hidden) refreshFromRest(); };
+        document.addEventListener('visibilitychange', onCatalogVisibility);
+        window._appListenerUnsubscribers.push(() => document.removeEventListener('visibilitychange', onCatalogVisibility));
+    }
 
     /* Best-effort real-time, ONLY when REST is not available. When REST is the
        transport we deliberately do not attach SDK listeners: the blocked
        streaming transport is what produced the offline timeout / Listen-channel
-       errors. The 30s REST poll above keeps the widgets fresh instead. */
+       errors. The slow REST poll above keeps the widgets fresh instead. */
     if (!useRest && typeof window.onSnapshot === 'function' && typeof window.collection === 'function' && window.db) {
         const unsubPending = window.onSnapshot(
             window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending')),

@@ -1151,6 +1151,9 @@ window.listenToTasks = () => {
         console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every 30s.');
         const poll = async () => {
             if (!window._tasksListenerStarted) return;
+            /* A hidden tab has no one watching the board — skip the read so an
+               idle background session does not burn task reads. */
+            if (typeof document !== 'undefined' && document.hidden) return;
             /* Direct REST first: it works even while the SDK transport is
                offline, which is exactly the case that starts this poller. */
             if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {

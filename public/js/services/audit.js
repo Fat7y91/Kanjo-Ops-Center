@@ -639,9 +639,14 @@ window.kanjoAuditLogView = (entry) => {
 
 /* ─── Retrospective reconstruction ──────────────────────────────────── */
 
-const auditCollectReconstructed = async () => {
+const AUDIT_RECON_CACHE_KEY = 'audit:reconstructed';
+const AUDIT_RECON_CACHE_TTL = 5 * 60 * 1000;
+
+/* Building the retrospective trail scans merchant_products, so the result is
+   memoized for a short window (see auditCollectReconstructed) to keep repeated
+   Black Box opens / re-renders cheap. */
+const auditFetchReconstructed = async () => {
     const out = [];
-    if (!window.kanjoRest || typeof window.kanjoRest.list !== 'function') return out;
     const products = await window.kanjoRest.list(['merchant_products'], { pageSize: 300, maxPages: 20 });
     (products || []).forEach((p) => {
         if (!p || !p.id) return;
@@ -686,9 +691,14 @@ const auditCollectReconstructed = async () => {
     return out;
 };
 
-window.kanjoAuditReconstruct = async ({ persist = false } = {}) => {
+const auditCollectReconstructed = async (force) => {
+    if (!window.kanjoRest || typeof window.kanjoRest.list !== 'function') return [];
+    return window.kanjoCache.get(AUDIT_RECON_CACHE_KEY, AUDIT_RECON_CACHE_TTL, auditFetchReconstructed, !!force);
+};
+
+window.kanjoAuditReconstruct = async ({ persist = false, force = false } = {}) => {
     if (!window.kanjoAuditCanView()) return [];
-    const entries = await auditCollectReconstructed();
+    const entries = await auditCollectReconstructed(force);
     auditState.reconstructed = entries;
     if (persist && entries.length) {
         /* Persist the historical trail once so it becomes permanent. Bounded and
@@ -720,7 +730,7 @@ window.runBlackBoxReconstruction = async () => {
         if (!alreadyBackfilled && !localStorage.getItem(AUDIT_BACKFILL_KEY)) {
             persist = window.confirm('سيتم فحص كل المنتجات السابقة وتوليد سجل أثر رجعي وحفظه في Black Box. هل تريد المتابعة؟');
         }
-        const entries = await window.kanjoAuditReconstruct({ persist });
+        const entries = await window.kanjoAuditReconstruct({ persist, force: true });
         if (persist) {
             const live = entries.map((e) => Object.assign({}, e, { id: undefined }));
             auditState.entries = live.concat(auditState.entries);
@@ -962,12 +972,23 @@ window.blackBoxToggleReconstructed = (checked) => {
     auditRenderBlackBox();
 };
 
-const auditLoadEntries = async () => {
+/* Black Box entry reads are cached briefly so re-opening the modal (or an
+   accidental double open) does not re-scan the whole audit_logs collection.
+   The explicit "تحديث" button passes force=true to bypass the cache. */
+const AUDIT_ENTRIES_CACHE_KEY = 'audit:entries';
+const AUDIT_ENTRIES_CACHE_TTL = 60 * 1000;
+
+const auditLoadEntries = async (force) => {
     if (!window.kanjoRest || typeof window.kanjoRest.list !== 'function') return [];
-    return window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: 300, maxPages: 10 });
+    return window.kanjoCache.get(
+        AUDIT_ENTRIES_CACHE_KEY,
+        AUDIT_ENTRIES_CACHE_TTL,
+        () => window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: 300, maxPages: 10 }),
+        !!force
+    );
 };
 
-window.openBlackBox = async () => {
+window.openBlackBox = async (force) => {
     if (!window.kanjoAuditCanView()) {
         if (window.showToast) window.showToast('Black Box is available to founders only', false);
         return;
@@ -982,7 +1003,7 @@ window.openBlackBox = async () => {
     if (list) list.innerHTML = '<div class="text-center py-12 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل السجل...</div></div>';
     try {
         auditInstallHooks();
-        const rows = await auditLoadEntries();
+        const rows = await auditLoadEntries(!!force);
         auditState.entries = (rows || []).sort((a, b) => {
             const da = (auditToDate(a.timestamp) || auditToDate(a.ts) || new Date(0)).getTime();
             const db = (auditToDate(b.timestamp) || auditToDate(b.ts) || new Date(0)).getTime();

@@ -219,6 +219,7 @@ window.saveFinancialProfile = async () => {
             updatedAt: new Date(),
             updatedBy: currentUser.name
         });
+        if (typeof window.invalidateFinancialProfilesCache === 'function') window.invalidateFinancialProfilesCache();
 
         await window.notifyManager(
             `تحديث بيانات دفع: ${currentUser.name}`,
@@ -329,24 +330,59 @@ window.renderFinancialProfilesTable = (profiles) => {
     if (elApproved) elApproved.innerText = approved;
 };
 
-window.loadFinancialProfilesForAccounting = () => {
-    if (window._financialProfilesListenerStarted) return;
-    window._financialProfilesListenerStarted = true;
-    const unsub = onSnapshot(collection(db, "financial_profiles"), (snap) => {
-        window.financialProfilesCache.clear();
-        const profiles = [];
-        snap.forEach(docSnap => {
-            const data = { id: docSnap.id, ...docSnap.data() };
-            window.financialProfilesCache.set(docSnap.id, data);
-            profiles.push(data);
-        });
-        window.renderFinancialProfilesTable(profiles);
-    }, (error) => {
-        console.error('[accounting] financial_profiles listener failed:', error);
+/* Accounting payment profiles.
+   Read once through the shared TTL cache instead of a permanent onSnapshot.
+   Profiles change only when a rep submits or accounting approves, and those
+   paths explicitly invalidate the cache, so a live listener was pure waste. */
+const FINANCIAL_PROFILES_CACHE_KEY = 'financial_profiles:all';
+const FINANCIAL_PROFILES_CACHE_TTL = 2 * 60 * 1000;
+
+window.loadFinancialProfilesForAccounting = async ({ force = false } = {}) => {
+    const loader = async () => {
+        let rows = null;
+        if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+            try {
+                rows = await window.kanjoRest.list(['financial_profiles'], { pageSize: 300, maxPages: 20 });
+            } catch (err) {
+                console.warn('[accounting] REST financial_profiles load failed; falling back to SDK:', err && err.message);
+            }
+        }
+        if (!Array.isArray(rows)) {
+            const snap = await getDocs(collection(db, 'financial_profiles'));
+            rows = [];
+            snap.forEach((ds) => rows.push(Object.assign({ id: ds.id }, ds.data() || {})));
+        }
+        return rows;
+    };
+
+    const rows = await window.kanjoCache.get(FINANCIAL_PROFILES_CACHE_KEY, FINANCIAL_PROFILES_CACHE_TTL, loader, force);
+    window.financialProfilesCache.clear();
+    const profiles = [];
+    (rows || []).forEach((data) => {
+        if (!data || !data.id) return;
+        window.financialProfilesCache.set(data.id, data);
+        profiles.push(data);
     });
-    if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
-    window._appListenerUnsubscribers.push(unsub);
+    window.renderFinancialProfilesTable(profiles);
+    return profiles;
 };
+
+window.invalidateFinancialProfilesCache = () => {
+    if (window.kanjoCache) window.kanjoCache.invalidate(FINANCIAL_PROFILES_CACHE_KEY);
+};
+
+/* Keep the table reasonably current without a live listener: refresh (cost-gated
+   by the 2-minute TTL, so this is a no-op when the cache is warm) when the tab
+   regains focus and on a slow interval. Only accounting users read profiles. */
+if (typeof document !== 'undefined') {
+    const refreshFinancialProfilesIfAccounting = () => {
+        const user = window.currentUser;
+        if (!user || user.role !== 'accounting') return;
+        if (typeof window.loadFinancialProfilesForAccounting === 'function') window.loadFinancialProfilesForAccounting();
+    };
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshFinancialProfilesIfAccounting(); });
+    setInterval(refreshFinancialProfilesIfAccounting, 5 * 60 * 1000);
+}
 
 window.approveFinancialProfile = async (id) => {
     if (!currentUser || currentUser.role !== 'accounting') return;
@@ -356,6 +392,8 @@ window.approveFinancialProfile = async (id) => {
             approvedBy: currentUser.name,
             approvedAt: new Date()
         });
+        if (typeof window.invalidateFinancialProfilesCache === 'function') window.invalidateFinancialProfilesCache();
+        if (typeof window.loadFinancialProfilesForAccounting === 'function') window.loadFinancialProfilesForAccounting({ force: true });
         await window.notifyManager(
             `تم اعتماد بيانات دفع: ${id}`,
             `تم اعتماد بيانات استلام المرتب الخاصة بـ ${id} من قسم الحسابات.`,

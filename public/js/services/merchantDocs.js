@@ -74,6 +74,63 @@ window.findMerchantIdForBase = (baseName) => {
     return null;
 };
 
+/* ─── Shared merchants cache ───
+   Reads the `merchants` collection once and keeps it in the shared TTL cache
+   instead of holding an unbounded onSnapshot listener. A merchant directory
+   changes rarely; a 5-minute TTL slashes billable reads while the app still
+   refreshes after any in-app write (rename / Drive binding) via
+   `invalidateMerchantsCache`. */
+const MERCHANTS_CACHE_KEY = 'merchants:all';
+const MERCHANTS_CACHE_TTL = 5 * 60 * 1000;
+
+window.loadMerchantsCache = async ({ force = false } = {}) => {
+    const loader = async () => {
+        /* Prefer the REST mirror: documented pages, no SDK channel. Falls back
+           to the SDK only if the REST layer is unavailable. */
+        if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+            const rows = await window.kanjoRest.list(['merchants'], { pageSize: 300, maxPages: 20 });
+            if (Array.isArray(rows)) return rows;
+        }
+        const snap = await getDocs(collection(db, 'merchants'));
+        const rows = [];
+        snap.forEach((ds) => rows.push(Object.assign({ id: ds.id }, ds.data() || {})));
+        return rows;
+    };
+
+    const rows = await window.kanjoCache.get(MERCHANTS_CACHE_KEY, MERCHANTS_CACHE_TTL, loader, force);
+    window.merchantsById = window.merchantsById || new Map();
+    window.merchantsById.clear();
+    (rows || []).forEach((rec) => {
+        if (rec && rec.id) window.merchantsById.set(rec.id, rec);
+    });
+    window._merchantsLoaded = true;
+    /* Run the merchantId backfill now that the authoritative records are known,
+       so it can safely reuse existing merchantIds instead of minting phantoms
+       for records loaded after the tasks snapshot. */
+    if (typeof window.ensureMerchantIds === 'function') {
+        window.ensureMerchantIds();
+    }
+    return window.merchantsById;
+};
+
+window.invalidateMerchantsCache = () => {
+    /* Drop only the cached snapshot so the next load re-reads. Keep
+       `_merchantsLoaded` true: the collection HAS been observed, and the
+       merchantId backfill relies on that flag to safely mint new IDs. */
+    if (window.kanjoCache) window.kanjoCache.invalidate(MERCHANTS_CACHE_KEY);
+};
+
+/* Without the old onSnapshot, refresh the directory when the user returns to
+   the tab. The 5-minute TTL makes this a no-op while the cache is warm. */
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        if (typeof window.loadMerchantsCache === 'function') {
+            window.loadMerchantsCache().catch(() => {});
+        }
+    });
+}
+
 /* Authoritative, server-side de-duplication of merchant identity.
    Before minting a NEW KJ-*** id (and thus before a new Drive folder can ever
    be created), this queries Firestore for an existing merchant record with the
@@ -88,31 +145,32 @@ window.resolveCanonicalMerchantId = async (baseName, taskData) => {
     const mem = window.findMerchantIdForBase(baseName);
     if (mem) return mem;
 
-    /* 2) Authoritative server lookup by normalized name (and phone). */
+    /* 2) Authoritative server lookup by normalized name (and phone). Reuses the
+       shared merchants loader with `force` so it refreshes the cache too. */
     try {
-        const snap = await getDocs(collection(db, "merchants"));
+        const rows = await window.loadMerchantsCache({ force: true });
         const digitKey = (s) => String(s || '').replace(/\D/g, '');
         const candidates = [];
-        snap.forEach((ds) => {
-            const rec = ds.data() || {};
+        (rows || []).forEach((rec) => {
+            if (!rec) return;
             if (rec.archived === true) return;
             if (!rec.name) return;
             if (getBaseName(rec.name) !== baseName) return;
             const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
-            candidates.push({ id: ds.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
+            candidates.push({ id: rec.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
         });
 
         if (candidates.length === 0 && taskData) {
             const taskPhone = taskData.phone || taskData.phoneNumber || (taskData.contact && taskData.contact.phone);
             const taskDigits = digitKey(taskPhone);
             if (taskDigits) {
-                snap.forEach((ds) => {
-                    const rec = ds.data() || {};
+                (rows || []).forEach((rec) => {
+                    if (!rec) return;
                     if (rec.archived === true) return;
                     const recPhone = rec.phone || (rec.contact && rec.contact.phone) || '';
                     if (digitKey(recPhone) === taskDigits) {
                         const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
-                        candidates.push({ id: ds.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
+                        candidates.push({ id: rec.id, rec, hasDocs, hasLink: !!rec.driveFolderLink });
                     }
                 });
             }
@@ -623,6 +681,7 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
         });
     }
     if (window.merchantsById) window.merchantsById.set(merchantId, merchantRec);
+    if (typeof window.invalidateMerchantsCache === 'function') window.invalidateMerchantsCache();
 
     if (window.lastSnapshot && typeof window.renderDashboard === 'function') {
         window.renderDashboard(window.lastSnapshot);

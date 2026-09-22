@@ -1,4 +1,5 @@
 /* Kanjo Ops — Application Entry Point */
+import './utils/cache.js';
 import './config/firebase.js';
 import './services/audit.js';
 import './services/authorization.js';
