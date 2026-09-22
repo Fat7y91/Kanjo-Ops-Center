@@ -26,13 +26,6 @@ jobs:
         env:
           SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
         run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
-      # Diagnostic: surface which principal the deploy authenticates as, so IAM
-      # bindings can be verified against the correct service account.
-      - name: Show deploy service account
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
-        run: |
-          node -e "console.log('Deployer service account: ' + require(process.env.GOOGLE_APPLICATION_CREDENTIALS).client_email)"
       - name: Deploy Firestore rules
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
@@ -50,15 +43,14 @@ jobs:
       # installed locally so the CLI can analyse the source before uploading.
       - name: Install function dependencies
         run: npm install --prefix functions --omit=dev --no-audit --no-fund
-      # Best-effort until a project owner enables the Cloud Functions API and
-      # grants the CI service account the deploy roles (Run/Artifact Registry/
-      # Cloud Build/Service Usage). Once enabled this deploys automatically.
-      - name: Deploy Cloud Functions (best-effort)
-        continue-on-error: true
+      # Required: the server-side contract generator. --force authorises the CLI
+      # to set the Artifact Registry cleanup policy, which otherwise makes an
+      # otherwise-successful deploy exit non-zero.
+      - name: Deploy Cloud Functions
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
           CI: true
-        run: npx -y firebase-tools@latest deploy --only functions --project kanjo-desouk
+        run: npx -y firebase-tools@latest deploy --only functions --project kanjo-desouk --force
       # Locked-down Storage rules for the contracts bucket. Best-effort so a
       # first-time bucket provisioning hiccup never blocks a release.
       - name: Deploy Storage rules (best-effort)
