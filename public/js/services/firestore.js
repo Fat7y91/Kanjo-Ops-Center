@@ -889,6 +889,17 @@ const scheduleTaskSync = (() => {
 const loadMoreTasks = async () => 0;
 window.loadMoreTasks = loadMoreTasks;
 
+/* Role isolation for the heavy historical read. Task documents embed Base64
+   merchant logos, so the full archive is ~15MB. Only managers/founders (and the
+   accounting desk, which computes payroll from the whole set) may pull it.
+   Field reps and data-entry users are on mobile data and only ever need the
+   day-scoped tasks plus the small merchants list. */
+const canLoadTaskArchive = () => {
+    const role = (window.currentUser && window.currentUser.role) || (typeof currentUser !== 'undefined' && currentUser && currentUser.role);
+    return role !== 'rep' && role !== 'data_entry';
+};
+window.canLoadTaskArchive = canLoadTaskArchive;
+
 // الاستماع الحي للمهام — مُقيَّد بفريق المندوب + نافذة مرتّبة قابلة للترقيم
 window.listenToTasks = () => {
     if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') return;
@@ -1178,16 +1189,22 @@ window.listenToTasks = () => {
         registerUnsub();
     };
 
-    /* Background archive fetch (non-blocking, one-shot). Starts 5s AFTER the
+    /* Background archive fetch (non-blocking, one-shot). Fires right after the
        first day has painted, reads the complete task set once with getDocs
        (never a live listener over thousands of archived docs), merges the
        documents into tasksMemory and re-renders exactly once at the end.
        Historical reads are best-effort: a failure logs and degrades to the
-       date-scoped data instead of alarming the user. */
+       date-scoped data instead of alarming the user.
+       Gated to managers/founders/accounting: reps and data-entry users must
+       never download the ~15MB archive. */
     let historyStarted = false;
     function startHistoricalListener() {
         if (historyStarted) return;
         historyStarted = true;
+        if (!canLoadTaskArchive()) {
+            console.log('[KANJO-DIAGNOSTIC] Archive fetch skipped for role:', window.currentUser && window.currentUser.role);
+            return;
+        }
         const page = window._tasksPage;
         const mergeDocs = (snapshot) => {
             let mutated = false;
@@ -1212,7 +1229,7 @@ window.listenToTasks = () => {
                 scheduleTaskSync();
             }
         };
-        window.setTimeout(async () => {
+        (async () => {
             /* Direct REST first: the whole archive must load even when the SDK
                is stuck offline, otherwise global counts stay at 0. */
             if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
@@ -1236,7 +1253,7 @@ window.listenToTasks = () => {
                     console.error("Firestore history fallback fetch error:", fallbackError);
                 }
             }
-        }, 5000);
+        })();
     }
 
     /* ─── Hybrid bootstrap: fast day paint first, full archive in background ───
@@ -1246,9 +1263,10 @@ window.listenToTasks = () => {
            0-count dashboard). The SDK getDocs is kept as a fallback.
        2) Only after that fast paint resolves do we attach the day onSnapshot
           listener for live updates.
-       3) startHistoricalListener then reads the COMPLETE archive 5s later in
-          the background (guarded by historyStarted) so global search and global
-          stats fill in without blocking first paint.
+       3) startHistoricalListener then reads the COMPLETE archive in the
+          background (guarded by historyStarted) so global search and global
+          stats fill in without blocking first paint. Reps/data-entry skip this
+          entirely (see canLoadTaskArchive).
        4) If the stream is killed, the silent poller keeps the day fresh over
           REST instead of showing the 0-count recovery UI. */
     const handleInitialError = (error) => {
