@@ -280,7 +280,13 @@ const listFinalizedMerchants = () => {
     const taskSource = (window.allTasksCache && window.allTasksCache.length)
         ? window.allTasksCache
         : Array.from((window.tasksMemory || new Map()).values());
-    taskSource.forEach((t) => {
+    /* Reps/data-entry skip the full archive, so signed merchants are supplied by
+       a lightweight field-masked read (window.finalizedMerchantsCache). Merge it
+       in — the baseName dedupe below keeps a single entry per merchant. */
+    const source = (Array.isArray(window.finalizedMerchantsCache) && window.finalizedMerchantsCache.length)
+        ? taskSource.concat(window.finalizedMerchantsCache)
+        : taskSource;
+    source.forEach((t) => {
         if (teamFilter && t.team !== teamFilter) return;
         const achieved = Number(t.achieved) || 0;
         if (!t.isSigned || achieved <= 0) return;
@@ -530,6 +536,12 @@ const fillCatalogMerchantOptions = (extraMerchant) => {
         const name = catalogEscapeHtml(m.merchantName);
         return `<option value="${id}">${name}</option>`;
     }).join('');
+};
+
+/* Repopulate the merchant picker in place once the lightweight finalized
+   merchants read resolves (no-op when the modal is closed). */
+window.refreshCatalogMerchantOptions = () => {
+    if (document.getElementById('catalogMerchantSelect')) fillCatalogMerchantOptions();
 };
 
 const catalogProductThumbUrl = (p) => {

@@ -900,6 +900,36 @@ const canLoadTaskArchive = () => {
 };
 window.canLoadTaskArchive = canLoadTaskArchive;
 
+/* Reps/data-entry cannot pull the full task archive, but the catalog's merchant
+   picker ("تاجر باتفاق نهائي") needs every merchant that reached a final signed
+   agreement. This is a tiny, field-masked read (no Base64 logos) that keeps the
+   lightweight boot path functional without re-introducing the ~15MB payload.
+   Idempotent: repeated calls share the same in-flight promise. */
+let _finalizedMerchantsPromise = null;
+window.ensureFinalizedMerchantsLoaded = () => {
+    if (_finalizedMerchantsPromise) return _finalizedMerchantsPromise;
+    if (!window.kanjoRest || typeof window.kanjoRest.fetchSignedMerchantTasks !== 'function') {
+        return Promise.resolve([]);
+    }
+    const role = (window.currentUser && window.currentUser.role) || '';
+    const team = role === 'rep' ? ((window.currentUser && window.currentUser.team) || null) : null;
+    _finalizedMerchantsPromise = (async () => {
+        try {
+            const docs = await window.kanjoRest.fetchSignedMerchantTasks({ team });
+            window.finalizedMerchantsCache = Array.isArray(docs) ? docs : [];
+            console.log('[KANJO-DIAGNOSTIC] Finalized-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
+            /* If the merchant picker is already open, repopulate it now. */
+            if (typeof window.refreshCatalogMerchantOptions === 'function') window.refreshCatalogMerchantOptions();
+            return window.finalizedMerchantsCache;
+        } catch (err) {
+            _finalizedMerchantsPromise = null;
+            console.warn('[tasks] finalized-merchants sync failed (non-fatal):', err);
+            return [];
+        }
+    })();
+    return _finalizedMerchantsPromise;
+};
+
 // الاستماع الحي للمهام — مُقيَّد بفريق المندوب + نافذة مرتّبة قابلة للترقيم
 window.listenToTasks = () => {
     if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') return;

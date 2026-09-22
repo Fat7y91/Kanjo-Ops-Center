@@ -437,6 +437,13 @@ function applyThemeAndShowDashboard() {
         if (!isDataEntry && typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
         if (!isDataEntry && typeof listenToTasks !== 'undefined') listenToTasks();
         if (isDataEntry && typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
+
+        /* Reps/data-entry skip the heavy task archive, but the catalog's merchant
+           picker still needs the finalized (signed) merchants. Load the tiny,
+           field-masked signed-task set so the dropdown populates on boot. */
+        if ((isRep || isDataEntry) && typeof window.ensureFinalizedMerchantsLoaded === 'function') {
+            window.ensureFinalizedMerchantsLoaded();
+        }
     });
 }
 

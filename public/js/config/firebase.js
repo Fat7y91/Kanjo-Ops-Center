@@ -309,7 +309,7 @@ const restNormalizeOp = (op) => REST_OP_ALIASES[op] || op;
 /* Query a top-level collection over REST. `filters` is an array of
    `[fieldPath, op, value]` clauses combined with AND. Returns flat
    `[{ id, ...fields }]`, matching the SDK snapshot shape. */
-const restRunQuery = async (collectionId, filters = [], limit = null) => {
+const restRunQuery = async (collectionId, filters = [], limit = null, options = {}) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
         fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
     }));
@@ -317,6 +317,11 @@ const restRunQuery = async (collectionId, filters = [], limit = null) => {
     if (clauses.length === 1) structuredQuery.where = clauses[0];
     else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
     if (limit) structuredQuery.limit = limit;
+    /* Optional field mask: without it runQuery returns every field of every
+       document (including large Base64 blobs such as tasks.merchantLogo). */
+    if (options.select && options.select.length) {
+        structuredQuery.select = { fields: options.select.map((fieldPath) => ({ fieldPath })) };
+    }
 
     const url = REST_DOCUMENTS_URL + ':runQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
     const response = await fetch(url, {
@@ -445,8 +450,21 @@ const restFetchTasks = async ({ team = null, date = null } = {}) => {
     return docs;
 };
 
+/* Lightweight read of finalized (signed) merchants for roles that must NOT pull
+   the full task archive (reps / data-entry). The archive is ~15MB because task
+   docs embed Base64 merchantLogo blobs; the field mask returns only what the
+   catalog's merchant picker and category resolution need. */
+const restFetchSignedMerchantTasks = async ({ team = null } = {}) => {
+    const filters = [['isSigned', 'EQUAL', true]];
+    if (team) filters.push(['team', 'EQUAL', team]);
+    return restRunQuery('tasks', filters, null, {
+        select: ['name', 'merchantId', 'cat', 'team', 'achieved', 'isSigned', 'time']
+    });
+};
+
 window.kanjoRest = {
     fetchTasks: restFetchTasks,
+    fetchSignedMerchantTasks: restFetchSignedMerchantTasks,
     runQuery: restRunQuery,
     list: restListCollection,
     getDocument: restGetDocument,
