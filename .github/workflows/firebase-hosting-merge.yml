@@ -43,7 +43,11 @@ jobs:
       # installed locally so the CLI can analyse the source before uploading.
       - name: Install function dependencies
         run: npm install --prefix functions --omit=dev --no-audit --no-fund
-      - name: Deploy Cloud Functions
+      # Best-effort until a project owner enables the Cloud Functions API and
+      # grants the CI service account the deploy roles (Run/Artifact Registry/
+      # Cloud Build/Service Usage). Once enabled this deploys automatically.
+      - name: Deploy Cloud Functions (best-effort)
+        continue-on-error: true
         env:
           GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
           CI: true
