@@ -12,7 +12,8 @@
  *   - Static preamble date (blank day/month/year left for handwriting).
  *   - Conditional jurisdiction: merchant KJ-N3K4DG (serial #1014, الحيطاوى / جزارة)
  *     -> محكمة دسوق, everyone else -> the default Kanjo-HQ court.
- *   - Secondary phone field (رقم إضافي) and the 4-line expandable notes block.
+ *   - Secondary phone field (رقم إضافي). Internal operational notes are
+ *     deliberately excluded: they are for ops only, never official documents.
  *
  * The legal copy is hardcoded and non-editable, exactly like the client.
  * ------------------------------------------------------------------------- */
@@ -231,8 +232,6 @@ function normalizeContractInput(raw) {
     let contactName = String(data.contactName || '').trim();
     if (contactName) contactName = sanitizeLegalText(contactName) || contactName;
 
-    const notes = sanitizeLegalText(String(data.notes || ''));
-
     return {
         merchantId,
         merchantName,
@@ -244,7 +243,6 @@ function normalizeContractInput(raw) {
         contactPhone: String(data.contactPhone || '').trim(),
         contactRole: String(data.contactRole || '').trim(),
         address: String(data.address || '').trim(),
-        notes,
         merchantLogo: String(data.merchantLogo || data.merchantLogoBase64 || '').trim(),
         vipPreContract: data.vipPreContract === true,
         baseCommission,
@@ -283,7 +281,6 @@ function buildContractHtml(input) {
     const displayRate = (baseCommission !== null) ? baseCommission : achieved;
 
     const contactName = input.contactName;
-    const sanitizedNotes = input.notes;
     const address = input.address || '........................';
     const phone = input.contactPhone || '........................';
     const merchantLogo = input.merchantLogo;
@@ -500,7 +497,6 @@ function buildContractHtml(input) {
                 <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">${preambleDateLine}</div>
                 ${firstPartyBlockHtml}
                 ${secondPartyBlockHtml}
-                ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${safeString(sanitizedNotes)}</div>` : ''}
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
                     <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>

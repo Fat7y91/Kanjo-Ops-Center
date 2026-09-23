@@ -148,7 +148,7 @@
 
 
 
-    <div id="detailsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+    <div id="detailsModal" onclick="if(event.target===this)closeStatModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
 
         <div class="bg-white rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] flex flex-col">
 
@@ -248,11 +248,11 @@
 
 
 
-    <div id="merchantProfileModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[120]">
+    <div id="merchantProfileModal" onclick="if(event.target===this)closeMerchantProfileModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[120]">
 
         <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar space-y-5">
 
-            <div class="flex justify-between items-center border-b border-purple-100 pb-3">
+            <div class="kanjo-sticky-modal-header -mx-6 sm:-mx-8 -mt-6 sm:-mt-8 px-6 sm:px-8 pt-6 sm:pt-8 pb-3 border-b border-purple-100 flex justify-between items-center">
 
                 <div class="flex items-center gap-3">
 
@@ -270,7 +270,7 @@
 
                 </div>
 
-                <button onclick="closeMerchantProfileModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+                <button onclick="closeMerchantProfileModal()" class="text-slate-400 hover:text-red-500 p-1 transition" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
 
             </div>
 
@@ -618,7 +618,7 @@
 
 
 
-    <div id="contractPreviewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+    <div id="contractPreviewModal" onclick="if(event.target===this)document.getElementById('contractPreviewModal').classList.add('hidden')" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
 
         <div class="bg-white rounded-3xl p-6 w-full max-w-3xl shadow-2xl max-h-[85vh] flex flex-col">
 
@@ -2548,15 +2548,15 @@
 
 
 
-    <div id="merchantDocsModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[140]">
+    <div id="merchantDocsModal" onclick="if(event.target===this)closeMerchantDocsModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[140]">
 
         <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
 
-            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-3">
+            <div class="sticky top-0 z-20 bg-white -mx-5 sm:-mx-7 -mt-5 sm:-mt-7 px-5 sm:px-7 pt-5 sm:pt-7 pb-3 mb-3 border-b border-purple-100 flex justify-between items-center">
 
                 <div class="flex items-center gap-3">
 
-                    <div class="bg-teal-50 text-teal-700 p-3 rounded-2xl text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                    <div class="bg-purple-50 text-[#4B0082] p-3 rounded-2xl text-xl"><i class="fa-solid fa-cloud-arrow-up"></i></div>
 
                     <div>
 
@@ -2570,7 +2570,7 @@
 
                 </div>
 
-                <button onclick="closeMerchantDocsModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+                <button onclick="closeMerchantDocsModal()" class="text-slate-400 hover:text-red-500 p-1 transition" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
 
             </div>
 
@@ -3114,27 +3114,41 @@
 
 
 
-    <div id="merchantDocsAuditModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[136]">
+    <div id="merchantDocsAuditModal" onclick="if(event.target===this)closeMerchantDocsAuditModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[136]">
 
         <div class="bg-white rounded-3xl p-5 sm:p-7 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto hide-scrollbar">
 
-            <div class="flex justify-between items-center border-b border-purple-100 pb-3 mb-3">
+            <div class="sticky top-0 z-20 bg-white -mx-5 sm:-mx-7 -mt-5 sm:-mt-7 px-5 sm:px-7 pt-5 sm:pt-7 pb-3 mb-3 border-b border-purple-100">
 
-                <div class="flex items-center gap-3">
+                <div class="flex justify-between items-center">
 
-                    <div class="bg-teal-50 text-teal-700 p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-contract"></i></div>
+                    <div class="flex items-center gap-3">
 
-                    <div>
+                        <div class="bg-purple-50 text-[#4B0082] p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-contract"></i></div>
 
-                        <h3 class="font-black text-lg text-kanjo-dark">تدقيق مستندات التجار</h3>
+                        <div>
 
-                        <p class="text-xs text-slate-500 font-bold" id="docsAuditSubtitle">التجار ذوو الاتفاق النهائي</p>
+                            <h3 class="font-black text-lg text-kanjo-dark">تدقيق مستندات التجار</h3>
+
+                            <p class="text-xs text-slate-500 font-bold" id="docsAuditSubtitle">التجار ذوو الاتفاق النهائي</p>
+
+                        </div>
 
                     </div>
 
+                    <button onclick="closeMerchantDocsAuditModal()" class="text-slate-400 hover:text-red-500 p-1 transition" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
                 </div>
 
-                <button onclick="closeMerchantDocsAuditModal()" class="text-slate-400 hover:text-red-500 p-1"><i class="fa-solid fa-xmark text-2xl"></i></button>
+                <div class="relative mt-3">
+
+                    <i class="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+
+                    <input id="docsAuditSearchInput" type="text" autocomplete="off" oninput="filterMerchantDocsAudit(this.value)" placeholder="ابحث باسم التاجر أو المعرّف..." class="w-full bg-slate-50 border border-purple-100 rounded-xl pr-9 pl-16 py-2.5 text-sm font-bold text-slate-700 focus:outline-none focus:border-[#4B0082] focus:ring-2 focus:ring-[#4B0082]/20 transition">
+
+                    <span id="docsAuditSearchCount" class="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400"></span>
+
+                </div>
 
             </div>
 

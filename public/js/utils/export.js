@@ -1369,8 +1369,6 @@ window.buildContractHTML = (task) => {
 
     if (contactName && typeof window.sanitizeLegalText === 'function') contactName = window.sanitizeLegalText(contactName) || contactName;
 
-    const sanitizedNotes = (typeof window.sanitizeLegalText === 'function') ? window.sanitizeLegalText(task.notes || '') : String(task.notes || '');
-
     const address = task.address || '........................';
 
     const phone = contactPhone || '........................';
@@ -1697,7 +1695,6 @@ window.buildContractHTML = (task) => {
                 <div class="contract-text" style="font-size: 14px; margin-bottom: 20px; line-height: 1.8; font-weight: bold;">إنه في يوم: ............................ الموافق: ...... / ...... / ${toArabicNumerals(new Date().getFullYear())}م، تم الاتفاق والتراضي بين كل من:</div>
                 ${firstPartyBlockHtml}
                 ${secondPartyBlockHtml}
-                ${sanitizedNotes ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">ملاحظات الطرف الثاني: ${window.safeString(sanitizedNotes)}</div>` : ''}
                 <div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">التمهيد</div>
                     <div class="contract-text" style="font-size: 14px; line-height: 1.8; text-align: justify; font-weight: bold;">حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.</div>

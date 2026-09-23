@@ -421,19 +421,47 @@ window.openMerchantDocsAuditModal = () => {
 
     window.merchantDocsAuditData = data;
 
+    window._docsAuditQuery = '';
+
+    const searchInput = document.getElementById('docsAuditSearchInput');
+
+    if (searchInput) searchInput.value = '';
+
+    const searchCount = document.getElementById('docsAuditSearchCount');
+
+    if (searchCount) searchCount.innerText = '';
+
     const sub = document.getElementById('docsAuditSubtitle');
 
     if (sub) sub.innerText = `التجار ذوو الاتفاق النهائي: ${data.total} — تم رفع الملفات: ${data.uploaded}`;
 
-    if (data.items.length === 0) {
+    window.renderMerchantDocsAuditItems(data.items);
 
-        listEl.innerHTML = '<div class="bg-kanjo-light p-6 rounded-2xl text-center text-sm font-bold text-slate-500">لا يوجد تجار في مرحلة الاتفاق النهائي حالياً</div>';
+    modal.classList.remove('hidden');
+
+};
+
+/* Pure client-side re-render of the (already in-memory) audit list. No Firestore
+   access here — the caller passes whatever subset of the loaded items to show. */
+window.renderMerchantDocsAuditItems = (items) => {
+
+    const listEl = document.getElementById('docsAuditList');
+
+    if (!listEl) return;
+
+    if (!items || items.length === 0) {
+
+        listEl.innerHTML = String(window._docsAuditQuery || '').trim()
+
+            ? '<div class="bg-kanjo-light p-6 rounded-2xl text-center text-sm font-bold text-slate-500">لا توجد نتائج مطابقة لبحثك</div>'
+
+            : '<div class="bg-kanjo-light p-6 rounded-2xl text-center text-sm font-bold text-slate-500">لا يوجد تجار في مرحلة الاتفاق النهائي حالياً</div>';
 
         return;
 
     }
 
-    listEl.innerHTML = data.items.map((m) => {
+    listEl.innerHTML = items.map((m) => {
 
         const driveBtn = m.driveFolderLink
 
@@ -467,9 +495,38 @@ window.openMerchantDocsAuditModal = () => {
 
     }).join('');
 
-    modal.classList.remove('hidden');
+};
+
+/* Real-time merchant-name filter. Filters the in-memory array only, so typing
+   never triggers a Firestore read. */
+window.filterMerchantDocsAudit = (value) => {
+
+    const query = String(value || '');
+
+    window._docsAuditQuery = query;
+
+    const data = window.merchantDocsAuditData || { items: [] };
+
+    const all = Array.isArray(data.items) ? data.items : [];
+
+    const normalize = window.normalizeArabic || ((s) => String(s || '').toLowerCase());
+
+    const needle = normalize(query);
+
+    const filtered = needle
+
+        ? all.filter((m) => normalize(m.baseName).includes(needle) || normalize(m.merchantId).includes(needle))
+
+        : all;
+
+    window.renderMerchantDocsAuditItems(filtered);
+
+    const countEl = document.getElementById('docsAuditSearchCount');
+
+    if (countEl) countEl.innerText = needle ? `${filtered.length} / ${all.length}` : '';
 
 };
+
 
 window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
 

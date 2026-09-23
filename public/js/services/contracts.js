@@ -78,7 +78,6 @@ window.buildContractCallablePayload = (task) => {
         contactRole,
         contactPhone,
         address: task.address || '',
-        notes: task.notes || '',
         merchantLogo: window.currentMerchantLogoBase64 || ''
     };
 };

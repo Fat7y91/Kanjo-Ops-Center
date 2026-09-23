@@ -19,6 +19,31 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* —— Global custom scrollbar (brand: royal purple #4B0082 on a light track) ——
+   Slim and elegant, replacing the default browser chrome app-wide. Elements
+   that intentionally opt out via .hide-scrollbar keep their scrollbar hidden. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+
+::-webkit-scrollbar-track { background: #F5F3FF; }
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #4B0082 0%, #6D28D9 100%);
+    border-radius: 999px;
+    border: 2px solid #F5F3FF;
+}
+
+::-webkit-scrollbar-thumb:hover { background: #230535; }
+
+::-webkit-scrollbar-corner { background: #F5F3FF; }
+
+* { scrollbar-width: thin; scrollbar-color: #4B0082 #F5F3FF; }
+
+/* —— Sticky modal headers ——
+   Long modals keep their title + close button pinned while the body scrolls.
+   The negative margins cancel the card's p-5/sm:p-7 padding so the pinned
+   header sits flush against the card's top edge with no gap. */
+.kanjo-sticky-modal-header { position: sticky; top: 0; z-index: 20; background: #fff; }
+
 .highlight-task { animation: highlightAnim 2s ease-out; }
 
 @keyframes highlightAnim {
