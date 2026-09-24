@@ -347,10 +347,14 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
 /* List a collection or subcollection by path segments, following page tokens.
    Returns flat `[{ id, ...fields }]`; a missing path is an empty list, never an
    error. */
-const restListCollection = async (segments, { pageSize = 300, maxPages = 20 } = {}) => {
+const restListCollection = async (segments, { pageSize = 300, maxPages = 20, select = null } = {}) => {
     const path = segments.map(encodeURIComponent).join('/');
+    /* Optional field mask (mask.fieldPaths) so a list can omit heavy fields. */
+    const mask = (Array.isArray(select) && select.length)
+        ? '&' + select.map((f) => 'mask.fieldPaths=' + encodeURIComponent(f)).join('&')
+        : '';
     const build = (pageToken) => {
-        let u = REST_DOCUMENTS_URL + '/' + path + '?pageSize=' + pageSize + '&key=' + encodeURIComponent(firebaseConfig.apiKey);
+        let u = REST_DOCUMENTS_URL + '/' + path + '?pageSize=' + pageSize + '&key=' + encodeURIComponent(firebaseConfig.apiKey) + mask;
         if (pageToken) u += '&pageToken=' + encodeURIComponent(pageToken);
         return u;
     };
@@ -458,6 +462,34 @@ const restFetchTasks = async ({ team = null, date = null } = {}) => {
     return docs;
 };
 
+/* Field mask for the heavy `tasks` archive read. Task documents embed a Base64
+   `merchantLogo` which is the ~15MB bulk of the collection. The archive
+   consumers (global search, reports/exports, accounting, merchant cards) only
+   ever read the textual/structural fields below, so the logo and any other
+   oversized blob is deliberately omitted. Day-scoped reads keep the full
+   document (the dashboard cards render the logo). */
+const TASKS_ARCHIVE_SELECT = [
+    'name', 'merchantId', 'merchant_id', 'cat', 'team', 'time', 'target',
+    'notes', 'reports', 'attendances', 'isSigned', 'isProvisional', 'achieved',
+    'createdAt', 'created_at', 'updatedAt',
+    'fbPage', 'fbGroup', 'insta', 'website', 'address',
+    'vipPreContract', 'commission', 'agreementStatus', 'facilityType',
+    'phone', 'phoneNumber', 'contact',
+    'docsUpdatedAt', 'docsUpdatedBy', 'driveFolderId', 'driveFolderLink',
+    'source', 'isArchived', 'signedAt', 'contractSignedAt', 'reportCount'
+];
+
+/* Reads the complete `tasks` collection with the strict archive field mask so
+   the heavy Base64 logos never travel. `team` scopes a rep to their own team;
+   results are sorted newest-first by the `time` field. */
+const restFetchTasksArchive = async ({ team = null } = {}) => {
+    const filters = [];
+    if (team) filters.push(['team', 'EQUAL', team]);
+    const docs = await restRunQuery('tasks', filters, null, { select: TASKS_ARCHIVE_SELECT });
+    docs.sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')));
+    return docs;
+};
+
 /* Lightweight read of finalized (signed) merchants for roles that must NOT pull
    the full task archive (reps / data-entry). The archive is ~15MB because task
    docs embed Base64 merchantLogo blobs; the field mask returns only what the
@@ -483,6 +515,7 @@ const restFetchVipPreContractMerchantTasks = async ({ team = null } = {}) => {
 
 window.kanjoRest = {
     fetchTasks: restFetchTasks,
+    fetchTasksArchive: restFetchTasksArchive,
     fetchSignedMerchantTasks: restFetchSignedMerchantTasks,
     fetchVipPreContractMerchantTasks: restFetchVipPreContractMerchantTasks,
     runQuery: restRunQuery,

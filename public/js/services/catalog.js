@@ -2129,6 +2129,13 @@ window.toggleCatalogAllProductsWidget = () => {
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogAllProductsOpen = willOpen;
     if (willOpen) {
+        /* The all-products view resolves merchant logos from the global task
+           archive, so make sure the archive is being loaded. */
+        if (typeof window.ensureTaskArchiveLoaded === 'function') {
+            Promise.resolve(window.ensureTaskArchiveLoaded()).then(() => {
+                if (window._catalogAllProductsOpen) renderCatalogAllProductsList();
+            }).catch(() => {});
+        }
         const searchInput = document.getElementById('catalogGlobalSearchInput');
         if (searchInput) searchInput.value = String(window._catalogSearchQuery || '');
         const clearBtn = document.getElementById('catalogGlobalSearchClear');
@@ -2454,6 +2461,11 @@ window.onCatalogGlobalSearchInput = (event) => {
     if (_catalogGlobalSearchTimer) clearTimeout(_catalogGlobalSearchTimer);
     _catalogGlobalSearchTimer = setTimeout(() => {
         window._catalogSearchQuery = value;
+        /* A cross-date merchant search needs the global task archive for names
+           and logos; trigger it on first keystroke. */
+        if (value.trim() && typeof window.ensureTaskArchiveLoaded === 'function') {
+            window.ensureTaskArchiveLoaded();
+        }
         /* A merchant detail view would hide the filtered folders, so snap
            back to the folder grid while a query is active. */
         if (value.trim()) window._catalogAllProductsSelectedMerchant = '';

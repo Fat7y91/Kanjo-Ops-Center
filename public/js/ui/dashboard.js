@@ -1272,7 +1272,12 @@ window.showCardDetails = (cardType) => {
 
 };
 
-window.applySearch = () => renderDashboard(window.lastSnapshot);
+window.applySearch = () => {
+    /* A non-empty search spans every date, so ensure the full archive is
+       being loaded; the memory sync re-renders once it lands. */
+    if (typeof window.ensureTaskArchiveLoaded === 'function') window.ensureTaskArchiveLoaded();
+    renderDashboard(window.lastSnapshot);
+};
 
 /* ─── Compact action modals (assign task / products export) ───
    The bulky inline forms now live inside standard Kanjo modals so the page

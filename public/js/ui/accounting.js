@@ -957,6 +957,10 @@ window.renderPayrollTable = () => {
 
     if (!tbody) return;
 
+    /* Payroll is computed from the whole task set; make sure the lazy archive
+       is loading. The memory sync re-runs this render once the data lands. */
+    if (typeof window.ensureTaskArchiveLoaded === 'function') window.ensureTaskArchiveLoaded();
+
     tbody.innerHTML = '';
 
     window.initPayrollPeriodControls();

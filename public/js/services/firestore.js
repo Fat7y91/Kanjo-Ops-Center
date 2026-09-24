@@ -959,6 +959,8 @@ window.listenToTasks = () => {
        clean memory, otherwise docs from the previous session linger. */
     if (!window.tasksMemory) window.tasksMemory = new Map();
     window.tasksMemory.clear();
+    /* Reset the lazy-archive guard so this session can trigger its own read. */
+    window._taskArchivePromise = null;
     /* A new session/window must invalidate the memoized full-memory scans so the
        first render rebuilds from this listener's data, not a previous login. */
     window.tasksMemoryVersion = tasksMemoryVersion() + 1;
@@ -971,8 +973,8 @@ window.listenToTasks = () => {
     /* Initial fetch is scoped to the day the dashboard is showing (today by
        default) so the first paint never waits on the full historical archive.
        Persistence keeps it in IndexedDB, so it is paid once and then served
-       from cache. The archive is streamed afterwards by `startHistoricalListener`
-       (see below) without blocking the main thread. */
+       from cache. The full archive is loaded lazily, on demand, via
+       `window.ensureTaskArchiveLoaded()` (see below). */
     const selectedDate = (typeof window.getTasksSelectedDate === 'function')
         ? window.getTasksSelectedDate()
         : new Date().toISOString().slice(0, 10);
@@ -1058,6 +1060,20 @@ window.listenToTasks = () => {
         return mutated;
     };
 
+    /* Merge archive docs into memory WITHOUT clobbering fields the masked
+       archive read intentionally omits (e.g. the day read's merchantLogo). */
+    const mergeRestDocsToMemory = (docs) => {
+        let mutated = false;
+        docs.forEach((doc) => {
+            if (!doc || !doc.id) return;
+            const { id, ...data } = doc;
+            const existing = window.tasksMemory.get(id);
+            window.tasksMemory.set(id, existing ? Object.assign({}, existing, data) : data);
+            mutated = true;
+        });
+        return mutated;
+    };
+
     const commitRenderIfNeeded = (mutated) => {
         if (window._tasksPage !== sessionPage) return;
         if (mutated || firstSnapshot) {
@@ -1065,9 +1081,11 @@ window.listenToTasks = () => {
             firstSnapshot = false;
             scheduleTaskSync();
         }
-        /* Paint the selected day first, then stream the archive in the
-           background so the global stats fill in without blocking the UI. */
-        startHistoricalListener();
+        /* The selected day is painted above. The full archive is no longer
+           streamed automatically: a feature that spans all dates (global
+           search, exports/reports, accounting, the all-products catalog) calls
+           window.ensureTaskArchiveLoaded(), which starts the single background
+           read on demand and re-renders once the data lands. */
     };
 
     /* Real-time delta handler (onSnapshot -> docChanges). */
@@ -1250,18 +1268,23 @@ window.listenToTasks = () => {
        Gated to managers/founders/accounting: reps and data-entry users must
        never download the ~15MB archive. */
     let historyStarted = false;
+    let historyPromise = null;
     function startHistoricalListener() {
-        if (historyStarted) return;
+        if (historyStarted) return historyPromise || Promise.resolve();
         historyStarted = true;
         if (!canLoadTaskArchive()) {
             console.log('[KANJO-DIAGNOSTIC] Archive fetch skipped for role:', window.currentUser && window.currentUser.role);
-            return;
+            return Promise.resolve();
         }
         const page = window._tasksPage;
         const mergeDocs = (snapshot) => {
             let mutated = false;
             snapshot.docs.forEach((docSnap) => {
-                window.tasksMemory.set(docSnap.id, docSnap.data());
+                const existing = window.tasksMemory.get(docSnap.id);
+                window.tasksMemory.set(
+                    docSnap.id,
+                    existing ? Object.assign({}, existing, docSnap.data()) : docSnap.data()
+                );
                 mutated = true;
             });
             return mutated;
@@ -1276,17 +1299,22 @@ window.listenToTasks = () => {
         };
         const applyHistoryDocs = (docs) => {
             if (window._tasksPage !== page) return;
-            if (applyRestDocsToMemory(docs)) {
+            if (mergeRestDocsToMemory(docs)) {
                 window.tasksMemoryVersion = tasksMemoryVersion() + 1;
                 scheduleTaskSync();
             }
         };
-        (async () => {
+        historyPromise = (async () => {
             /* Direct REST first: the whole archive must load even when the SDK
-               is stuck offline, otherwise global counts stay at 0. */
-            if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
+               is stuck offline, otherwise global counts stay at 0. The archive
+               reader applies a strict field mask so the heavy Base64 logos do
+               not travel (see restFetchTasksArchive). */
+            const archiveFetcher = (window.kanjoRest && typeof window.kanjoRest.fetchTasksArchive === 'function')
+                ? window.kanjoRest.fetchTasksArchive
+                : (window.kanjoRest && window.kanjoRest.fetchTasks);
+            if (typeof archiveFetcher === 'function') {
                 try {
-                    const docs = await window.kanjoRest.fetchTasks({ team: page ? page.repTeam : repTeam });
+                    const docs = await archiveFetcher({ team: page ? page.repTeam : repTeam });
                     console.log('[KANJO-DIAGNOSTIC] Background history REST fetch completed. Tasks loaded:', docs.length);
                     applyHistoryDocs(docs);
                     return;
@@ -1306,7 +1334,21 @@ window.listenToTasks = () => {
                 }
             }
         })();
+        return historyPromise;
     }
+
+    /* Lazy archive trigger. The bootstrap no longer streams the full archive
+       on its own: a feature that spans every date (global search, reports and
+       exports, accounting payroll, the all-products catalog) calls this. The
+       first caller starts the single background read; later callers and
+       re-renders share its promise and never issue a second read. Idempotent
+       and safe to call even for roles that may not load the archive. */
+    window.ensureTaskArchiveLoaded = () => {
+        if (window._taskArchivePromise) return window._taskArchivePromise;
+        window._taskArchivePromise = Promise.resolve(startHistoricalListener());
+        return window._taskArchivePromise;
+    };
+    window.startHistoricalListener = startHistoricalListener;
 
     /* ─── Hybrid bootstrap: fast day paint first, full archive in background ───
        1) A direct REST runQuery paints TODAY in under a second. It is a plain
@@ -1315,10 +1357,11 @@ window.listenToTasks = () => {
            0-count dashboard). The SDK getDocs is kept as a fallback.
        2) Only after that fast paint resolves do we attach the day onSnapshot
           listener for live updates.
-       3) startHistoricalListener then reads the COMPLETE archive in the
-          background (guarded by historyStarted) so global search and global
-          stats fill in without blocking first paint. Reps/data-entry skip this
-          entirely (see canLoadTaskArchive).
+       3) The COMPLETE archive is loaded lazily: a feature that spans every date
+          (global search, exports/reports, accounting, the all-products catalog)
+          calls window.ensureTaskArchiveLoaded(), which runs startHistoricalListener
+          once, guarded by historyStarted, without blocking first paint. Reps and
+          data-entry never load it (see canLoadTaskArchive).
        4) If the stream is killed, the silent poller keeps the day fresh over
           REST instead of showing the 0-count recovery UI. */
     const handleInitialError = (error) => {
@@ -1380,8 +1423,9 @@ window.listenToTasks = () => {
                 return;
             }
         }
-        /* Day data is painted now; the full archive streams in 5s later via
-           startHistoricalListener (scheduled by commitRenderIfNeeded). */
+        /* Day data is painted now. The full archive is not fetched here; the
+           first all-dates feature (search/export/accounting/catalog) triggers
+           it on demand via window.ensureTaskArchiveLoaded(). */
         if (snapshot) handleDocsSnapshot(snapshot);
         if (attachRealtime) attachRealtimeListener();
     };

@@ -420,7 +420,11 @@ window.exportDetailsExcel = async () => {
 
 };
 
-window.openExportModal = () => { document.getElementById('exportModal').classList.remove('hidden'); };
+window.openExportModal = () => {
+    /* Start the lazy archive load while the user configures the export. */
+    if (typeof window.ensureTaskArchiveLoaded === 'function') window.ensureTaskArchiveLoaded();
+    document.getElementById('exportModal').classList.remove('hidden');
+};
 
 
 
@@ -454,7 +458,21 @@ window.toggleExportOptions = (type) => {
 
 
 
+/* Exports read the whole task set from memory. The global archive is now loaded
+   lazily, so make sure it is present and let the scheduled memory-sync re-render
+   rebuild window.allTasksCache before the synchronous export reads it. */
+const ensureArchiveForExport = async () => {
+    if (typeof window.ensureTaskArchiveLoaded !== 'function') return;
+    await window.ensureTaskArchiveLoaded();
+    await new Promise((resolve) => {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(resolve));
+        else setTimeout(resolve, 32);
+    });
+};
+
 window.performExport = async () => {
+
+    await ensureArchiveForExport();
 
     const isAll = document.getElementById('expAll').checked;
 
@@ -554,6 +572,8 @@ window.performExport = async () => {
 
 
 window.performAdvancedExport = async () => {
+
+    await ensureArchiveForExport();
 
     if(!window.filteredTasksForExport || window.filteredTasksForExport.length === 0) {
 

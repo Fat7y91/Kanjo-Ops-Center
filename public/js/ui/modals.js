@@ -1080,6 +1080,9 @@ window.openViewArchivedReportsModal = async () => {
 
     }
 
+    /* Archived reports span every date; make sure the lazy archive is loading. */
+    if (typeof window.ensureTaskArchiveLoaded === 'function') window.ensureTaskArchiveLoaded();
+
     const container = document.getElementById('archivedReportsListContainer');
 
     container.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">جاري تحميل التقارير المستبعدة...</div>';

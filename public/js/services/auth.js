@@ -384,7 +384,16 @@ function applyThemeAndShowDashboard() {
             }
         }
 
-        if (!isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
+        const isMahmoudOps = (typeof window.isMahmoudOpsUser === 'function')
+            ? window.isMahmoudOpsUser()
+            : String((currentUser && currentUser.name) || '').includes('محمود');
+
+        /* The pending-transfer badge is only ever surfaced to the Ops owner, so
+           the global live listener is attached for that single role instead of
+           every non-data-entry user. Reps no longer hold a persistent global
+           subscription; they get one bounded, self-scoped read below so the
+           cross-team search can still flag a request they already submitted. */
+        if (isMahmoudOps && !isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
             const unsub = onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending"), limit(50)), (snap) => {
                 if(window.pendingTransferTaskIds) window.pendingTransferTaskIds.clear();
                 snap.forEach(docSnap => {
@@ -393,10 +402,7 @@ function applyThemeAndShowDashboard() {
                 });
 
                 const transferBadge = document.getElementById('transferBadge');
-                const showTransferBadge = (typeof window.isMahmoudOpsUser === 'function')
-                    ? window.isMahmoudOpsUser()
-                    : String((currentUser && currentUser.name) || '').includes('محمود');
-                if (transferBadge && showTransferBadge) {
+                if (transferBadge) {
                     if (snap.size > 0) {
                         transferBadge.classList.remove('hidden');
                     } else {
@@ -408,6 +414,20 @@ function applyThemeAndShowDashboard() {
                 }
             });
             window._appListenerUnsubscribers.push(unsub);
+        } else if (isRep && !isDataEntry && typeof getDocs === 'function' && typeof query === 'function' && typeof collection === 'function' && typeof db !== 'undefined' && typeof where === 'function') {
+            /* One-shot self-scoped read (no live subscription): only the rep's
+               own requests, so a pending transfer shows as already submitted. */
+            Promise.resolve()
+                .then(() => getDocs(query(collection(db, "transferRequests"), where("requestedBy", "==", currentUser.name))))
+                .then((snap) => {
+                    if (!window.pendingTransferTaskIds) window.pendingTransferTaskIds = new Set();
+                    snap.forEach((docSnap) => {
+                        const req = docSnap.data() || {};
+                        if (req.status === 'pending' && req.taskId) window.pendingTransferTaskIds.add(req.taskId);
+                    });
+                    if (window.lastSnapshot && typeof renderDashboard !== 'undefined') renderDashboard(window.lastSnapshot);
+                })
+                .catch((err) => console.error('[transferRequests] self-scoped read failed:', err));
         }
 
         /* Merchant records (authoritative drive-folder binding + merchantId).

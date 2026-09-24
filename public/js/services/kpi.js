@@ -19,6 +19,48 @@ const KPI_PRODUCTS_COLLECTION = 'merchant_products';
 const KPI_ACTIVE_TIME_KEY = 'kanjo_kpi_active_time_v1';
 const KPI_IMAGE_EDIT_KEY = 'kanjo_kpi_image_edit_v1';
 
+/* Field masks for the KPI reads. `merchant_products` embeds Base64 image
+   payloads and `rep_kpis` carries oversized bookkeeping; the dashboard only
+   ever reads the textual/metric fields below, so masked reads keep the payload
+   small. Firestore `select` is inclusion-only, so every field the KPI helpers
+   touch is listed explicitly. */
+const KPI_PRODUCT_FIELDS = [
+    'added_by', 'createdBy', 'addedBy', 'created_by', 'repName',
+    'merchantName', 'merchant', 'merchant_name',
+    'name', 'name_ar', 'name_en',
+    'description', 'description_ar', 'description_en',
+    'variations',
+    'enhancedImageUrls', 'rawImageUrls', 'images',
+    'enhancedImageUrl', 'rawImageUrl', 'image_url', 'image', 'rawImage',
+    'enhanced_image_urls', 'enhanced_image_url', 'enhancedImage', 'enhanced_image',
+    'raw_image_urls', 'raw_image_url', 'main_image_url',
+    'has_enhanced_image', 'hasEnhancedImage', 'status', 'image_status', 'imageStatus',
+    'imageUpdatedAt', 'image_updated_at', 'enhancedImageUpdatedAt', 'enhanced_image_updated_at',
+    'imagesUpdatedAt', 'images_updated_at', 'imageEditCompletedAt', 'image_edit_completed_at',
+    'enhancedAt', 'enhanced_at', 'updatedAt', 'updated_at', 'createdAt', 'created_at'
+];
+const KPI_REP_FIELDS = ['repName', 'historicalSeconds', 'historicalComputedAt'];
+const KPI_DAILY_STATS_FIELDS = ['activeSeconds', 'imageEditSeconds'];
+
+/* Shared TTL for the memoized KPI reads. A re-render or a rep switch inside a
+   minute reuses the in-memory rows instead of re-reading the collections. */
+const KPI_READ_CACHE_TTL = 60 * 1000;
+
+const kpiCacheGet = (key, loader, ttlMs) => {
+    if (window.kanjoCache && typeof window.kanjoCache.get === 'function') {
+        return window.kanjoCache.get(key, (ttlMs == null ? KPI_READ_CACHE_TTL : ttlMs), loader);
+    }
+    return Promise.resolve().then(loader);
+};
+
+const kpiInvalidateProductCache = () => {
+    if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+        window.kanjoCache.invalidatePrefix('kpi:products');
+        window.kanjoCache.invalidatePrefix('kpi:daily');
+    }
+};
+window.kpiInvalidateProductCache = kpiInvalidateProductCache;
+
 const KPI_IDLE_MS = 3 * 60 * 1000;          // pause after 3 minutes of inactivity
 const KPI_SESSION_BREAK_MS = 15 * 60 * 1000; // gap larger than this = new session
 const KPI_STANDARD_ADD_MS = 4 * 60 * 1000;   // assumed time for the first product / new session
@@ -271,6 +313,11 @@ window.kpiSyncActiveTime = async (extra) => {
         if (!(await kpiRestMerge([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today], payload))) {
             const ref = window.doc(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today);
             await window.setDoc(ref, payload, { merge: true });
+        }
+        /* The day's active/edit totals changed: drop the memoized read so an
+           open dashboard reflects it on the next render. */
+        if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
+            window.kanjoCache.invalidate('kpi:daily:' + repId);
         }
     } catch (err) {
         console.error('[kpi] active time sync failed:', err);
@@ -577,6 +624,12 @@ window.calculateHistoricalTime = async () => {
             }, { merge: true });
             results.push({ rep: info.rep, repId, seconds: info.seconds, count: info.count });
         }
+        /* Historical seconds were rewritten for every rep: drop the memoized
+           rep_kpis/leaderboard so the dashboard below reads the fresh values. */
+        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+            window.kanjoCache.invalidatePrefix('kpi:repkpis');
+            window.kanjoCache.invalidatePrefix('kpi:leaderboard');
+        }
 
         const creditMinutes = Math.round(editorCredit / 60);
         if (window.showToast) {
@@ -617,10 +670,10 @@ window._kpiLatestReport = window._kpiLatestReport || null;
 window._kpiSelectedRepId = window._kpiSelectedRepId || null;
 window._kpiCharts = window._kpiCharts || {};
 
-const kpiFetchAllProducts = async () => {
+const kpiFetchAllProductsUncached = async () => {
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
-            return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, []);
+            return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });
         } catch (restErr) {
             console.warn('[kpi] REST products fetch failed; trying SDK:', restErr);
         }
@@ -631,10 +684,14 @@ const kpiFetchAllProducts = async () => {
     return items;
 };
 
+/* Memoized full-product read: the manager dashboard reuses the same rows for a
+   TTL window instead of re-reading the collection on every render. */
+const kpiFetchAllProducts = () => kpiCacheGet('kpi:products:all', kpiFetchAllProductsUncached);
+
 /* Secure, rep-scoped product fetch. A field rep only ever loads the products
    they personally added (queries are scoped by the logged-in User ID via the
    common author fields). Managers keep the full view. */
-const kpiFetchProductsForRep = async (repName) => {
+const kpiFetchProductsForRepUncached = async (repName) => {
     const name = String(repName || '').trim();
     if (!name) return [];
     const found = new Map();
@@ -643,7 +700,7 @@ const kpiFetchProductsForRep = async (repName) => {
     /* Query both author aliases concurrently instead of serially. */
     const results = await Promise.all(authorFields.map((field) => {
         if (useRest) {
-            return window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [[field, '==', name]]).catch(() => null);
+            return window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [[field, '==', name]], null, { select: KPI_PRODUCT_FIELDS }).catch(() => null);
         }
         if (typeof window.query !== 'function' || typeof window.where !== 'function') return Promise.resolve(null);
         return window.getDocs(window.query(
@@ -659,6 +716,11 @@ const kpiFetchProductsForRep = async (repName) => {
     return Array.from(found.values());
 };
 
+const kpiFetchProductsForRep = (repName) => {
+    const key = 'kpi:products:rep:' + String(repName || '').trim();
+    return kpiCacheGet(key, () => kpiFetchProductsForRepUncached(repName));
+};
+
 /* Reps get a scoped fetch of their own products; managers get the full set
    for the cross-rep audit tools. */
 const kpiFetchProductsForScope = async (repName) => {
@@ -666,7 +728,7 @@ const kpiFetchProductsForScope = async (repName) => {
     return kpiFetchAllProducts();
 };
 
-const kpiFetchParentRecords = async () => {
+const kpiFetchParentRecordsUncached = async () => {
     const map = new Map();
     const useRest = !!(window.kanjoRest && (typeof window.kanjoRest.runQuery === 'function' || typeof window.kanjoRest.getDocument === 'function'));
     try {
@@ -686,7 +748,7 @@ const kpiFetchParentRecords = async () => {
             return map;
         }
         if (useRest && typeof window.kanjoRest.runQuery === 'function') {
-            const items = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, []);
+            const items = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, [], null, { select: KPI_REP_FIELDS });
             items.forEach((it) => { const { id, ...data } = it; map.set(id, data); });
             return map;
         }
@@ -698,7 +760,15 @@ const kpiFetchParentRecords = async () => {
     return map;
 };
 
-const kpiFetchDailyStats = async (repId) => {
+/* Memoized rep_kpis read (own record for reps, whole roster for managers). */
+const kpiFetchParentRecords = () => {
+    const key = window.isFieldRepUser()
+        ? 'kpi:repkpis:own:' + String((window.currentUser && window.currentUser.name) || '')
+        : 'kpi:repkpis:all';
+    return kpiCacheGet(key, kpiFetchParentRecordsUncached);
+};
+
+const kpiFetchDailyStatsUncached = async (repId) => {
     let activeSeconds = 0;
     let imageEditSeconds = 0;
     let days = 0;
@@ -706,7 +776,7 @@ const kpiFetchDailyStats = async (repId) => {
         let items = null;
         if (!repId) return { activeSeconds, imageEditSeconds, days };
         if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
-            items = await window.kanjoRest.list([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION]);
+            items = await window.kanjoRest.list([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION], { select: KPI_DAILY_STATS_FIELDS });
         } else {
             const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION));
             items = [];
@@ -721,6 +791,13 @@ const kpiFetchDailyStats = async (repId) => {
         console.error('[kpi] daily stats fetch failed for ' + repId + ':', err);
     }
     return { activeSeconds, imageEditSeconds, days };
+};
+
+/* Memoized per-rep daily-stats read, keyed by repId, so a re-render or a
+   manager opening the dashboard twice inside the TTL issues no extra reads. */
+const kpiFetchDailyStats = (repId) => {
+    if (!repId) return Promise.resolve({ activeSeconds: 0, imageEditSeconds: 0, days: 0 });
+    return kpiCacheGet('kpi:daily:' + repId, () => kpiFetchDailyStatsUncached(repId));
 };
 
 /* ───────────── Team leaderboard (gamification) ─────────────
@@ -771,6 +848,12 @@ const kpiPublishSummary = async (row) => {
         if (!(await kpiRestMerge([KPI_REP_COLLECTION, payload.repId], payload))) {
             await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, payload.repId), payload, { merge: true });
         }
+        /* The published rows changed: drop the memoized rep_kpis/leaderboard so
+           the next read (and every viewer) sees the fresh summary. */
+        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+            window.kanjoCache.invalidatePrefix('kpi:repkpis');
+            window.kanjoCache.invalidatePrefix('kpi:leaderboard');
+        }
     } catch (err) {
         /* Non-fatal: a rep publishes only their own row; managers publish all. */
         console.error('[kpi] leaderboard summary publish failed for ' + payload.repId + ':', err);
@@ -791,7 +874,7 @@ const kpiPublishSummaries = (rows) => {
    payroll roster seeds the list so every rep is counted in the denominator even
    before they have published a summary. Rule-gated by `allow read` for all
    signed-in users. Never lets a failure throw into the dashboard render path. */
-const kpiFetchLeaderboardSummaries = async () => {
+const kpiFetchLeaderboardSummariesUncached = async () => {
     try {
         const byId = new Map();
         /* Seed the full company roster so the rank denominator is the total
@@ -816,7 +899,7 @@ const kpiFetchLeaderboardSummaries = async () => {
         let rows = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
             try {
-                rows = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, []);
+                rows = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, [], null, { select: KPI_TEAM_SUMMARY_FIELDS });
             } catch (restErr) {
                 console.warn('[kpi] REST leaderboard fetch failed; trying SDK:', restErr);
             }
@@ -846,6 +929,10 @@ const kpiFetchLeaderboardSummaries = async () => {
         return [];
     }
 };
+
+/* Memoized leaderboard read, shared across re-renders inside the TTL window.
+   Consumers only filter/map the result, so the cached array is never mutated. */
+const kpiFetchLeaderboardSummaries = () => kpiCacheGet('kpi:leaderboard', kpiFetchLeaderboardSummariesUncached);
 
 /* Anonymous benchmarking: reps compare each of their four scored metrics
    against the single best company-wide value, without ever seeing a peer's
@@ -2031,6 +2118,7 @@ window.kpiSaveFixedDescription = async (productId) => {
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixList [data-fix-id]').length;
         if (window.showToast) window.showToast('تم حفظ الوصف بنجاح — تحسّن مؤشرك', true);
+        kpiInvalidateProductCache();
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixDescriptions();
@@ -2167,6 +2255,7 @@ window.kpiUploadMissingImage = async (productId, input) => {
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixImagesList [data-fix-img-id]').length;
         if (window.showToast) window.showToast('تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
+        kpiInvalidateProductCache();
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixImages();
