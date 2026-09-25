@@ -1833,6 +1833,24 @@
 
                     <div id="pharmacyIntakeCatalogStatus" class="text-[11px] font-bold text-slate-500">لم يتم تحميل الكتالوج الطبي بعد</div>
 
+                    <div id="pharmacyIntakeCatalogProgressWrap" class="hidden space-y-1.5">
+
+                        <div class="flex items-center justify-between gap-2 text-[11px] font-black text-[#230535]">
+
+                            <span id="pharmacyIntakeCatalogProgressText">جاري تحليل الكتالوج الطبي: 0%</span>
+
+                            <span id="pharmacyIntakeCatalogProgressPct" class="text-[#FFD700] bg-[#230535] px-2 py-0.5 rounded-lg">0%</span>
+
+                        </div>
+
+                        <div class="w-full h-2.5 bg-white border border-[#230535]/15 rounded-full overflow-hidden">
+
+                            <div id="pharmacyIntakeCatalogProgressBar" class="h-full bg-gradient-to-r from-[#230535] to-[#FFD700] transition-all duration-150 ease-out" style="width:0%"></div>
+
+                        </div>
+
+                    </div>
+
                 </div>
 
                 <div class="bg-kanjo-light border border-[#FFD700]/50 rounded-2xl p-3 space-y-2">

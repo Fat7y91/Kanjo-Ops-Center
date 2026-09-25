@@ -20,6 +20,9 @@ const PHARMACY_INTAKE_CATALOG_URL = 'data/Kanjo_Enriched_Medical_Catalog.json';
 const PHARMACY_INTAKE_CATALOG_CACHE_KEY = 'pharmacyIntake:catalog';
 const PHARMACY_INTAKE_CATALOG_TTL = 30 * 60 * 1000;
 const PHARMACY_INTAKE_MATCH_THRESHOLD = 0.4;
+/* Rows normalized per macrotask while parsing the uploaded catalog. Bounded so
+   a 14k+ item JSON never blocks the main thread long enough to freeze the tab. */
+const PHARMACY_INTAKE_PARSE_CHUNK_SIZE = 1000;
 const PHARMACY_INTAKE_PRICE_FIELDS = [
     'public_price', 'publicPrice', 'price', 'sellingPrice', 'current_price', 'base_price',
     'السعر (EGP)', 'السعر', 'سعر', 'سعر الجمهور', 'الجمهور', 'السعر للجمهور'
@@ -399,6 +402,35 @@ const normalizeIntakeCatalog = (parsed) => intakeExtractArray(parsed)
     .map(intakeNormalizeCatalogItem)
     .filter((item) => item.name);
 
+/* Yield back to the browser so pending paints/input events are processed
+   between parse chunks. requestAnimationFrame keeps the progress bar smooth
+   where available; setTimeout(0) is the fallback for background tabs. */
+const intakeYieldToBrowser = () => new Promise((resolve) => {
+    if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(() => resolve());
+    } else {
+        setTimeout(resolve, 0);
+    }
+});
+
+/* Normalize a large catalog array in bounded chunks, reporting progress after
+   each chunk. Returns the usable items (those with a resolved name). */
+const intakeNormalizeCatalogChunked = async (extracted, onProgress) => {
+    const items = [];
+    const total = Array.isArray(extracted) ? extracted.length : 0;
+    const chunkSize = PHARMACY_INTAKE_PARSE_CHUNK_SIZE;
+    for (let start = 0; start < total; start += chunkSize) {
+        const end = Math.min(start + chunkSize, total);
+        for (let i = start; i < end; i++) {
+            const normalized = intakeNormalizeCatalogItem(extracted[i]);
+            if (normalized.name) items.push(normalized);
+        }
+        if (typeof onProgress === 'function') onProgress(end, total);
+        await intakeYieldToBrowser();
+    }
+    return items;
+};
+
 /* Rough shape summary used only for console diagnostics when a catalog file is
    uploaded, so an unexpected structure can be identified without re-reading the
    whole (multi-MB) file by hand. */
@@ -546,6 +578,36 @@ window.onPharmacyIntakeFileChange = (event) => {
     if (label) label.textContent = file ? file.name : 'اختر ملف المخزون (xlsx / xls / csv / pdf)';
 };
 
+/* ── Catalog parse progress UI ── */
+const intakeSetCatalogStatusMessage = (text) => {
+    const el = document.getElementById('pharmacyIntakeCatalogStatus');
+    if (el) el.textContent = text || '';
+};
+
+const intakeSetCatalogProgress = (processed, total, label) => {
+    const wrap = document.getElementById('pharmacyIntakeCatalogProgressWrap');
+    if (!wrap) return;
+    wrap.classList.remove('hidden');
+    const pct = total > 0 ? Math.min(100, Math.floor((processed / total) * 100)) : 0;
+    const bar = document.getElementById('pharmacyIntakeCatalogProgressBar');
+    const pctEl = document.getElementById('pharmacyIntakeCatalogProgressPct');
+    const textEl = document.getElementById('pharmacyIntakeCatalogProgressText');
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (textEl) {
+        const base = label || 'جاري تحليل الكتالوج الطبي';
+        const counts = total > 0
+            ? ' (' + processed.toLocaleString('en-US') + ' / ' + total.toLocaleString('en-US') + ' منتج)'
+            : '';
+        textEl.textContent = base + ': ' + pct + '%' + counts;
+    }
+};
+
+const intakeHideCatalogProgress = () => {
+    const wrap = document.getElementById('pharmacyIntakeCatalogProgressWrap');
+    if (wrap) wrap.classList.add('hidden');
+};
+
 window.onPharmacyCatalogFileChange = async (event) => {
     const input = event && event.target;
     const file = input && input.files && input.files[0];
@@ -553,15 +615,17 @@ window.onPharmacyCatalogFileChange = async (event) => {
     const label = document.getElementById('pharmacyIntakeCatalogFileName');
     if (label) label.textContent = file.name;
     try {
+        intakeSetCatalogProgress(0, 0, 'جاري قراءة ملف الكتالوج');
+        intakeSetCatalogStatusMessage('جاري قراءة ملف الكتالوج...');
         const text = await readIntakeFileAsText(file);
         const parsed = JSON.parse(text);
-        /* Extract the product list defensively, then normalize. Log the detected
-           shape + counts so an unexpected export can be diagnosed from the
-           console without re-opening a multi-MB JSON by hand. */
+        /* Extract the product list defensively, then normalize in async chunks. */
         const extracted = intakeExtractArray(parsed);
-        const items = extracted
-            .map(intakeNormalizeCatalogItem)
-            .filter((item) => item.name);
+        intakeSetCatalogProgress(0, extracted.length, 'جاري تحليل الكتالوج الطبي');
+        intakeSetCatalogStatusMessage('جاري تحليل الكتالوج الطبي...');
+        const items = await intakeNormalizeCatalogChunked(extracted, (processed, total) => {
+            intakeSetCatalogProgress(processed, total, 'جاري تحليل الكتالوج الطبي');
+        });
         console.log(
             '[pharmacy-intake] catalog structure: ' + intakeDescribeStructure(parsed)
             + ' | detected rows: ' + extracted.length
@@ -583,14 +647,21 @@ window.onPharmacyCatalogFileChange = async (event) => {
         }
         intakeCatalogOverride = items;
         intakeCatalogIndex = items;
-        intakeCatalogStatusText();
+        /* Build the Fuse search index next; yield once so the "indexing"
+           message paints before the synchronous index build blocks the thread. */
+        intakeSetCatalogProgress(items.length, items.length, 'جاري تجهيز فهرس البحث');
+        intakeSetCatalogStatusMessage('جاري تجهيز فهرس البحث...');
+        await intakeYieldToBrowser();
         intakeFuse = intakeBuildFuse();
+        intakeCatalogStatusText();
+        intakeHideCatalogProgress();
         window.showToast('تم تحميل الكتالوج الطبي (' + items.length + ' صنف)');
     } catch (err) {
         console.error('[pharmacy-intake] catalog file failed:', err);
         intakeCatalogOverride = null;
         intakeCatalogIndex = [];
         intakeFuse = null;
+        intakeHideCatalogProgress();
         intakeCatalogStatusText();
         window.showToast('تعذّر قراءة ملف الكتالوج', false);
     } finally {
