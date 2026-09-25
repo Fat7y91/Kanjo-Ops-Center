@@ -1,7 +1,7 @@
 /* Kanjo Ops — Product Cataloging Pipeline */
 
 const CATALOG_COLLECTION = 'merchant_products';
-const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzWid4xw-1Vo4y3gNwUPSs9SYYYVEZMVCZyeilNiNyRCkgfLWSjj9s3WmpvX1G4Octv/exec';
+const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec';
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 

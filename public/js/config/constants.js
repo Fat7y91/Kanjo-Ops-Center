@@ -77,6 +77,6 @@ window.teamMembers = teamMembers;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
 window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
 window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
-window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzWid4xw-1Vo4y3gNwUPSs9SYYYVEZMVCZyeilNiNyRCkgfLWSjj9s3WmpvX1G4Octv/exec";
+window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec";
 
 export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
