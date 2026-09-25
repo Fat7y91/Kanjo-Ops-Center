@@ -111,12 +111,82 @@ const readIntakeFileAsText = (file) => new Promise((resolve, reject) => {
     reader.readAsText(file);
 });
 
-const intakeExtractArray = (parsed) => {
+/* Keys commonly used to wrap the product list in an enriched-catalog export.
+   Checked first so a labelled `products` array always wins over a random array
+   found deeper in the JSON. */
+const INTAKE_CATALOG_ARRAY_KEYS = [
+    'products', 'items', 'data', 'results', 'catalog', 'records', 'medicines',
+    'drugs', 'catalog_items', 'catalogItems', 'enriched_catalog', 'enrichedCatalog',
+    'product_list', 'productList', 'list', 'rows', 'entries'
+];
+
+/* A plain object counts as a catalog item when it carries at least one
+   name/description-like field — this is how we tell a real product array apart
+   from unrelated arrays (errors, tags, pagination, …). */
+const INTAKE_CATALOG_ITEM_HINTS = [
+    'name', 'name_ar', 'name_en', 'arabic_name', 'english_name', 'item_name', 'itemName',
+    'title', 'product_name', 'productName', 'drug_name', 'commercial_name', 'trade_name',
+    'description', 'description_ar', 'description_en', 'image_url', 'imageUrl', 'sku', 'barcode'
+];
+/* Wrapper keys some exports use around each product ({ product: {...} }). */
+const INTAKE_CATALOG_WRAPPER_KEYS = ['product', 'item', 'data', 'attributes', 'fields', 'value'];
+const intakeHasDirectCatalogField = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    return INTAKE_CATALOG_ITEM_HINTS.some(
+        (key) => value[key] !== undefined && value[key] !== null && String(value[key]).trim() !== ''
+    );
+};
+const intakeLooksLikeCatalogItem = (value, depth = 0) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return false;
+    if (intakeHasDirectCatalogField(value)) return true;
+    for (let i = 0; i < INTAKE_CATALOG_WRAPPER_KEYS.length; i++) {
+        const inner = value[INTAKE_CATALOG_WRAPPER_KEYS[i]];
+        if (inner && typeof inner === 'object' && !Array.isArray(inner) && intakeLooksLikeCatalogItem(inner, depth + 1)) return true;
+    }
+    return false;
+};
+const intakeIsCatalogArray = (value) => Array.isArray(value)
+    && value.length > 0
+    && value.some(intakeLooksLikeCatalogItem);
+
+/* Robust extractor for the manually uploaded catalog JSON. Accepts:
+   - a root Array of products;
+   - an object wrapping the list under a known key (products/items/data/…);
+   - a nested wrapper (e.g. { data: { products: [...] } });
+   - a dictionary of products keyed by id/SKU;
+   - any array of product-shaped objects found while walking the tree. */
+const intakeExtractArray = (parsed, depth = 0) => {
+    if (!parsed || typeof parsed !== 'object' || depth > 5) return [];
     if (Array.isArray(parsed)) return parsed;
-    if (!parsed || typeof parsed !== 'object') return [];
-    const keys = ['products', 'items', 'data', 'results', 'catalog', 'records', 'medicines', 'drugs'];
-    for (let i = 0; i < keys.length; i++) {
-        if (Array.isArray(parsed[keys[i]])) return parsed[keys[i]];
+
+    /* 1. Known wrapper keys holding the products array directly. */
+    for (let i = 0; i < INTAKE_CATALOG_ARRAY_KEYS.length; i++) {
+        const value = parsed[INTAKE_CATALOG_ARRAY_KEYS[i]];
+        if (intakeIsCatalogArray(value)) return value;
+    }
+    /* 2. Known wrapper keys holding another wrapper object. */
+    for (let i = 0; i < INTAKE_CATALOG_ARRAY_KEYS.length; i++) {
+        const value = parsed[INTAKE_CATALOG_ARRAY_KEYS[i]];
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            const nested = intakeExtractArray(value, depth + 1);
+            if (nested.length) return nested;
+        }
+    }
+    /* 3. A single product object at the root. */
+    if (intakeLooksLikeCatalogItem(parsed)) return [parsed];
+    /* 4. A dictionary of products keyed by id/SKU (most values are items). */
+    const values = Object.values(parsed);
+    const objectValues = values.filter((v) => v && typeof v === 'object' && !Array.isArray(v));
+    if (objectValues.length && objectValues.filter(intakeLooksLikeCatalogItem).length >= Math.max(1, Math.ceil(objectValues.length / 2))) {
+        return objectValues;
+    }
+    /* 5. Last resort: depth-first search for any product-shaped array. */
+    for (let i = 0; i < values.length; i++) {
+        if (intakeIsCatalogArray(values[i])) return values[i];
+    }
+    for (let i = 0; i < objectValues.length; i++) {
+        const nested = intakeExtractArray(objectValues[i], depth + 1);
+        if (nested.length) return nested;
     }
     return [];
 };
@@ -235,10 +305,23 @@ window.parsePharmacyIntakeSheet = async (file) => {
 
 /* ──────────────────────── CATALOG INDEX ────────────────────────────── */
 
-const intakeNormalizeCatalogItem = (item) => {
+/* Some exports wrap each product, e.g. { product: {...} } or { item: {...} }.
+   Descend into the wrapper when the outer object is not itself an item. */
+const intakeUnwrapCatalogItem = (item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    if (intakeHasDirectCatalogField(item)) return item;
+    for (let i = 0; i < INTAKE_CATALOG_WRAPPER_KEYS.length; i++) {
+        const inner = item[INTAKE_CATALOG_WRAPPER_KEYS[i]];
+        if (inner && typeof inner === 'object' && !Array.isArray(inner)) return intakeUnwrapCatalogItem(inner);
+    }
+    return item;
+};
+
+const intakeNormalizeCatalogItem = (rawItem) => {
+    const item = intakeUnwrapCatalogItem(rawItem);
     const nameEn = String(intakePick(item, ['name_en', 'english_name', 'nameEnglish', 'name_english']) || '').trim();
     const nameAr = String(intakePick(item, ['name_ar', 'arabic_name', 'nameArabic', 'name_arabic']) || '').trim();
-    const fallbackName = String(intakePick(item, ['name', 'title', 'product_name', 'productName']) || '').trim();
+    const fallbackName = String(intakePick(item, ['name', 'title', 'product_name', 'productName', 'item_name', 'itemName', 'product_title', 'productTitle', 'drug_name', 'drugName', 'commercial_name', 'trade_name']) || '').trim();
     return {
         name: fallbackName || nameAr || nameEn,
         name_ar: nameAr || fallbackName,
@@ -258,6 +341,23 @@ const intakeNormalizeCatalogItem = (item) => {
 const normalizeIntakeCatalog = (parsed) => intakeExtractArray(parsed)
     .map(intakeNormalizeCatalogItem)
     .filter((item) => item.name);
+
+/* Rough shape summary used only for console diagnostics when a catalog file is
+   uploaded, so an unexpected structure can be identified without re-reading the
+   whole (multi-MB) file by hand. */
+const intakeDescribeStructure = (parsed) => {
+    if (parsed === null) return 'null';
+    if (Array.isArray(parsed)) return 'array[' + parsed.length + ']';
+    if (typeof parsed !== 'object') return typeof parsed;
+    const keys = Object.keys(parsed);
+    const preview = keys.slice(0, 12).map((key) => {
+        const value = parsed[key];
+        if (Array.isArray(value)) return key + ':array[' + value.length + ']';
+        if (value && typeof value === 'object') return key + ':object{' + Object.keys(value).slice(0, 6).join(',') + '}';
+        return key + ':' + typeof value;
+    });
+    return 'object{' + (preview.join(', ') || 'empty') + '}' + (keys.length > 12 ? ' (+' + (keys.length - 12) + ' more keys)' : '');
+};
 
 const intakeGetCatalogIndex = async (force) => {
     if (intakeCatalogOverride) return intakeCatalogOverride;
@@ -398,8 +498,25 @@ window.onPharmacyCatalogFileChange = async (event) => {
     try {
         const text = await readIntakeFileAsText(file);
         const parsed = JSON.parse(text);
-        const items = normalizeIntakeCatalog(parsed);
-        if (!items.length) throw new Error('EMPTY_CATALOG');
+        /* Extract the product list defensively, then normalize. Log the detected
+           shape + counts so an unexpected export can be diagnosed from the
+           console without re-opening a multi-MB JSON by hand. */
+        const extracted = intakeExtractArray(parsed);
+        const items = extracted
+            .map(intakeNormalizeCatalogItem)
+            .filter((item) => item.name);
+        console.log(
+            '[pharmacy-intake] catalog structure: ' + intakeDescribeStructure(parsed)
+            + ' | extracted rows: ' + extracted.length
+            + ' | usable items: ' + items.length
+        );
+        if (!items.length) {
+            if (extracted.length) {
+                const sampleKeys = Object.keys(intakeUnwrapCatalogItem(extracted[0]) || {}).slice(0, 25).join(', ');
+                console.warn('[pharmacy-intake] extracted rows have no recognizable name field. First row keys:', sampleKeys);
+            }
+            throw new Error('EMPTY_CATALOG');
+        }
         intakeCatalogOverride = items;
         intakeCatalogIndex = items;
         intakeCatalogStatusText();
