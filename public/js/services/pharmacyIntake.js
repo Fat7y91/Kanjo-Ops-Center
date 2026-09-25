@@ -239,38 +239,77 @@ const intakeExtractArray = (parsed, depth = 0) => {
 
 /* ──────────────────────── SHEET PARSING ────────────────────────────── */
 
-const INTAKE_HEADER_HINTS = {
-    code: ['code', 'كود', 'الباركود', 'باركود', 'barcode', 'sku', 'id', 'الكود', 'رقم'],
-    name: ['name', 'item', 'product', 'اسم', 'الصنف', 'صنف', 'المنتج', 'البيان', 'بيان', 'دواء', 'medicine'],
-    price: ['price', 'سعر', 'public', 'السعر', 'الجمهور', 'جمهور']
+/* Canonical vendor-sheet columns. Headers are compared after
+   `intakeNormalizeKey`, so `الكود`, `كود المنتج (SKU)` and `Barcode` all resolve
+   to `code`, while `السعر`, `سعر الجمهور` and `Public Price` resolve to
+   `price`. This is what lets an Arabic or English export map to the internal
+   schema without positional guessing. */
+const INTAKE_COLUMN_ALIASES = {
+    code: [
+        'code', 'sku', 'barcode', 'id', 'item code', 'product code', 'item id',
+        'كود', 'الكود', 'كود المنتج', 'كود المنتج (SKU)', 'الباركود', 'باركود', 'رقم الصنف', 'رقم'
+    ],
+    name: [
+        'name', 'item', 'item name', 'product', 'product name', 'title',
+        'اسم', 'الاسم', 'اسم المنتج', 'الصنف', 'صنف', 'المنتج', 'البيان', 'بيان', 'دواء', 'medicine'
+    ],
+    price: [
+        'price', 'public price', 'selling price', 'current price', 'base price',
+        'سعر', 'السعر', 'سعر الجمهور', 'السعر للجمهور', 'الجمهور', 'جمهور', 'السعر (EGP)'
+    ]
 };
 
-const intakeCellMatches = (cell, hints) => {
-    const text = normalizeIntakeDigits(cell).toLowerCase().trim();
-    if (!text) return false;
-    return hints.some((hint) => text.indexOf(hint) !== -1);
+/* normalized alias -> canonical field (first alias wins). Built once. */
+const intakeColumnAliasIndex = (() => {
+    const index = new Map();
+    Object.keys(INTAKE_COLUMN_ALIASES).forEach((field) => {
+        INTAKE_COLUMN_ALIASES[field].forEach((alias) => {
+            const norm = intakeNormalizeKey(alias);
+            if (norm && !index.has(norm)) index.set(norm, field);
+        });
+    });
+    return index;
+})();
+
+/* Map one header cell to a canonical field: exact normalized alias first, then
+   a substring fallback (e.g. `السعر بعد الخصم` -> price). The fallback prefers
+   the longest alias so `سعر الجمهور` cannot be shadowed by `سعر`. */
+const intakeHeaderField = (cell) => {
+    const norm = intakeNormalizeKey(cell);
+    if (!norm) return '';
+    if (intakeColumnAliasIndex.has(norm)) return intakeColumnAliasIndex.get(norm);
+    let bestField = '';
+    let bestLength = 0;
+    intakeColumnAliasIndex.forEach((field, alias) => {
+        if (alias.length > bestLength && norm.indexOf(alias) !== -1) {
+            bestField = field;
+            bestLength = alias.length;
+        }
+    });
+    return bestField;
 };
 
-/* Find a header row in the first few rows; fall back to positional columns. */
+/* Find a header row in the first few rows and resolve each column to a
+   canonical field; fall back to positional (code, name, price). */
 const intakeDetectColumns = (matrix) => {
-    const limit = Math.min(matrix.length, 6);
+    const limit = Math.min(matrix.length, 8);
     for (let r = 0; r < limit; r++) {
         const row = matrix[r] || [];
-        let codeIdx = -1;
-        let nameIdx = -1;
-        let priceIdx = -1;
+        const found = { code: -1, name: -1, price: -1 };
         for (let c = 0; c < row.length; c++) {
-            if (nameIdx === -1 && intakeCellMatches(row[c], INTAKE_HEADER_HINTS.name)) nameIdx = c;
-            else if (priceIdx === -1 && intakeCellMatches(row[c], INTAKE_HEADER_HINTS.price)) priceIdx = c;
-            else if (codeIdx === -1 && intakeCellMatches(row[c], INTAKE_HEADER_HINTS.code)) codeIdx = c;
+            const field = intakeHeaderField(row[c]);
+            if (field && found[field] === -1) found[field] = c;
         }
-        if (nameIdx !== -1 && (priceIdx !== -1 || codeIdx !== -1)) {
-            return { headerRow: r, codeIdx, nameIdx, priceIdx };
+        if (found.name !== -1 && (found.price !== -1 || found.code !== -1)) {
+            return { headerRow: r, codeIdx: found.code, nameIdx: found.name, priceIdx: found.price };
         }
     }
     return { headerRow: -1, codeIdx: 0, nameIdx: 1, priceIdx: 2 };
 };
 
+/* Convert the sheet matrix into clean JSON rows keyed by the internal schema.
+   Rows without a mappable name are dropped here so the chunked matcher never
+   has to touch them. */
 const intakeRowsFromMatrix = (matrix) => {
     if (!Array.isArray(matrix) || !matrix.length) return [];
     const cols = intakeDetectColumns(matrix);
@@ -287,6 +326,25 @@ const intakeRowsFromMatrix = (matrix) => {
     return rows;
 };
 
+/* Convert an Excel/CSV file into clean JSON rows fully in memory via SheetJS.
+   CSV is parsed from text (SheetJS handles it more reliably than from a byte
+   array); every other SheetJS-readable format goes through the array path. The
+   intermediate matrix never touches the DOM — only the final row objects are
+   handed to the chunked matcher. */
+const intakeParseSpreadsheet = async (file) => {
+    if (!window.XLSX) throw new Error('XLSX_NOT_LOADED');
+    const lower = String((file && file.name) || '').toLowerCase();
+    const type = String((file && file.type) || '').toLowerCase();
+    const isCsv = lower.endsWith('.csv') || type.indexOf('csv') !== -1;
+    const workbook = isCsv
+        ? window.XLSX.read(await readIntakeFileAsText(file), { type: 'string' })
+        : window.XLSX.read(await readIntakeFileAsArrayBuffer(file), { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!sheet) return [];
+    const matrix = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+    return intakeRowsFromMatrix(matrix);
+};
+
 const loadPdfJs = () => new Promise((resolve, reject) => {
     if (window.pdfjsLib) return resolve(window.pdfjsLib);
     const script = document.createElement('script');
@@ -296,8 +354,9 @@ const loadPdfJs = () => new Promise((resolve, reject) => {
     document.head.appendChild(script);
 });
 
-/* Basic pdf.js text extraction: group text items into visual lines, then split
-   each line into (code, name, price) using the trailing number as the price. */
+/* Fallback only: PDF has no tabular structure to read, so pdf.js text items are
+   grouped into visual lines and split heuristically. Slower and less reliable
+   than Excel/CSV; the UI warns the operator to prefer a spreadsheet. */
 const intakeParsePdf = async (file) => {
     const pdfjs = await loadPdfJs();
     pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -335,17 +394,17 @@ const intakeParsePdf = async (file) => {
     return rows.filter((row) => row.name);
 };
 
+/* Public entry: convert a vendor sheet into clean JSON rows. Excel/CSV use the
+   fast in-memory SheetJS path; PDF falls back to text extraction. */
 window.parsePharmacyIntakeSheet = async (file) => {
     const lower = String((file && file.name) || '').toLowerCase();
-    if (lower.endsWith('.pdf')) return intakeParsePdf(file);
-    if (!window.XLSX) throw new Error('XLSX_NOT_LOADED');
-    const buffer = await readIntakeFileAsArrayBuffer(file);
-    const workbook = window.XLSX.read(buffer, { type: 'array' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!sheet) return [];
-    const matrix = window.XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    return intakeRowsFromMatrix(matrix);
+    const type = String((file && file.type) || '').toLowerCase();
+    if (lower.endsWith('.pdf') || type.indexOf('pdf') !== -1) return intakeParsePdf(file);
+    return intakeParseSpreadsheet(file);
 };
+
+/* Descriptive alias for callers that want the explicit JSON conversion step. */
+window.parsePharmacyIntakeSheetToJson = window.parsePharmacyIntakeSheet;
 
 /* ──────────────────────── CATALOG INDEX ────────────────────────────── */
 
@@ -781,6 +840,20 @@ const intakeRenderPreview = () => {
     if (all) all.checked = intakeMatched.length > 0 && selectedCount === intakeMatched.length;
 };
 
+/* Drop any preview left over from a previous file, so a new sheet is converted
+   entirely in memory and only the final matched rows are painted. */
+const intakeClearPreview = () => {
+    intakeMatched = [];
+    const body = document.getElementById('pharmacyIntakePreviewBody');
+    if (body) body.innerHTML = '';
+    const wrap = document.getElementById('pharmacyIntakePreviewWrap');
+    if (wrap) wrap.classList.add('hidden');
+    const summary = document.getElementById('pharmacyIntakeSummary');
+    if (summary) summary.textContent = '';
+    const all = document.getElementById('pharmacyIntakeSelectAll');
+    if (all) all.checked = false;
+};
+
 window.pharmacyIntakeToggleRow = (index, checked) => {
     const m = intakeMatched[index];
     if (!m) return;
@@ -812,11 +885,19 @@ window.runPharmacyIntakeMatching = async () => {
     }
     const matchBtn = document.getElementById('pharmacyIntakeMatchBtn');
     const syncBtn = document.getElementById('pharmacyIntakeSyncBtn');
+    const isPdf = (() => {
+        const lower = String((file && file.name) || '').toLowerCase();
+        const type = String((file && file.type) || '').toLowerCase();
+        return lower.endsWith('.pdf') || type.indexOf('pdf') !== -1;
+    })();
     intakeBusy = true;
     if (matchBtn) matchBtn.disabled = true;
     if (syncBtn) syncBtn.disabled = true;
-    intakeSetStatus('جاري تحليل الملف...');
-    intakeSetMatchProgress(0, 0, 'جاري تحليل ملف المخزون');
+    /* Clear any preview from a previous file before converting the new one, so
+       stale rows never linger while the sheet is parsed in memory. */
+    intakeClearPreview();
+    intakeSetStatus(isPdf ? 'جاري استخراج البيانات من ملف PDF...' : 'جاري تحويل الشيت إلى بيانات...');
+    intakeSetMatchProgress(0, 0, isPdf ? 'جاري استخراج بيانات PDF' : 'جاري قراءة ملف المخزون');
     try {
         intakeRows = await window.parsePharmacyIntakeSheet(file);
         if (!intakeRows.length) {
@@ -824,6 +905,9 @@ window.runPharmacyIntakeMatching = async () => {
             intakeRenderPreview();
             window.showToast('لم يتم العثور على أصناف صالحة في الملف', false);
             return;
+        }
+        if (isPdf) {
+            window.showToast('تم استخراج البيانات من ملف PDF؛ يُفضّل استخدام Excel/CSV لدقة أعلى', false);
         }
         intakeSetStatus('جاري تحميل الكتالوج الطبي...');
         intakeSetMatchProgress(0, 0, 'جاري تحميل الكتالوج الطبي');
