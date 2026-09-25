@@ -213,6 +213,14 @@ service cloud.firestore {
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 
+    // Pharmacy intake run state (one doc per pharmacy). Records the document ids
+    // the last intake run targeted so an interrupted/partial run can be
+    // reconciled and re-uploaded without duplicating rows. Data-entry tooling;
+    // reads stay available to managers for support/diagnostics.
+    match /pharmacy_intake_runs/{docId} {
+      allow read, write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
+    }
+
     // Black Box — immutable, system-wide audit trail (`audit_logs`).
     // - Append-only: any signed-in session may CREATE its own trail entry (reps
     //   perform the catalog edits that must be recorded), but nobody can update

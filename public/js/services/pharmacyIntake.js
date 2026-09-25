@@ -16,6 +16,10 @@
  */
 
 const PHARMACY_INTAKE_COLLECTION = 'merchant_products';
+/* One run-state document per pharmacy (`pharmacy_intake_runs/{merchantId}`).
+   It records the document ids the last run targeted so an interrupted/partial
+   intake can be reconciled and re-uploaded without duplicating rows. */
+const PHARMACY_INTAKE_RUNS_COLLECTION = 'pharmacy_intake_runs';
 const PHARMACY_INTAKE_CATALOG_URL = 'data/Kanjo_Enriched_Medical_Catalog.json';
 const PHARMACY_INTAKE_CATALOG_CACHE_KEY = 'pharmacyIntake:catalog';
 const PHARMACY_INTAKE_CATALOG_TTL = 30 * 60 * 1000;
@@ -232,8 +236,6 @@ const intakeExtractArray = (parsed, depth = 0) => {
     }
     return [];
 };
-
-const generateIntakeSku = () => 'KJ-PRD-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
 
 /* ──────────────────────── SHEET PARSING ────────────────────────────── */
 
@@ -867,11 +869,163 @@ window.runPharmacyIntakeMatching = async () => {
 
 /* ──────────────────────── SYNC / BATCH WRITE ───────────────────────── */
 
-const intakeBuildPayload = (m, merchant, newImageUrl) => {
+/* ─────────────────── IDEMPOTENT RUN RECONCILIATION ───────────────────
+   The original sync was all-or-nothing: it copied every image first and only
+   then wrote Firestore, so a session timeout mid-run lost the whole batch and
+   left orphaned Drive files. Re-running used random document ids, which
+   duplicated every row. The functions below make a re-upload safe:
+
+     - `intakeProductDocId` derives a STABLE id from the pharmacy + vendor SKU
+       (or item name), so the same sheet always targets the same documents;
+     - `pharmacy_intake_runs/{merchantId}` records the ids of the last run, so
+       an interrupted attempt is detectable and its partial rows are reconciled;
+     - stale ids (present last run, gone from this sheet) are swept afterwards.
+   All run-state I/O is best-effort: if the collection is not yet permitted the
+   intake still works, because stable ids alone already prevent duplicates. */
+
+/* FNV-1a (32-bit) → base36. Stable and dependency-free, unlike
+   Math.random/Date.now, so the same row maps to the same id on every device. */
+const intakeHashKey = (text) => {
+    let hash = 0x811c9dc5;
+    const value = String(text == null ? '' : text);
+    for (let i = 0; i < value.length; i++) {
+        hash ^= value.charCodeAt(i);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(36);
+};
+
+/* Firestore document ids forbid `/` and control characters; trim so a
+   pathological SKU can never overflow the id limit. */
+const intakeSanitizeIdPart = (value) => String(value == null ? '' : value)
+    .replace(/[\/\u0000-\u001F\u007F]+/g, '-')
+    .replace(/\s+/g, '-')
+    .slice(0, 80);
+
+/* Stable product id: `<merchantId>__<sku|name-hash>`. Re-uploading the same
+   sheet overwrites the same documents instead of creating duplicates. */
+const intakeProductDocId = (merchantId, m) => {
+    const row = (m && m.row) || {};
+    const catalog = (m && m.match) || null;
+    const sku = String(row.code || '').trim() || (catalog ? String(catalog.sku || '').trim() : '');
+    const key = sku
+        ? 'sku-' + intakeSanitizeIdPart(sku)
+        : 'nm-' + intakeHashKey(normalizeIntakeMatchKey(row.name || (catalog && catalog.name) || ''));
+    return intakeSanitizeIdPart(merchantId) + '__' + key;
+};
+
+/* Deterministic SKU fallback for rows without a vendor code, so a re-upload
+   keeps the same SKU instead of minting a new random one. */
+const intakeStableSku = (m) => {
+    const row = (m && m.row) || {};
+    const catalog = (m && m.match) || null;
+    const explicit = String(row.code || '').trim() || (catalog ? String(catalog.sku || '').trim() : '');
+    if (explicit) return explicit;
+    return 'KJ-PI-' + intakeHashKey(normalizeIntakeMatchKey(row.name || (catalog && catalog.name) || ''));
+};
+
+const intakeRunDocRef = (merchantId) => window.doc(
+    window.db,
+    PHARMACY_INTAKE_RUNS_COLLECTION,
+    intakeSanitizeIdPart(merchantId)
+);
+
+/* Read the last run state for a pharmacy. REST-first (transport-independent),
+   SDK fallback. A missing document is a normal "never ran" outcome. */
+const intakeReadRunState = async (merchantId) => {
+    if (!merchantId || !window.db) return null;
+    try {
+        if (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
+            return await window.kanjoRest.getDocument([PHARMACY_INTAKE_RUNS_COLLECTION, intakeSanitizeIdPart(merchantId)]);
+        }
+        const snap = await window.getDoc(intakeRunDocRef(merchantId));
+        return snap && snap.exists() ? Object.assign({ id: snap.id }, snap.data()) : null;
+    } catch (err) {
+        console.warn('[pharmacy-intake] run-state read failed:', err);
+        return null;
+    }
+};
+
+/* Persist run state. Best-effort (see section note): a failure is logged and
+   never surfaced, because stable ids already guarantee no duplication. */
+const intakeWriteRunState = async (merchant, state) => {
+    if (!merchant || !merchant.merchantId || !window.db) return false;
+    const data = Object.assign({
+        merchantId: merchant.merchantId,
+        merchantName: merchant.merchantName,
+        version: 1,
+        updatedAt: new Date()
+    }, state);
+    try {
+        if (window.kanjoRest && typeof window.kanjoRest.patch === 'function') {
+            await window.kanjoRest.patch([PHARMACY_INTAKE_RUNS_COLLECTION, intakeSanitizeIdPart(merchant.merchantId)], data);
+            return true;
+        }
+        await window.setDoc(intakeRunDocRef(merchant.merchantId), data, { merge: true });
+        return true;
+    } catch (err) {
+        console.warn('[pharmacy-intake] run-state write failed:', err);
+        return false;
+    }
+};
+
+/* Delete intake documents from a previous run of the SAME pharmacy that are
+   absent from the current sheet. Scoped by construction (ids come from this
+   merchant's own run state) and audited like any other bulk sweep. */
+const intakeDeleteStaleDocs = async (ids) => {
+    const unique = Array.from(new Set((ids || []).filter(Boolean)));
+    if (!unique.length) return 0;
+    let deleted = 0;
+    for (let i = 0; i < unique.length; i += 400) {
+        const chunk = unique.slice(i, i + 400);
+        const batch = window.writeBatch(window.db);
+        chunk.forEach((id) => batch.delete(window.doc(window.db, PHARMACY_INTAKE_COLLECTION, id)));
+        await batch.commit();
+        deleted += chunk.length;
+    }
+    if (typeof window.kanjoAuditDelete === 'function') {
+        window.kanjoAuditDelete({
+            collectionId: PHARMACY_INTAKE_COLLECTION,
+            id: '',
+            name: intakeFormatNumber(deleted) + ' صنف',
+            description: 'تنظيف ' + intakeFormatNumber(deleted) + ' صنف قديم/يتيم عند إعادة رفع مخزون الصيدلية'
+        });
+    }
+    return deleted;
+};
+
+/* Device-local cache of copied images: `docId -> { sourceUrl, driveUrl }`. It
+   lets a restarted run reuse images it already copied instead of pushing a
+   second copy into the pharmacy's Drive folder. Purely an optimisation, stored
+   in localStorage so it costs no Firestore reads/writes. */
+const PHARMACY_INTAKE_IMAGE_CACHE_PREFIX = 'pharmacyIntake:imageCache:';
+
+const intakeImageCacheKey = (merchantId) => PHARMACY_INTAKE_IMAGE_CACHE_PREFIX + intakeSanitizeIdPart(merchantId);
+
+const intakeLoadImageCache = (merchantId) => {
+    try {
+        const raw = localStorage.getItem(intakeImageCacheKey(merchantId));
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+    } catch (err) {
+        return {};
+    }
+};
+
+const intakeSaveImageCache = (merchantId, cache) => {
+    try {
+        localStorage.setItem(intakeImageCacheKey(merchantId), JSON.stringify(cache));
+    } catch (err) {
+        /* Quota exceeded — drop the cache; it is only an optimisation. */
+        try { localStorage.removeItem(intakeImageCacheKey(merchantId)); } catch (_) {}
+    }
+};
+
+const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
     const catalog = m.match || null;
-    const nameAr = String(m.row.name || '').trim() || (catalog ? String(catalog.name_ar || catalog.name || '').trim() : '');
     const nameEn = catalog ? (String(catalog.name_en || '').trim() || nameAr) : nameAr;
-    const sku = String(m.row.code || '').trim() || (catalog ? String(catalog.sku || '').trim() : '') || generateIntakeSku();
+    const sku = intakeStableSku(m);
     const category = (catalog ? String(catalog.category || '').trim() : '') || String(merchant.category || '').trim();
     const price = Number(m.row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
     /* Descriptions come from the enriched catalog for MATCHED rows only.
@@ -897,17 +1051,21 @@ const intakeBuildPayload = (m, merchant, newImageUrl) => {
         rawSourceImageUrl: catalog ? String(catalog.image_url || '') : '',
         createdBy: (window.currentUser && window.currentUser.name) || '',
         createdAt: new Date(),
+        intakeRunId: runId || '',
+        intakeRunAt: new Date(),
         syncedFromDraft: true
     };
 };
 
-const intakeCommitBatches = async (payloads) => {
+/* Write `{ id, data }` entries in 400-write chunks. Documents are addressed by
+   their deterministic id, so an existing row is overwritten in place. */
+const intakeCommitBatches = async (entries) => {
     const collectionRef = window.collection(window.db, PHARMACY_INTAKE_COLLECTION);
     let saved = 0;
-    for (let i = 0; i < payloads.length; i += 400) {
-        const chunk = payloads.slice(i, i + 400);
+    for (let i = 0; i < entries.length; i += 400) {
+        const chunk = entries.slice(i, i + 400);
         const batch = window.writeBatch(window.db);
-        chunk.forEach((payload) => batch.set(window.doc(collectionRef), payload));
+        chunk.forEach((entry) => batch.set(window.doc(collectionRef, entry.id), entry.data));
         await batch.commit();
         saved += chunk.length;
     }
@@ -939,18 +1097,64 @@ window.syncPharmacyIntakeProducts = async () => {
     let copied = 0;
     let copyFailed = 0;
     try {
-        const payloads = [];
-        for (let i = 0; i < selected.length; i++) {
-            const m = selected[i];
-            intakeSetStatus('نسخ الصور ' + intakeFormatNumber(i + 1) + ' / ' + intakeFormatNumber(selected.length) + '...');
+        const runId = 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
+        /* Collapse the selection onto deterministic ids (last row wins for a
+           duplicated SKU/name) so the batch never writes the same doc twice. */
+        const byId = new Map();
+        selected.forEach((m) => byId.set(intakeProductDocId(merchantId, m), m));
+        const plan = [];
+        byId.forEach((m, docId) => plan.push({ m, docId }));
+
+        /* Recover the previous run for this pharmacy (one read). A run that was
+           interrupted is flagged to the operator, then healed by the stable ids
+           below instead of being duplicated. */
+        const priorState = await intakeReadRunState(merchantId);
+        const priorIds = (priorState && Array.isArray(priorState.docIds)) ? priorState.docIds : [];
+        if (priorState && priorState.status === 'in_progress' && priorIds.length) {
+            intakeSetStatus('تم رصد محاولة سابقة غير مكتملة، سيتم تحديث أصنافها بدل تكرارها...');
+        }
+
+        /* Persist the intended ids BEFORE the (long) image-copy phase, so an
+           interruption during copying is still detectable and reconcilable. */
+        await intakeWriteRunState(merchant, {
+            status: 'in_progress',
+            runId,
+            startedAt: new Date(),
+            expectedCount: plan.length,
+            writtenCount: 0,
+            docIds: plan.map((item) => item.docId)
+        });
+
+        const entries = [];
+        const imageCache = intakeLoadImageCache(merchantId);
+        let cacheDirty = false;
+        let reused = 0;
+        for (let i = 0; i < plan.length; i++) {
+            const m = plan[i].m;
+            const docId = plan[i].docId;
+            intakeSetStatus('نسخ الصور ' + intakeFormatNumber(i + 1) + ' / ' + intakeFormatNumber(plan.length) + '...');
             let newImageUrl = '';
             const sourceUrl = (m.match && m.match.image_url) ? m.match.image_url : '';
-            if (sourceUrl) {
+            const cached = imageCache[docId];
+            if (sourceUrl && cached && cached.sourceUrl === sourceUrl && cached.driveUrl) {
+                /* Already copied by an earlier (possibly interrupted) run: reuse it
+                   instead of pushing a duplicate image into the Drive folder. */
+                newImageUrl = cached.driveUrl;
+                m.newImageUrl = newImageUrl;
+                m.error = '';
+                reused++;
+            } else if (sourceUrl) {
                 try {
-                    const fileName = 'pharmacy-' + (String(m.row.code || '').trim() || (i + 1)) + '.jpg';
+                    /* Stable file name derived from the deterministic doc id, so a
+                       re-run targets the same Drive file instead of piling up
+                       duplicate copies where the Apps Script supports it. */
+                    const fileName = 'pharmacy-' + docId + '.jpg';
                     newImageUrl = await window.copyCatalogImageFromUrl(sourceUrl, fileName, merchant.merchantName);
                     m.newImageUrl = newImageUrl;
                     m.error = '';
+                    imageCache[docId] = { sourceUrl, driveUrl: newImageUrl };
+                    cacheDirty = true;
                     copied++;
                 } catch (err) {
                     console.error('[pharmacy-intake] image copy failed:', err);
@@ -958,15 +1162,47 @@ window.syncPharmacyIntakeProducts = async () => {
                     copyFailed++;
                 }
             }
-            payloads.push(intakeBuildPayload(m, merchant, newImageUrl));
-            if (i % 5 === 0 || i === selected.length - 1) intakeRenderPreview();
+            entries.push({ id: docId, data: intakeBuildPayload(m, merchant, newImageUrl, runId) });
+            if (cacheDirty && (i % 10 === 0 || i === plan.length - 1)) {
+                intakeSaveImageCache(merchantId, imageCache);
+                cacheDirty = false;
+            }
+            if (i % 5 === 0 || i === plan.length - 1) intakeRenderPreview();
         }
-        intakeSetStatus('حفظ ' + intakeFormatNumber(payloads.length) + ' منتج...');
-        const saved = await intakeCommitBatches(payloads);
+        intakeSaveImageCache(merchantId, imageCache);
+
+        intakeSetStatus('حفظ ' + intakeFormatNumber(entries.length) + ' منتج...');
+        const saved = await intakeCommitBatches(entries);
+
+        /* Sweep rows that existed in the previous run but are gone from this
+           sheet, so a re-upload fully replaces the pharmacy's intake data. */
+        const currentIds = new Set(entries.map((entry) => entry.id));
+        const staleIds = priorIds.filter((id) => id && !currentIds.has(id));
+        let removed = 0;
+        if (staleIds.length) {
+            intakeSetStatus('تنظيف ' + intakeFormatNumber(staleIds.length) + ' صنف قديم...');
+            try {
+                removed = await intakeDeleteStaleDocs(staleIds);
+            } catch (err) {
+                console.warn('[pharmacy-intake] stale cleanup failed:', err);
+            }
+        }
+
+        await intakeWriteRunState(merchant, {
+            status: 'completed',
+            runId,
+            completedAt: new Date(),
+            expectedCount: entries.length,
+            writtenCount: saved,
+            docIds: entries.map((entry) => entry.id)
+        });
+
         if (typeof window.kpiInvalidateProductCache === 'function') window.kpiInvalidateProductCache();
         intakeSetStatus('تم حفظ ' + intakeFormatNumber(saved) + ' منتج'
             + (copied ? ' — نُسخت ' + intakeFormatNumber(copied) + ' صورة' : '')
-            + (copyFailed ? ' — فشل ' + intakeFormatNumber(copyFailed) + ' صورة' : '') + '.');
+            + (reused ? ' — أُعيد استخدام ' + intakeFormatNumber(reused) + ' صورة' : '')
+            + (copyFailed ? ' — فشل ' + intakeFormatNumber(copyFailed) + ' صورة' : '')
+            + (removed ? ' — حُذف ' + intakeFormatNumber(removed) + ' صنف قديم' : '') + '.');
         window.showToast('تم رفع ' + intakeFormatNumber(saved) + ' منتج بنجاح');
     } catch (err) {
         console.error('[pharmacy-intake] sync failed:', err);
@@ -977,4 +1213,59 @@ window.syncPharmacyIntakeProducts = async () => {
         if (matchBtn) matchBtn.disabled = false;
         if (syncBtn) { syncBtn.disabled = false; syncBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> رفع ونسخ الصور'; }
     }
+};
+
+/* ────────────────────── RECOVERY / DIAGNOSTICS ─────────────────────── */
+
+/* Read the last run state for a pharmacy (console/support use). */
+window.pharmacyIntakeRunStatus = (merchantId) => {
+    const mid = String(merchantId || '').trim()
+        || ((document.getElementById('pharmacyIntakeMerchant') || {}).value || '').trim();
+    if (!mid) return Promise.resolve(null);
+    return intakeReadRunState(mid);
+};
+
+/* Purge every document written by the last run of a pharmacy. Recovers an
+   interrupted intake (partial Firestore rows) and clears the run pointer so a
+   fresh upload starts clean. */
+window.cleanupOrphanedPharmacyIntake = async (merchantId) => {
+    if (!window.isPharmacyIntakeUser()) {
+        window.showToast('هذه الشاشة متاحة لإدخال البيانات فقط', false);
+        return 0;
+    }
+    const mid = String(merchantId || '').trim()
+        || ((document.getElementById('pharmacyIntakeMerchant') || {}).value || '').trim();
+    if (!mid) {
+        window.showToast('اختر الصيدلية أولاً', false);
+        return 0;
+    }
+    const state = await intakeReadRunState(mid);
+    const ids = (state && Array.isArray(state.docIds)) ? state.docIds : [];
+    if (!ids.length) {
+        window.showToast('لا توجد بيانات سابقة لتنظيفها', false);
+        return 0;
+    }
+    const deleted = await intakeDeleteStaleDocs(ids);
+    try {
+        await intakeWriteRunState({ merchantId: mid, merchantName: (state && state.merchantName) || '' }, {
+            status: 'cleaned',
+            cleanedAt: new Date(),
+            docIds: []
+        });
+    } catch (err) {
+        console.warn('[pharmacy-intake] run-state clear failed:', err);
+    }
+    if (typeof window.kpiInvalidateProductCache === 'function') window.kpiInvalidateProductCache();
+    window.showToast('تم تنظيف ' + intakeFormatNumber(deleted) + ' صنف');
+    return deleted;
+};
+
+/* UI wrapper: confirms before the destructive sweep. */
+window.confirmCleanupOrphanedPharmacyIntake = () => {
+    if (!window.isPharmacyIntakeUser()) {
+        window.showToast('هذه الشاشة متاحة لإدخال البيانات فقط', false);
+        return;
+    }
+    const ok = window.confirm('سيتم حذف كل أصناف آخر محاولة إدخال لهذه الصيدلية من قاعدة البيانات. هل أنت متأكد؟');
+    if (ok) window.cleanupOrphanedPharmacyIntake();
 };
