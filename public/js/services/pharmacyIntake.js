@@ -301,19 +301,41 @@ const intakePopulatePharmacySelect = () => {
     const select = document.getElementById('pharmacyIntakeMerchant');
     if (!select || typeof window.listFinalizedMerchants !== 'function') return;
     const current = select.value;
-    const merchants = window.listFinalizedMerchants();
+    let merchants = [];
+    try { merchants = window.listFinalizedMerchants() || []; } catch (err) { merchants = []; }
     intakeMerchantMap = {};
-    merchants.forEach((merchant) => { intakeMerchantMap[merchant.merchantId] = merchant; });
-    const options = ['<option value="">اختر الصيدلية...</option>'];
+    const options = [];
     merchants.forEach((merchant) => {
-        const id = intakeEscapeHtml(merchant.merchantId);
-        const name = intakeEscapeHtml(merchant.merchantName);
+        /* The catalog picker returns { merchantId, merchantName, category,
+           vipPreContract }; fall back to the raw Firestore keys so a shape
+           change can never blank the dropdown. */
+        const id = String(merchant.merchantId || merchant.id || merchant.merchant_id || '').trim();
+        const name = String(merchant.merchantName || merchant.name || id).trim();
+        if (!id || !name) return;
+        intakeMerchantMap[id] = merchant;
         const marker = String(merchant.category || '').indexOf('صيدل') !== -1 ? ' — صيدلية' : '';
         const vip = merchant.vipPreContract ? ' (VIP)' : '';
-        options.push('<option value="' + id + '">' + name + marker + vip + '</option>');
+        options.push('<option value="' + intakeEscapeHtml(id) + '">' + intakeEscapeHtml(name) + marker + vip + '</option>');
     });
-    select.innerHTML = options.join('');
+    if (!options.length) {
+        select.innerHTML = '<option value="">لا توجد صيدليات مؤهلة بعد</option>';
+        return;
+    }
+    select.innerHTML = '<option value="">اختر الصيدلية...</option>' + options.join('');
     if (current) select.value = current;
+};
+
+/* The finalized-merchants read is field-masked and asynchronous. On boot the
+   widget can render before the read resolves, leaving the picker empty even
+   though the cache later fills (the exact regression this fixes). Re-run the
+   populate step once the shared cache is ready; the load is idempotent so this
+   never issues a duplicate Firestore read. */
+const intakeEnsurePharmacyOptionsLoaded = () => {
+    if (Array.isArray(window.finalizedMerchantsCache) && window.finalizedMerchantsCache.length) return;
+    if (typeof window.ensureFinalizedMerchantsLoaded !== 'function') return;
+    Promise.resolve(window.ensureFinalizedMerchantsLoaded())
+        .then(() => intakePopulatePharmacySelect())
+        .catch(() => {});
 };
 
 const intakeCatalogStatusText = () => {
@@ -335,6 +357,7 @@ window.renderPharmacyIntakeWidget = () => {
     widget.classList.toggle('hidden', !canUse);
     if (!canUse) return;
     intakePopulatePharmacySelect();
+    intakeEnsurePharmacyOptionsLoaded();
     intakeCatalogStatusText();
 };
 
