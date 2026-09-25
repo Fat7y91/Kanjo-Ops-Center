@@ -274,6 +274,47 @@ window.uploadCatalogRawImage = async (file, merchantName) => {
     return uploadCatalogImageToGas(base64, fileName, merchantName || 'Unknown', 'raw');
 };
 
+/* Ask the catalog Google Apps Script to copy an EXISTING Master Catalog image
+   into the selected pharmacy's Drive folder (imageType: 'copy_from_url') and
+   return the NEW Drive view URL. Used by the Pharmacy Inventory Intake engine so
+   the pharmacy owns its own copy instead of hot-linking the master catalog.
+   Reuses the same timeout/retry/backoff envelope as `uploadCatalogImageToGas`. */
+window.copyCatalogImageFromUrl = async (sourceUrl, fileName, merchantName) => {
+    const GAS_URL = catalogScriptUrl() || CATALOG_GAS_URL;
+    if (!GAS_URL) throw new Error('NO_GAS_URL');
+    const url = String(sourceUrl || '').trim();
+    if (!url) throw new Error('NO_SOURCE_URL');
+    const payload = JSON.stringify({
+        merchantName: merchantName || 'Unknown',
+        imageType: 'copy_from_url',
+        sourceUrl: url,
+        fileName: fileName || 'image.jpg'
+    });
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= CATALOG_UPLOAD_MAX_ATTEMPTS; attempt++) {
+        try {
+            const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
+            if (ok && result && result.status === 'success') {
+                const directUrl = catalogDriveViewUrl(result.id || result.url);
+                if (directUrl) return directUrl;
+                throw new Error(result.message || 'GAS API Error');
+            }
+            const retryable = status === 429 || status >= 500;
+            const httpErr = new Error((result && result.message) || ('GAS_HTTP_' + status));
+            if (!retryable) throw httpErr;
+            httpErr.retryable = true;
+            throw httpErr;
+        } catch (error) {
+            lastError = error;
+            const canRetry = !!error.retryable && attempt < CATALOG_UPLOAD_MAX_ATTEMPTS;
+            if (!canRetry) throw error;
+            await catalogUploadSleep(catalogUploadRetryDelay(attempt));
+        }
+    }
+    throw lastError || new Error('COPY_FAILED');
+};
+
 const listFinalizedMerchants = () => {
     const map = new Map();
     /* Cross-team collaboration: this picker intentionally lists eligible
@@ -318,6 +359,9 @@ const listFinalizedMerchants = () => {
     });
     return Array.from(map.values()).sort((a, b) => String(a.merchantName).localeCompare(String(b.merchantName), 'ar'));
 };
+/* Exposed for the Pharmacy Inventory Intake module (`services/pharmacyIntake.js`)
+   so its pharmacy picker reuses the exact same eligibility rules as the catalog. */
+window.listFinalizedMerchants = listFinalizedMerchants;
 
 const resolveMerchantCategory = (merchant) => {
     const isRealCat = (value) => {
@@ -4453,6 +4497,7 @@ window.renderStagingCatalogWidgets = () => {
     if (parser) parser.classList.toggle('hidden', !canUse);
     if (master) master.classList.toggle('hidden', !canUse);
     if (driveLinks) driveLinks.classList.toggle('hidden', !canUse);
+    if (typeof window.renderPharmacyIntakeWidget === 'function') window.renderPharmacyIntakeWidget();
 };
 
 const saveStagingCatalogItems = async (items) => {

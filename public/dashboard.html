@@ -26,6 +26,8 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -1780,6 +1782,118 @@
                     <i class="fa-solid fa-trash-can"></i> مسح جميع البيانات
 
                 </button>
+
+            </div>
+
+
+
+            <!-- ===== استقبال مخزون الصيدلية (إدخال البيانات / المدير) ===== -->
+
+            <div id="pharmacyIntakeWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-pills"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">استقبال مخزون الصيدلية</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">ارفع شيت المخزون (Excel / CSV)، وطابِق الأصناف مع الكتالوج الطبي، ثم انسخ الصور إلى درايف الصيدلية</p>
+
+                    </div>
+
+                </div>
+
+                <select id="pharmacyIntakeMerchant" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                    <option value="">اختر الصيدلية...</option>
+
+                </select>
+
+                <label for="pharmacyIntakeFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+
+                    <i class="fa-solid fa-file-excel text-[#230535]"></i>
+
+                    <span id="pharmacyIntakeFileName" class="text-[11px] font-bold text-slate-500">اختر ملف المخزون (xlsx / xls / csv / pdf)</span>
+
+                </label>
+
+                <input type="file" id="pharmacyIntakeFile" accept=".xlsx,.xls,.csv,.pdf" class="sr-only" onchange="onPharmacyIntakeFileChange(event)">
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                    <button type="button" id="pharmacyIntakeMatchBtn" onclick="runPharmacyIntakeMatching()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-magnifying-glass"></i> تحليل ومطابقة
+
+                    </button>
+
+                    <button type="button" id="pharmacyIntakeSyncBtn" onclick="syncPharmacyIntakeProducts()" disabled class="w-full bg-[#FFD700] text-[#230535] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-40">
+
+                        <i class="fa-solid fa-cloud-arrow-up"></i> رفع ونسخ الصور
+
+                    </button>
+
+                </div>
+
+                <div id="pharmacyIntakeStatus" class="text-xs font-bold text-slate-600"></div>
+
+                <div id="pharmacyIntakePreviewWrap" class="hidden border-t border-purple-100 pt-3 space-y-3">
+
+                    <div id="pharmacyIntakeSummary" class="text-xs font-black text-[#230535]"></div>
+
+                    <div class="overflow-auto max-h-[440px] rounded-2xl border border-purple-100">
+
+                        <table class="w-full text-right text-[11px] font-bold">
+
+                            <thead class="bg-[#230535] text-[#FFD700] sticky top-0">
+
+                                <tr>
+
+                                    <th class="p-2"><input type="checkbox" id="pharmacyIntakeSelectAll" onchange="pharmacyIntakeToggleAll(this.checked)" class="accent-[#FFD700]"></th>
+
+                                    <th class="p-2">الكود</th>
+
+                                    <th class="p-2">اسم الصنف (الشيت)</th>
+
+                                    <th class="p-2">السعر</th>
+
+                                    <th class="p-2">المطابقة</th>
+
+                                    <th class="p-2">الصورة</th>
+
+                                </tr>
+
+                            </thead>
+
+                            <tbody id="pharmacyIntakePreviewBody" class="bg-white text-slate-700"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+                <details class="border-t border-purple-100 pt-3">
+
+                    <summary class="text-[11px] font-black text-slate-500 cursor-pointer">إعدادات الكتالوج الطبي (اختياري)</summary>
+
+                    <div class="space-y-2 pt-3">
+
+                        <label for="pharmacyIntakeCatalogFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[48px] px-4 py-3 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
+
+                            <span class="text-[11px] font-bold text-slate-500">تحميل ملف الكتالوج JSON يدوياً (عند تعذّر التحميل التلقائي)</span>
+
+                        </label>
+
+                        <input type="file" id="pharmacyIntakeCatalogFile" accept=".json,application/json" class="sr-only" onchange="onPharmacyCatalogFileChange(event)">
+
+                        <div id="pharmacyIntakeCatalogStatus" class="text-[11px] font-bold text-slate-500"></div>
+
+                    </div>
+
+                </details>
 
             </div>
 
