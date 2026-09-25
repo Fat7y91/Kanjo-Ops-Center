@@ -238,6 +238,11 @@ const intakeNormalizeCatalogItem = (item) => {
         image_url: String(intakePick(item, ['image_url', 'imageUrl', 'main_image', 'mainImage', 'image', 'thumbnail', 'img', 'photo']) || '').trim(),
         category: String(intakePick(item, ['category', 'cat', 'sub_category', 'subCategory']) || '').trim(),
         sku: String(intakePick(item, ['sku', 'barcode', 'gtin', 'ean', 'code', 'id']) || '').trim(),
+        /* Descriptions come from the enriched catalog only. The generic
+           `description` falls back to the Arabic slot; the English slot requires
+           an explicit English key. */
+        description_ar: String(intakePick(item, ['description_ar', 'descriptionAr', 'description_arabic', 'descriptionArabic', 'description', 'desc', 'details', 'usage']) || '').trim(),
+        description_en: String(intakePick(item, ['description_en', 'descriptionEn', 'description_english', 'descriptionEnglish']) || '').trim(),
         public_price: parseIntakePrice(intakePick(item, PHARMACY_INTAKE_PRICE_FIELDS))
     };
 };
@@ -311,7 +316,7 @@ const intakePopulatePharmacySelect = () => {
     if (current) select.value = current;
 };
 
-const incomeCatalogStatusText = () => {
+const intakeCatalogStatusText = () => {
     const el = document.getElementById('pharmacyIntakeCatalogStatus');
     if (!el) return;
     if (intakeCatalogOverride) {
@@ -330,7 +335,7 @@ window.renderPharmacyIntakeWidget = () => {
     widget.classList.toggle('hidden', !canUse);
     if (!canUse) return;
     intakePopulatePharmacySelect();
-    incomeCatalogStatusText();
+    intakeCatalogStatusText();
 };
 
 window.onPharmacyIntakeFileChange = (event) => {
@@ -344,6 +349,8 @@ window.onPharmacyCatalogFileChange = async (event) => {
     const input = event && event.target;
     const file = input && input.files && input.files[0];
     if (!file) return;
+    const label = document.getElementById('pharmacyIntakeCatalogFileName');
+    if (label) label.textContent = file.name;
     try {
         const text = await readIntakeFileAsText(file);
         const parsed = JSON.parse(text);
@@ -351,11 +358,15 @@ window.onPharmacyCatalogFileChange = async (event) => {
         if (!items.length) throw new Error('EMPTY_CATALOG');
         intakeCatalogOverride = items;
         intakeCatalogIndex = items;
+        intakeCatalogStatusText();
         intakeFuse = intakeBuildFuse();
-        incomeCatalogStatusText();
         window.showToast('تم تحميل الكتالوج الطبي (' + items.length + ' صنف)');
     } catch (err) {
         console.error('[pharmacy-intake] catalog file failed:', err);
+        intakeCatalogOverride = null;
+        intakeCatalogIndex = [];
+        intakeFuse = null;
+        intakeCatalogStatusText();
         window.showToast('تعذّر قراءة ملف الكتالوج', false);
     } finally {
         if (input) input.value = '';
@@ -376,12 +387,12 @@ const intakeRenderPreview = () => {
     if (!wrap || !body) return;
     const matchedCount = intakeMatched.filter((m) => m.match).length;
     const imageCount = intakeMatched.filter((m) => m.match && m.match.image_url).length;
-    const selectedCount = intakeMatched.filter((m) => m.include && m.match).length;
+    const selectedCount = intakeMatched.filter((m) => m.include).length;
     if (summary) {
         summary.textContent = 'إجمالي ' + intakeFormatNumber(intakeRows.length)
             + ' صنف — مطابق ' + intakeFormatNumber(matchedCount)
             + ' — بصور ' + intakeFormatNumber(imageCount)
-            + ' — محدد ' + intakeFormatNumber(selectedCount);
+            + ' — محدد للرفع ' + intakeFormatNumber(selectedCount);
     }
     body.innerHTML = intakeMatched.map((m, index) => {
         const matchName = m.match ? intakeEscapeHtml(m.match.name) : '<span class="text-red-500">غير مطابق</span>';
@@ -395,7 +406,7 @@ const intakeRenderPreview = () => {
                 : '<span class="text-slate-300">لا توجد</span>');
         const errorCell = m.error ? '<div class="text-red-500">' + intakeEscapeHtml(m.error) + '</div>' : '';
         return '<tr class="border-b border-purple-50">'
-            + '<td class="p-2 text-center"><input type="checkbox" class="accent-[#230535]" ' + (m.include && m.match ? 'checked' : '') + ' ' + (m.match ? '' : 'disabled') + ' onchange="pharmacyIntakeToggleRow(' + index + ', this.checked)"></td>'
+            + '<td class="p-2 text-center"><input type="checkbox" class="accent-[#230535]" ' + (m.include ? 'checked' : '') + ' onchange="pharmacyIntakeToggleRow(' + index + ', this.checked)"></td>'
             + '<td class="p-2">' + intakeEscapeHtml(m.row.code) + '</td>'
             + '<td class="p-2">' + intakeEscapeHtml(m.row.name) + '</td>'
             + '<td class="p-2">' + intakeFormatNumber(m.row.price) + '</td>'
@@ -405,18 +416,18 @@ const intakeRenderPreview = () => {
     }).join('');
     wrap.classList.remove('hidden');
     const all = document.getElementById('pharmacyIntakeSelectAll');
-    if (all) all.checked = matchedCount > 0 && selectedCount === matchedCount;
+    if (all) all.checked = intakeMatched.length > 0 && selectedCount === intakeMatched.length;
 };
 
 window.pharmacyIntakeToggleRow = (index, checked) => {
     const m = intakeMatched[index];
-    if (!m || !m.match) return;
+    if (!m) return;
     m.include = !!checked;
     intakeRenderPreview();
 };
 
 window.pharmacyIntakeToggleAll = (checked) => {
-    intakeMatched.forEach((m) => { m.include = m.match ? !!checked : false; });
+    intakeMatched.forEach((m) => { m.include = !!checked; });
     intakeRenderPreview();
 };
 
@@ -452,15 +463,25 @@ window.runPharmacyIntakeMatching = async () => {
             return;
         }
         intakeSetStatus('جاري تحميل الكتالوج الطبي...');
-        try {
-            await intakeGetCatalogIndex(false);
-        } catch (err) {
-            console.error('[pharmacy-intake] catalog load failed:', err);
-            incomeCatalogStatusText();
-            window.showToast('تعذّر تحميل الكتالوج الطبي تلقائياً — استخدم التحميل اليدوي', false);
+        if (!intakeCatalogIndex.length) {
+            try {
+                await intakeGetCatalogIndex(false);
+            } catch (err) {
+                console.error('[pharmacy-intake] catalog load failed:', err);
+                intakeCatalogStatusText();
+                window.showToast('ارفع ملف الكتالوج الطبي أولاً', false);
+                return;
+            }
+        }
+        if (!intakeCatalogIndex.length) {
+            intakeCatalogStatusText();
+            window.showToast('ارفع ملف الكتالوج الطبي أولاً', false);
             return;
         }
-        intakeFuse = intakeBuildFuse();
+        intakeSetStatus('جاري بناء فهرس المطابقة...');
+        /* Let the status text paint before the synchronous Fuse index build. */
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        if (!intakeFuse) intakeFuse = intakeBuildFuse();
         intakeMatched = intakeRows.map((row) => {
             let match = null;
             let score = null;
@@ -474,12 +495,14 @@ window.runPharmacyIntakeMatching = async () => {
                 match = intakeExactMatch(row.name);
                 score = match ? 0 : null;
             }
-            return { row, match, score, include: !!match, newImageUrl: '', error: '' };
+            /* Every sheet row is imported by default: matched rows are enriched
+               from the catalog, unmatched rows keep empty descriptions. */
+            return { row, match, score, include: true, newImageUrl: '', error: '' };
         });
         intakeRenderPreview();
         const matchedCount = intakeMatched.filter((m) => m.match).length;
         intakeSetStatus('تم تحليل ' + intakeFormatNumber(intakeRows.length) + ' صنف، ومطابقة ' + intakeFormatNumber(matchedCount) + '. راجع ثم ارفع.');
-        if (syncBtn) syncBtn.disabled = matchedCount === 0;
+        if (syncBtn) syncBtn.disabled = intakeMatched.length === 0;
     } catch (err) {
         console.error('[pharmacy-intake] parse failed:', err);
         window.showToast('تعذّر تحليل الملف، تأكد من الصيغة', false);
@@ -493,18 +516,21 @@ window.runPharmacyIntakeMatching = async () => {
 /* ──────────────────────── SYNC / BATCH WRITE ───────────────────────── */
 
 const intakeBuildPayload = (m, merchant, newImageUrl) => {
-    const nameAr = String(m.row.name || '').trim() || String(m.match.name_ar || m.match.name || '').trim();
-    const nameEn = String(m.match.name_en || '').trim() || nameAr;
-    const sku = String(m.row.code || '').trim() || String(m.match.sku || '').trim() || generateIntakeSku();
-    const category = String(m.match.category || '').trim() || String(merchant.category || '').trim();
-    const price = Number(m.row.price) || Number(m.match.public_price) || 0;
+    const catalog = m.match || null;
+    const nameAr = String(m.row.name || '').trim() || (catalog ? String(catalog.name_ar || catalog.name || '').trim() : '');
+    const nameEn = catalog ? (String(catalog.name_en || '').trim() || nameAr) : nameAr;
+    const sku = String(m.row.code || '').trim() || (catalog ? String(catalog.sku || '').trim() : '') || generateIntakeSku();
+    const category = (catalog ? String(catalog.category || '').trim() : '') || String(merchant.category || '').trim();
+    const price = Number(m.row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
+    /* Descriptions come from the enriched catalog for MATCHED rows only.
+       UNMATCHED rows keep both description fields strictly empty. */
     return {
         merchantId: merchant.merchantId,
         merchantName: merchant.merchantName,
         name_ar: nameAr,
         name_en: nameEn,
-        description_ar: '',
-        description_en: '',
+        description_ar: catalog ? String(catalog.description_ar || '').trim() : '',
+        description_en: catalog ? String(catalog.description_en || '').trim() : '',
         sku,
         product_type: 'simple',
         base_price: price,
@@ -516,7 +542,7 @@ const intakeBuildPayload = (m, merchant, newImageUrl) => {
         status: 'pending',
         is_active: true,
         intakeSource: 'pharmacy_inventory_intake',
-        rawSourceImageUrl: String(m.match.image_url || ''),
+        rawSourceImageUrl: catalog ? String(catalog.image_url || '') : '',
         createdBy: (window.currentUser && window.currentUser.name) || '',
         createdAt: new Date(),
         syncedFromDraft: true
@@ -544,7 +570,7 @@ window.syncPharmacyIntakeProducts = async () => {
     }
     const merchantId = ((document.getElementById('pharmacyIntakeMerchant') || {}).value || '').trim();
     const merchant = intakeMerchantMap[merchantId] || (window._catalogMerchantMap && window._catalogMerchantMap[merchantId]);
-    const selected = intakeMatched.filter((m) => m.include && m.match);
+    const selected = intakeMatched.filter((m) => m.include);
     if (!merchant) {
         window.showToast('اختر الصيدلية أولاً', false);
         return;
@@ -566,7 +592,7 @@ window.syncPharmacyIntakeProducts = async () => {
             const m = selected[i];
             intakeSetStatus('نسخ الصور ' + intakeFormatNumber(i + 1) + ' / ' + intakeFormatNumber(selected.length) + '...');
             let newImageUrl = '';
-            const sourceUrl = m.match.image_url;
+            const sourceUrl = (m.match && m.match.image_url) ? m.match.image_url : '';
             if (sourceUrl) {
                 try {
                     const fileName = 'pharmacy-' + (String(m.row.code || '').trim() || (i + 1)) + '.jpg';

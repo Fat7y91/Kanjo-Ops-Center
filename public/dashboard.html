@@ -1811,15 +1811,51 @@
 
                 </select>
 
-                <label for="pharmacyIntakeFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+                <div class="bg-kanjo-light border border-[#230535]/20 rounded-2xl p-3 space-y-2">
 
-                    <i class="fa-solid fa-file-excel text-[#230535]"></i>
+                    <div class="flex items-center gap-2">
 
-                    <span id="pharmacyIntakeFileName" class="text-[11px] font-bold text-slate-500">اختر ملف المخزون (xlsx / xls / csv / pdf)</span>
+                        <span class="bg-[#230535] text-[#FFD700] w-6 h-6 rounded-lg text-[11px] font-black flex items-center justify-center">1</span>
 
-                </label>
+                        <span class="text-xs font-black text-[#230535]">ملف الكتالوج الطبي (إلزامي)</span>
 
-                <input type="file" id="pharmacyIntakeFile" accept=".xlsx,.xls,.csv,.pdf" class="sr-only" onchange="onPharmacyIntakeFileChange(event)">
+                    </div>
+
+                    <label for="pharmacyIntakeCatalogFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[48px] px-4 py-3 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
+
+                        <i class="fa-solid fa-database text-[#230535]"></i>
+
+                        <span id="pharmacyIntakeCatalogFileName" class="text-[11px] font-bold text-slate-500">اختر ملف Kanjo_Enriched_Medical_Catalog.json</span>
+
+                    </label>
+
+                    <input type="file" id="pharmacyIntakeCatalogFile" accept=".json,application/json" class="sr-only" onchange="onPharmacyCatalogFileChange(event)">
+
+                    <div id="pharmacyIntakeCatalogStatus" class="text-[11px] font-bold text-slate-500">لم يتم تحميل الكتالوج الطبي بعد</div>
+
+                </div>
+
+                <div class="bg-kanjo-light border border-[#FFD700]/50 rounded-2xl p-3 space-y-2">
+
+                    <div class="flex items-center gap-2">
+
+                        <span class="bg-[#230535] text-[#FFD700] w-6 h-6 rounded-lg text-[11px] font-black flex items-center justify-center">2</span>
+
+                        <span class="text-xs font-black text-[#230535]">شيت مخزون الصيدلية</span>
+
+                    </div>
+
+                    <label for="pharmacyIntakeFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[56px] px-4 py-4 bg-white border-2 border-dashed border-[#FFD700] rounded-2xl text-center cursor-pointer hover:bg-[#FFD700]/10 transition">
+
+                        <i class="fa-solid fa-file-excel text-[#230535]"></i>
+
+                        <span id="pharmacyIntakeFileName" class="text-[11px] font-bold text-slate-500">اختر ملف المخزون (xlsx / xls / csv / pdf)</span>
+
+                    </label>
+
+                    <input type="file" id="pharmacyIntakeFile" accept=".xlsx,.xls,.csv,.pdf" class="sr-only" onchange="onPharmacyIntakeFileChange(event)">
+
+                </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
@@ -1874,26 +1910,6 @@
                     </div>
 
                 </div>
-
-                <details class="border-t border-purple-100 pt-3">
-
-                    <summary class="text-[11px] font-black text-slate-500 cursor-pointer">إعدادات الكتالوج الطبي (اختياري)</summary>
-
-                    <div class="space-y-2 pt-3">
-
-                        <label for="pharmacyIntakeCatalogFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[48px] px-4 py-3 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
-
-                            <span class="text-[11px] font-bold text-slate-500">تحميل ملف الكتالوج JSON يدوياً (عند تعذّر التحميل التلقائي)</span>
-
-                        </label>
-
-                        <input type="file" id="pharmacyIntakeCatalogFile" accept=".json,application/json" class="sr-only" onchange="onPharmacyCatalogFileChange(event)">
-
-                        <div id="pharmacyIntakeCatalogStatus" class="text-[11px] font-bold text-slate-500"></div>
-
-                    </div>
-
-                </details>
 
             </div>
 
