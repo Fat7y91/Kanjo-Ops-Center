@@ -20,7 +20,10 @@ const PHARMACY_INTAKE_CATALOG_URL = 'data/Kanjo_Enriched_Medical_Catalog.json';
 const PHARMACY_INTAKE_CATALOG_CACHE_KEY = 'pharmacyIntake:catalog';
 const PHARMACY_INTAKE_CATALOG_TTL = 30 * 60 * 1000;
 const PHARMACY_INTAKE_MATCH_THRESHOLD = 0.4;
-const PHARMACY_INTAKE_PRICE_FIELDS = ['public_price', 'publicPrice', 'price', 'sellingPrice', 'current_price', 'base_price'];
+const PHARMACY_INTAKE_PRICE_FIELDS = [
+    'public_price', 'publicPrice', 'price', 'sellingPrice', 'current_price', 'base_price',
+    'السعر (EGP)', 'السعر', 'سعر', 'سعر الجمهور', 'الجمهور', 'السعر للجمهور'
+];
 
 /* Parsed sheet rows: [{ rowNumber, code, name, price }] */
 let intakeRows = [];
@@ -86,13 +89,40 @@ const normalizeIntakeMatchKey = (value) => String(value == null ? '' : value)
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
 
-const intakePick = (item, keys) => {
-    if (!item || typeof item !== 'object') return '';
+/* Canonicalize an object key so Arabic and English headers that differ only by
+   case, diacritics, tatweel, alef/ya/ta-marbuta form, punctuation or a
+   parenthetical qualifier resolve to the same token:
+     "كود المنتج (SKU)" -> "كود المنتج"
+     "السعر (EGP)"      -> "السعر"
+     "رابط الصورة (Drive)" -> "رابط الصورة" */
+const intakeNormalizeKey = (key) => String(key == null ? '' : key)
+    .toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[أإآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[\(（\[][^)）\]]*[\)）\]]/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+const intakeBuildKeyIndex = (item) => {
+    const index = new Map();
+    if (!item || typeof item !== 'object') return index;
+    Object.keys(item).forEach((rawKey) => {
+        const norm = intakeNormalizeKey(rawKey);
+        if (norm && !index.has(norm)) index.set(norm, item[rawKey]);
+    });
+    return index;
+};
+
+/* Pick a field by normalized key, so Arabic headers map to the internal schema
+   without hard-coding one exact spelling. */
+const intakePickFromIndex = (index, keys) => {
     for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (item[key] !== undefined && item[key] !== null && String(item[key]).trim() !== '') {
-            return item[key];
-        }
+        const norm = intakeNormalizeKey(keys[i]);
+        if (!norm || !index.has(norm)) continue;
+        const value = index.get(norm);
+        if (value !== undefined && value !== null && String(value).trim() !== '') return value;
     }
     return '';
 };
@@ -126,15 +156,21 @@ const INTAKE_CATALOG_ARRAY_KEYS = [
 const INTAKE_CATALOG_ITEM_HINTS = [
     'name', 'name_ar', 'name_en', 'arabic_name', 'english_name', 'item_name', 'itemName',
     'title', 'product_name', 'productName', 'drug_name', 'commercial_name', 'trade_name',
-    'description', 'description_ar', 'description_en', 'image_url', 'imageUrl', 'sku', 'barcode'
+    'description', 'description_ar', 'description_en', 'image_url', 'imageUrl', 'sku', 'barcode',
+    'اسم المنتج', 'الاسم', 'اسم', 'الصنف', 'المنتج', 'الوصف', 'القسم',
+    'كود المنتج', 'كود', 'السعر', 'رابط الصورة'
 ];
 /* Wrapper keys some exports use around each product ({ product: {...} }). */
 const INTAKE_CATALOG_WRAPPER_KEYS = ['product', 'item', 'data', 'attributes', 'fields', 'value'];
 const intakeHasDirectCatalogField = (value) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-    return INTAKE_CATALOG_ITEM_HINTS.some(
-        (key) => value[key] !== undefined && value[key] !== null && String(value[key]).trim() !== ''
-    );
+    const index = intakeBuildKeyIndex(value);
+    return INTAKE_CATALOG_ITEM_HINTS.some((hint) => {
+        const norm = intakeNormalizeKey(hint);
+        if (!norm || !index.has(norm)) return false;
+        const fieldValue = index.get(norm);
+        return fieldValue !== undefined && fieldValue !== null && String(fieldValue).trim() !== '';
+    });
 };
 const intakeLooksLikeCatalogItem = (value, depth = 0) => {
     if (!value || typeof value !== 'object' || Array.isArray(value) || depth > 2) return false;
@@ -317,24 +353,45 @@ const intakeUnwrapCatalogItem = (item) => {
     return item;
 };
 
+/* Last-resort name when an export uses an unknown header: take the first
+   non-empty scalar value that is not a URL or a bare number. Prevents a valid
+   product array from collapsing to "usable items: 0" over a single missing
+   header. */
+const intakeFallbackName = (item) => {
+    const values = Object.values(item || {});
+    for (let i = 0; i < values.length; i++) {
+        const value = values[i];
+        if (value === undefined || value === null || typeof value === 'object') continue;
+        const text = String(value).trim();
+        if (!text) continue;
+        if (/^https?:\/\//i.test(text)) continue;
+        if (/^data:/i.test(text)) continue;
+        if (/^\d+([.,]\d+)?$/.test(text)) continue;
+        return text;
+    }
+    return '';
+};
+
 const intakeNormalizeCatalogItem = (rawItem) => {
     const item = intakeUnwrapCatalogItem(rawItem);
-    const nameEn = String(intakePick(item, ['name_en', 'english_name', 'nameEnglish', 'name_english']) || '').trim();
-    const nameAr = String(intakePick(item, ['name_ar', 'arabic_name', 'nameArabic', 'name_arabic']) || '').trim();
-    const fallbackName = String(intakePick(item, ['name', 'title', 'product_name', 'productName', 'item_name', 'itemName', 'product_title', 'productTitle', 'drug_name', 'drugName', 'commercial_name', 'trade_name']) || '').trim();
+    const index = intakeBuildKeyIndex(item);
+    const nameEn = String(intakePickFromIndex(index, ['name_en', 'english_name', 'nameEnglish', 'name_english']) || '').trim();
+    const nameAr = String(intakePickFromIndex(index, ['name_ar', 'arabic_name', 'nameArabic', 'name_arabic', 'اسم المنتج', 'الاسم', 'اسم', 'الصنف', 'المنتج']) || '').trim();
+    const fallbackName = String(intakePickFromIndex(index, ['name', 'title', 'product_name', 'productName', 'item_name', 'itemName', 'product_title', 'productTitle', 'drug_name', 'drugName', 'commercial_name', 'trade_name']) || '').trim();
+    const resolvedName = fallbackName || nameAr || nameEn || String(intakeFallbackName(item)).trim();
     return {
-        name: fallbackName || nameAr || nameEn,
-        name_ar: nameAr || fallbackName,
+        name: resolvedName,
+        name_ar: nameAr || fallbackName || resolvedName,
         name_en: nameEn,
-        image_url: String(intakePick(item, ['image_url', 'imageUrl', 'main_image', 'mainImage', 'image', 'thumbnail', 'img', 'photo']) || '').trim(),
-        category: String(intakePick(item, ['category', 'cat', 'sub_category', 'subCategory']) || '').trim(),
-        sku: String(intakePick(item, ['sku', 'barcode', 'gtin', 'ean', 'code', 'id']) || '').trim(),
+        image_url: String(intakePickFromIndex(index, ['image_url', 'imageUrl', 'main_image', 'mainImage', 'image', 'thumbnail', 'img', 'photo', 'رابط الصورة (Drive)', 'رابط الصورة', 'الصورة']) || '').trim(),
+        category: String(intakePickFromIndex(index, ['category', 'cat', 'sub_category', 'subCategory', 'القسم', 'قسم', 'التصنيف']) || '').trim(),
+        sku: String(intakePickFromIndex(index, ['sku', 'barcode', 'gtin', 'ean', 'code', 'id', 'كود المنتج (SKU)', 'كود المنتج', 'الكود', 'كود', 'الباركود', 'باركود']) || '').trim(),
         /* Descriptions come from the enriched catalog only. The generic
-           `description` falls back to the Arabic slot; the English slot requires
-           an explicit English key. */
-        description_ar: String(intakePick(item, ['description_ar', 'descriptionAr', 'description_arabic', 'descriptionArabic', 'description', 'desc', 'details', 'usage']) || '').trim(),
-        description_en: String(intakePick(item, ['description_en', 'descriptionEn', 'description_english', 'descriptionEnglish']) || '').trim(),
-        public_price: parseIntakePrice(intakePick(item, PHARMACY_INTAKE_PRICE_FIELDS))
+           `description`/`الوصف` falls back to the Arabic slot; the English slot
+           requires an explicit English key. */
+        description_ar: String(intakePickFromIndex(index, ['description_ar', 'descriptionAr', 'description_arabic', 'descriptionArabic', 'description', 'desc', 'details', 'usage', 'الوصف', 'وصف', 'البيان', 'التفاصيل']) || '').trim(),
+        description_en: String(intakePickFromIndex(index, ['description_en', 'descriptionEn', 'description_english', 'descriptionEnglish']) || '').trim(),
+        public_price: parseIntakePrice(intakePickFromIndex(index, PHARMACY_INTAKE_PRICE_FIELDS))
     };
 };
 
@@ -507,15 +564,22 @@ window.onPharmacyCatalogFileChange = async (event) => {
             .filter((item) => item.name);
         console.log(
             '[pharmacy-intake] catalog structure: ' + intakeDescribeStructure(parsed)
-            + ' | extracted rows: ' + extracted.length
+            + ' | detected rows: ' + extracted.length
             + ' | usable items: ' + items.length
         );
+        /* Only reject when nothing could be mapped at all — a partial mapping is
+           still usable, so never fail the whole file over a few blank rows. */
         if (!items.length) {
             if (extracted.length) {
                 const sampleKeys = Object.keys(intakeUnwrapCatalogItem(extracted[0]) || {}).slice(0, 25).join(', ');
-                console.warn('[pharmacy-intake] extracted rows have no recognizable name field. First row keys:', sampleKeys);
+                console.warn('[pharmacy-intake] detected ' + extracted.length + ' rows but none could be mapped. First row keys:', sampleKeys);
+            } else {
+                console.warn('[pharmacy-intake] no product array detected in the JSON root.');
             }
             throw new Error('EMPTY_CATALOG');
+        }
+        if (items.length !== extracted.length) {
+            console.warn('[pharmacy-intake] ' + (extracted.length - items.length) + ' row(s) skipped (no mappable name).');
         }
         intakeCatalogOverride = items;
         intakeCatalogIndex = items;
