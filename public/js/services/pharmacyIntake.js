@@ -23,6 +23,9 @@ const PHARMACY_INTAKE_MATCH_THRESHOLD = 0.4;
 /* Rows normalized per macrotask while parsing the uploaded catalog. Bounded so
    a 14k+ item JSON never blocks the main thread long enough to freeze the tab. */
 const PHARMACY_INTAKE_PARSE_CHUNK_SIZE = 1000;
+/* Sheet rows fuzzy-matched per macrotask. Kept small because each row runs a
+   Fuse.js search over the whole catalog and is the heavier phase. */
+const PHARMACY_INTAKE_MATCH_CHUNK_SIZE = 50;
 const PHARMACY_INTAKE_PRICE_FIELDS = [
     'public_price', 'publicPrice', 'price', 'sellingPrice', 'current_price', 'base_price',
     'السعر (EGP)', 'السعر', 'سعر', 'سعر الجمهور', 'الجمهور', 'السعر للجمهور'
@@ -676,6 +679,67 @@ const intakeSetStatus = (text) => {
     if (el) el.textContent = text || '';
 };
 
+/* Progress UI for the fuzzy-matching phase (batch analysis of sheet rows). */
+const intakeSetMatchProgress = (processed, total, label) => {
+    const wrap = document.getElementById('pharmacyIntakeMatchProgressWrap');
+    if (!wrap) return;
+    wrap.classList.remove('hidden');
+    const pct = total > 0 ? Math.min(100, Math.floor((processed / total) * 100)) : 0;
+    const bar = document.getElementById('pharmacyIntakeMatchProgressBar');
+    const pctEl = document.getElementById('pharmacyIntakeMatchProgressPct');
+    const textEl = document.getElementById('pharmacyIntakeMatchProgressText');
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (textEl) {
+        const base = label || 'جاري مطابقة الأصناف';
+        const counts = total > 0
+            ? ' (' + processed.toLocaleString('en-US') + ' / ' + total.toLocaleString('en-US') + ' صنف)'
+            : '';
+        textEl.textContent = base + ': ' + pct + '%' + counts;
+    }
+};
+
+const intakeHideMatchProgress = () => {
+    const wrap = document.getElementById('pharmacyIntakeMatchProgressWrap');
+    if (wrap) wrap.classList.add('hidden');
+};
+
+/* Match a single sheet row against the catalog (Fuse when available, exact
+   fallback otherwise). Every row is imported by default; matched rows are
+   enriched from the catalog and unmatched rows keep empty descriptions. */
+const intakeMatchRow = (row) => {
+    let match = null;
+    let score = null;
+    if (intakeFuse) {
+        const results = intakeFuse.search(row.name);
+        if (results.length) {
+            match = results[0].item;
+            score = typeof results[0].score === 'number' ? results[0].score : null;
+        }
+    } else {
+        match = intakeExactMatch(row.name);
+        score = match ? 0 : null;
+    }
+    return { row, match, score, include: true, newImageUrl: '', error: '' };
+};
+
+/* Fuzzy-match the sheet in bounded async chunks, yielding to the browser after
+   each chunk and reporting progress so the tab never freezes. */
+const intakeMatchRowsChunked = async (rows, onProgress) => {
+    const results = [];
+    const total = Array.isArray(rows) ? rows.length : 0;
+    const chunkSize = PHARMACY_INTAKE_MATCH_CHUNK_SIZE;
+    for (let start = 0; start < total; start += chunkSize) {
+        const end = Math.min(start + chunkSize, total);
+        for (let i = start; i < end; i++) {
+            results.push(intakeMatchRow(rows[i]));
+        }
+        if (typeof onProgress === 'function') onProgress(end, total);
+        await intakeYieldToBrowser();
+    }
+    return results;
+};
+
 const intakeRenderPreview = () => {
     const wrap = document.getElementById('pharmacyIntakePreviewWrap');
     const body = document.getElementById('pharmacyIntakePreviewBody');
@@ -730,7 +794,7 @@ window.pharmacyIntakeToggleAll = (checked) => {
 window.runPharmacyIntakeMatching = async () => {
     if (intakeBusy) return;
     if (!window.isPharmacyIntakeUser()) {
-        window.showToast('هذه الشاشة متاحة لإدخال البيانات والإدارة فقط', false);
+        window.showToast('هذه الشاشة متاحة لإدخال البيانات فقط', false);
         return;
     }
     const merchantId = ((document.getElementById('pharmacyIntakeMerchant') || {}).value || '').trim();
@@ -750,6 +814,7 @@ window.runPharmacyIntakeMatching = async () => {
     if (matchBtn) matchBtn.disabled = true;
     if (syncBtn) syncBtn.disabled = true;
     intakeSetStatus('جاري تحليل الملف...');
+    intakeSetMatchProgress(0, 0, 'جاري تحليل ملف المخزون');
     try {
         intakeRows = await window.parsePharmacyIntakeSheet(file);
         if (!intakeRows.length) {
@@ -759,6 +824,7 @@ window.runPharmacyIntakeMatching = async () => {
             return;
         }
         intakeSetStatus('جاري تحميل الكتالوج الطبي...');
+        intakeSetMatchProgress(0, 0, 'جاري تحميل الكتالوج الطبي');
         if (!intakeCatalogIndex.length) {
             try {
                 await intakeGetCatalogIndex(false);
@@ -775,25 +841,14 @@ window.runPharmacyIntakeMatching = async () => {
             return;
         }
         intakeSetStatus('جاري بناء فهرس المطابقة...');
+        intakeSetMatchProgress(0, 0, 'جاري بناء فهرس المطابقة');
         /* Let the status text paint before the synchronous Fuse index build. */
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await intakeYieldToBrowser();
         if (!intakeFuse) intakeFuse = intakeBuildFuse();
-        intakeMatched = intakeRows.map((row) => {
-            let match = null;
-            let score = null;
-            if (intakeFuse) {
-                const results = intakeFuse.search(row.name);
-                if (results.length) {
-                    match = results[0].item;
-                    score = typeof results[0].score === 'number' ? results[0].score : null;
-                }
-            } else {
-                match = intakeExactMatch(row.name);
-                score = match ? 0 : null;
-            }
-            /* Every sheet row is imported by default: matched rows are enriched
-               from the catalog, unmatched rows keep empty descriptions. */
-            return { row, match, score, include: true, newImageUrl: '', error: '' };
+        /* Fuzzy-match each row in bounded async chunks so the main thread stays
+           responsive during the heavier matching phase. */
+        intakeMatched = await intakeMatchRowsChunked(intakeRows, (processed, total) => {
+            intakeSetMatchProgress(processed, total, 'جاري مطابقة الأصناف');
         });
         intakeRenderPreview();
         const matchedCount = intakeMatched.filter((m) => m.match).length;
@@ -805,6 +860,7 @@ window.runPharmacyIntakeMatching = async () => {
         intakeSetStatus('');
     } finally {
         intakeBusy = false;
+        intakeHideMatchProgress();
         if (matchBtn) matchBtn.disabled = false;
     }
 };
@@ -861,7 +917,7 @@ const intakeCommitBatches = async (payloads) => {
 window.syncPharmacyIntakeProducts = async () => {
     if (intakeBusy) return;
     if (!window.isPharmacyIntakeUser()) {
-        window.showToast('هذه الشاشة متاحة لإدخال البيانات والإدارة فقط', false);
+        window.showToast('هذه الشاشة متاحة لإدخال البيانات فقط', false);
         return;
     }
     const merchantId = ((document.getElementById('pharmacyIntakeMerchant') || {}).value || '').trim();
