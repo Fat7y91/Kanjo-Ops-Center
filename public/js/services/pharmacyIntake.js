@@ -1,6 +1,7 @@
 /* Kanjo Ops — Pharmacy Inventory Intake (Phase 1)
  * =====================================================================
- * Restricted to data-entry / admin. Reads a pharmacy inventory sheet
+ * Restricted to the Data-Entry operator only (hidden from founders,
+ * admins, Mahmoud and every other role). Reads a pharmacy inventory sheet
  * (Excel / CSV via SheetJS, basic pdf.js fallback), fuzzy-matches each
  * "Item Name" against the enriched medical catalog in memory (Fuse.js),
  * copies every matched catalog image into the selected pharmacy's Google
@@ -39,8 +40,15 @@ let intakeMerchantMap = {};
 window.isPharmacyIntakeUser = () => {
     const u = window.currentUser;
     if (!u) return false;
-    const isDataEntry = typeof window.isDataEntryUser === 'function' && window.isDataEntryUser();
-    return isDataEntry || u.role === 'admin' || u.role === 'founder';
+    /* Data-Entry-only module. Founders, admins, accounting, reps and the
+       Mahmoud operator must never see or operate this widget, so any
+       non-data-entry role is rejected up front. */
+    const role = String(u.role || '').toLowerCase();
+    if (role && role !== 'data_entry') return false;
+    if (role === 'data_entry') return true;
+    if (typeof window.isDataEntryUser === 'function' && window.isDataEntryUser()) return true;
+    /* Last-resort fallback: the dedicated data-entry operator PIN. */
+    return String(u.pin == null ? '' : u.pin) === '2468';
 };
 
 /* ──────────────────────────── HELPERS ──────────────────────────────── */
@@ -297,6 +305,17 @@ const intakeExactMatch = (name) => {
 
 /* ──────────────────────── UI: RENDER / WIDGET ──────────────────────── */
 
+/* This module handles pharmacy stock only, so the picker is restricted to the
+   "صيدليات وعناية شخصية" category. Matching on the Arabic stem (rather than the
+   exact decorated label) keeps it working with/without the leading emoji and
+   with minor naming variations. */
+const INTAKE_PHARMACY_CATEGORY_KEYWORDS = ['صيدل', 'عناية شخصية'];
+const intakeIsPharmacyMerchant = (merchant) => {
+    if (!merchant) return false;
+    const type = String(merchant.category || merchant.cat || merchant.type || merchant.merchantType || '');
+    return INTAKE_PHARMACY_CATEGORY_KEYWORDS.some((kw) => type.indexOf(kw) !== -1);
+};
+
 const intakePopulatePharmacySelect = () => {
     const select = document.getElementById('pharmacyIntakeMerchant');
     if (!select || typeof window.listFinalizedMerchants !== 'function') return;
@@ -306,6 +325,9 @@ const intakePopulatePharmacySelect = () => {
     intakeMerchantMap = {};
     const options = [];
     merchants.forEach((merchant) => {
+        /* Pharmacy-only: drop restaurants, supermarkets and every other
+           category the catalog picker may return. */
+        if (!intakeIsPharmacyMerchant(merchant)) return;
         /* The catalog picker returns { merchantId, merchantName, category,
            vipPreContract }; fall back to the raw Firestore keys so a shape
            change can never blank the dropdown. */
@@ -313,9 +335,8 @@ const intakePopulatePharmacySelect = () => {
         const name = String(merchant.merchantName || merchant.name || id).trim();
         if (!id || !name) return;
         intakeMerchantMap[id] = merchant;
-        const marker = String(merchant.category || '').indexOf('صيدل') !== -1 ? ' — صيدلية' : '';
         const vip = merchant.vipPreContract ? ' (VIP)' : '';
-        options.push('<option value="' + intakeEscapeHtml(id) + '">' + intakeEscapeHtml(name) + marker + vip + '</option>');
+        options.push('<option value="' + intakeEscapeHtml(id) + '">' + intakeEscapeHtml(name) + vip + '</option>');
     });
     if (!options.length) {
         select.innerHTML = '<option value="">لا توجد صيدليات مؤهلة بعد</option>';
