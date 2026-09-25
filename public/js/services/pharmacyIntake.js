@@ -1107,11 +1107,17 @@ const intakeSaveImageCache = (merchantId, cache) => {
 };
 
 const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
-    const catalog = m.match || null;
-    const nameEn = catalog ? (String(catalog.name_en || '').trim() || nameAr) : nameAr;
+    const row = (m && m.row) || {};
+    const catalog = (m && m.match) || null;
+    /* The vendor sheet name is the Arabic slot; fall back to the matched catalog
+       name when the sheet row is blank. Always a string, never undefined. */
+    const nameAr = String(row.name || '').trim()
+        || (catalog ? String(catalog.name_ar || catalog.name || '').trim() : '')
+        || '';
+    const nameEn = (catalog ? String(catalog.name_en || '').trim() : '') || nameAr;
     const sku = intakeStableSku(m);
     const category = (catalog ? String(catalog.category || '').trim() : '') || String(merchant.category || '').trim();
-    const price = Number(m.row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
+    const price = Number(row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
     /* Descriptions come from the enriched catalog for MATCHED rows only.
        UNMATCHED rows keep both description fields strictly empty. */
     return {
