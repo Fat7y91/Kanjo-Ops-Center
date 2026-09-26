@@ -37,14 +37,17 @@ const FOUNDER_AUDIT_SELECT = [
     'sku', 'base_price', 'createdAt', 'auditedBy', 'auditFounder'
 ];
 
-/* In-RAM state only (see STATE note above). */
+/* In-RAM state only (see STATE note above). `editing` tracks which rows the
+   founder has opened for description editing, so an unrelated re-render (image
+   upload, founder switch) never collapses an open editor or loses the caret. */
 const founderAuditState = {
     loaded: false,
     loading: false,
     products: [],
     assignments: [],
     loadedAt: null,
-    uploadingId: ''
+    uploadingId: '',
+    editing: new Set()
 };
 window._founderAuditState = founderAuditState;
 
@@ -70,6 +73,7 @@ const founderAuditFormatNumber = (value) => {
 const founderAuditDocToken = (id) => String(id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
 
 const founderAuditDescId = (id) => 'founderAuditDesc-' + founderAuditDocToken(id);
+const founderAuditDescViewId = (id) => 'founderAuditDescView-' + founderAuditDocToken(id);
 
 /* Live value of a row's description editor. Always prefer the in-DOM textarea
    so an edit is never lost; fall back to the stored value only when the editor
@@ -336,12 +340,15 @@ window.founderAuditOpenImage = (id) => {
     window.open(full, '_blank', 'noopener');
 };
 
-/* Open Google Images for the product name in a new tab. */
+/* Open Google Images for the product name in a new tab, explicitly localized to
+   Egypt: the " مصر" suffix plus `gl=eg` force Egyptian packaging results
+   regardless of where the auditor's IP is geolocated. */
 window.founderAuditSearchGoogle = (id) => {
     const product = founderAuditState.products.find((p) => p.id === id);
     const name = founderAuditProductName(product);
     if (!name) { window.showToast('لا يوجد اسم للبحث عنه', false); return; }
-    window.open('https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(name), '_blank', 'noopener');
+    const url = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(name + ' مصر') + '&gl=eg';
+    window.open(url, '_blank', 'noopener');
 };
 
 /* Approve a product: persist the edited description, set status=done and
@@ -382,6 +389,7 @@ window.founderAuditApprove = async (id) => {
         /* Drop it from RAM so the chunk shrinks immediately; no refetch needed. */
         founderAuditState.products = founderAuditState.products.filter((p) => p.id !== id);
         founderAuditState.assignments = founderAuditAssign(founderAuditState.products);
+        if (founderAuditState.editing) founderAuditState.editing.delete(id);
         window.showToast('تم اعتماد الصنف');
         founderAuditRenderChunk();
     } catch (err) {
@@ -447,6 +455,24 @@ const founderAuditCardHtml = (product) => {
         ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">مطابق</span>'
         : '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-200 text-orange-900">غير مطابق</span>';
     const uploading = founderAuditState.uploadingId === id;
+    /* The description is READ-ONLY by default; the founder must click
+       "تعديل الوصف" to open the editor, which prevents accidental keystrokes. */
+    const editing = !!(founderAuditState.editing && founderAuditState.editing.has(id));
+    const description = founderAuditEscapeHtml(product.description_ar || '');
+    const descriptionDisplay = description
+        ? '<p dir="auto" class="text-xs font-bold text-slate-700 whitespace-pre-wrap break-words leading-relaxed">' + description + '</p>'
+        : '<p class="text-xs font-bold text-slate-400 italic">لا يوجد وصف بعد.</p>';
+    const descHtml = ''
+        + '<div class="space-y-1.5">'
+        +   '<div class="flex items-center justify-between gap-2">'
+        +     '<div class="flex items-center gap-1.5 text-[10px] font-black text-[#230535]/70"><i class="fa-solid fa-pen-to-square"></i> الوصف</div>'
+        +     '<button type="button" data-action="edit-desc" data-id="' + token + '" class="shrink-0 text-[10px] font-black text-[#230535] border border-[#230535]/30 rounded-lg px-2 py-1 hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1' + (editing ? ' hidden' : '') + '"><i class="fa-solid fa-pen"></i> تعديل الوصف</button>'
+        +   '</div>'
+        +   '<div id="' + founderAuditDescViewId(id) + '" class="' + (editing ? 'hidden' : '') + '">' + descriptionDisplay + '</div>'
+        +   '<textarea id="' + founderAuditDescId(id) + '" rows="3" dir="auto" placeholder="اكتب وصف الصنف..." '
+        +     'class="w-full p-2.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-xs outline-none focus:border-[#230535] resize-y' + (editing ? '' : ' hidden') + '">'
+        +     description + '</textarea>'
+        + '</div>';
 
     return ''
         + '<div class="bg-white border border-[#230535]/15 rounded-2xl p-3 flex gap-3" data-product-card="' + token + '">'
@@ -459,10 +485,7 @@ const founderAuditCardHtml = (product) => {
         +       '</div>'
         +       matchBadge
         +     '</div>'
-        +     '<div class="flex items-center gap-1.5 text-[10px] font-black text-[#230535]/70"><i class="fa-solid fa-pen-to-square"></i> الوصف (قابل للتعديل)</div>'
-        +     '<textarea id="' + founderAuditDescId(id) + '" rows="3" dir="auto" placeholder="اكتب وصف الصنف..." '
-        +       'class="w-full p-2.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-xs outline-none focus:border-[#230535] resize-y">'
-        +       founderAuditEscapeHtml(product.description_ar || '') + '</textarea>'
+        +     descHtml
         +     '<div class="flex flex-wrap gap-2">'
         +       '<button type="button" data-action="search" data-id="' + token + '" class="bg-white text-[#230535] border-2 border-[#230535] px-3 py-2 rounded-xl text-[11px] font-black hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> البحث عن صورة</button>'
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
@@ -472,10 +495,15 @@ const founderAuditCardHtml = (product) => {
         + '</div>';
 };
 
-/* Snapshot any in-progress description edits from the DOM before a re-render,
-   so switching founder or replacing an image never discards typed text. */
+/* Snapshot in-progress description edits from the DOM before a re-render, so
+   switching founder or replacing an image never discards typed text. Only rows
+   currently in edit mode sync from the DOM; read-only rows keep their stored
+   value untouched (the textarea is merely a mirror there). */
 const founderAuditCaptureEdits = () => {
+    const editing = founderAuditState.editing;
+    if (!editing || !editing.size) return;
     founderAuditState.products.forEach((p) => {
+        if (!editing.has(p.id)) return;
         const el = document.getElementById(founderAuditDescId(p.id));
         if (el) p.description_ar = el.value;
     });
@@ -511,6 +539,23 @@ const founderAuditRenderChunk = () => {
     list.innerHTML = mine.map(founderAuditCardHtml).join('');
 };
 
+/* Open a row's description editor on demand ("تعديل الوصف"). The id is kept in
+   `editing` so the editor survives an unrelated re-render, then focus lands in
+   the textarea with the caret at the end. */
+window.founderAuditStartEditDescription = (id) => {
+    if (!founderAuditState.editing) founderAuditState.editing = new Set();
+    founderAuditState.editing.add(id);
+    founderAuditRenderChunk();
+    const ta = document.getElementById(founderAuditDescId(id));
+    if (ta && typeof ta.focus === 'function') {
+        try {
+            ta.focus();
+            const end = String(ta.value || '').length;
+            if (typeof ta.setSelectionRange === 'function') ta.setSelectionRange(end, end);
+        } catch (err) { /* focus/caret is best-effort */ }
+    }
+};
+
 /* ───────────────────────────── WIDGET / EVENTS ───────────────────────────── */
 
 window.renderFounderAuditWidget = () => {
@@ -537,6 +582,7 @@ const founderAuditInit = () => {
             const id = btn.getAttribute('data-id');
             if (action === 'search') window.founderAuditSearchGoogle(id);
             else if (action === 'zoom') window.founderAuditOpenImage(id);
+            else if (action === 'edit-desc') window.founderAuditStartEditDescription(id);
             else if (action === 'upload') {
                 founderAuditUploadTargetId = id;
                 const input = document.getElementById('founderAuditFileInput');
