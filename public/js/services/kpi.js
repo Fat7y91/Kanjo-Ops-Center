@@ -131,6 +131,24 @@ window.isKpiTrackedUser = () => {
     return typeof window.isCatalogContentUser === 'function' && window.isCatalogContentUser();
 };
 
+/* The Data Entry account (يوزر إدخال البيانات) is an internal ingestion identity,
+   NOT a field rep. It must never be ranked on the competitive leaderboard nor
+   counted in the team totals. Products it created carry its name in `createdBy`,
+   so we exclude by name; the users table is also consulted so any future
+   data_entry identity is hidden rather than only this one literal. */
+const KPI_EXCLUDED_DATA_ENTRY_NAME = 'يوزر إدخال البيانات';
+const kpiIsExcludedRepName = (name) => {
+    const target = String(name || '').trim();
+    if (!target) return false;
+    if (target === KPI_EXCLUDED_DATA_ENTRY_NAME) return true;
+    const table = (window.users && typeof window.users === 'object') ? window.users : {};
+    return Object.keys(table).some((pin) => {
+        const u = table[pin];
+        return !!u && u.role === 'data_entry' && String(u.name || '').trim() === target;
+    });
+};
+window.kpiIsExcludedRepName = kpiIsExcludedRepName;
+
 /* ─────────────────────── shared helpers ─────────────────────── */
 
 const kpiLocalDateKey = (value) => {
@@ -911,6 +929,8 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
         }
         rows.forEach((row) => {
             const { id, ...data } = row;
+            /* Ignore any stale summary published for a data-entry identity. */
+            if (kpiIsExcludedRepName(data.repName || id)) return;
             byId.set(id, {
                 repId: id,
                 name: data.repName || id,
@@ -923,7 +943,7 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
                 imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
             });
         });
-        return Array.from(byId.values());
+        return Array.from(byId.values()).filter((s) => !kpiIsExcludedRepName(s.name));
     } catch (err) {
         console.error('[kpi] leaderboard fetch failed:', err);
         return [];
@@ -943,7 +963,7 @@ const kpiFetchLeaderboardSummaries = () => kpiCacheGet('kpi:leaderboard', kpiFet
    matches the values on their top cards, even when their published rep_kpis
    document is stale. */
 const kpiComputeBenchmark = (summaries, ownRow) => {
-    const field = (summaries || []).filter((r) => !r.isEditor);
+    const field = (summaries || []).filter((r) => r && !r.isEditor && !kpiIsExcludedRepName(r.name));
     const own = {
         score: ownRow && !ownRow.isEditor ? (Number(ownRow.kanjoScore) || 0) : 0,
         validRatio: ownRow ? (Number(ownRow.validRatioRaw) || 0) : 0,
@@ -1186,9 +1206,12 @@ const kpiBuildReport = async () => {
     /* A field rep may only resolve daily stats for their own repId; managers
        enumerate the whole team. Every daily-stats read runs concurrently — the
        old serial `await` inside a for-loop scaled report time with headcount. */
+    /* Data-entry accounts are internal ingestion identities: drop them before
+       scoring so they never appear in the ranking cards, the team totals, or
+       the published rep_kpis summaries. */
     const repList = window.isFieldRepUser()
         ? [reps.get(kpiRepId((window.currentUser && window.currentUser.name) || ''))].filter(Boolean)
-        : Array.from(reps.values());
+        : Array.from(reps.values()).filter((rep) => !kpiIsExcludedRepName(rep.name));
     const rows = await Promise.all(repList.map(async (rep) => {
         const stats = await kpiFetchDailyStats(rep.repId);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
@@ -1713,7 +1736,7 @@ const kpiPersonalRank = (row, report) => {
 const kpiComputePersonalRank = (summaries, ownRow) => {
     if (!ownRow || ownRow.isEditor) return { rank: null, total: 0 };
     const peers = (summaries || [])
-        .filter((r) => r && !r.isEditor && r.repId !== ownRow.repId)
+        .filter((r) => r && !r.isEditor && r.repId !== ownRow.repId && !kpiIsExcludedRepName(r.name))
         .map((r) => ({
             repId: r.repId,
             totalProducts: Math.max(0, Number(r.totalProducts) || 0),
