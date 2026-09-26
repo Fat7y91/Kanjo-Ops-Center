@@ -466,10 +466,21 @@ const normalizeIntakeCatalog = (parsed) => intakeExtractArray(parsed)
     .map(intakeNormalizeCatalogItem)
     .filter((item) => item.name);
 
+/* Keep the auth session alive during long parse/match/copy loops. The dashboard
+   logs a user out after 30 idle minutes; a big intake run is pure background
+   work with no mouse/key events, so without this the session would expire
+   mid-run. Synchronous and I/O-free — safe to call on every loop tick. */
+const intakeHeartbeat = () => {
+    try {
+        if (typeof window.resetIdleTimer === 'function') window.resetIdleTimer();
+    } catch (err) { /* heartbeat must never break the loop */ }
+};
+
 /* Yield back to the browser so pending paints/input events are processed
    between parse chunks. requestAnimationFrame keeps the progress bar smooth
    where available; setTimeout(0) is the fallback for background tabs. */
 const intakeYieldToBrowser = () => new Promise((resolve) => {
+    intakeHeartbeat();
     if (typeof window.requestAnimationFrame === 'function') {
         window.requestAnimationFrame(() => resolve());
     } else {
@@ -1126,10 +1137,20 @@ const intakeCachedDriveUrl = (cache, docId, sourceUrl) => {
     return (hit && hit.driveUrl && hit.sourceUrl === sourceUrl) ? hit.driveUrl : '';
 };
 
-/* Copy + commit pipeline size. Each chunk is written to Firestore and the run
-   document is checkpointed immediately afterwards, so an interruption only ever
-   costs the work after the last completed chunk. */
-const PHARMACY_INTAKE_COMMIT_CHUNK = 200;
+/* Copy + commit pipeline size, aligned to Firestore's hard 500-op batch limit
+   (we stay at 400). Each chunk maps 1:1 to one `writeBatch` call and one run-
+   state checkpoint, so a 2,000-row sheet costs ~5 batch writes and ~5 state
+   writes instead of thousands. An interruption costs only the in-flight chunk. */
+const PHARMACY_INTAKE_COMMIT_CHUNK = 400;
+
+/* A row is only committed once it carries a deterministic id and at least one
+   name slot. Rows that fail validation are skipped (and reported), never
+   written as half-empty documents. */
+const intakeEntryIsValid = (entry) => {
+    if (!entry || !entry.id || !entry.data) return false;
+    const d = entry.data;
+    return !!(String(d.name_ar || '').trim() || String(d.name_en || '').trim());
+};
 
 const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
     const row = (m && m.row) || {};
@@ -1215,6 +1236,7 @@ window.syncPharmacyIntakeProducts = async () => {
     let saved = 0;
     let removed = 0;
     let resumedCount = 0;
+    let skippedCount = 0;
     try {
         /* Collapse the selection onto deterministic ids (last row wins for a
            duplicated SKU/name) so the batch never writes the same doc twice. */
@@ -1282,6 +1304,7 @@ window.syncPharmacyIntakeProducts = async () => {
                 const done = start + j;
                 const m = chunk[j].m;
                 const docId = chunk[j].docId;
+                intakeHeartbeat();
                 intakeSetStatus('نسخ الصور ' + intakeFormatNumber(done + 1) + ' / ' + intakeFormatNumber(pending.length) + '...');
                 let newImageUrl = '';
                 const sourceUrl = (m.match && m.match.image_url) ? m.match.image_url : '';
@@ -1314,11 +1337,14 @@ window.syncPharmacyIntakeProducts = async () => {
                 if (done % 5 === 0 || done === pending.length - 1) intakeRenderPreview();
             }
 
-            intakeSetStatus('حفظ ' + intakeFormatNumber(chunkEntries.length) + ' منتج...');
-            saved += await intakeCommitBatches(chunkEntries);
-            chunkEntries.forEach((entry) => committedIds.add(entry.id));
+            /* Commit only fully-validated rows, then checkpoint the durable
+               image map + the exact set of committed ids in a single write. */
+            const validEntries = chunkEntries.filter(intakeEntryIsValid);
+            skippedCount += chunkEntries.length - validEntries.length;
+            intakeSetStatus('حفظ ' + intakeFormatNumber(validEntries.length) + ' منتج...');
+            if (validEntries.length) saved += await intakeCommitBatches(validEntries);
+            validEntries.forEach((entry) => committedIds.add(entry.id));
 
-            /* Checkpoint: durable image map + the exact set of committed ids. */
             intakeSaveImageCache(merchantId, imageCache);
             await intakeWriteRunState(merchant, runStateBase());
         }
@@ -1358,6 +1384,7 @@ window.syncPharmacyIntakeProducts = async () => {
             + (copied ? ' — نُسخت ' + intakeFormatNumber(copied) + ' صورة' : '')
             + (reused ? ' — أُعيد استخدام ' + intakeFormatNumber(reused) + ' صورة' : '')
             + (copyFailed ? ' — فشل ' + intakeFormatNumber(copyFailed) + ' صورة' : '')
+            + (skippedCount ? ' — تم تجاهل ' + intakeFormatNumber(skippedCount) + ' صف غير صالح' : '')
             + (removed ? ' — حُذف ' + intakeFormatNumber(removed) + ' صنف قديم' : '') + '.');
         window.showToast('تم رفع ' + intakeFormatNumber(committedIds.size) + ' منتج بنجاح'
             + (resumedCount ? ' (استئناف ' + intakeFormatNumber(resumedCount) + ' صنف)' : ''));
