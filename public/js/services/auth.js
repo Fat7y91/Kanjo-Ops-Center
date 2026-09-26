@@ -290,6 +290,10 @@ function applyThemeAndShowDashboard() {
             window.renderCatalogWidgets();
         }
 
+        if (typeof window.renderFounderAuditWidget === 'function') {
+            window.renderFounderAuditWidget();
+        }
+
         if (isRep && window.refreshFinancialProfileBanner) {
             window.refreshFinancialProfileBanner();
         }

@@ -1957,6 +1957,50 @@
 
 
 
+            <!-- مراجعة مخزون الصيدليات (للمؤسسين فقط — Phase 2) -->
+
+            <div id="founderAuditWidget" class="hidden bg-white rounded-3xl shadow-sm border border-[#FFD700]/50 overflow-hidden">
+
+                <div class="w-full bg-gradient-to-r from-[#230535] to-[#4C1D95] text-white px-4 py-3 flex flex-wrap justify-between items-center gap-2">
+
+                    <div class="flex items-center gap-3">
+
+                        <div class="bg-[#FFD700]/20 text-[#FFD700] p-2.5 rounded-2xl text-lg"><i class="fa-solid fa-clipboard-check"></i></div>
+
+                        <div>
+
+                            <h4 class="font-black text-base">مراجعة مخزون الصيدليات</h4>
+
+                            <p class="text-[11px] text-white/80 font-bold">توزيع عادل على المؤسسين — ضبط الوصف والصورة ثم الاعتماد</p>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="p-3 sm:p-4 space-y-3 bg-slate-50">
+
+                    <div class="flex flex-wrap items-center gap-2">
+
+                        <select id="founderAuditFounderSelect" class="p-2.5 bg-white border border-purple-100 rounded-xl font-bold text-xs outline-none focus:border-[#230535]"></select>
+
+                        <button type="button" id="founderAuditRefreshBtn" class="bg-white text-[#230535] border-2 border-[#230535] px-3 py-2 rounded-xl text-xs font-black hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> تحديث</button>
+
+                        <div id="founderAuditStats" class="flex flex-wrap gap-2"></div>
+
+                    </div>
+
+                    <p id="founderAuditStatus" class="text-xs font-bold text-slate-500"></p>
+
+                    <div id="founderAuditList" class="space-y-3 max-h-[70vh] overflow-y-auto hide-scrollbar"></div>
+
+                    <input type="file" id="founderAuditFileInput" accept="image/*" class="hidden">
+
+                </div>
+
+            </div>
+
             <!-- إدخال منتجات الكتالوج (للمناديب) -->
 
             <div id="catalogRepBanner" class="hidden bg-gradient-to-r from-[#230535] to-[#4C1D95] p-4 rounded-3xl shadow-lg text-white flex flex-wrap justify-between items-center gap-3">

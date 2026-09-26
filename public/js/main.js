@@ -15,6 +15,7 @@ import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
 import './services/firestore.js';
 import './services/catalog.js';
 import './services/pharmacyIntake.js';
+import './services/founderAudit.js';
 import './ui/modals.js';
 import './ui/accounting.js';
 import './ui/dashboard.js';

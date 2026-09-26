@@ -3245,9 +3245,23 @@ window.toggleCatalogMerchantAccordion = (domId, mode) => {
 
 const catalogActiveTab = () => (window._catalogContentTab === 'done' ? 'done' : 'pending');
 
-const catalogPendingProducts = () => (window.merchantProductsCache || []).filter((p) => p.status === 'pending');
+/* Products ingested by the Pharmacy Inventory Intake engine are audited by the
+   founders (see founderAudit.js), NOT by the content/image editor. They are
+   excluded here so they never appear in the content editor's queue. Matching is
+   by the explicit intake source first, then by pharmacy-related category as a
+   fallback for older rows. */
+window.catalogIsPharmacyIntakeProduct = (p) => {
+    if (!p) return false;
+    if (String(p.intakeSource || '').trim() === 'pharmacy_inventory_intake') return true;
+    const category = String(p.category || '');
+    return category.includes('صيدل') || category.includes('عناية شخصية');
+};
 
-const catalogDoneProducts = () => (window.doneCatalogProductsCache || []);
+const catalogPendingProducts = () => (window.merchantProductsCache || [])
+    .filter((p) => p.status === 'pending' && !window.catalogIsPharmacyIntakeProduct(p));
+
+const catalogDoneProducts = () => (window.doneCatalogProductsCache || [])
+    .filter((p) => !window.catalogIsPharmacyIntakeProduct(p));
 
 const updateCatalogContentBadge = () => {
     const active = catalogActiveTab();
