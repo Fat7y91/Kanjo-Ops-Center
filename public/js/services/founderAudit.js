@@ -71,6 +71,16 @@ const founderAuditDocToken = (id) => String(id || '').replace(/[^a-zA-Z0-9_-]/g,
 
 const founderAuditDescId = (id) => 'founderAuditDesc-' + founderAuditDocToken(id);
 
+/* Live value of a row's description editor. Always prefer the in-DOM textarea
+   so an edit is never lost; fall back to the stored value only when the editor
+   is absent (e.g. before the first render). */
+const founderAuditDescriptionValue = (id, product) => {
+    const el = document.getElementById(founderAuditDescId(id));
+    if (el) return String(el.value || '').trim();
+    return String((product && product.description_ar) || '').trim();
+};
+window.founderAuditDescriptionValue = founderAuditDescriptionValue;
+
 const founderAuditDriveFileId = (urlOrId) => {
     const s = String(urlOrId || '').trim();
     if (!s) return '';
@@ -83,6 +93,15 @@ const founderAuditDriveFileId = (urlOrId) => {
 const founderAuditThumbnailUrl = (urlOrId) => {
     const id = founderAuditDriveFileId(urlOrId);
     if (id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w200-h200';
+    return String(urlOrId || '');
+};
+
+/* Full-resolution variant for the click-to-zoom lightbox: same Drive source
+   rendered large (w1600) so packaging details are legible. Falls back to the
+   raw URL for non-Drive sources. */
+const founderAuditFullImageUrl = (urlOrId) => {
+    const id = founderAuditDriveFileId(urlOrId);
+    if (id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w1600';
     return String(urlOrId || '');
 };
 
@@ -302,6 +321,21 @@ window.founderAuditHandleUpload = async (event) => {
     }
 };
 
+/* Zoom a row's image in the shared full-screen lightbox. Uses the existing
+   `openImageViewer` overlay (backdrop/close-button dismissal) and the
+   full-resolution URL so packaging details can be verified. */
+window.founderAuditOpenImage = (id) => {
+    const product = founderAuditState.products.find((p) => p.id === id);
+    const image = founderAuditProductImage(product);
+    if (!image) { window.showToast('لا توجد صورة لهذا الصنف', false); return; }
+    const full = founderAuditFullImageUrl(image);
+    if (typeof window.openImageViewer === 'function') {
+        window.openImageViewer(full);
+        return;
+    }
+    window.open(full, '_blank', 'noopener');
+};
+
 /* Open Google Images for the product name in a new tab. */
 window.founderAuditSearchGoogle = (id) => {
     const product = founderAuditState.products.find((p) => p.id === id);
@@ -316,8 +350,9 @@ window.founderAuditApprove = async (id) => {
     if (!window.isFounderAuditUser()) return;
     const product = founderAuditState.products.find((p) => p.id === id);
     if (!product) return;
-    const descEl = document.getElementById(founderAuditDescId(id));
-    const description = descEl ? String(descEl.value || '').trim() : String(product.description_ar || '');
+    /* Read the founder's freshly typed value straight from the DOM textarea so
+       their correction is persisted in the same transition. */
+    const description = founderAuditDescriptionValue(id, product);
     const founder = window.founderAuditCurrentFounder();
     const actor = (window.currentUser && window.currentUser.name) || '';
     const patch = {
@@ -399,6 +434,15 @@ const founderAuditCardHtml = (product) => {
     const imageHtml = thumb
         ? '<img src="' + founderAuditEscapeHtml(thumb) + '" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display=\'none\'">'
         : '<i class="fa-regular fa-image text-2xl text-slate-300"></i>';
+    /* Clickable thumbnail with a hover affordance; opens the full-resolution
+       lightbox. Rows without an image keep a plain, non-interactive box. */
+    const thumbHtml = thumb
+        ? '<button type="button" data-action="zoom" data-id="' + token + '" title="تكبير الصورة" aria-label="تكبير الصورة" '
+            + 'class="group relative w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-kanjo-light border border-purple-100 flex items-center justify-center cursor-pointer transition hover:border-[#FFD700] hover:ring-2 hover:ring-[#FFD700] focus:outline-none focus:ring-2 focus:ring-[#FFD700]">'
+            + imageHtml
+            + '<span class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition"><i class="fa-solid fa-magnifying-glass-plus text-white text-sm opacity-0 group-hover:opacity-100 transition"></i></span>'
+          + '</button>'
+        : '<div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-kanjo-light border border-purple-100 flex items-center justify-center">' + imageHtml + '</div>';
     const matchBadge = founderAuditHasDescription(product)
         ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">مطابق</span>'
         : '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-200 text-orange-900">غير مطابق</span>';
@@ -406,7 +450,7 @@ const founderAuditCardHtml = (product) => {
 
     return ''
         + '<div class="bg-white border border-[#230535]/15 rounded-2xl p-3 flex gap-3" data-product-card="' + token + '">'
-        +   '<div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-kanjo-light border border-purple-100 flex items-center justify-center">' + imageHtml + '</div>'
+        +   thumbHtml
         +   '<div class="flex-1 min-w-0 space-y-2">'
         +     '<div class="flex items-start justify-between gap-2">'
         +       '<div class="min-w-0">'
@@ -415,7 +459,8 @@ const founderAuditCardHtml = (product) => {
         +       '</div>'
         +       matchBadge
         +     '</div>'
-        +     '<textarea id="' + founderAuditDescId(id) + '" rows="2" placeholder="اكتب وصف الصنف..." '
+        +     '<div class="flex items-center gap-1.5 text-[10px] font-black text-[#230535]/70"><i class="fa-solid fa-pen-to-square"></i> الوصف (قابل للتعديل)</div>'
+        +     '<textarea id="' + founderAuditDescId(id) + '" rows="3" dir="auto" placeholder="اكتب وصف الصنف..." '
         +       'class="w-full p-2.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-xs outline-none focus:border-[#230535] resize-y">'
         +       founderAuditEscapeHtml(product.description_ar || '') + '</textarea>'
         +     '<div class="flex flex-wrap gap-2">'
@@ -491,6 +536,7 @@ const founderAuditInit = () => {
             const action = btn.getAttribute('data-action');
             const id = btn.getAttribute('data-id');
             if (action === 'search') window.founderAuditSearchGoogle(id);
+            else if (action === 'zoom') window.founderAuditOpenImage(id);
             else if (action === 'upload') {
                 founderAuditUploadTargetId = id;
                 const input = document.getElementById('founderAuditFileInput');
