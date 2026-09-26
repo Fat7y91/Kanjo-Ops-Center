@@ -1106,6 +1106,31 @@ const intakeSaveImageCache = (merchantId, cache) => {
     }
 };
 
+/* Merge two `docId -> { sourceUrl, driveUrl }` maps, preferring a real driveUrl.
+   The device cache is merged with the durable map stored in the run document so
+   a resume on ANOTHER device still recognises the images it already copied. */
+const intakeMergeImageMaps = (base, incoming) => {
+    const out = Object.assign({}, base || {});
+    Object.keys(incoming || {}).forEach((key) => {
+        const val = incoming[key];
+        if (val && val.driveUrl) out[key] = { sourceUrl: val.sourceUrl || '', driveUrl: val.driveUrl };
+        else if (!out[key] && val) out[key] = val;
+    });
+    return out;
+};
+
+/* Return the already-copied Drive URL for a row, but only when it was copied
+   from the SAME source image — otherwise the image changed and must be re-copied. */
+const intakeCachedDriveUrl = (cache, docId, sourceUrl) => {
+    const hit = cache && cache[docId];
+    return (hit && hit.driveUrl && hit.sourceUrl === sourceUrl) ? hit.driveUrl : '';
+};
+
+/* Copy + commit pipeline size. Each chunk is written to Firestore and the run
+   document is checkpointed immediately afterwards, so an interruption only ever
+   costs the work after the last completed chunk. */
+const PHARMACY_INTAKE_COMMIT_CHUNK = 200;
+
 const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
     const row = (m && m.row) || {};
     const catalog = (m && m.match) || null;
@@ -1186,9 +1211,11 @@ window.syncPharmacyIntakeProducts = async () => {
     if (syncBtn) { syncBtn.disabled = true; syncBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري النسخ...'; }
     let copied = 0;
     let copyFailed = 0;
+    let reused = 0;
+    let saved = 0;
+    let removed = 0;
+    let resumedCount = 0;
     try {
-        const runId = 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-
         /* Collapse the selection onto deterministic ids (last row wins for a
            duplicated SKU/name) so the batch never writes the same doc twice. */
         const byId = new Map();
@@ -1196,79 +1223,113 @@ window.syncPharmacyIntakeProducts = async () => {
         const plan = [];
         byId.forEach((m, docId) => plan.push({ m, docId }));
 
-        /* Recover the previous run for this pharmacy (one read). A run that was
-           interrupted is flagged to the operator, then healed by the stable ids
-           below instead of being duplicated. */
+        /* Recover the previous run for this pharmacy (one read). A run left in
+           `in_progress` is a genuine interruption: keep its id as the resume
+           point, reuse its durable image map, and only process what is missing.
+           `docIds` is the whole intended set; `committedIds` is what actually
+           reached Firestore (absent on the pre-resume schema, hence the empty
+           default — the deterministic write below is still idempotent). */
         const priorState = await intakeReadRunState(merchantId);
         const priorIds = (priorState && Array.isArray(priorState.docIds)) ? priorState.docIds : [];
-        if (priorState && priorState.status === 'in_progress' && priorIds.length) {
-            intakeSetStatus('تم رصد محاولة سابقة غير مكتملة، سيتم تحديث أصنافها بدل تكرارها...');
-        }
+        const resuming = !!(priorState && priorState.status === 'in_progress');
+        const priorCommitted = new Set(
+            resuming && priorState && Array.isArray(priorState.committedIds) ? priorState.committedIds : []
+        );
+        const runId = (resuming && priorState && priorState.runId)
+            ? priorState.runId
+            : 'pi-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
-        /* Persist the intended ids BEFORE the (long) image-copy phase, so an
-           interruption during copying is still detectable and reconcilable. */
-        await intakeWriteRunState(merchant, {
+        /* Rows already committed by the interrupted run are skipped entirely — no
+           second write — and every previously copied image is recognised before
+           the copy endpoint is ever called. */
+        const pending = plan.filter((item) => !priorCommitted.has(item.docId));
+        resumedCount = plan.length - pending.length;
+
+        /* Merge the durable (cross-device) map into the local cache. */
+        const imageCache = intakeMergeImageMaps(
+            intakeLoadImageCache(merchantId),
+            (priorState && priorState.imageMap) || {}
+        );
+        const committedIds = new Set(priorCommitted);
+        const runStateBase = () => ({
             status: 'in_progress',
             runId,
-            startedAt: new Date(),
+            startedAt: (resuming && priorState && priorState.startedAt) || new Date(),
             expectedCount: plan.length,
-            writtenCount: 0,
-            docIds: plan.map((item) => item.docId)
+            writtenCount: committedIds.size,
+            docIds: plan.map((item) => item.docId),
+            committedIds: Array.from(committedIds),
+            imageMap: intakeMergeImageMaps({}, imageCache)
         });
 
-        const entries = [];
-        const imageCache = intakeLoadImageCache(merchantId);
-        let cacheDirty = false;
-        let reused = 0;
-        for (let i = 0; i < plan.length; i++) {
-            const m = plan[i].m;
-            const docId = plan[i].docId;
-            intakeSetStatus('نسخ الصور ' + intakeFormatNumber(i + 1) + ' / ' + intakeFormatNumber(plan.length) + '...');
-            let newImageUrl = '';
-            const sourceUrl = (m.match && m.match.image_url) ? m.match.image_url : '';
-            const cached = imageCache[docId];
-            if (sourceUrl && cached && cached.sourceUrl === sourceUrl && cached.driveUrl) {
-                /* Already copied by an earlier (possibly interrupted) run: reuse it
-                   instead of pushing a duplicate image into the Drive folder. */
-                newImageUrl = cached.driveUrl;
-                m.newImageUrl = newImageUrl;
-                m.error = '';
-                reused++;
-            } else if (sourceUrl) {
-                try {
-                    /* Stable file name derived from the deterministic doc id, so a
-                       re-run targets the same Drive file instead of piling up
-                       duplicate copies where the Apps Script supports it. */
-                    const fileName = 'pharmacy-' + docId + '.jpg';
-                    newImageUrl = await window.copyCatalogImageFromUrl(sourceUrl, fileName, merchant.merchantName);
-                    m.newImageUrl = newImageUrl;
-                    m.error = '';
-                    imageCache[docId] = { sourceUrl, driveUrl: newImageUrl };
-                    cacheDirty = true;
-                    copied++;
-                } catch (err) {
-                    console.error('[pharmacy-intake] image copy failed:', err);
-                    m.error = 'تعذّر نسخ الصورة';
-                    copyFailed++;
-                }
-            }
-            entries.push({ id: docId, data: intakeBuildPayload(m, merchant, newImageUrl, runId) });
-            if (cacheDirty && (i % 10 === 0 || i === plan.length - 1)) {
-                intakeSaveImageCache(merchantId, imageCache);
-                cacheDirty = false;
-            }
-            if (i % 5 === 0 || i === plan.length - 1) intakeRenderPreview();
+        if (resuming) {
+            intakeSetStatus('استئناف محاولة سابقة: '
+                + intakeFormatNumber(resumedCount) + ' صنف محفوظ مسبقاً، '
+                + intakeFormatNumber(pending.length) + ' متبقٍ...');
         }
+
+        /* Checkpoint the resume point BEFORE the copy phase, so even an
+           interruption during copying is detectable and reconcilable. */
+        await intakeWriteRunState(merchant, runStateBase());
         intakeSaveImageCache(merchantId, imageCache);
 
-        intakeSetStatus('حفظ ' + intakeFormatNumber(entries.length) + ' منتج...');
-        const saved = await intakeCommitBatches(entries);
+        /* Copy + commit one chunk at a time, checkpointing after each. An
+           interruption can only ever cost the chunk currently in flight. */
+        for (let start = 0; start < pending.length; start += PHARMACY_INTAKE_COMMIT_CHUNK) {
+            const chunk = pending.slice(start, start + PHARMACY_INTAKE_COMMIT_CHUNK);
+            const chunkEntries = [];
+            for (let j = 0; j < chunk.length; j++) {
+                const done = start + j;
+                const m = chunk[j].m;
+                const docId = chunk[j].docId;
+                intakeSetStatus('نسخ الصور ' + intakeFormatNumber(done + 1) + ' / ' + intakeFormatNumber(pending.length) + '...');
+                let newImageUrl = '';
+                const sourceUrl = (m.match && m.match.image_url) ? m.match.image_url : '';
+                const cached = intakeCachedDriveUrl(imageCache, docId, sourceUrl);
+                if (sourceUrl && cached) {
+                    /* Already copied by an earlier (possibly interrupted) run: reuse
+                       it instead of pushing a duplicate image into the Drive folder. */
+                    newImageUrl = cached;
+                    m.newImageUrl = newImageUrl;
+                    m.error = '';
+                    reused++;
+                } else if (sourceUrl) {
+                    try {
+                        /* Stable file name derived from the deterministic doc id, so a
+                           re-run targets the same Drive file instead of piling up
+                           duplicate copies where the Apps Script supports it. */
+                        const fileName = 'pharmacy-' + docId + '.jpg';
+                        newImageUrl = await window.copyCatalogImageFromUrl(sourceUrl, fileName, merchant.merchantName);
+                        m.newImageUrl = newImageUrl;
+                        m.error = '';
+                        imageCache[docId] = { sourceUrl, driveUrl: newImageUrl };
+                        copied++;
+                    } catch (err) {
+                        console.error('[pharmacy-intake] image copy failed:', err);
+                        m.error = 'تعذّر نسخ الصورة';
+                        copyFailed++;
+                    }
+                }
+                chunkEntries.push({ id: docId, data: intakeBuildPayload(m, merchant, newImageUrl, runId) });
+                if (done % 5 === 0 || done === pending.length - 1) intakeRenderPreview();
+            }
+
+            intakeSetStatus('حفظ ' + intakeFormatNumber(chunkEntries.length) + ' منتج...');
+            saved += await intakeCommitBatches(chunkEntries);
+            chunkEntries.forEach((entry) => committedIds.add(entry.id));
+
+            /* Checkpoint: durable image map + the exact set of committed ids. */
+            intakeSaveImageCache(merchantId, imageCache);
+            await intakeWriteRunState(merchant, runStateBase());
+        }
+        if (!pending.length && plan.length) {
+            intakeSetStatus('كل الأصناف محفوظة مسبقاً، تحديث السجل فقط...');
+        }
 
         /* Sweep rows that existed in the previous run but are gone from this
            sheet, so a re-upload fully replaces the pharmacy's intake data. */
-        const currentIds = new Set(entries.map((entry) => entry.id));
+        const currentIds = new Set(plan.map((item) => item.docId));
         const staleIds = priorIds.filter((id) => id && !currentIds.has(id));
-        let removed = 0;
         if (staleIds.length) {
             intakeSetStatus('تنظيف ' + intakeFormatNumber(staleIds.length) + ' صنف قديم...');
             try {
@@ -1282,18 +1343,24 @@ window.syncPharmacyIntakeProducts = async () => {
             status: 'completed',
             runId,
             completedAt: new Date(),
-            expectedCount: entries.length,
-            writtenCount: saved,
-            docIds: entries.map((entry) => entry.id)
+            expectedCount: plan.length,
+            writtenCount: committedIds.size,
+            docIds: plan.map((item) => item.docId),
+            committedIds: Array.from(committedIds),
+            imageMap: intakeMergeImageMaps({}, imageCache),
+            copiedCount: copied,
+            reusedCount: reused
         });
 
         if (typeof window.kpiInvalidateProductCache === 'function') window.kpiInvalidateProductCache();
-        intakeSetStatus('تم حفظ ' + intakeFormatNumber(saved) + ' منتج'
+        intakeSetStatus('تم حفظ ' + intakeFormatNumber(committedIds.size) + ' منتج'
+            + (resumedCount ? ' — استُؤنف ' + intakeFormatNumber(resumedCount) + ' صنف من محاولة سابقة' : '')
             + (copied ? ' — نُسخت ' + intakeFormatNumber(copied) + ' صورة' : '')
             + (reused ? ' — أُعيد استخدام ' + intakeFormatNumber(reused) + ' صورة' : '')
             + (copyFailed ? ' — فشل ' + intakeFormatNumber(copyFailed) + ' صورة' : '')
             + (removed ? ' — حُذف ' + intakeFormatNumber(removed) + ' صنف قديم' : '') + '.');
-        window.showToast('تم رفع ' + intakeFormatNumber(saved) + ' منتج بنجاح');
+        window.showToast('تم رفع ' + intakeFormatNumber(committedIds.size) + ' منتج بنجاح'
+            + (resumedCount ? ' (استئناف ' + intakeFormatNumber(resumedCount) + ' صنف)' : ''));
     } catch (err) {
         console.error('[pharmacy-intake] sync failed:', err);
         intakeSetStatus('فشل الرفع، حاول مرة أخرى.');
