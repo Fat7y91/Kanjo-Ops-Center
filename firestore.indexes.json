@@ -73,6 +73,14 @@
       ]
     },
     {
+      "collectionGroup": "merchant_products",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "auditFounder", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "transferRequests",
       "queryScope": "COLLECTION",
       "fields": [

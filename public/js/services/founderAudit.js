@@ -28,25 +28,32 @@ const FOUNDER_AUDIT_INTAKE_SOURCE = 'pharmacy_inventory_intake';
 const FOUNDER_AUDIT_FOUNDERS = ['فتحي', 'رمزي', 'الخولي', 'رأفت'];
 window.founderAuditFounders = FOUNDER_AUDIT_FOUNDERS;
 
-/* Field mask for the pending query — deliberately narrow so the (potentially
+/* Field mask for the audit queries — deliberately narrow so the (potentially
    large) intake rows never pull heavy/irrelevant fields over the wire. */
 const FOUNDER_AUDIT_SELECT = [
     'name_ar', 'name_en', 'description_ar', 'description_en',
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'image_url',
     'category', 'intakeSource', 'status', 'merchantId', 'merchantName',
-    'sku', 'base_price', 'createdAt', 'auditedBy', 'auditFounder'
+    'sku', 'base_price', 'createdAt', 'auditedBy', 'auditFounder',
+    'auditedAt', 'updatedAt', 'is_active'
 ];
 
 /* In-RAM state only (see STATE note above). `editing` tracks which rows the
    founder has opened for description editing, so an unrelated re-render (image
    upload, founder switch) never collapses an open editor or loses the caret.
    `drafts` holds the uncommitted text while a row is being edited; it is only
-   folded into the product's `description_ar` when the founder clicks "حفظ". */
+   folded into the product's `description_ar` when the founder clicks "حفظ".
+   `approved` holds the rows this founder has already signed off on (the
+   "ما تم اعتماده" tab); it is loaded lazily per founder and kept in sync as
+   approvals happen. */
 const founderAuditState = {
     loaded: false,
     loading: false,
     products: [],
     assignments: [],
+    approved: [],
+    approvedLoadedFor: '',
+    activeTab: 'pending',
     loadedAt: null,
     uploadingId: '',
     editing: new Set(),
@@ -87,6 +94,23 @@ const founderAuditDescriptionValue = (id, product) => {
     return String((product && product.description_ar) || '').trim();
 };
 window.founderAuditDescriptionValue = founderAuditDescriptionValue;
+
+/* A row can live in either the pending pool or the approved pool depending on
+   which tab it belongs to; every per-row action looks it up through here. */
+const founderAuditFindProduct = (id) => founderAuditState.products.find((p) => p.id === id)
+    || (founderAuditState.approved || []).find((p) => p.id === id)
+    || null;
+
+/* Best-effort epoch-ms for a Firestore/REST time value, used to order the
+   approved list newest-first. */
+const founderAuditTimeMs = (value) => {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'string') { const t = Date.parse(value); return Number.isNaN(t) ? 0 : t; }
+    if (typeof value.seconds === 'number') return value.seconds * 1000;
+    return 0;
+};
 
 const founderAuditDriveFileId = (urlOrId) => {
     const s = String(urlOrId || '').trim();
@@ -232,16 +256,72 @@ const founderAuditFetchPending = async () => {
     );
 };
 
+/* Rows this founder has already approved (`status == 'done'` + `auditFounder`),
+   over REST with the same narrow field mask (SDK fallback). Backed by the
+   `auditFounder+status` composite index. `intakeSource` is filtered client-side. */
+const founderAuditFetchApproved = async (founder) => {
+    if (!founder) return [];
+    let items = null;
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            items = await window.kanjoRest.runQuery(
+                FOUNDER_AUDIT_COLLECTION,
+                [['status', '==', 'done'], ['auditFounder', '==', founder]],
+                null,
+                { select: FOUNDER_AUDIT_SELECT }
+            );
+        } catch (restErr) {
+            console.warn('[founder-audit] REST approved fetch failed; trying SDK:', restErr);
+        }
+    }
+    if (!items) {
+        if (typeof window.getDocs !== 'function' || !window.db) return [];
+        try {
+            const ref = window.query(
+                window.collection(window.db, FOUNDER_AUDIT_COLLECTION),
+                window.where('status', '==', 'done'),
+                window.where('auditFounder', '==', founder)
+            );
+            const snap = await window.getDocs(ref);
+            items = [];
+            snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        } catch (sdkErr) {
+            console.warn('[founder-audit] approved fetch failed:', sdkErr);
+            return [];
+        }
+    }
+    return (items || []).filter(
+        (p) => String((p && p.intakeSource) || '').trim() === FOUNDER_AUDIT_INTAKE_SOURCE
+    );
+};
+
+/* Newest-first so a founder's most recent approvals sit at the top. */
+const founderAuditSortApproved = (list) => (Array.isArray(list) ? list.slice() : [])
+    .sort((a, b) => founderAuditTimeMs(b.auditedAt || b.updatedAt || b.createdAt)
+        - founderAuditTimeMs(a.auditedAt || a.updatedAt || a.createdAt));
+
 window.founderAuditLoad = async (force) => {
     if (!window.isFounderAuditUser()) return;
     if (founderAuditState.loading) return;
     if (founderAuditState.loaded && !force) { founderAuditRenderChunk(); return; }
+    const founder = window.founderAuditCurrentFounder();
     founderAuditState.loading = true;
-    founderAuditSetStatus('جاري تحميل أصناف الصيدليات المعلّقة...');
+    founderAuditSetStatus('جاري تحميل أصناف المراجعة...');
     try {
-        const products = await founderAuditFetchPending();
+        const [products, approved] = await Promise.all([
+            founderAuditFetchPending(),
+            /* Approved is supplementary: if its query/index is unavailable the
+               pending audit must still load, so a failure degrades to []. */
+            founderAuditFetchApproved(founder).catch((approvedErr) => {
+                console.warn('[founder-audit] approved pool unavailable:', approvedErr);
+                return [];
+            })
+        ]);
         founderAuditState.products = products;
         founderAuditState.assignments = founderAuditAssign(products);
+        founderAuditState.approved = founderAuditSortApproved(approved);
+        founderAuditState.approvedLoadedFor = founder;
+        founderAuditState.activeTab = 'pending';
         /* Fresh data supersedes any open editor/draft from the previous load. */
         founderAuditState.editing = new Set();
         founderAuditState.drafts = {};
@@ -292,7 +372,7 @@ window.founderAuditHandleUpload = async (event) => {
         window.showToast('خدمة رفع الصور غير متاحة', false);
         return;
     }
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     const merchantName = (product && (product.merchantName || product.merchant)) || 'Unknown';
     founderAuditState.uploadingId = id;
     founderAuditSetStatus('جاري رفع الصورة...');
@@ -335,7 +415,7 @@ window.founderAuditHandleUpload = async (event) => {
    `openImageViewer` overlay (backdrop/close-button dismissal) and the
    full-resolution URL so packaging details can be verified. */
 window.founderAuditOpenImage = (id) => {
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     const image = founderAuditProductImage(product);
     if (!image) { window.showToast('لا توجد صورة لهذا الصنف', false); return; }
     const full = founderAuditFullImageUrl(image);
@@ -350,7 +430,7 @@ window.founderAuditOpenImage = (id) => {
    Egypt: the " مصر" suffix plus `gl=eg` force Egyptian packaging results
    regardless of where the auditor's IP is geolocated. */
 window.founderAuditSearchGoogle = (id) => {
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     const name = founderAuditProductName(product);
     if (!name) { window.showToast('لا يوجد اسم للبحث عنه', false); return; }
     const url = 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(name + ' مصر') + '&gl=eg';
@@ -361,7 +441,7 @@ window.founderAuditSearchGoogle = (id) => {
    is_active=true, and remove it from this founder's pending chunk. */
 window.founderAuditApprove = async (id) => {
     if (!window.isFounderAuditUser()) return;
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     if (!product) return;
     /* Fold any open editor's text into its draft, then read what should be
        persisted: an unsaved draft wins, else the value locked by "حفظ", else
@@ -394,9 +474,19 @@ window.founderAuditApprove = async (id) => {
         });
         if (!ok) throw new Error('PATCH_FAILED');
 
-        /* Drop it from RAM so the chunk shrinks immediately; no refetch needed. */
+        /* Move it from the pending pool to the approved pool immediately: the
+           "المكلف" card leaves the DOM and both tab counters update live. */
+        product.status = 'done';
+        product.is_active = true;
+        product.description_ar = description;
+        product.auditedBy = actor;
+        product.auditFounder = founder;
+        product.auditedAt = new Date();
         founderAuditState.products = founderAuditState.products.filter((p) => p.id !== id);
         founderAuditState.assignments = founderAuditAssign(founderAuditState.products);
+        if (!(founderAuditState.approved || []).some((p) => p.id === id)) {
+            founderAuditState.approved = founderAuditSortApproved([product].concat(founderAuditState.approved || []));
+        }
         if (founderAuditState.editing) founderAuditState.editing.delete(id);
         if (founderAuditState.drafts) delete founderAuditState.drafts[id];
         window.showToast('تم اعتماد الصنف');
@@ -404,6 +494,55 @@ window.founderAuditApprove = async (id) => {
     } catch (err) {
         console.error('[founder-audit] approve failed:', err);
         window.showToast('فشل اعتماد الصنف، حاول مرة أخرى', false);
+    } finally {
+        founderAuditSetStatus('');
+    }
+};
+
+/* Update an ALREADY-approved row (the "ما تم اعتماده" safety net): persist the
+   corrected description without touching `status` (it stays 'done') and log the
+   edit so the change is traceable. */
+window.founderAuditUpdate = async (id) => {
+    if (!window.isFounderAuditUser()) return;
+    const product = founderAuditFindProduct(id);
+    if (!product) return;
+    founderAuditCaptureEdits();
+    const description = founderAuditDescriptionValue(id, product);
+    const founder = window.founderAuditCurrentFounder();
+    const actor = (window.currentUser && window.currentUser.name) || '';
+    const patch = {
+        description_ar: description,
+        auditedBy: actor,
+        auditedAt: new Date(),
+        updatedAt: new Date()
+    };
+    founderAuditSetStatus('جاري تحديث البيانات...');
+    try {
+        const ok = await founderAuditPatchProduct(id, patch, {
+            actionType: 'update',
+            targetEntity: 'منتج',
+            targetId: id,
+            targetName: founderAuditProductName(product),
+            entityKind: 'منتج',
+            description: 'تحديث بيانات صنف مخزون صيدلية معتمد (مراجعة مؤسسين: ' + founder + ')',
+            collection: FOUNDER_AUDIT_COLLECTION,
+            previousData: { description_ar: product.description_ar || '' },
+            newData: { description_ar: description }
+        });
+        if (!ok) throw new Error('PATCH_FAILED');
+
+        product.description_ar = description;
+        product.auditedBy = actor;
+        product.auditedAt = new Date();
+        product.updatedAt = new Date();
+        if (founderAuditState.editing) founderAuditState.editing.delete(id);
+        if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+        founderAuditState.approved = founderAuditSortApproved(founderAuditState.approved || []);
+        window.showToast('تم تحديث البيانات');
+        founderAuditRenderChunk();
+    } catch (err) {
+        console.error('[founder-audit] update failed:', err);
+        window.showToast('فشل تحديث البيانات، حاول مرة أخرى', false);
     } finally {
         founderAuditSetStatus('');
     }
@@ -432,12 +571,19 @@ const founderAuditSyncFounderSelect = () => {
     select.disabled = locked;
 };
 
-const founderAuditStatBadge = (label, value, tone) => (
-    '<span class="text-xs font-black px-3 py-1 rounded-full ' + tone + '">'
-    + founderAuditEscapeHtml(label) + ' ' + founderAuditFormatNumber(value) + '</span>'
+/* Tabs are the only filter now: "المكلف" (pending) and "ما تم اعتماده"
+   (approved). The matched/unmatched split is informational text inside the
+   pending tab, not a separate clickable pill. */
+const founderAuditTabButton = (tab, active, labelHtml) => (
+    '<button type="button" data-tab="' + tab + '" class="text-xs font-black px-3 py-2 rounded-xl border-2 transition flex flex-wrap items-center gap-1.5 '
+    + (active
+        ? 'bg-[#230535] text-[#FFD700] border-[#230535]'
+        : 'bg-white text-[#230535] border-[#230535]/25 hover:border-[#230535]')
+    + '">' + labelHtml + '</button>'
 );
 
-const founderAuditCardHtml = (product) => {
+const founderAuditCardHtml = (product, mode) => {
+    const approvedMode = mode === 'approved';
     const id = String(product.id);
     const token = founderAuditEscapeHtml(id);
     const name = founderAuditEscapeHtml(founderAuditProductName(product) || 'بدون اسم');
@@ -460,14 +606,16 @@ const founderAuditCardHtml = (product) => {
             + '<span class="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition"><i class="fa-solid fa-magnifying-glass-plus text-white text-sm opacity-0 group-hover:opacity-100 transition"></i></span>'
           + '</button>'
         : '<div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-kanjo-light border border-purple-100 flex items-center justify-center">' + imageHtml + '</div>';
-    const matchBadge = founderAuditHasDescription(product)
-        ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">مطابق</span>'
-        : '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-200 text-orange-900">غير مطابق</span>';
+    const matchBadge = approvedMode
+        ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white">معتمد</span>'
+        : (founderAuditHasDescription(product)
+            ? '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">مطابق</span>'
+            : '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-200 text-orange-900">غير مطابق</span>');
     const uploading = founderAuditState.uploadingId === id;
     /* The description is READ-ONLY by default; the founder must click
        "تعديل الوصف" to open the editor, which prevents accidental keystrokes.
        While editing, the textarea edits a draft that is only folded into the
-       product by "حفظ" (or by the final "اعتماد"). */
+       product by "حفظ" (or by the final "اعتماد" / "تحديث البيانات"). */
     const editing = !!(founderAuditState.editing && founderAuditState.editing.has(id));
     const draftText = (founderAuditState.drafts && founderAuditState.drafts[id] !== undefined)
         ? String(founderAuditState.drafts[id] || '')
@@ -507,7 +655,9 @@ const founderAuditCardHtml = (product) => {
         +     '<div class="flex flex-wrap gap-2">'
         +       '<button type="button" data-action="search" data-id="' + token + '" class="bg-white text-[#230535] border-2 border-[#230535] px-3 py-2 rounded-xl text-[11px] font-black hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> البحث عن صورة</button>'
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
-        +       '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>'
+        +       (approvedMode
+            ? '<button type="button" data-action="update" data-id="' + token + '" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> تحديث البيانات</button>'
+            : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>')
         +     '</div>'
         +   '</div>'
         + '</div>';
@@ -521,7 +671,7 @@ const founderAuditCaptureEdits = () => {
     const editing = founderAuditState.editing;
     if (!editing || !editing.size) return;
     if (!founderAuditState.drafts) founderAuditState.drafts = {};
-    founderAuditState.products.forEach((p) => {
+    founderAuditState.products.concat(founderAuditState.approved || []).forEach((p) => {
         if (!editing.has(p.id)) return;
         const el = document.getElementById(founderAuditDescId(p.id));
         if (el) founderAuditState.drafts[p.id] = el.value;
@@ -531,31 +681,48 @@ const founderAuditCaptureEdits = () => {
 const founderAuditRenderChunk = () => {
     founderAuditCaptureEdits();
     const list = document.getElementById('founderAuditList');
-    const stats = document.getElementById('founderAuditStats');
+    const tabs = document.getElementById('founderAuditTabs');
     if (!list) return;
     const founder = window.founderAuditCurrentFounder();
-    const mine = founderAuditState.assignments
+    const pendingItems = founderAuditState.assignments
         .filter((a) => a.founder === founder)
         .map((a) => a.product);
-    const matched = mine.filter(founderAuditHasDescription).length;
-    const unmatched = mine.length - matched;
+    const matched = pendingItems.filter(founderAuditHasDescription).length;
+    const unmatched = pendingItems.length - matched;
+    const approvedItems = founderAuditState.approved || [];
+    const active = founderAuditState.activeTab === 'approved' ? 'approved' : 'pending';
 
-    if (stats) {
-        stats.innerHTML = ''
-            + founderAuditStatBadge('المكلّف', mine.length, 'bg-[#FFD700]/30 text-[#230535]')
-            + founderAuditStatBadge('مطابق', matched, 'bg-emerald-100 text-emerald-700')
-            + founderAuditStatBadge('غير مطابق', unmatched, 'bg-orange-200 text-orange-900');
+    if (tabs) {
+        tabs.innerHTML = ''
+            + founderAuditTabButton('pending', active === 'pending',
+                '<span>المكلّف: ' + founderAuditFormatNumber(pendingItems.length) + '</span>'
+                + '<span class="text-[10px] font-bold opacity-80">(مطابق: ' + founderAuditFormatNumber(matched)
+                + ' | غير مطابق: ' + founderAuditFormatNumber(unmatched) + ')</span>')
+            + founderAuditTabButton('approved', active === 'approved',
+                '<span>ما تم اعتماده: ' + founderAuditFormatNumber(approvedItems.length) + '</span>');
     }
 
     if (!founderAuditState.loaded) {
         list.innerHTML = '<p class="text-center text-sm font-bold text-slate-400 py-8">جاري التحميل...</p>';
         return;
     }
-    if (!mine.length) {
-        list.innerHTML = '<p class="text-center text-sm font-bold text-slate-400 py-8">لا توجد أصناف مكلّفة إليك حالياً.</p>';
+    const items = active === 'approved' ? approvedItems : pendingItems;
+    if (!items.length) {
+        list.innerHTML = '<p class="text-center text-sm font-bold text-slate-400 py-8">'
+            + (active === 'approved' ? 'لا توجد أصناف معتمدة بعد.' : 'لا توجد أصناف مكلّفة إليك حالياً.')
+            + '</p>';
         return;
     }
-    list.innerHTML = mine.map(founderAuditCardHtml).join('');
+    list.innerHTML = items.map((p) => founderAuditCardHtml(p, active)).join('');
+};
+
+/* Switch between the two tabs. Counters/contents are re-derived on render, so
+   the pending and approved figures always reflect live RAM state. */
+window.founderAuditSwitchTab = (tab) => {
+    const next = tab === 'approved' ? 'approved' : 'pending';
+    if (founderAuditState.activeTab === next) return;
+    founderAuditState.activeTab = next;
+    founderAuditRenderChunk();
 };
 
 /* Open a row's description editor on demand ("تعديل الوصف"). The id is kept in
@@ -564,7 +731,7 @@ const founderAuditRenderChunk = () => {
 window.founderAuditStartEditDescription = (id) => {
     if (!founderAuditState.editing) founderAuditState.editing = new Set();
     if (!founderAuditState.drafts) founderAuditState.drafts = {};
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     /* Seed the draft from the locked value so "إلغاء" always reverts cleanly. */
     founderAuditState.drafts[id] = String((product && product.description_ar) || '');
     founderAuditState.editing.add(id);
@@ -583,7 +750,7 @@ window.founderAuditStartEditDescription = (id) => {
    read-only view. No Firestore write happens here — only "اعتماد" does that. */
 window.founderAuditSaveDescription = (id) => {
     founderAuditCaptureEdits();
-    const product = founderAuditState.products.find((p) => p.id === id);
+    const product = founderAuditFindProduct(id);
     if (!product) return;
     const draft = founderAuditState.drafts ? founderAuditState.drafts[id] : undefined;
     const ta = document.getElementById(founderAuditDescId(id));
@@ -638,10 +805,20 @@ const founderAuditInit = () => {
                 const input = document.getElementById('founderAuditFileInput');
                 if (input) input.click();
             } else if (action === 'approve') window.founderAuditApprove(id);
+            else if (action === 'update') window.founderAuditUpdate(id);
+        });
+    }
+    const tabs = document.getElementById('founderAuditTabs');
+    if (tabs) {
+        tabs.addEventListener('click', (event) => {
+            const tab = event.target.closest('[data-tab]');
+            if (tab) window.founderAuditSwitchTab(tab.getAttribute('data-tab'));
         });
     }
     const select = document.getElementById('founderAuditFounderSelect');
-    if (select) select.addEventListener('change', founderAuditRenderChunk);
+    /* Approved rows are per-founder, so switching founder refetches that
+       founder's pending + approved pools (and resets to the pending tab). */
+    if (select) select.addEventListener('change', () => window.founderAuditLoad(true));
     const fileInput = document.getElementById('founderAuditFileInput');
     if (fileInput) fileInput.addEventListener('change', window.founderAuditHandleUpload);
     const refresh = document.getElementById('founderAuditRefreshBtn');
