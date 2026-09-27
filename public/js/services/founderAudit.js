@@ -619,9 +619,10 @@ window.founderAuditUpdate = async (id) => {
     }
 };
 
-/* Moderated, audited hard-delete for prohibited items. Only ever offered on a
-   pending card, so it removes the row from the pending pool (the approved
-   counter is untouched) after the founder confirms. */
+/* Moderated, audited hard-delete for prohibited/mistaken items. Offered on both
+   the pending and the approved card (a "safety net" for a wrong approval), so it
+   drops the row from whichever pool holds it — decrementing that tab's counter —
+   after the founder confirms. */
 window.founderAuditDelete = async (id) => {
     if (!window.isFounderAuditUser()) return;
     const product = founderAuditFindProduct(id);
@@ -789,8 +790,8 @@ const founderAuditCardHtml = (product, mode) => {
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
         +       (approvedMode
             ? '<button type="button" data-action="update" data-id="' + token + '" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> تحديث البيانات</button>'
-            : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>'
-                + '<button type="button" data-action="delete" data-id="' + token + '" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center gap-1.5"><i class="fa-solid fa-trash"></i> حذف</button>')
+            : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>')
+        +       '<button type="button" data-action="delete" data-id="' + token + '" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center gap-1.5"><i class="fa-solid fa-trash"></i> حذف</button>'
         +     '</div>'
         +   '</div>'
         + '</div>';
