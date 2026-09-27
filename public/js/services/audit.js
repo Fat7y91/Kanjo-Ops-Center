@@ -187,6 +187,7 @@ const AUDIT_FIELD_LABELS = {
     status: 'الحالة', rawImageUrls: 'الصور الأصلية', rawImageUrl: 'الصورة الأصلية',
     enhancedImageUrl: 'الصورة المحسّنة', enhancedImageUrls: 'الصور المحسّنة', variations: 'الخيارات',
     barcode: 'الباركود', unit: 'الوحدة', stock: 'المخزون',
+    requires_prescription: 'يحتاج روشتة',
     isSigned: 'التعاقد النهائي', isProvisional: 'اتفاق مبدئي', achieved: 'المُحقّق', target: 'المستهدف',
     address: 'العنوان', phone: 'الهاتف', contactPhone: 'هاتف التواصل', contactName: 'مسؤول التواصل',
     contactRole: 'صفة مسؤول التواصل', team: 'الفريق', notes: 'ملاحظات',

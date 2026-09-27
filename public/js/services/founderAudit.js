@@ -35,7 +35,7 @@ const FOUNDER_AUDIT_SELECT = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'image_url',
     'category', 'intakeSource', 'status', 'merchantId', 'merchantName',
     'sku', 'base_price', 'createdAt', 'auditedBy', 'auditFounder',
-    'auditedAt', 'updatedAt', 'is_active'
+    'auditedAt', 'updatedAt', 'is_active', 'requires_prescription'
 ];
 
 /* In-RAM state only (see STATE note above). `editing` tracks which rows the
@@ -57,7 +57,10 @@ const founderAuditState = {
     loadedAt: null,
     uploadingId: '',
     editing: new Set(),
-    drafts: {}
+    drafts: {},
+    /* Uncommitted "يحتاج روشتة" toggle values (id -> boolean), folded into the
+       product only on "اعتماد"/"تحديث البيانات" like drafts. */
+    prescriptions: {}
 };
 window._founderAuditState = founderAuditState;
 
@@ -94,6 +97,15 @@ const founderAuditDescriptionValue = (id, product) => {
     return String((product && product.description_ar) || '').trim();
 };
 window.founderAuditDescriptionValue = founderAuditDescriptionValue;
+
+/* Effective "يحتاج روشتة" value for a row: an uncommitted toggle wins, else the
+   last server-known flag. Always a strict boolean, defaulting to false. */
+const founderAuditRxValue = (id, product) => {
+    const pending = founderAuditState.prescriptions;
+    if (pending && pending[id] !== undefined) return !!pending[id];
+    return !!(product && product.requires_prescription);
+};
+window.founderAuditRxValue = founderAuditRxValue;
 
 /* A row can live in either the pending pool or the approved pool depending on
    which tab it belongs to; every per-row action looks it up through here. */
@@ -325,6 +337,7 @@ window.founderAuditLoad = async (force) => {
         /* Fresh data supersedes any open editor/draft from the previous load. */
         founderAuditState.editing = new Set();
         founderAuditState.drafts = {};
+        founderAuditState.prescriptions = {};
         founderAuditState.loaded = true;
         founderAuditState.loadedAt = new Date();
         founderAuditRenderChunk();
@@ -448,12 +461,14 @@ window.founderAuditApprove = async (id) => {
        the last server-known description. Only this button writes to Firestore. */
     founderAuditCaptureEdits();
     const description = founderAuditDescriptionValue(id, product);
+    const requiresPrescription = founderAuditRxValue(id, product);
     const founder = window.founderAuditCurrentFounder();
     const actor = (window.currentUser && window.currentUser.name) || '';
     const patch = {
         status: 'done',
         is_active: true,
         description_ar: description,
+        requires_prescription: requiresPrescription,
         auditedBy: actor,
         auditFounder: founder,
         auditedAt: new Date(),
@@ -469,8 +484,8 @@ window.founderAuditApprove = async (id) => {
             entityKind: 'منتج',
             description: 'اعتماد صنف مخزون صيدلية (مراجعة مؤسسين: ' + founder + ')',
             collection: FOUNDER_AUDIT_COLLECTION,
-            previousData: { status: product.status, description_ar: product.description_ar || '' },
-            newData: { status: 'done', description_ar: description, is_active: true }
+            previousData: { status: product.status, description_ar: product.description_ar || '', requires_prescription: !!product.requires_prescription },
+            newData: { status: 'done', description_ar: description, is_active: true, requires_prescription: requiresPrescription }
         });
         if (!ok) throw new Error('PATCH_FAILED');
 
@@ -479,6 +494,7 @@ window.founderAuditApprove = async (id) => {
         product.status = 'done';
         product.is_active = true;
         product.description_ar = description;
+        product.requires_prescription = requiresPrescription;
         product.auditedBy = actor;
         product.auditFounder = founder;
         product.auditedAt = new Date();
@@ -489,6 +505,7 @@ window.founderAuditApprove = async (id) => {
         }
         if (founderAuditState.editing) founderAuditState.editing.delete(id);
         if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+        if (founderAuditState.prescriptions) delete founderAuditState.prescriptions[id];
         window.showToast('تم اعتماد الصنف');
         founderAuditRenderChunk();
     } catch (err) {
@@ -508,10 +525,12 @@ window.founderAuditUpdate = async (id) => {
     if (!product) return;
     founderAuditCaptureEdits();
     const description = founderAuditDescriptionValue(id, product);
+    const requiresPrescription = founderAuditRxValue(id, product);
     const founder = window.founderAuditCurrentFounder();
     const actor = (window.currentUser && window.currentUser.name) || '';
     const patch = {
         description_ar: description,
+        requires_prescription: requiresPrescription,
         auditedBy: actor,
         auditedAt: new Date(),
         updatedAt: new Date()
@@ -526,17 +545,19 @@ window.founderAuditUpdate = async (id) => {
             entityKind: 'منتج',
             description: 'تحديث بيانات صنف مخزون صيدلية معتمد (مراجعة مؤسسين: ' + founder + ')',
             collection: FOUNDER_AUDIT_COLLECTION,
-            previousData: { description_ar: product.description_ar || '' },
-            newData: { description_ar: description }
+            previousData: { description_ar: product.description_ar || '', requires_prescription: !!product.requires_prescription },
+            newData: { description_ar: description, requires_prescription: requiresPrescription }
         });
         if (!ok) throw new Error('PATCH_FAILED');
 
         product.description_ar = description;
+        product.requires_prescription = requiresPrescription;
         product.auditedBy = actor;
         product.auditedAt = new Date();
         product.updatedAt = new Date();
         if (founderAuditState.editing) founderAuditState.editing.delete(id);
         if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+        if (founderAuditState.prescriptions) delete founderAuditState.prescriptions[id];
         founderAuditState.approved = founderAuditSortApproved(founderAuditState.approved || []);
         window.showToast('تم تحديث البيانات');
         founderAuditRenderChunk();
@@ -640,6 +661,18 @@ const founderAuditCardHtml = (product, mode) => {
         +   '</div>'
         + '</div>';
 
+    /* "يحتاج روشتة" toggle — a strict boolean committed with the row on
+       "اعتماد"/"تحديث البيانات", never on its own. */
+    const rx = founderAuditRxValue(id, product);
+    const rxHtml = ''
+        + '<label class="flex items-center gap-2 cursor-pointer select-none w-max mt-1">'
+        +   '<input type="checkbox" data-rx data-id="' + token + '" ' + (rx ? 'checked' : '') + ' class="sr-only">'
+        +   '<span class="relative w-9 h-5 shrink-0 rounded-full transition ' + (rx ? 'bg-emerald-600' : 'bg-slate-300') + '">'
+        +     '<span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition ' + (rx ? 'translate-x-4' : 'translate-x-0') + '"></span>'
+        +   '</span>'
+        +   '<span class="text-[10px] font-black ' + (rx ? 'text-emerald-700' : 'text-[#230535]/70') + '">يحتاج روشتة</span>'
+        + '</label>';
+
     return ''
         + '<div class="bg-white border border-[#230535]/15 rounded-2xl p-3 flex gap-3" data-product-card="' + token + '">'
         +   thumbHtml
@@ -652,6 +685,7 @@ const founderAuditCardHtml = (product, mode) => {
         +       matchBadge
         +     '</div>'
         +     descHtml
+        +     rxHtml
         +     '<div class="flex flex-wrap gap-2">'
         +       '<button type="button" data-action="search" data-id="' + token + '" class="bg-white text-[#230535] border-2 border-[#230535] px-3 py-2 rounded-xl text-[11px] font-black hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> البحث عن صورة</button>'
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
@@ -676,6 +710,16 @@ const founderAuditCaptureEdits = () => {
         const el = document.getElementById(founderAuditDescId(p.id));
         if (el) founderAuditState.drafts[p.id] = el.value;
     });
+};
+
+/* Record an uncommitted "يحتاج روشتة" toggle (id -> boolean). Local-only: the
+   draft is folded into the document by "اعتماد"/"تحديث البيانات", so toggling on
+   its own never writes to Firestore. */
+window.founderAuditSetPrescription = (id, checked) => {
+    if (!window.isFounderAuditUser()) return;
+    if (!founderAuditState.prescriptions) founderAuditState.prescriptions = {};
+    founderAuditState.prescriptions[id] = !!checked;
+    founderAuditRenderChunk();
 };
 
 const founderAuditRenderChunk = () => {
@@ -806,6 +850,13 @@ const founderAuditInit = () => {
                 if (input) input.click();
             } else if (action === 'approve') window.founderAuditApprove(id);
             else if (action === 'update') window.founderAuditUpdate(id);
+        });
+        /* "يحتاج روشتة" is a live native checkbox, so it needs `change`, not the
+           delegated `click` dispatch above. */
+        list.addEventListener('change', (event) => {
+            const box = event.target.closest('[data-rx]');
+            if (!box) return;
+            window.founderAuditSetPrescription(box.getAttribute('data-id'), box.checked);
         });
     }
     const tabs = document.getElementById('founderAuditTabs');
