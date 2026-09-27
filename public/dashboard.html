@@ -2163,9 +2163,13 @@
 
                             <select id="catalogSortSelect" onchange="onCatalogSortChange(event)" aria-label="ترتيب المنتجات" class="w-full appearance-none bg-white border-2 border-[#230535]/15 rounded-2xl pr-10 pl-9 py-2.5 text-sm font-bold text-[#230535] outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10 cursor-pointer">
 
-                                <option value="newest" selected>الأحدث</option>
+                                <option value="newest" selected>الأحدث أولاً</option>
 
-                                <option value="alpha">الترتيب الأبجدي</option>
+                                <option value="oldest">الأقدم أولاً</option>
+
+                                <option value="alpha">الترتيب الأبجدي (أ - ي)</option>
+
+                                <option value="alpha_desc">الترتيب الأبجدي (ي - أ)</option>
 
                                 <option value="most">الأكثر منتجات</option>
 
@@ -3134,7 +3138,21 @@
 
                         <label class="block text-[11px] font-black text-[#230535] mb-1">التاجر (اتفاق نهائي)</label>
 
-                         <select id="catalogMerchantSelect" required onchange="onCatalogMerchantChange()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]"></select>
+                        <div id="catalogMerchantCombobox" class="relative">
+
+                            <i class="fa-solid fa-store absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/50 text-sm pointer-events-none"></i>
+
+                            <input type="text" id="catalogMerchantSearchInput" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="catalogMerchantSearchList" placeholder="ابحث باسم التاجر..." class="w-full p-3.5 pr-10 pl-10 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                            <button type="button" id="catalogMerchantSearchClear" onclick="clearCatalogMerchantSelection()" class="hidden absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition" aria-label="مسح التاجر"><i class="fa-solid fa-xmark text-xs"></i></button>
+
+                            <i id="catalogMerchantSearchChevron" class="fa-solid fa-chevron-down absolute left-3.5 top-1/2 -translate-y-1/2 text-[#230535]/40 text-sm pointer-events-none"></i>
+
+                        </div>
+
+                        <ul id="catalogMerchantSearchList" role="listbox" class="hidden bg-white border border-purple-100 rounded-2xl shadow-2xl overflow-y-auto hide-scrollbar" style="max-height: 18rem;"></ul>
+
+                        <input type="hidden" id="catalogMerchantSelect" value="">
 
                     </div>
 

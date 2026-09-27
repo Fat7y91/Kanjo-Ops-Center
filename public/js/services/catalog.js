@@ -576,9 +576,16 @@ const collectCatalogVariations = () => {
     return items;
 };
 
+/* ─── Searchable merchant combobox (Fuse.js fuzzy search) ───
+   Replaces the native <select> in "إضافة منتج للكتالوج", which was unusable
+   with hundreds of merchants. The chosen merchantId is written to the hidden
+   #catalogMerchantSelect input (same id), so every existing consumer that
+   reads `.value` keeps working unchanged. Matching runs entirely on the
+   already-loaded finalized-merchants array — zero Firestore reads. */
+let _catalogMerchantFuse = null;
+let _catalogMerchantFuseSig = '';
+
 const fillCatalogMerchantOptions = (extraMerchant) => {
-    const select = document.getElementById('catalogMerchantSelect');
-    if (!select) return;
     const merchants = listFinalizedMerchants();
     window._catalogMerchantMap = {};
     merchants.forEach((m) => { window._catalogMerchantMap[m.merchantId] = m; });
@@ -586,22 +593,269 @@ const fillCatalogMerchantOptions = (extraMerchant) => {
         merchants.unshift(extraMerchant);
         window._catalogMerchantMap[extraMerchant.merchantId] = extraMerchant;
     }
-    if (merchants.length === 0) {
-        select.innerHTML = '<option value="">لا يوجد تجار متعاقدون أو تحت التعاقد (VIP)</option>';
-        return;
+    window._catalogMerchantList = merchants;
+    /* Invalidate the Fuse index so the combobox rebinds to the new list. */
+    _catalogMerchantFuse = null;
+    _catalogMerchantFuseSig = '';
+    /* Defensive legacy path: if a real <select> is ever present, keep filling
+       it. The shipped markup uses a hidden input + custom combobox. */
+    const select = document.getElementById('catalogMerchantSelect');
+    if (select && select.tagName === 'SELECT') {
+        if (merchants.length === 0) {
+            select.innerHTML = '<option value="">لا يوجد تجار متعاقدون أو تحت التعاقد (VIP)</option>';
+        } else {
+            select.innerHTML = '<option value="">اختر التاجر...</option>' + merchants.map((m) => {
+                const id = catalogEscapeHtml(m.merchantId);
+                const name = catalogEscapeHtml(m.merchantName);
+                const marker = m.vipPreContract ? ' — تحت التعاقد (VIP)' : '';
+                return `<option value="${id}">${name}${marker}</option>`;
+            }).join('');
+        }
     }
-    select.innerHTML = '<option value="">اختر التاجر...</option>' + merchants.map((m) => {
-        const id = catalogEscapeHtml(m.merchantId);
-        const name = catalogEscapeHtml(m.merchantName);
-        const marker = m.vipPreContract ? ' — تحت التعاقد (VIP)' : '';
-        return `<option value="${id}">${name}${marker}</option>`;
-    }).join('');
+    setCatalogMerchantInputLabel();
 };
 
 /* Repopulate the merchant picker in place once the lightweight finalized
    merchants read resolves (no-op when the modal is closed). */
 window.refreshCatalogMerchantOptions = () => {
     if (document.getElementById('catalogMerchantSelect')) fillCatalogMerchantOptions();
+};
+
+/* How many fuzzy matches to render at once (keeps the popup snappy). */
+const CATALOG_MERCHANT_MAX_RESULTS = 50;
+
+/* Normalize Arabic and strip punctuation/dots so "ش. اولاد رجب" matches the
+   normalized index used for fuzzy matching. */
+const catalogMerchantSearchText = (name) => normalizeArabicSearchText(name);
+
+const catalogMerchantListSignature = (list) => (list || [])
+    .map((m) => m.merchantId + ':' + m.merchantName + (m.vipPreContract ? ':vip' : '')).join('|');
+
+/* Build (or reuse) the Fuse index over the in-memory merchant list. */
+const rebuildCatalogMerchantFuse = (list) => {
+    const sig = catalogMerchantListSignature(list);
+    if (_catalogMerchantFuse && _catalogMerchantFuseSig === sig) return _catalogMerchantFuse;
+    _catalogMerchantFuseSig = sig;
+    if (!window.Fuse || !(list || []).length) {
+        _catalogMerchantFuse = null;
+        return null;
+    }
+    const index = (list || []).map((m) => ({ ...m, _search: catalogMerchantSearchText(m.merchantName) }));
+    _catalogMerchantFuse = new window.Fuse(index, {
+        keys: ['_search'],
+        threshold: 0.4,
+        distance: 200,
+        ignoreLocation: true,
+        minMatchCharLength: 1,
+        includeScore: true
+    });
+    return _catalogMerchantFuse;
+};
+
+/* Fuzzy-match the typed query against the merchants; empty query lists the
+   first merchants so the popup is never blank. Falls back to an in-memory
+   substring scan when Fuse.js failed to load. */
+const catalogMerchantMatch = (query) => {
+    const list = window._catalogMerchantList || [];
+    if (!list.length) return [];
+    const raw = String(query || '').trim();
+    if (!raw) return list.slice(0, CATALOG_MERCHANT_MAX_RESULTS);
+    const normalized = catalogMerchantSearchText(raw);
+    const fuse = rebuildCatalogMerchantFuse(list);
+    if (!fuse) {
+        return list.filter((m) => catalogMerchantSearchText(m.merchantName).includes(normalized))
+            .slice(0, CATALOG_MERCHANT_MAX_RESULTS);
+    }
+    return fuse.search(normalized).slice(0, CATALOG_MERCHANT_MAX_RESULTS).map((r) => r.item);
+};
+
+/* Park the results list on <body> (absolute) so the modal's scroll container
+   can never clip it. */
+const positionCatalogMerchantSearchList = () => {
+    const input = document.getElementById('catalogMerchantSearchInput');
+    const box = document.getElementById('catalogMerchantSearchList');
+    if (!input || !box || box.classList.contains('hidden')) return;
+    const rect = input.getBoundingClientRect();
+    const vv = window.visualViewport;
+    const viewportWidth = vv ? vv.width : window.innerWidth;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const viewportOffsetLeft = vv ? vv.offsetLeft : 0;
+    const viewportOffsetTop = vv ? vv.offsetTop : 0;
+    const scrollX = window.pageXOffset || document.documentElement.scrollLeft || 0;
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const gutter = 8;
+    const width = Math.max(180, Math.min(rect.width, viewportWidth - gutter * 2));
+    const clampedLeft = Math.max(viewportOffsetLeft + gutter, Math.min(rect.left, viewportOffsetLeft + viewportWidth - width - gutter));
+    const boxHeight = box.offsetHeight || 0;
+    const viewportBottom = viewportOffsetTop + viewportHeight;
+    const spaceBelow = viewportBottom - rect.bottom;
+    const spaceAbove = rect.top - viewportOffsetTop;
+    const openAbove = (spaceBelow < boxHeight + 12) && (spaceAbove > spaceBelow);
+    const available = openAbove ? (spaceAbove - 6) : (spaceBelow - 6);
+    const topDoc = (openAbove ? rect.top - boxHeight - 6 : rect.bottom + 6) + scrollY;
+    box.style.position = 'absolute';
+    box.style.width = width + 'px';
+    box.style.left = (clampedLeft + scrollX) + 'px';
+    box.style.top = Math.max(viewportOffsetTop + scrollY + 4, topDoc) + 'px';
+    box.style.right = 'auto';
+    box.style.bottom = 'auto';
+    box.style.maxHeight = Math.max(120, Math.min(288, available)) + 'px';
+    box.style.zIndex = '9999';
+};
+window.positionCatalogMerchantSearchList = positionCatalogMerchantSearchList;
+
+const hideCatalogMerchantSearchList = () => {
+    const box = document.getElementById('catalogMerchantSearchList');
+    window._catalogMerchantActiveIndex = -1;
+    const input = document.getElementById('catalogMerchantSearchInput');
+    if (input) input.setAttribute('aria-expanded', 'false');
+    if (!box) return;
+    box.classList.add('hidden');
+    box.innerHTML = '';
+};
+window.hideCatalogMerchantSearchList = hideCatalogMerchantSearchList;
+
+/* Reflect the hidden input's selected merchant on the visible search input. */
+const setCatalogMerchantInputLabel = () => {
+    const input = document.getElementById('catalogMerchantSearchInput');
+    const select = document.getElementById('catalogMerchantSelect');
+    const clearBtn = document.getElementById('catalogMerchantSearchClear');
+    if (!input || !select) return;
+    const id = String(select.value || '');
+    const merchant = (window._catalogMerchantMap && window._catalogMerchantMap[id]) || null;
+    input.value = merchant ? merchant.merchantName : '';
+    if (clearBtn) clearBtn.classList.toggle('hidden', !id);
+};
+window.setCatalogMerchantInputLabel = setCatalogMerchantInputLabel;
+
+const renderCatalogMerchantSearchList = () => {
+    const input = document.getElementById('catalogMerchantSearchInput');
+    const box = document.getElementById('catalogMerchantSearchList');
+    if (!input || !box) return;
+    input.setAttribute('aria-expanded', 'true');
+    const query = String(input.value || '').trim();
+    const results = catalogMerchantMatch(query);
+    if (!(window._catalogMerchantList || []).length) {
+        box.innerHTML = '<li class="px-3 py-3 text-center text-xs font-bold text-slate-400">لا يوجد تجار متعاقدون أو تحت التعاقد (VIP)</li>';
+        window._catalogMerchantActiveIndex = -1;
+        box.classList.remove('hidden');
+        positionCatalogMerchantSearchList();
+        return;
+    }
+    if (!results.length) {
+        box.innerHTML = '<li class="px-3 py-3 text-center text-xs font-bold text-slate-400">لا يوجد تاجر مطابق لبحثك</li>';
+        window._catalogMerchantActiveIndex = -1;
+        box.classList.remove('hidden');
+        positionCatalogMerchantSearchList();
+        return;
+    }
+    window._catalogMerchantActiveIndex = 0;
+    box.innerHTML = results.map((m, idx) => {
+        const id = catalogEscapeHtml(m.merchantId);
+        const name = catalogEscapeHtml(m.merchantName);
+        const marker = m.vipPreContract
+            ? '<span class="shrink-0 text-[10px] font-black text-[#E57723] bg-[#E57723]/10 px-2 py-0.5 rounded-full">تحت التعاقد (VIP)</span>'
+            : '';
+        return `<li role="option" data-catalog-merchant-option="${id}" class="${idx === 0 ? 'bg-[#FFD700]/25' : ''} cursor-pointer flex items-center justify-between gap-2 px-3 py-2.5 text-right hover:bg-[#FFD700]/15 border-b border-purple-50 last:border-b-0">
+            <span class="font-black text-[13px] text-[#230535] truncate">${name}</span>
+            ${marker}
+        </li>`;
+    }).join('');
+    box.classList.remove('hidden');
+    positionCatalogMerchantSearchList();
+    box.querySelectorAll('[data-catalog-merchant-option]').forEach((li) => {
+        li.addEventListener('click', () => window.selectCatalogMerchant(li.getAttribute('data-catalog-merchant-option')));
+    });
+};
+window.renderCatalogMerchantSearchList = renderCatalogMerchantSearchList;
+
+window.selectCatalogMerchant = (merchantId) => {
+    const select = document.getElementById('catalogMerchantSelect');
+    if (!select) return;
+    select.value = String(merchantId || '');
+    setCatalogMerchantInputLabel();
+    hideCatalogMerchantSearchList();
+    if (typeof window.onCatalogMerchantChange === 'function') window.onCatalogMerchantChange();
+};
+
+window.clearCatalogMerchantSelection = () => {
+    const select = document.getElementById('catalogMerchantSelect');
+    if (select) select.value = '';
+    const input = document.getElementById('catalogMerchantSearchInput');
+    if (input) input.value = '';
+    const clearBtn = document.getElementById('catalogMerchantSearchClear');
+    if (clearBtn) clearBtn.classList.add('hidden');
+    hideCatalogMerchantSearchList();
+    if (typeof window.onCatalogMerchantChange === 'function') window.onCatalogMerchantChange();
+};
+
+/* Typing a fresh query drops the previous selection until a merchant is
+   picked again, so the hidden value can never point at a stale merchant. */
+window.onCatalogMerchantSearchInput = (event) => {
+    const input = event && event.target;
+    if (!input) return;
+    const select = document.getElementById('catalogMerchantSelect');
+    if (select) select.value = '';
+    const clearBtn = document.getElementById('catalogMerchantSearchClear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !String(input.value || '').trim());
+    renderCatalogMerchantSearchList();
+};
+
+window.onCatalogMerchantSearchKeydown = (event) => {
+    const box = document.getElementById('catalogMerchantSearchList');
+    if (!box || box.classList.contains('hidden')) {
+        if (event.key === 'ArrowDown') { renderCatalogMerchantSearchList(); event.preventDefault(); }
+        return;
+    }
+    const options = Array.from(box.querySelectorAll('[data-catalog-merchant-option]'));
+    if (!options.length) {
+        if (event.key === 'Escape') hideCatalogMerchantSearchList();
+        return;
+    }
+    let idx = window._catalogMerchantActiveIndex;
+    if (event.key === 'ArrowDown') idx = Math.min(options.length - 1, idx + 1);
+    else if (event.key === 'ArrowUp') idx = Math.max(0, idx - 1);
+    else if (event.key === 'Enter') {
+        if (idx >= 0 && options[idx]) { event.preventDefault(); options[idx].click(); }
+        return;
+    } else if (event.key === 'Escape') {
+        hideCatalogMerchantSearchList();
+        return;
+    } else {
+        return;
+    }
+    event.preventDefault();
+    window._catalogMerchantActiveIndex = idx;
+    options.forEach((li, i) => li.classList.toggle('bg-[#FFD700]/25', i === idx));
+    if (options[idx]) options[idx].scrollIntoView({ block: 'nearest' });
+};
+
+window.bindCatalogMerchantCombobox = () => {
+    const input = document.getElementById('catalogMerchantSearchInput');
+    const box = document.getElementById('catalogMerchantSearchList');
+    if (!input || input._catalogMerchantBound) return;
+    input._catalogMerchantBound = true;
+    if (box && box.parentNode !== document.body) document.body.appendChild(box);
+    input.addEventListener('input', () => {
+        if (window._catalogMerchantTimer) clearTimeout(window._catalogMerchantTimer);
+        window._catalogMerchantTimer = setTimeout(window.renderCatalogMerchantSearchList, 120);
+    });
+    input.addEventListener('focus', () => { renderCatalogMerchantSearchList(); });
+    input.addEventListener('keydown', window.onCatalogMerchantSearchKeydown);
+    input.addEventListener('blur', () => {
+        /* Grace period lets a tap on an option land before we tear down. */
+        setTimeout(() => {
+            if (window._catalogMerchantTouching) return;
+            hideCatalogMerchantSearchList();
+            setCatalogMerchantInputLabel();
+        }, 250);
+    });
+    if (box) {
+        box.addEventListener('mousedown', (event) => { if (event.cancelable) event.preventDefault(); });
+        box.addEventListener('touchstart', () => { window._catalogMerchantTouching = true; }, { passive: true });
+        box.addEventListener('touchend', () => { setTimeout(() => { window._catalogMerchantTouching = false; }, 300); });
+        box.addEventListener('touchcancel', () => { window._catalogMerchantTouching = false; });
+    }
 };
 
 const catalogProductThumbUrl = (p) => {
@@ -1542,6 +1796,7 @@ const clearCatalogProductFields = (keepMerchant) => {
     if (!keepMerchant) {
         const merchantEl = document.getElementById('catalogMerchantSelect');
         if (merchantEl) merchantEl.value = '';
+        setCatalogMerchantInputLabel();
     }
     if (typeof window.updateMasterCatalogSearchVisibility === 'function') window.updateMasterCatalogSearchVisibility();
     const typeEl = document.getElementById('catalogProductType');
@@ -1641,6 +1896,9 @@ window.openCatalogProductModal = () => {
     setCatalogModalChrome();
     window.updateMasterCatalogSearchVisibility();
     window.bindCatalogNameAutocomplete();
+    window.bindCatalogMerchantCombobox();
+    window.hideCatalogMerchantSearchList();
+    window.setCatalogMerchantInputLabel();
     window.hideCatalogNameSuggestions();
     fetchCatalogAutocompleteCache();
     const modal = document.getElementById('catalogProductModal');
@@ -1650,6 +1908,7 @@ window.openCatalogProductModal = () => {
 window.closeCatalogProductModal = () => {
     window.stopCatalogBarcodeScan();
     window.hideCatalogNameSuggestions();
+    window.hideCatalogMerchantSearchList();
     resetCatalogImageState();
     resetCatalogEditState();
     const modal = document.getElementById('catalogProductModal');
@@ -2016,6 +2275,8 @@ window.openCatalogProductEditor = (productId) => {
     clearCatalogProductFields(false);
     const merchantEl = document.getElementById('catalogMerchantSelect');
     if (merchantEl) merchantEl.value = product.merchantId || '';
+    window.bindCatalogMerchantCombobox();
+    window.setCatalogMerchantInputLabel();
     window.bindCatalogNameAutocomplete();
     fetchCatalogAutocompleteCache();
     const nameEl = document.getElementById('catalogNameAr');
@@ -2539,14 +2800,17 @@ const catalogProductCreatedAtMillis = (p) => {
 const catalogGroupNewestMillis = (group) => (group && group.products || [])
     .reduce((max, p) => Math.max(max, catalogProductCreatedAtMillis(p)), 0);
 
-/* Ordered merchant groups for the folder grid. Ties always fall back to the
-   Arabic alphabetical order so the grid is deterministic. */
+/* Ordered merchant groups for the folder grid, covering both directions of
+   every metric. Ties always fall back to the Arabic alphabetical order so the
+   grid stays deterministic. */
 const catalogSortMerchantGroups = (groups, sortMode) => {
     const mode = String(sortMode || 'newest');
     const alpha = (a, b) => a.merchantName.localeCompare(b.merchantName, 'ar');
     if (mode === 'alpha') groups.sort(alpha);
+    else if (mode === 'alpha_desc') groups.sort((a, b) => -alpha(a, b));
     else if (mode === 'most') groups.sort((a, b) => (b.products.length - a.products.length) || alpha(a, b));
     else if (mode === 'least') groups.sort((a, b) => (a.products.length - b.products.length) || alpha(a, b));
+    else if (mode === 'oldest') groups.sort((a, b) => (catalogGroupNewestMillis(a) - catalogGroupNewestMillis(b)) || alpha(a, b));
     else groups.sort((a, b) => (catalogGroupNewestMillis(b) - catalogGroupNewestMillis(a)) || alpha(a, b));
     return groups;
 };
