@@ -88,22 +88,53 @@ const founderAuditDocToken = (id) => String(id || '').replace(/[^a-zA-Z0-9_-]/g,
 const founderAuditDescId = (id) => 'founderAuditDesc-' + founderAuditDocToken(id);
 const founderAuditDescViewId = (id) => 'founderAuditDescView-' + founderAuditDocToken(id);
 
+/* ── Prescription text is decoupled from the description ─────────────────────
+   Older rows had the requirement typed straight into `description_ar` (e.g.
+   "... | متطلبات الروشتة: إجباري (يتطلب روشتة طبية رسمية)"). The boolean is now
+   the single source of truth, so the standard block is stripped from everything
+   shown, edited or saved, and re-rendered dynamically from the flag. */
+const FOUNDER_AUDIT_RX_STRICT_TEXT = 'متطلبات الروشتة: إجباري (يتطلب روشتة طبية رسمية)';
+const FOUNDER_AUDIT_RX_OTC_TEXT = 'متطلبات الروشتة: لا يتطلب روشتة (OTC)';
+const FOUNDER_AUDIT_RX_LEGACY_RE = /\s*\|?\s*متطلبات الروشتة\s*:[^\n]*/g;
+
+const founderAuditStripPrescriptionText = (text) => String(text == null ? '' : text)
+    .replace(FOUNDER_AUDIT_RX_LEGACY_RE, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]*\|[ \t]*$/, '')
+    .trim();
+window.founderAuditStripPrescriptionText = founderAuditStripPrescriptionText;
+
+/* One-time migration hint: when a document predates the boolean, infer its flag
+   from the legacy baked-in text so no requirement is silently lost. */
+const founderAuditPrescriptionFromText = (product) => {
+    const raw = String((product && product.description_ar) || '');
+    if (!raw) return null;
+    if (/متطلبات الروشتة\s*:\s*إجباري/.test(raw) || /يتطلب روشتة طبية رسمية/.test(raw)) return true;
+    if (/متطلبات الروشتة\s*:\s*لا يتطلب/.test(raw) || /\bOTC\b/i.test(raw)) return false;
+    return null;
+};
+
 /* Value that should be persisted for a row: an open, unsaved draft wins (so a
    founder who types and directly hits "اعتماد" never loses their words), then
-   the locked local value set by "حفظ", then the last server-known value. */
+   the locked local value set by "حفظ", then the last server-known value. Always
+   the BASE description — any legacy prescription block is stripped so it can
+   never round-trip back into Firestore. */
 const founderAuditDescriptionValue = (id, product) => {
     const drafts = founderAuditState.drafts;
-    if (drafts && drafts[id] !== undefined) return String(drafts[id] || '').trim();
-    return String((product && product.description_ar) || '').trim();
+    if (drafts && drafts[id] !== undefined) return founderAuditStripPrescriptionText(drafts[id]);
+    return founderAuditStripPrescriptionText(product && product.description_ar);
 };
 window.founderAuditDescriptionValue = founderAuditDescriptionValue;
 
-/* Effective "يحتاج روشتة" value for a row: an uncommitted toggle wins, else the
-   last server-known flag. Always a strict boolean, defaulting to false. */
+/* Effective "يحتاج روشتة" value for a row: an uncommitted toggle wins, then the
+   persisted boolean, then a one-time inference from legacy description text,
+   else false. Always a strict boolean. */
 const founderAuditRxValue = (id, product) => {
     const pending = founderAuditState.prescriptions;
     if (pending && pending[id] !== undefined) return !!pending[id];
-    return !!(product && product.requires_prescription);
+    if (product && typeof product.requires_prescription === 'boolean') return product.requires_prescription;
+    const legacy = founderAuditPrescriptionFromText(product);
+    return legacy === null ? false : legacy;
 };
 window.founderAuditRxValue = founderAuditRxValue;
 
@@ -638,13 +669,27 @@ const founderAuditCardHtml = (product, mode) => {
        While editing, the textarea edits a draft that is only folded into the
        product by "حفظ" (or by the final "اعتماد" / "تحديث البيانات"). */
     const editing = !!(founderAuditState.editing && founderAuditState.editing.has(id));
+    const rx = founderAuditRxValue(id, product);
+    /* The editor only ever holds the BASE description; the toggle owns the
+       prescription requirement, so any legacy baked-in block is stripped. */
     const draftText = (founderAuditState.drafts && founderAuditState.drafts[id] !== undefined)
         ? String(founderAuditState.drafts[id] || '')
-        : String(product.description_ar || '');
-    const description = founderAuditEscapeHtml(product.description_ar || '');
-    const descriptionDisplay = description
+        : founderAuditStripPrescriptionText(product.description_ar || '');
+    const description = founderAuditEscapeHtml(founderAuditStripPrescriptionText(product.description_ar || ''));
+    /* Read-only view: base description plus a dynamically injected requirement
+       block. This text is NEVER part of `description_ar` in Firestore. */
+    const rxBadgeHtml = ''
+        + '<span dir="auto" class="inline-flex items-center gap-1 mt-1">'
+        +   '<span class="text-slate-300 font-black">|</span>'
+        +   '<span class="text-[10px] font-black px-2 py-0.5 rounded-full border '
+        +     (rx ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-300') + '">'
+        +     founderAuditEscapeHtml(rx ? FOUNDER_AUDIT_RX_STRICT_TEXT : FOUNDER_AUDIT_RX_OTC_TEXT)
+        +   '</span>'
+        + '</span>';
+    const descriptionDisplay = (description
         ? '<p dir="auto" class="text-xs font-bold text-slate-700 whitespace-pre-wrap break-words leading-relaxed">' + description + '</p>'
-        : '<p class="text-xs font-bold text-slate-400 italic">لا يوجد وصف بعد.</p>';
+        : '<p class="text-xs font-bold text-slate-400 italic">لا يوجد وصف بعد.</p>')
+        + rxBadgeHtml;
     const descHtml = ''
         + '<div class="space-y-1.5">'
         +   '<div class="flex items-center justify-between gap-2">'
@@ -662,15 +707,17 @@ const founderAuditCardHtml = (product, mode) => {
         + '</div>';
 
     /* "يحتاج روشتة" toggle — a strict boolean committed with the row on
-       "اعتماد"/"تحديث البيانات", never on its own. */
-    const rx = founderAuditRxValue(id, product);
+       "اعتماد"/"تحديث البيانات", never on its own. The label mirrors the state
+       (green when required, neutral gray when not). */
     const rxHtml = ''
         + '<label class="flex items-center gap-2 cursor-pointer select-none w-max mt-1">'
         +   '<input type="checkbox" data-rx data-id="' + token + '" ' + (rx ? 'checked' : '') + ' class="sr-only">'
         +   '<span class="relative w-9 h-5 shrink-0 rounded-full transition ' + (rx ? 'bg-emerald-600' : 'bg-slate-300') + '">'
         +     '<span class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition ' + (rx ? 'translate-x-4' : 'translate-x-0') + '"></span>'
         +   '</span>'
-        +   '<span class="text-[10px] font-black ' + (rx ? 'text-emerald-700' : 'text-[#230535]/70') + '">يحتاج روشتة</span>'
+        +   '<span class="text-[10px] font-black ' + (rx ? 'text-emerald-700' : 'text-slate-500') + '">'
+        +     (rx ? 'يحتاج روشتة' : 'لا يحتاج روشتة')
+        +   '</span>'
         + '</label>';
 
     return ''
