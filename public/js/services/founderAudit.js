@@ -170,13 +170,22 @@ const founderAuditThumbnailUrl = (urlOrId) => {
     return String(urlOrId || '');
 };
 
-/* Full-resolution variant for the click-to-zoom lightbox: same Drive source
-   rendered large (w1600) so packaging details are legible. Falls back to the
-   raw URL for non-Drive sources. */
-const founderAuditFullImageUrl = (urlOrId) => {
+/* Google's thumbnail service 404s (HTML body, which the browser blocks by ORB)
+   when the requested size exceeds the stored image — so a row whose small card
+   thumbnail renders at `w200-h200` can fail at `w1600`. Returning the ordered
+   size chain lets the lightbox step down to a renderable size rather than
+   falling through to the "no image" state. */
+const founderAuditLightboxUrls = (urlOrId) => {
     const id = founderAuditDriveFileId(urlOrId);
-    if (id) return 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=w1600';
-    return String(urlOrId || '');
+    if (!id) return urlOrId ? [String(urlOrId)] : [];
+    const sizes = ['w1600', 'w1000', 'w400', 'w200-h200'];
+    const seen = new Set();
+    const urls = [];
+    sizes.forEach((s) => {
+        const u = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=' + s;
+        if (!seen.has(u)) { seen.add(u); urls.push(u); }
+    });
+    return urls;
 };
 
 const founderAuditProductImage = (p) => {
@@ -472,12 +481,12 @@ window.founderAuditOpenImage = (id) => {
     const product = founderAuditFindProduct(id);
     const image = founderAuditProductImage(product);
     if (!image) { window.showToast('لا توجد صورة لهذا الصنف', false); return; }
-    const full = founderAuditFullImageUrl(image);
+    const urls = founderAuditLightboxUrls(image);
     if (typeof window.openImageViewer === 'function') {
-        window.openImageViewer(full);
+        window.openImageViewer(urls[0] || '', urls.slice(1));
         return;
     }
-    window.open(full, '_blank', 'noopener');
+    window.open(urls[0] || image, '_blank', 'noopener');
 };
 
 /* Open Google Images for the product name in a new tab, explicitly localized to

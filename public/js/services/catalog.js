@@ -641,6 +641,25 @@ const catalogProductLightboxUrl = (p) => {
     return full;
 };
 
+/* Google's thumbnail service refuses to render a size that exceeds the stored
+   image (it answers 404 with an HTML body, which the browser then blocks by
+   ORB). That made the full-size lightbox fail for rows whose card thumbnail
+   rendered fine — e.g. a small original that succeeds at `sz=w200-h200` but
+   404s at `sz=w1600`. Returning the size chain lets the lightbox step down to
+   a renderable size instead of showing the "no image" state. */
+const catalogDriveLightboxUrls = (urlOrId, primarySize) => {
+    const id = catalogDriveFileId(urlOrId);
+    if (!id) return urlOrId ? [String(urlOrId)] : [];
+    const sizes = [primarySize || 'w2000', 'w1000', 'w400', 'w200-h200'];
+    const seen = new Set();
+    const urls = [];
+    sizes.forEach((s) => {
+        const u = 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(id) + '&sz=' + s;
+        if (!seen.has(u)) { seen.add(u); urls.push(u); }
+    });
+    return urls;
+};
+
 const catalogClickableThumbHtml = (p, opts) => {
     const pid = catalogEscapeHtml((p && p.id) || '');
     const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
@@ -661,28 +680,59 @@ const catalogClickableThumbHtml = (p, opts) => {
    a friendly empty-state message instead. */
 window.openCatalogProductLightbox = (productId) => {
     const product = findCatalogProductById(productId);
-    window.openImageViewer(product ? catalogProductLightboxUrl(product) : '');
+    if (!product) { window.openImageViewer(''); return; }
+    const full = catalogProductFullImageUrls(product)[0] || '';
+    const urls = catalogDriveLightboxUrls(full, 'w2000');
+    window.openImageViewer(urls[0] || '', urls.slice(1));
 };
 
 window.openImageLightbox = (el) => {
     if (el && typeof el.stopPropagation === 'function') el.stopPropagation();
     const node = (el && el.getAttribute) ? el : null;
     const url = node ? String(node.getAttribute('data-full-img') || '').trim() : '';
-    window.openImageViewer(url);
+    const thumb = node ? String(node.getAttribute('src') || '').trim() : '';
+    const fallbacks = url ? catalogDriveLightboxUrls(url, 'w2000').slice(1) : [];
+    if (thumb && thumb !== url && fallbacks.indexOf(thumb) === -1) fallbacks.push(thumb);
+    window.openImageViewer(url, fallbacks);
 };
 
-window.openImageViewer = (url) => {
+/* Shared full-screen viewer. `url` is the preferred (largest) source;
+   `fallbacks` is an optional ordered list the viewer steps through if the
+   preferred size is unavailable, so a renderable image is shown instead of the
+   empty state whenever one exists. */
+window.openImageViewer = (url, fallbacks) => {
     const overlay = document.getElementById('imageLightbox');
     const img = document.getElementById('imageLightboxImg');
     const empty = document.getElementById('imageLightboxEmpty');
     if (!overlay || !img) return;
     const src = String(url || '').trim();
+    const queue = (Array.isArray(fallbacks) ? fallbacks : [])
+        .map((u) => String(u || '').trim())
+        .filter((u) => u && u !== src);
+    img.onerror = function () {
+        let list = [];
+        try { list = JSON.parse(this.dataset.fallbacks || '[]'); } catch (err) { list = []; }
+        if (list.length) {
+            this.dataset.fallbacks = JSON.stringify(list.slice(1));
+            this.src = list[0];
+            return;
+        }
+        this.style.display = 'none';
+        const e = document.getElementById('imageLightboxEmpty');
+        if (e) e.classList.remove('hidden');
+    };
+    img.onload = function () {
+        this.style.display = 'block';
+        const e = document.getElementById('imageLightboxEmpty');
+        if (e) e.classList.add('hidden');
+    };
     if (!src) {
         img.removeAttribute('src');
         img.style.display = 'none';
         if (empty) empty.classList.remove('hidden');
     } else {
         if (empty) empty.classList.add('hidden');
+        img.dataset.fallbacks = JSON.stringify(queue);
         img.style.display = 'block';
         img.src = src;
     }
@@ -694,7 +744,7 @@ window.closeImageLightbox = () => {
     const img = document.getElementById('imageLightboxImg');
     const empty = document.getElementById('imageLightboxEmpty');
     if (overlay) overlay.classList.add('hidden');
-    if (img) { img.style.display = 'none'; img.src = ''; }
+    if (img) { img.style.display = 'none'; img.removeAttribute('src'); img.dataset.fallbacks = '[]'; }
     if (empty) empty.classList.add('hidden');
 };
 
