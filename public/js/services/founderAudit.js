@@ -39,7 +39,9 @@ const FOUNDER_AUDIT_SELECT = [
 
 /* In-RAM state only (see STATE note above). `editing` tracks which rows the
    founder has opened for description editing, so an unrelated re-render (image
-   upload, founder switch) never collapses an open editor or loses the caret. */
+   upload, founder switch) never collapses an open editor or loses the caret.
+   `drafts` holds the uncommitted text while a row is being edited; it is only
+   folded into the product's `description_ar` when the founder clicks "حفظ". */
 const founderAuditState = {
     loaded: false,
     loading: false,
@@ -47,7 +49,8 @@ const founderAuditState = {
     assignments: [],
     loadedAt: null,
     uploadingId: '',
-    editing: new Set()
+    editing: new Set(),
+    drafts: {}
 };
 window._founderAuditState = founderAuditState;
 
@@ -75,12 +78,12 @@ const founderAuditDocToken = (id) => String(id || '').replace(/[^a-zA-Z0-9_-]/g,
 const founderAuditDescId = (id) => 'founderAuditDesc-' + founderAuditDocToken(id);
 const founderAuditDescViewId = (id) => 'founderAuditDescView-' + founderAuditDocToken(id);
 
-/* Live value of a row's description editor. Always prefer the in-DOM textarea
-   so an edit is never lost; fall back to the stored value only when the editor
-   is absent (e.g. before the first render). */
+/* Value that should be persisted for a row: an open, unsaved draft wins (so a
+   founder who types and directly hits "اعتماد" never loses their words), then
+   the locked local value set by "حفظ", then the last server-known value. */
 const founderAuditDescriptionValue = (id, product) => {
-    const el = document.getElementById(founderAuditDescId(id));
-    if (el) return String(el.value || '').trim();
+    const drafts = founderAuditState.drafts;
+    if (drafts && drafts[id] !== undefined) return String(drafts[id] || '').trim();
     return String((product && product.description_ar) || '').trim();
 };
 window.founderAuditDescriptionValue = founderAuditDescriptionValue;
@@ -239,6 +242,9 @@ window.founderAuditLoad = async (force) => {
         const products = await founderAuditFetchPending();
         founderAuditState.products = products;
         founderAuditState.assignments = founderAuditAssign(products);
+        /* Fresh data supersedes any open editor/draft from the previous load. */
+        founderAuditState.editing = new Set();
+        founderAuditState.drafts = {};
         founderAuditState.loaded = true;
         founderAuditState.loadedAt = new Date();
         founderAuditRenderChunk();
@@ -357,8 +363,10 @@ window.founderAuditApprove = async (id) => {
     if (!window.isFounderAuditUser()) return;
     const product = founderAuditState.products.find((p) => p.id === id);
     if (!product) return;
-    /* Read the founder's freshly typed value straight from the DOM textarea so
-       their correction is persisted in the same transition. */
+    /* Fold any open editor's text into its draft, then read what should be
+       persisted: an unsaved draft wins, else the value locked by "حفظ", else
+       the last server-known description. Only this button writes to Firestore. */
+    founderAuditCaptureEdits();
     const description = founderAuditDescriptionValue(id, product);
     const founder = window.founderAuditCurrentFounder();
     const actor = (window.currentUser && window.currentUser.name) || '';
@@ -390,6 +398,7 @@ window.founderAuditApprove = async (id) => {
         founderAuditState.products = founderAuditState.products.filter((p) => p.id !== id);
         founderAuditState.assignments = founderAuditAssign(founderAuditState.products);
         if (founderAuditState.editing) founderAuditState.editing.delete(id);
+        if (founderAuditState.drafts) delete founderAuditState.drafts[id];
         window.showToast('تم اعتماد الصنف');
         founderAuditRenderChunk();
     } catch (err) {
@@ -456,8 +465,13 @@ const founderAuditCardHtml = (product) => {
         : '<span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-200 text-orange-900">غير مطابق</span>';
     const uploading = founderAuditState.uploadingId === id;
     /* The description is READ-ONLY by default; the founder must click
-       "تعديل الوصف" to open the editor, which prevents accidental keystrokes. */
+       "تعديل الوصف" to open the editor, which prevents accidental keystrokes.
+       While editing, the textarea edits a draft that is only folded into the
+       product by "حفظ" (or by the final "اعتماد"). */
     const editing = !!(founderAuditState.editing && founderAuditState.editing.has(id));
+    const draftText = (founderAuditState.drafts && founderAuditState.drafts[id] !== undefined)
+        ? String(founderAuditState.drafts[id] || '')
+        : String(product.description_ar || '');
     const description = founderAuditEscapeHtml(product.description_ar || '');
     const descriptionDisplay = description
         ? '<p dir="auto" class="text-xs font-bold text-slate-700 whitespace-pre-wrap break-words leading-relaxed">' + description + '</p>'
@@ -471,7 +485,11 @@ const founderAuditCardHtml = (product) => {
         +   '<div id="' + founderAuditDescViewId(id) + '" class="' + (editing ? 'hidden' : '') + '">' + descriptionDisplay + '</div>'
         +   '<textarea id="' + founderAuditDescId(id) + '" rows="3" dir="auto" placeholder="اكتب وصف الصنف..." '
         +     'class="w-full p-2.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-xs outline-none focus:border-[#230535] resize-y' + (editing ? '' : ' hidden') + '">'
-        +     description + '</textarea>'
+        +     founderAuditEscapeHtml(draftText) + '</textarea>'
+        +   '<div class="flex items-center gap-2' + (editing ? '' : ' hidden') + '">'
+        +     '<button type="button" data-action="save-desc" data-id="' + token + '" class="text-[10px] font-black bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition flex items-center gap-1"><i class="fa-solid fa-floppy-disk"></i> حفظ</button>'
+        +     '<button type="button" data-action="cancel-desc" data-id="' + token + '" class="text-[10px] font-black bg-white text-[#230535] border border-[#230535]/30 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition flex items-center gap-1"><i class="fa-solid fa-xmark"></i> إلغاء</button>'
+        +   '</div>'
         + '</div>';
 
     return ''
@@ -495,17 +513,18 @@ const founderAuditCardHtml = (product) => {
         + '</div>';
 };
 
-/* Snapshot in-progress description edits from the DOM before a re-render, so
-   switching founder or replacing an image never discards typed text. Only rows
-   currently in edit mode sync from the DOM; read-only rows keep their stored
-   value untouched (the textarea is merely a mirror there). */
+/* Snapshot the text currently in an open editor into its draft, so switching
+   founder or replacing an image never discards typed text. Drafts NEVER touch
+   the product here — that only happens on "حفظ"/"اعتماد" — which is what makes
+   "إلغاء" a true revert. */
 const founderAuditCaptureEdits = () => {
     const editing = founderAuditState.editing;
     if (!editing || !editing.size) return;
+    if (!founderAuditState.drafts) founderAuditState.drafts = {};
     founderAuditState.products.forEach((p) => {
         if (!editing.has(p.id)) return;
         const el = document.getElementById(founderAuditDescId(p.id));
-        if (el) p.description_ar = el.value;
+        if (el) founderAuditState.drafts[p.id] = el.value;
     });
 };
 
@@ -544,6 +563,10 @@ const founderAuditRenderChunk = () => {
    the textarea with the caret at the end. */
 window.founderAuditStartEditDescription = (id) => {
     if (!founderAuditState.editing) founderAuditState.editing = new Set();
+    if (!founderAuditState.drafts) founderAuditState.drafts = {};
+    const product = founderAuditState.products.find((p) => p.id === id);
+    /* Seed the draft from the locked value so "إلغاء" always reverts cleanly. */
+    founderAuditState.drafts[id] = String((product && product.description_ar) || '');
     founderAuditState.editing.add(id);
     founderAuditRenderChunk();
     const ta = document.getElementById(founderAuditDescId(id));
@@ -554,6 +577,31 @@ window.founderAuditStartEditDescription = (id) => {
             if (typeof ta.setSelectionRange === 'function') ta.setSelectionRange(end, end);
         } catch (err) { /* focus/caret is best-effort */ }
     }
+};
+
+/* "حفظ": lock the draft into the product's local state and return to the
+   read-only view. No Firestore write happens here — only "اعتماد" does that. */
+window.founderAuditSaveDescription = (id) => {
+    founderAuditCaptureEdits();
+    const product = founderAuditState.products.find((p) => p.id === id);
+    if (!product) return;
+    const draft = founderAuditState.drafts ? founderAuditState.drafts[id] : undefined;
+    const ta = document.getElementById(founderAuditDescId(id));
+    const value = String((draft !== undefined ? draft : (ta ? ta.value : product.description_ar)) || '').trim();
+    product.description_ar = value;
+    if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+    if (founderAuditState.editing) founderAuditState.editing.delete(id);
+    founderAuditRenderChunk();
+    window.showToast('تم حفظ الوصف');
+};
+
+/* "إلغاء": discard the draft and return to the read-only view showing the
+   original, unedited value. */
+window.founderAuditCancelEditDescription = (id) => {
+    if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+    if (founderAuditState.editing) founderAuditState.editing.delete(id);
+    founderAuditRenderChunk();
+    window.showToast('تم إلغاء التعديل');
 };
 
 /* ───────────────────────────── WIDGET / EVENTS ───────────────────────────── */
@@ -583,6 +631,8 @@ const founderAuditInit = () => {
             if (action === 'search') window.founderAuditSearchGoogle(id);
             else if (action === 'zoom') window.founderAuditOpenImage(id);
             else if (action === 'edit-desc') window.founderAuditStartEditDescription(id);
+            else if (action === 'save-desc') window.founderAuditSaveDescription(id);
+            else if (action === 'cancel-desc') window.founderAuditCancelEditDescription(id);
             else if (action === 'upload') {
                 founderAuditUploadTargetId = id;
                 const input = document.getElementById('founderAuditFileInput');
