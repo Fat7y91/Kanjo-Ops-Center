@@ -2141,6 +2141,44 @@
 
                     </div>
 
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+
+                        <div class="relative">
+
+                            <i class="fa-solid fa-layer-group absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/50 text-xs pointer-events-none"></i>
+
+                            <select id="catalogCategoryFilter" onchange="onCatalogCategoryFilterChange(event)" aria-label="تصفية حسب الفئة" class="w-full appearance-none bg-white border-2 border-[#230535]/15 rounded-2xl pr-10 pl-9 py-2.5 text-sm font-bold text-[#230535] outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10 cursor-pointer">
+
+                                <option value="">الكل</option>
+
+                            </select>
+
+                            <i class="fa-solid fa-chevron-down absolute left-3.5 top-1/2 -translate-y-1/2 text-[#230535]/40 text-xs pointer-events-none"></i>
+
+                        </div>
+
+                        <div class="relative">
+
+                            <i class="fa-solid fa-arrow-down-wide-short absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/50 text-xs pointer-events-none"></i>
+
+                            <select id="catalogSortSelect" onchange="onCatalogSortChange(event)" aria-label="ترتيب المنتجات" class="w-full appearance-none bg-white border-2 border-[#230535]/15 rounded-2xl pr-10 pl-9 py-2.5 text-sm font-bold text-[#230535] outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10 cursor-pointer">
+
+                                <option value="newest" selected>الأحدث</option>
+
+                                <option value="alpha">الترتيب الأبجدي</option>
+
+                                <option value="most">الأكثر منتجات</option>
+
+                                <option value="least">الأقل منتجات</option>
+
+                            </select>
+
+                            <i class="fa-solid fa-chevron-down absolute left-3.5 top-1/2 -translate-y-1/2 text-[#230535]/40 text-xs pointer-events-none"></i>
+
+                        </div>
+
+                    </div>
+
                     <div id="catalogAllProductsView" class="space-y-3 min-h-[60vh]">
 
                         <div id="catalogAllProductsToolbar" class="hidden"></div>

@@ -2499,6 +2499,105 @@ const catalogDeepSearchFilter = (products, query) => {
     return (products || []).filter((p) => passing.has(catalogGroupMerchantKey(p)));
 };
 
+/* ─── Client-side category filter + sort for "جميع منتجات المناديب" ───
+   Both run on the ALREADY-LOADED in-memory product cache and never issue a
+   Firestore read. The base list is narrowed by category, then by the existing
+   search text, regrouped into merchant cards, and finally ordered by the
+   selected sort mode. */
+
+/* Distinct, non-empty product categories across the loaded products, sorted
+   for a stable <select>. Pure in-memory Set work. */
+const catalogUniqueCategories = (products) => {
+    const set = new Set();
+    (products || []).forEach((p) => {
+        const cat = String((p && p.category) || '').trim();
+        if (cat) set.add(cat);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
+};
+
+/* Category is stored per product (`category`, e.g. "🍔 مطاعم وكافيهات"). The
+   default "الكل" is the empty string and is a pass-through. */
+const catalogFilterProductsByCategory = (products, category) => {
+    const cat = String(category || '').trim();
+    if (!cat) return products || [];
+    return (products || []).filter((p) => String((p && p.category) || '').trim() === cat);
+};
+
+/* Millisecond timestamp of a product, tolerant of a Firestore Timestamp,
+   KanjoRestTimestamp, Date and ISO string. Returns 0 when unknown. */
+const catalogProductCreatedAtMillis = (p) => {
+    const value = p && p.createdAt;
+    if (!value) return 0;
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    const millis = new Date(value).getTime();
+    return Number.isFinite(millis) ? millis : 0;
+};
+
+/* Newest product in a merchant group — i.e. the merchant's latest activity. */
+const catalogGroupNewestMillis = (group) => (group && group.products || [])
+    .reduce((max, p) => Math.max(max, catalogProductCreatedAtMillis(p)), 0);
+
+/* Ordered merchant groups for the folder grid. Ties always fall back to the
+   Arabic alphabetical order so the grid is deterministic. */
+const catalogSortMerchantGroups = (groups, sortMode) => {
+    const mode = String(sortMode || 'newest');
+    const alpha = (a, b) => a.merchantName.localeCompare(b.merchantName, 'ar');
+    if (mode === 'alpha') groups.sort(alpha);
+    else if (mode === 'most') groups.sort((a, b) => (b.products.length - a.products.length) || alpha(a, b));
+    else if (mode === 'least') groups.sort((a, b) => (a.products.length - b.products.length) || alpha(a, b));
+    else groups.sort((a, b) => (catalogGroupNewestMillis(b) - catalogGroupNewestMillis(a)) || alpha(a, b));
+    return groups;
+};
+
+/* Keep the two <select> controls in sync with the loaded data. Options are
+   rebuilt only when the category list actually changes, so the native popup
+   is not reset (and the current choice is preserved) on every keystroke. */
+let _catalogCategoryOptionsSig = null;
+const syncCatalogFilterControls = (baseProducts) => {
+    const categorySelect = document.getElementById('catalogCategoryFilter');
+    if (categorySelect) {
+        const categories = catalogUniqueCategories(baseProducts);
+        const sig = categories.join('\u0001');
+        if (_catalogCategoryOptionsSig !== sig) {
+            _catalogCategoryOptionsSig = sig;
+            categorySelect.innerHTML = '<option value="">الكل</option>' + categories.map((cat) => {
+                const safe = catalogEscapeHtml(cat);
+                return `<option value="${safe}">${safe}</option>`;
+            }).join('');
+        }
+        const current = String(window._catalogCategoryFilter || '');
+        if (current && !categories.includes(current)) window._catalogCategoryFilter = '';
+        categorySelect.value = window._catalogCategoryFilter || '';
+    }
+    const sortSelect = document.getElementById('catalogSortSelect');
+    if (sortSelect) sortSelect.value = String(window._catalogSortMode || 'newest');
+};
+
+window.onCatalogCategoryFilterChange = (event) => {
+    window._catalogCategoryFilter = event && event.target ? String(event.target.value || '') : '';
+    /* A merchant detail view would hide the filtered folders, so snap back to
+       the grid while a category filter is active. */
+    window._catalogAllProductsSelectedMerchant = '';
+    renderCatalogAllProductsListNow();
+};
+
+window.onCatalogSortChange = (event) => {
+    window._catalogSortMode = (event && event.target && String(event.target.value)) || 'newest';
+    window._catalogAllProductsSelectedMerchant = '';
+    renderCatalogAllProductsListNow();
+};
+
+const catalogCategoryNoResultsHtml = (category) => `<div class="col-span-full text-center py-10 text-slate-400 font-bold">
+    <i class="fa-solid fa-filter text-3xl text-[#230535]/30 mb-3"></i>
+    <div class="text-base text-[#230535] font-black mb-1">لا توجد منتجات في هذه الفئة</div>
+    <div class="text-xs">الفئة المحددة: <span class="text-[#E57723]">${catalogEscapeHtml(String(category || ''))}</span></div>
+    <button type="button" onclick="onCatalogCategoryFilterChange({target:{value:''}})" class="mt-4 bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition inline-flex items-center gap-2">
+        <i class="fa-solid fa-xmark"></i> كل الفئات
+    </button>
+</div>`;
+
 /* Maps each merchant to the exact products whose name matched the query.
    Founders use this mini-list to audit suspicious entries (name + price +
    who entered it) without leaving the merchant folder grid. */
@@ -2590,7 +2689,13 @@ const renderCatalogAllProductsListNow = () => {
         ? allProducts.filter((p) => catalogRepDisplayName(p) === selectedRep)
         : allProducts;
     const searchQuery = String(window._catalogSearchQuery || '').trim();
-    const products = catalogDeepSearchFilter(repProducts, searchQuery);
+    const categoryFilter = String(window._catalogCategoryFilter || '').trim();
+    const sortMode = String(window._catalogSortMode || 'newest');
+    /* Populate the dropdowns from the rep-scoped base set (before the active
+       filters) so their options stay stable while typing a search. */
+    syncCatalogFilterControls(repProducts);
+    let products = catalogFilterProductsByCategory(repProducts, categoryFilter);
+    products = catalogDeepSearchFilter(products, searchQuery);
     if (countEl) countEl.textContent = String(products.length);
     window.renderCatalogRepLeaderboard(allProducts);
     if (!list) return;
@@ -2629,10 +2734,12 @@ const renderCatalogAllProductsListNow = () => {
             }
         }
         list.className = 'catalog-card-grid';
-        list.innerHTML = searchQuery ? catalogSearchNoResultsHtml(searchQuery) : catalogAllProductsEmptyHtml;
+        list.innerHTML = searchQuery
+            ? catalogSearchNoResultsHtml(searchQuery)
+            : (categoryFilter ? catalogCategoryNoResultsHtml(categoryFilter) : catalogAllProductsEmptyHtml);
         return;
     }
-    const groups = groupCatalogProductsByMerchant(products);
+    const groups = catalogSortMerchantGroups(groupCatalogProductsByMerchant(products), sortMode);
     const selected = String(window._catalogAllProductsSelectedMerchant || '');
     const selectedGroup = selected ? groups.find((g) => g.merchantName === selected) : null;
     if (selected && selectedGroup) {
@@ -4357,6 +4464,12 @@ window.startCatalogListeners = () => {
     window._catalogDoneLoaded = false;
     window._catalogAllProductsLoaded = false;
     window._catalogDeleteRequestsLoaded = false;
+    /* Client-side view state for the "all products" folder grid: a category
+       filter (empty = الكل) and a sort mode. Reset per session so a previous
+       user's selection can never leak into the next one. */
+    window._catalogCategoryFilter = '';
+    window._catalogSortMode = 'newest';
+    _catalogCategoryOptionsSig = null;
     /* Result-size signatures behind the cheap count probes; `null` means "no
        known baseline yet", so the first poll always fetches. Reset per session
        so a previous user's counts can never short-circuit the next user. */
