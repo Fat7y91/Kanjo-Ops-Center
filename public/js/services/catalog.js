@@ -837,6 +837,13 @@ window.bindCatalogMerchantCombobox = () => {
     input._catalogMerchantBound = true;
     if (box && box.parentNode !== document.body) document.body.appendChild(box);
     input.addEventListener('input', () => {
+        /* Typing drops the previous selection immediately so the hidden
+           value can never submit a stale merchant while the debounced
+           render is still pending. */
+        const select = document.getElementById('catalogMerchantSelect');
+        if (select) select.value = '';
+        const clearBtn = document.getElementById('catalogMerchantSearchClear');
+        if (clearBtn) clearBtn.classList.toggle('hidden', !String(input.value || '').trim());
         if (window._catalogMerchantTimer) clearTimeout(window._catalogMerchantTimer);
         window._catalogMerchantTimer = setTimeout(window.renderCatalogMerchantSearchList, 120);
     });
