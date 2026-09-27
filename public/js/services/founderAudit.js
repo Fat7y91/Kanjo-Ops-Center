@@ -196,46 +196,37 @@ const founderAuditProductName = (p) => String((p && (p.name_ar || p.name_en)) ||
 const founderAuditHasDescription = (p) => String((p && p.description_ar) || '').trim() !== '';
 window.founderAuditHasDescription = founderAuditHasDescription;
 
-/* ─────────────────────── DETERMINISTIC FAIR ROUTING ─────────────────────── */
+/* ─────────────────────── STABLE HASH ROUTING ─────────────────────── */
 
-/* Assigns every pending product to one of the four founders.
+/* Assigns every pending product to one of the four founders by hashing its
+   immutable identity (document id, else sku, else name). The mapping depends
+   ONLY on the product, never on the array size, order or how many siblings were
+   approved/deleted — so a row is permanently locked to the same founder. This
+   kills the old shifting-index overlap where approving one row renumbered the
+   rest and let two founders land on the same product. */
+const founderAuditStableHash = (seed) => {
+    const s = String(seed == null ? '' : seed);
+    let hash = 0;
+    for (let i = 0; i < s.length; i += 1) hash += s.charCodeAt(i);
+    return hash;
+};
+window.founderAuditStableHash = founderAuditStableHash;
 
-   Ordering is fully deterministic: rows are sorted by id, then split into
-   matched (has description) and unmatched (hard, empty description). Each group
-   is round-robined across the founders independently; the unmatched rotation is
-   offset by `matched.length % 4` so the founders who received fewer matched rows
-   are the ones who receive the extra unmatched rows. The result is an equal
-   share of BOTH kinds per founder (never differing by more than one), and —
-   because the order never depends on network/return order — the same row always
-   lands on the same founder. */
+/* Prefer the immutable document id; fall back to sku/name for drafts that have
+   not been persisted yet, so a row stays on the same founder across its life. */
+const founderAuditAssignmentKey = (p) => String(
+    (p && (p.id || p.sku || p.name_ar || p.name_en)) || ''
+);
+
 const founderAuditAssign = (products) => {
     const n = FOUNDER_AUDIT_FOUNDERS.length;
     const list = Array.isArray(products) ? products.slice() : [];
-    list.sort((a, b) => String((a && a.id) || '').localeCompare(String((b && b.id) || '')));
-
-    const matched = [];
-    const unmatched = [];
-    list.forEach((p) => {
-        (founderAuditHasDescription(p) ? matched : unmatched).push(p);
-    });
-
-    const out = [];
-    matched.forEach((product, i) => out.push({
+    return list.map((product, index) => ({
         product,
-        founder: FOUNDER_AUDIT_FOUNDERS[i % n],
-        kind: 'matched'
+        founder: FOUNDER_AUDIT_FOUNDERS[founderAuditStableHash(founderAuditAssignmentKey(product)) % n],
+        kind: founderAuditHasDescription(product) ? 'matched' : 'unmatched',
+        index
     }));
-
-    /* Offset the hard rows so they top up the founders short on easy rows. */
-    const offset = matched.length % n;
-    unmatched.forEach((product, i) => out.push({
-        product,
-        founder: FOUNDER_AUDIT_FOUNDERS[(offset + i) % n],
-        kind: 'unmatched'
-    }));
-
-    out.sort((a, b) => String(a.product.id).localeCompare(String(b.product.id)));
-    return out.map((entry, index) => Object.assign({}, entry, { index }));
 };
 window.founderAuditAssign = founderAuditAssign;
 
@@ -400,6 +391,25 @@ const founderAuditPatchProduct = async (id, patch, auditMeta) => {
     if (typeof window.kanjoAuditLog === 'function' && auditMeta) {
         window.kanjoAuditLog(auditMeta);
     }
+    return true;
+};
+
+/* Permanently remove a product (moderation of prohibited/scheduled items). Both
+   transports are audited by the deletion layer: `merchant_products` is a watched
+   delete collection, so the REST mirror snapshots the document before the write
+   and the `deleteDoc` wrapper does the same on the SDK path — the removal and the
+   deleted contents land in `audit_logs` automatically. Returns true on success. */
+const founderAuditRemoveProduct = async (id) => {
+    if (window.kanjoRest && typeof window.kanjoRest.remove === 'function') {
+        try {
+            await window.kanjoRest.remove([FOUNDER_AUDIT_COLLECTION, id]);
+            return true;
+        } catch (restErr) {
+            console.warn('[founder-audit] REST remove failed; falling back to SDK:', restErr);
+        }
+    }
+    if (typeof window.deleteDoc !== 'function' || !window.db) return false;
+    await window.deleteDoc(window.doc(window.db, FOUNDER_AUDIT_COLLECTION, id));
     return true;
 };
 
@@ -600,6 +610,38 @@ window.founderAuditUpdate = async (id) => {
     }
 };
 
+/* Moderated, audited hard-delete for prohibited items. Only ever offered on a
+   pending card, so it removes the row from the pending pool (the approved
+   counter is untouched) after the founder confirms. */
+window.founderAuditDelete = async (id) => {
+    if (!window.isFounderAuditUser()) return;
+    const product = founderAuditFindProduct(id);
+    if (!product) return;
+    const confirmFn = typeof window.confirm === 'function' ? window.confirm : null;
+    if (confirmFn && !confirmFn('هل أنت متأكد من حذف هذا الصنف نهائياً؟')) return;
+    founderAuditSetStatus('جاري حذف الصنف...');
+    try {
+        const ok = await founderAuditRemoveProduct(id);
+        if (!ok) throw new Error('DELETE_FAILED');
+
+        /* Drop it from both pools so the card leaves the DOM immediately; this
+           decrements the pending counter and never touches the approved one. */
+        founderAuditState.products = founderAuditState.products.filter((p) => p.id !== id);
+        founderAuditState.approved = (founderAuditState.approved || []).filter((p) => p.id !== id);
+        founderAuditState.assignments = founderAuditAssign(founderAuditState.products);
+        if (founderAuditState.editing) founderAuditState.editing.delete(id);
+        if (founderAuditState.drafts) delete founderAuditState.drafts[id];
+        if (founderAuditState.prescriptions) delete founderAuditState.prescriptions[id];
+        window.showToast('تم حذف الصنف');
+        founderAuditRenderChunk();
+    } catch (err) {
+        console.error('[founder-audit] delete failed:', err);
+        window.showToast('فشل حذف الصنف، حاول مرة أخرى', false);
+    } finally {
+        founderAuditSetStatus('');
+    }
+};
+
 /* ──────────────────────────────── RENDER ──────────────────────────────── */
 
 const founderAuditSetStatus = (text) => {
@@ -738,7 +780,8 @@ const founderAuditCardHtml = (product, mode) => {
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
         +       (approvedMode
             ? '<button type="button" data-action="update" data-id="' + token + '" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> تحديث البيانات</button>'
-            : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>')
+            : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>'
+                + '<button type="button" data-action="delete" data-id="' + token + '" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center gap-1.5"><i class="fa-solid fa-trash"></i> حذف</button>')
         +     '</div>'
         +   '</div>'
         + '</div>';
@@ -897,6 +940,7 @@ const founderAuditInit = () => {
                 if (input) input.click();
             } else if (action === 'approve') window.founderAuditApprove(id);
             else if (action === 'update') window.founderAuditUpdate(id);
+            else if (action === 'delete') window.founderAuditDelete(id);
         });
         /* "يحتاج روشتة" is a live native checkbox, so it needs `change`, not the
            delegated `click` dispatch above. */
