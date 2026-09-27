@@ -4277,6 +4277,21 @@ const patchRepCatalogProductLocally = (productId, patch) => {
 };
 window.patchRepCatalogProductLocally = patchRepCatalogProductLocally;
 
+/* Cheap "did this query change?" probe: an aggregation count costs ~1 read per
+   1,000 matching documents (minimum 1) instead of one read per document.
+   Returns the count, or `null` when the helper is unavailable (which callers
+   treat as "cannot tell — re-fetch"). */
+const catalogRestCount = async (filters) => {
+    if (window.kanjoRest && typeof window.kanjoRest.count === 'function') {
+        try {
+            return await window.kanjoRest.count(CATALOG_COLLECTION, filters || []);
+        } catch (err) {
+            console.warn('[catalog] count probe failed; will re-fetch:', err);
+        }
+    }
+    return null;
+};
+
 window.startCatalogListeners = () => {
     if (window._catalogListenerStarted) return;
     window._catalogListenerStarted = true;
@@ -4292,6 +4307,12 @@ window.startCatalogListeners = () => {
     window._catalogDoneLoaded = false;
     window._catalogAllProductsLoaded = false;
     window._catalogDeleteRequestsLoaded = false;
+    /* Result-size signatures behind the cheap count probes; `null` means "no
+       known baseline yet", so the first poll always fetches. Reset per session
+       so a previous user's counts can never short-circuit the next user. */
+    window._catalogPendingCount = null;
+    window._catalogAllProductsCount = null;
+    window._catalogDeleteRequestsCount = null;
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
 
     const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
@@ -4299,10 +4320,12 @@ window.startCatalogListeners = () => {
     /* Direct REST is the primary read path: the SDK's streaming transport can
        be blocked, which used to leave these widgets stuck at 0. The caches are
        refreshed on a slow poll so they stay current without a live listener.
-       Cost model: a manager's poll now pulls only the small pending (+ delete
-       request) sets; the full collection is fetched once at boot and again only
-       while the "all products" widget is open. */
-    const refreshFromRest = async () => {
+       Cost model: the timed poll only re-fetches the small pending (+ delete
+       request) sets, and only when a cheap aggregation count shows they
+       changed; the full collection is read once at boot and again only when a
+       manager explicitly opens/refreshes the "all products" widget. A plain rep
+       never reads either global set — only their own products. */
+    const refreshFromRest = async (allowFull = false) => {
         /* Skip if the previous poll is still in flight: a slow network must not
            stack overlapping full-collection reads. Also skip hidden tabs — a
            backgrounded Ops Center has no user watching the widgets. */
@@ -4311,27 +4334,43 @@ window.startCatalogListeners = () => {
         window._catalogRestRefreshInFlight = true;
         try {
             const canViewAll = window.canViewAllCatalogProducts();
+            /* The global pending set only feeds the content editor / manager
+               views; a plain rep renders its own products from
+               `loadMyCatalogProducts` and must not pay for it. */
+            const canViewPending = canViewAll || window.isCatalogContentUser();
             const isMahmoud = window.isMahmoudUser();
-            /* A full-collection read is expensive, so a manager only pulls it on
-               boot (to populate counts / export filters) or while the "all
-               products" widget is open. Otherwise the poll fetches just the small
-               pending (+ delete request) sets, which is all the always-visible
-               widgets need. Reps keep the narrow pending query. All independent
-               reads run concurrently with the rep's own-products read. */
-            const wantAllProducts = canViewAll && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
+            /* The full-collection read is by far the most expensive one (one
+               read per document — 4,000+ today). It is therefore NEVER issued by
+               the timed poll (`allowFull === false`); only on boot and when the
+               user explicitly opens/refreshes the "all products" widget. */
+            const wantAllProducts = allowFull && canViewAll
+                && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
             const jobs = [window.loadMyCatalogProducts()];
             if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
+                        /* Cheap change check: an aggregation count costs ~1 read
+                           per 1,000 docs, so an explicit re-open with unchanged
+                           data skips the full re-fetch. `null` (helper missing)
+                           forces the fetch. */
+                        const total = await catalogRestCount([]);
+                        if (total !== null && window._catalogAllProductsLoaded && total === window._catalogAllProductsCount) {
+                            window._catalogAllProductsFetchedAt = Date.now();
+                            return;
+                        }
                         const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, []));
                         window.allCatalogProductsCache = items;
                         window._catalogAllProductsLoaded = true;
+                        window._catalogAllProductsCount = typeof total === 'number' ? total : items.length;
                         window._catalogAllProductsFetchedAt = Date.now();
-                        window.merchantProductsCache = items.filter((p) => p.status === 'pending');
+                        const pending = items.filter((p) => p.status === 'pending');
+                        window.merchantProductsCache = pending;
                         window._catalogPendingLoaded = true;
+                        window._catalogPendingCount = pending.length;
                         if (isMahmoud) {
                             window.catalogDeleteRequestsCache = items.filter((p) => p.deleteRequested === true);
                             window._catalogDeleteRequestsLoaded = true;
+                            window._catalogDeleteRequestsCount = window.catalogDeleteRequestsCache.length;
                         }
                         if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
                         if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
@@ -4342,22 +4381,30 @@ window.startCatalogListeners = () => {
                     }
                 })());
             } else {
-                jobs.push((async () => {
-                    try {
-                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]));
-                        window.merchantProductsCache = items;
-                        window._catalogPendingLoaded = true;
-                        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
-                    } catch (err) {
-                        console.error('[catalog] pending REST fetch failed:', err);
-                    }
-                })());
+                if (canViewPending) {
+                    jobs.push((async () => {
+                        try {
+                            const pendingCount = await catalogRestCount([['status', '==', 'pending']]);
+                            if (pendingCount !== null && window._catalogPendingLoaded && pendingCount === window._catalogPendingCount) return;
+                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]));
+                            window.merchantProductsCache = items;
+                            window._catalogPendingLoaded = true;
+                            window._catalogPendingCount = typeof pendingCount === 'number' ? pendingCount : items.length;
+                            if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+                        } catch (err) {
+                            console.error('[catalog] pending REST fetch failed:', err);
+                        }
+                    })());
+                }
                 if (isMahmoud) {
                     jobs.push((async () => {
                         try {
+                            const deleteCount = await catalogRestCount([['deleteRequested', '==', true]]);
+                            if (deleteCount !== null && window._catalogDeleteRequestsLoaded && deleteCount === window._catalogDeleteRequestsCount) return;
                             const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]));
                             window.catalogDeleteRequestsCache = items;
                             window._catalogDeleteRequestsLoaded = true;
+                            window._catalogDeleteRequestsCount = typeof deleteCount === 'number' ? deleteCount : items.length;
                         } catch (err) {
                             console.error('[catalog] delete-requests REST fetch failed:', err);
                         }
@@ -4371,16 +4418,16 @@ window.startCatalogListeners = () => {
         }
     };
 
-    refreshFromRest();
+    refreshFromRest(true);
     /* Exposed so opening the "all products" widget can pull the full set on
-       demand instead of relying on a fast background poll. */
-    window.refreshCatalogFromRest = refreshFromRest;
-    const pollId = setInterval(refreshFromRest, 120000);
+       demand instead of relying on a background poll. */
+    window.refreshCatalogFromRest = () => refreshFromRest(true);
+    const pollId = setInterval(() => refreshFromRest(false), 120000);
     window._appListenerUnsubscribers.push(() => clearInterval(pollId));
     /* A hidden tab skips polls; refresh once when the user returns so the
        widgets are not up to two minutes stale. */
     if (typeof document !== 'undefined') {
-        const onCatalogVisibility = () => { if (!document.hidden) refreshFromRest(); };
+        const onCatalogVisibility = () => { if (!document.hidden) refreshFromRest(false); };
         document.addEventListener('visibilitychange', onCatalogVisibility);
         window._appListenerUnsubscribers.push(() => document.removeEventListener('visibilitychange', onCatalogVisibility));
     }

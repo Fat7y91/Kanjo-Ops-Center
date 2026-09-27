@@ -344,6 +344,40 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
     return restRowsToDocs(await response.json());
 };
 
+/* Aggregation count over REST (uses `:runAggregationQuery`). Firestore bills an
+   aggregation query at roughly one read per 1,000 matched documents (minimum
+   one), not one read per document, so this is the cheap way to ask "did this
+   query's result set change?" before paying for a full re-fetch. Returns the
+   matched document count as a number. */
+const restCount = async (collectionId, filters = []) => {
+    const clauses = (filters || []).map(([field, op, value]) => ({
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+    }));
+    const structuredQuery = { from: [{ collectionId }] };
+    if (clauses.length === 1) structuredQuery.where = clauses[0];
+    else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
+
+    const url = REST_DOCUMENTS_URL + ':runAggregationQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: await restAuthHeaders(),
+        body: JSON.stringify({
+            structuredAggregationQuery: {
+                structuredQuery,
+                aggregations: [{ alias: 'count', count: {} }]
+            }
+        })
+    });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST count failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    const rows = await response.json();
+    const row = Array.isArray(rows) ? rows.find((r) => r && r.result && r.result.aggregateFields) : null;
+    const field = row && row.result.aggregateFields.count;
+    return field ? Number(field.integerValue || field.doubleValue || 0) : 0;
+};
+
 /* List a collection or subcollection by path segments, following page tokens.
    Returns flat `[{ id, ...fields }]`; a missing path is an empty list, never an
    error. */
@@ -519,6 +553,7 @@ window.kanjoRest = {
     fetchSignedMerchantTasks: restFetchSignedMerchantTasks,
     fetchVipPreContractMerchantTasks: restFetchVipPreContractMerchantTasks,
     runQuery: restRunQuery,
+    count: restCount,
     list: restListCollection,
     getDocument: restGetDocument,
     patch: restPatchDocument,
