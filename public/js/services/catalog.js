@@ -1435,9 +1435,18 @@ window.hideCatalogNameSuggestions = hideCatalogNameSuggestions;
 const fetchCatalogAutocompleteCache = async () => {
     const merchant = selectedCatalogMerchant();
     const category = resolveMerchantCategory(merchant);
+    const previousCategory = window._catalogAutocompleteCategory;
     window._catalogAutocompleteCategory = category || '';
     if (!category || typeof window.getDocs !== 'function' || !window.db) {
         window._catalogAutocompleteCache = [];
+        return;
+    }
+    /* Zero-new-reads guard: the category's product set has not changed since it
+       was last loaded for this exact category, so reuse the in-memory cache and
+       skip the Firestore read on modal re-opens and merchant switches. */
+    if (previousCategory === category
+        && Array.isArray(window._catalogAutocompleteCache)
+        && window._catalogAutocompleteCache.length) {
         return;
     }
     try {
@@ -3997,6 +4006,11 @@ window.renderCatalogWidgets = () => {
 };
 
 const fetchDoneCatalogProducts = async () => {
+    /* Zero-new-reads reuse: when the full catalog is already in memory, derive
+       the "done" set locally instead of issuing another server query. */
+    if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
+        return window.allCatalogProductsCache.filter((p) => p && p.status === 'done');
+    }
     const qRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'done'));
     const snap = await window.getDocs(qRef);
     const items = [];

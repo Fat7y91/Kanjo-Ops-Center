@@ -436,13 +436,19 @@ const auditInstallHooks = () => {
         const write = () => _auditOriginalPatch.call(this, segments, data);
         if (!watched) return write();
         /* Capture the document BEFORE the write so the Update entry carries the
-           exact old vs. new values. The pre-read is best-effort: if it fails the
-           write still proceeds and the diff falls back to the client cache. */
+           exact old vs. new values. Prefer the in-memory copy to avoid a 2x read
+           penalty on every audited write; fall back to a server read only when
+           the record is not cached anywhere. Best-effort: if it fails the write
+           still proceeds and the diff falls back to the client cache. */
+        const preId = Array.isArray(segments) ? segments[segments.length - 1] : segments;
+        const cachedBefore = auditLocateCachedDoc(collectionId, preId);
         let before;
         try {
-            before = (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
-                ? window.kanjoRest.getDocument(segments)
-                : Promise.resolve(null);
+            before = cachedBefore
+                ? Promise.resolve(cachedBefore)
+                : ((window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
+                    ? window.kanjoRest.getDocument(segments)
+                    : Promise.resolve(null));
         } catch (_) {
             before = Promise.resolve(null);
         }
