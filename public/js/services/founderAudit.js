@@ -59,7 +59,7 @@ const founderAuditState = {
     editing: new Set(),
     drafts: {},
     /* Uncommitted "يحتاج روشتة" toggle values (id -> boolean), folded into the
-       product only on "اعتماد"/"تحديث البيانات" like drafts. */
+       product only on "اعتماد"/"حفظ التعديلات" like drafts. */
     prescriptions: {}
 };
 window._founderAuditState = founderAuditState;
@@ -585,7 +585,7 @@ window.founderAuditUpdate = async (id) => {
         auditedAt: new Date(),
         updatedAt: new Date()
     };
-    founderAuditSetStatus('جاري تحديث البيانات...');
+    founderAuditSetStatus('جاري حفظ التعديلات...');
     try {
         const ok = await founderAuditPatchProduct(id, patch, {
             actionType: 'update',
@@ -609,11 +609,11 @@ window.founderAuditUpdate = async (id) => {
         if (founderAuditState.drafts) delete founderAuditState.drafts[id];
         if (founderAuditState.prescriptions) delete founderAuditState.prescriptions[id];
         founderAuditState.approved = founderAuditSortApproved(founderAuditState.approved || []);
-        window.showToast('تم تحديث البيانات');
+        window.showToast('تم حفظ التعديلات');
         founderAuditRenderChunk();
     } catch (err) {
         console.error('[founder-audit] update failed:', err);
-        window.showToast('فشل تحديث البيانات، حاول مرة أخرى', false);
+        window.showToast('فشل حفظ التعديلات، حاول مرة أخرى', false);
     } finally {
         founderAuditSetStatus('');
     }
@@ -719,7 +719,7 @@ const founderAuditCardHtml = (product, mode) => {
     /* The description is READ-ONLY by default; the founder must click
        "تعديل الوصف" to open the editor, which prevents accidental keystrokes.
        While editing, the textarea edits a draft that is only folded into the
-       product by "حفظ" (or by the final "اعتماد" / "تحديث البيانات"). */
+       product by "حفظ" (or by the final "اعتماد" / "حفظ التعديلات"). */
     const editing = !!(founderAuditState.editing && founderAuditState.editing.has(id));
     const rx = founderAuditRxValue(id, product);
     /* The editor only ever holds the BASE description; the toggle owns the
@@ -759,7 +759,7 @@ const founderAuditCardHtml = (product, mode) => {
         + '</div>';
 
     /* "يحتاج روشتة" toggle — a strict boolean committed with the row on
-       "اعتماد"/"تحديث البيانات", never on its own. The label mirrors the state
+       "اعتماد"/"حفظ التعديلات", never on its own. The label mirrors the state
        (green when required, neutral gray when not). */
     const rxHtml = ''
         + '<label class="flex items-center gap-2 cursor-pointer select-none w-max mt-1">'
@@ -789,7 +789,7 @@ const founderAuditCardHtml = (product, mode) => {
         +       '<button type="button" data-action="search" data-id="' + token + '" class="bg-white text-[#230535] border-2 border-[#230535] px-3 py-2 rounded-xl text-[11px] font-black hover:bg-[#230535] hover:text-[#FFD700] transition flex items-center gap-1.5"><i class="fa-solid fa-magnifying-glass"></i> البحث عن صورة</button>'
         +       '<button type="button" data-action="upload" data-id="' + token + '" ' + (uploading ? 'disabled' : '') + ' class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid ' + (uploading ? 'fa-circle-notch fa-spin' : 'fa-cloud-arrow-up') + '"></i> رفع صورة</button>'
         +       (approvedMode
-            ? '<button type="button" data-action="update" data-id="' + token + '" class="bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> تحديث البيانات</button>'
+            ? '<button type="button" data-action="update" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات</button>'
             : '<button type="button" data-action="approve" data-id="' + token + '" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-emerald-700 transition flex items-center gap-1.5"><i class="fa-solid fa-check"></i> اعتماد</button>')
         +       '<button type="button" data-action="delete" data-id="' + token + '" class="bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center gap-1.5"><i class="fa-solid fa-trash"></i> حذف</button>'
         +     '</div>'
@@ -813,7 +813,7 @@ const founderAuditCaptureEdits = () => {
 };
 
 /* Record an uncommitted "يحتاج روشتة" toggle (id -> boolean). Local-only: the
-   draft is folded into the document by "اعتماد"/"تحديث البيانات", so toggling on
+   draft is folded into the document by "اعتماد"/"حفظ التعديلات", so toggling on
    its own never writes to Firestore. */
 window.founderAuditSetPrescription = (id, checked) => {
     if (!window.isFounderAuditUser()) return;
