@@ -184,7 +184,11 @@ const catalogUploadSleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
 /* Single HTTP attempt with a hard timeout so a stalled connection can never hang
    the whole "Sync All" batch. Returns { ok, result, status } or throws on a
-   retryable network/timeout error. */
+   retryable network/timeout error.
+   Content-Type is set explicitly to text/plain: it is a CORS "simple request"
+   (no OPTIONS preflight), which is what the Apps Script /exec endpoint accepts.
+   Do not switch this to application/json — that triggers a preflight the GAS
+   web app does not answer. */
 const catalogUploadAttempt = async (url, payload) => {
     const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     let timedOut = false;
@@ -193,6 +197,7 @@ const catalogUploadAttempt = async (url, payload) => {
         const response = await fetch(url, {
             method: 'POST',
             redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
             body: payload,
             signal: controller ? controller.signal : undefined
         });
