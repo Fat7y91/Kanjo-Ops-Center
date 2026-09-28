@@ -2338,6 +2338,9 @@ window.toggleCatalogMyProductsWidget = () => {
     if (willOpen) {
         window._catalogMyProductsSignature = '';
         renderCatalogMyProductsList();
+        /* Pull the rep's own products on demand (count-gated) instead of
+           unconditionally on every boot / refresh. */
+        if (typeof window.loadMyCatalogProducts === 'function') window.loadMyCatalogProducts(false);
     }
 };
 
@@ -2490,7 +2493,11 @@ window.renderCatalogMyProductsWidget = () => {
     const isRep = window.isCatalogRepUser();
     widget.classList.toggle('hidden', !isRep);
     const countEl = document.getElementById('catalogMyProductsCount');
-    if (countEl) countEl.textContent = String((window.repCatalogProductsCache || []).length);
+    if (countEl) {
+        countEl.textContent = window._catalogMyProductsLoaded
+            ? String((window.repCatalogProductsCache || []).length)
+            : '—';
+    }
     const body = document.getElementById('catalogMyProductsBody');
     if (isRep && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
 };
@@ -4020,18 +4027,29 @@ const fetchDoneCatalogProducts = async () => {
 
 const catalogProductMerchantName = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
 
-const populateMerchantExportFilter = async () => {
+const populateMerchantExportFilter = async (allowFetch = false) => {
     const select = document.getElementById('merchantExportFilter');
     if (!select) return;
     const previous = String(select.value || '').trim();
+    /* The export dropdown must never trigger the heavy done-set read on boot:
+       fill it from whatever is already in memory. The server read is only
+       allowed through the explicit on-demand path (wired to the select's
+       focus), and even then it reuses the all-products cache first. */
     let products = window.allCatalogProductsCache || [];
-    if (!products.length) {
+    if (!products.length && allowFetch) {
         try {
             products = await fetchDoneCatalogProducts();
         } catch (err) {
             console.error('[catalog] merchant filter load failed:', err);
             products = [];
         }
+    }
+    if (!products.length) {
+        products = [].concat(
+            window.merchantProductsCache || [],
+            window.repCatalogProductsCache || [],
+            window.catalogDeleteRequestsCache || []
+        );
     }
     const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, 'ar'));
@@ -4041,6 +4059,7 @@ const populateMerchantExportFilter = async () => {
     }).join('');
     if (previous && names.indexOf(previous) !== -1) select.value = previous;
 };
+window.loadMerchantExportFilterFull = () => populateMerchantExportFilter(true);
 
 /* ═══════════════════ Kanjo Excel bulk export engine ═══════════════════ */
 
@@ -4815,7 +4834,13 @@ window.startCatalogListeners = () => {
                user explicitly opens/refreshes the "all products" widget. */
             const wantAllProducts = allowFull && canViewAll
                 && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
-            const jobs = [window.loadMyCatalogProducts(allowFull)];
+            /* Never read the rep's own-product set on a plain boot/refresh: it is
+               deferred to the "منتجاتي" widget being opened (which calls
+               `loadMyCatalogProducts`, count-gated) or an explicit force. */
+            const jobs = [];
+            if (allowFull || window._catalogMyProductsOpen === true) {
+                jobs.push(window.loadMyCatalogProducts(allowFull));
+            }
             if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
@@ -4888,7 +4913,11 @@ window.startCatalogListeners = () => {
         }
     };
 
-    refreshFromRest(true);
+    /* Boot is count-gated: only the small pending/delete-request sets are read.
+       The full catalog loads on demand when the "all products" widget is opened
+       and the rep's own products when "منتجاتي" is opened, so a plain page load
+       or refresh never pays for the multi-thousand-document reads. */
+    refreshFromRest(false);
     /* Exposed so opening the "all products" widget can pull the full set on
        demand instead of relying on a background poll. */
     window.refreshCatalogFromRest = () => refreshFromRest(true);

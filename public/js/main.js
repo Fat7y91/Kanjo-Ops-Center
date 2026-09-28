@@ -1,6 +1,7 @@
 /* Kanjo Ops — Application Entry Point */
 import './utils/cache.js';
 import './config/firebase.js';
+import './config/build-info.generated.js';
 import './services/audit.js';
 import './services/authorization.js';
 import { categories } from './config/constants.js';
@@ -87,3 +88,43 @@ authReadyWithTimeout.then(() => {
     const login = document.getElementById('loginSection');
     if (login) login.classList.remove('hidden');
 });
+
+/* ─── Stale-tab killer ───────────────────────────────────────────────────────
+   A long-lived tab keeps the JS it loaded in memory, so a tab opened before a
+   deploy can keep running outdated (and previously leak-prone) code even after
+   the fix is live. Compare this page's build id against the freshly-served
+   `version.json` (served no-store) and force a single reload when they differ.
+   JS is served `Cache-Control: no-cache`, so the reload always lands on the new
+   build; the 60s loop guard prevents a reload storm if it ever does not.
+   Disabled for the local/emulator build ('dev'). */
+(function kanjoStaleTabGuard() {
+    const build = (window.KANJO_BUILD && window.KANJO_BUILD.build) || '';
+    if (!build || build === 'dev') return;
+    const RELOAD_AT_KEY = 'kanjo_stale_reload_at';
+    let checking = false;
+    const checkForUpdate = async () => {
+        if (checking || document.hidden) return;
+        checking = true;
+        try {
+            const res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json().catch(() => null);
+            const live = data && data.build ? String(data.build) : '';
+            if (!live || live === build) return;
+            const last = Number((window.sessionStorage && sessionStorage.getItem(RELOAD_AT_KEY)) || 0);
+            if (Date.now() - last < 60000) return;
+            try { sessionStorage.setItem(RELOAD_AT_KEY, String(Date.now())); } catch (_) {}
+            if (typeof window.showToast === 'function') {
+                window.showToast('تم تحديث التطبيق، جاري إعادة التحميل...', false);
+            }
+            setTimeout(() => window.location.reload(), 700);
+        } catch (_) {
+            /* Offline / transient failure: retry on the next tick. */
+        } finally {
+            checking = false;
+        }
+    };
+    setTimeout(checkForUpdate, 5000);
+    setInterval(checkForUpdate, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+})();
