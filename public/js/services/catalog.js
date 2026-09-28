@@ -3475,7 +3475,7 @@ window.syncAllCatalogDrafts = async () => {
         await window.renderCatalogDraftsWidget();
         /* One static refresh after the bulk upload so "My Products" shows the
            newly synced items without a continuous listener. */
-        if (typeof window.loadMyCatalogProducts === 'function') await window.loadMyCatalogProducts();
+        if (typeof window.loadMyCatalogProducts === 'function') await window.loadMyCatalogProducts(true);
     }
 };
 
@@ -4662,15 +4662,26 @@ const sortCatalogProductsByCreatedAt = (items) => {
    the previous real-time onSnapshot: overlapping listeners (tasks + catalog)
    repainted the same list continuously and made the rep dashboard blink.
    Reads go over direct REST first so they survive a blocked SDK transport. */
-window.loadMyCatalogProducts = async () => {
+window.loadMyCatalogProducts = async (force = false) => {
     if (!window.isCatalogRepUser()) return;
     const createdBy = (window.currentUser && window.currentUser.name) || '';
     if (!createdBy) return;
     try {
+        const filters = [['createdBy', '==', createdBy]];
+        /* Cheap change gate: without it the 120s poll re-read the rep's ENTIRE
+           own-product set every two minutes (one read per product), which is a
+           multi-hundred-thousand-read/day leak for a productive rep. An
+           aggregation count costs ~1 read; a forced/manual refresh ignores the
+           gate so the rep can always pull fresh data on demand, but still probes
+           the count so the next poll has an accurate baseline. */
+        const count = await catalogRestCount(filters);
+        if (!force && count !== null && window._catalogMyProductsLoaded && window._catalogMyProductsCount === count) {
+            return;
+        }
         let items = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
             try {
-                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['createdBy', '==', createdBy]]);
+                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, filters);
             } catch (restErr) {
                 console.warn('[catalog] REST my-products fetch failed; trying SDK:', restErr);
             }
@@ -4686,6 +4697,8 @@ window.loadMyCatalogProducts = async () => {
             snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
         }
         window.repCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
+        window._catalogMyProductsLoaded = true;
+        window._catalogMyProductsCount = (typeof count === 'number') ? count : items.length;
         window._catalogMyProductsSignature = '';
         if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
     } catch (err) {
@@ -4747,6 +4760,10 @@ window.startCatalogListeners = () => {
     window._catalogPendingCount = null;
     window._catalogAllProductsCount = null;
     window._catalogDeleteRequestsCount = null;
+    /* The rep's own-products read is count-gated the same way: reset per session
+       so one identity's count can never short-circuit another's first read. */
+    window._catalogMyProductsLoaded = false;
+    window._catalogMyProductsCount = null;
     if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
 
     const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
@@ -4779,7 +4796,7 @@ window.startCatalogListeners = () => {
                user explicitly opens/refreshes the "all products" widget. */
             const wantAllProducts = allowFull && canViewAll
                 && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
-            const jobs = [window.loadMyCatalogProducts()];
+            const jobs = [window.loadMyCatalogProducts(allowFull)];
             if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
