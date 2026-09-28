@@ -1163,48 +1163,104 @@ window.listenToTasks = () => {
 
     /* Silent REST polling: graceful degradation when the real-time stream is
        unavailable. No user-facing error and no recovery UI — the current-day
-       data keeps refreshing every 30s over plain HTTP. */
+       data keeps refreshing over plain HTTP, but at a read-controlled cadence.
+
+       Each tick used to re-read the WHOLE selected day (one read per task) every
+       30 seconds, forever, for every logged-in user. On a normal working day
+       that is ~2,880 full-day reads per session per day and was the source of
+       the 774k/day read spike. The poll is now:
+         1. gated behind a hidden-tab check,
+         2. gated behind a ~1-read aggregation count (skip the day read while the
+            document count is unchanged), and
+         3. forced to a full day read only every Nth tick so in-place edits that
+            do not change the count are still picked up.
+
+       The board also refreshes immediately when the tab regains focus and via a
+       manual "تحديث" button (window.refreshTasksFromRest). */
+    const SILENT_POLL_INTERVAL_MS = 120000;
+    const SILENT_POLL_FULL_EVERY = 5;
+    let silentPollTicks = 0;
+    let silentPollLastCount = null;
+    const readDayTasksFromRest = async () => {
+        if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
+            try {
+                handleRestDocs(await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate }));
+                return true;
+            } catch (restError) {
+                console.warn('[tasks] silent REST poll failed; trying SDK getDocs:', restError);
+            }
+        }
+        try {
+            const snapshot = await getDocs(fallbackActive ? buildDateFallback() : buildDateQuery());
+            handleDocsSnapshot(snapshot);
+            return true;
+        } catch (error) {
+            if (isMissingIndex(error)) {
+                fallbackActive = true;
+                const page = window._tasksPage;
+                if (page) { page.fallback = true; page.buildQuery = buildDateFallback; }
+                try {
+                    handleDocsSnapshot(await getDocs(buildDateFallback()));
+                    return true;
+                } catch (fallbackError) {
+                    console.error('[tasks] polling fallback failed:', fallbackError);
+                }
+            } else {
+                console.error('[tasks] silent poll failed:', error);
+            }
+            return false;
+        }
+    };
+    /* Cheap change gate: an aggregation count costs ~1 read instead of one read
+       per task. Returns true when the full day read should proceed. */
+    const dayChangedSinceLastPoll = async () => {
+        if (!window.kanjoRest || typeof window.kanjoRest.count !== 'function') return true;
+        if ((silentPollTicks % SILENT_POLL_FULL_EVERY) === 0) return true;
+        try {
+            const filters = [];
+            if (repTeam) filters.push(['team', '==', repTeam]);
+            filters.push(['time', '==', selectedDate]);
+            const count = await window.kanjoRest.count('tasks', filters);
+            if (silentPollLastCount !== null && count === silentPollLastCount) return false;
+            silentPollLastCount = count;
+            return true;
+        } catch (countError) {
+            /* Degraded (index-missing) mode rejects the aggregation; fall through
+               to the full read rather than letting the board go stale. */
+            console.warn('[tasks] silent poll count check failed; doing full read:', countError);
+            return true;
+        }
+    };
     const startSilentPolling = () => {
         if (pollingTimer) return;
-        console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every 30s.');
+        console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every ' + (SILENT_POLL_INTERVAL_MS / 1000) + 's (count-gated).');
         const poll = async () => {
             if (!window._tasksListenerStarted) return;
             /* A hidden tab has no one watching the board — skip the read so an
                idle background session does not burn task reads. */
             if (typeof document !== 'undefined' && document.hidden) return;
-            /* Direct REST first: it works even while the SDK transport is
-               offline, which is exactly the case that starts this poller. */
-            if (window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function') {
-                try {
-                    handleRestDocs(await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate }));
-                    return;
-                } catch (restError) {
-                    console.warn('[tasks] silent REST poll failed; trying SDK getDocs:', restError);
-                }
-            }
-            try {
-                const snapshot = await getDocs(fallbackActive ? buildDateFallback() : buildDateQuery());
-                handleDocsSnapshot(snapshot);
-            } catch (error) {
-                if (isMissingIndex(error)) {
-                    fallbackActive = true;
-                    const page = window._tasksPage;
-                    if (page) { page.fallback = true; page.buildQuery = buildDateFallback; }
-                    try {
-                        handleDocsSnapshot(await getDocs(buildDateFallback()));
-                    } catch (fallbackError) {
-                        console.error('[tasks] polling fallback failed:', fallbackError);
-                    }
-                } else {
-                    console.error('[tasks] silent poll failed:', error);
-                }
-            }
+            silentPollTicks += 1;
+            if (!(await dayChangedSinceLastPoll())) return;
+            await readDayTasksFromRest();
         };
-        pollingTimer = setInterval(poll, 30000);
+        pollingTimer = setInterval(poll, SILENT_POLL_INTERVAL_MS);
         if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
         window._appListenerUnsubscribers.push(() => {
             if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
         });
+        /* Returning to the tab should not wait for the next tick. */
+        if (typeof document !== 'undefined') {
+            const onTasksVisibility = () => { if (!document.hidden) poll(); };
+            document.addEventListener('visibilitychange', onTasksVisibility);
+            window._appListenerUnsubscribers.push(() => document.removeEventListener('visibilitychange', onTasksVisibility));
+        }
+    };
+    /* Manual refresh used by the tasks board "تحديث" button. Always reads the
+       selected day once, regardless of the count gate, and resets the gate so
+       the next tick is compared against the freshly-read count. */
+    window.refreshTasksFromRest = async () => {
+        silentPollLastCount = null;
+        return readDayTasksFromRest();
     };
 
     /* Real-time error handling with silent degradation. */
@@ -1389,11 +1445,13 @@ window.listenToTasks = () => {
                 const docs = await window.kanjoRest.fetchTasks({ team: repTeam, date: selectedDate });
                 console.log('[KANJO-DIAGNOSTIC] Initial REST fetch completed. Tasks loaded:', docs.length);
                 handleRestDocs(docs);
-                /* REST is the primary transport. Never wake the SDK's streaming
-                   transport (blocked here, so it only produces the 10s offline
-                   timeout and Listen-channel errors): refresh the day through
-                   the silent REST poller instead of a live onSnapshot. */
-                startSilentPolling();
+                /* REST painted the day. Prefer the date-scoped SDK listener for
+                   live updates: the first snapshot is persistence/cache-served
+                   and only changed documents are then billed. The count-gated
+                   REST poll remains the fallback and is started automatically by
+                   handleRealtimeError if the streaming transport is unavailable. */
+                attachRealtimeListener();
+                if (typeof currentUnsub !== 'function') startSilentPolling();
                 return;
             } catch (restError) {
                 console.warn('[tasks] direct REST initial fetch failed; falling back to SDK getDocs:', restError);
