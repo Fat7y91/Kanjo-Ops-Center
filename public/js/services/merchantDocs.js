@@ -64,12 +64,26 @@ window.findMerchantIdForBase = (baseName) => {
             const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
             if (hasDocs && !docsRecord) docsRecord = mid;
         }
-        return docsRecord || anyRecord;
+        const found = docsRecord || anyRecord;
+        if (found) return found;
+        /* No `merchants` record for this base name yet: fall through to the task
+           mirror / session cache below. Returning null here is what made
+           ensureMerchantIds mint a brand-new id on every tasks snapshot for any
+           base lacking a merchants record — the write then fired another
+           snapshot, so the backfill rewrote the same docs forever (a ~1s
+           write -> snapshot -> write loop). */
     }
     if (window.tasksMemory && window.tasksMemory.size > 0) {
         for (const [, td] of window.tasksMemory) {
             if (td && td.merchantId && getBaseName(td.name) === baseName) return td.merchantId;
         }
+    }
+    /* Ids minted earlier in this session for bases that have no authoritative
+       `merchants` record yet. Keeps the id immutable even if tasksMemory is
+       later rebuilt from a lossy (field-masked) REST/archive payload, so the
+       backfill can never mint a second id for the same merchant. */
+    if (window._mintedMerchantIdsByBase && window._mintedMerchantIdsByBase.has(baseName)) {
+        return window._mintedMerchantIdsByBase.get(baseName);
     }
     return null;
 };
@@ -244,7 +258,11 @@ window.ensureMerchantIds = async () => {
                (phantom) ID could be assigned to a merchant that already has a
                permanent record we simply haven't seen yet. */
             if (!merchantsReady) return;
-            g.merchantId = window.generateMerchantId();
+            /* Reuse an id minted earlier this session for the same base so a
+               lossy/rebuilt tasksMemory can never mint a duplicate. */
+            if (!window._mintedMerchantIdsByBase) window._mintedMerchantIdsByBase = new Map();
+            g.merchantId = window._mintedMerchantIdsByBase.get(base) || window.generateMerchantId();
+            window._mintedMerchantIdsByBase.set(base, g.merchantId);
         }
         g.ids.forEach((id) => {
             const td = window.tasksMemory.get(id);
@@ -265,7 +283,6 @@ window.ensureMerchantIds = async () => {
                 const td = window.tasksMemory.get(u.ref.id);
                 if (td) td.merchantId = u.data.merchantId;
             });
-            console.log(`[merchantId] assigned to ${updates.length} task doc(s)`);
         }
     } catch (err) {
         console.error("[merchantId] migration write failed (will retry on next snapshot):", err);
