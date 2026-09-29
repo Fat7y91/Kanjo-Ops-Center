@@ -4352,27 +4352,23 @@ const kanjoApplyVariantDecisions = (kept, conflicts, decisions) => {
     return kanjoDedupeVariantEntries(resolved);
 };
 
-/* Pre-export variant audit. Same-price duplicates are dropped silently, but any
-   group with DIFFERENT prices halts the export and opens the conflict modal. */
+/* Pre-export variant audit. Kept fully silent and non-blocking: exact same-price
+   duplicates are dropped, and groups that map to the same Kanjo attribute but
+   carry DIFFERENT prices are all kept (one row per distinct price) so no pricing
+   information is lost — the admin resolves any remainder inside the sheet. */
 const kanjoStartVariantPhase = (evaluations, selections, opts) => {
     const entries = kanjoCollectVariantEntries(evaluations);
     const groups = kanjoGroupVariantEntries(entries);
     const kept = [];
-    const conflicts = [];
     groups.forEach((group) => {
         if (group.length <= 1) { if (group[0]) kept.push(group[0]); return; }
         const uniquePrices = new Set(group.map((e) => e.price));
         if (uniquePrices.size === 1) { kept.push(group[0]); return; }
-        conflicts.push({ productKey: group[0].product_key, productName: group[0].productName, entries: group });
+        /* Price conflict: do not halt behind a modal — export every distinct
+           price. kanjoDedupeVariantEntries strips only exact same-price twins. */
+        group.forEach((entry) => kept.push(entry));
     });
-    if (conflicts.length) {
-        window.openKanjoVariantConflictModal(conflicts, (decisions) => {
-            const resolved = kanjoApplyVariantDecisions(kept, conflicts, decisions || {});
-            kanjoFinalizeExport(evaluations, selections, opts, resolved);
-        });
-        return;
-    }
-    kanjoFinalizeExport(evaluations, selections, opts, kept);
+    kanjoFinalizeExport(evaluations, selections, opts, kanjoDedupeVariantEntries(kept));
 };
 
 const kanjoSheetFromRows = (columns, rows) => (
