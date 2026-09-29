@@ -4018,10 +4018,25 @@ const fetchDoneCatalogProducts = async () => {
     if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
         return window.allCatalogProductsCache.filter((p) => p && p.status === 'done');
     }
+    /* REST-first (CORS-enabled, survives a blocked SDK transport). The result is
+       cached so a second export in the same session is free, and the SDK
+       transport (whose streaming channel can fail) is only a last resort. */
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']])) || [];
+            window.doneCatalogProductsCache = items;
+            window._catalogDoneLoaded = true;
+            return items;
+        } catch (err) {
+            console.warn('[catalog] done REST fetch failed; trying SDK:', err);
+        }
+    }
     const qRef = window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'done'));
     const snap = await window.getDocs(qRef);
     const items = [];
     snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    window.doneCatalogProductsCache = items;
+    window._catalogDoneLoaded = true;
     return items;
 };
 
@@ -4088,6 +4103,11 @@ const KANJO_PRODUCT_CATEGORIES = [
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
 const KANJO_CATEGORY_VALUES = KANJO_PRODUCT_CATEGORIES.map((cat) => kanjoCategoryValue(cat));
+
+/* Silent fallback for products the keyword matcher cannot classify: the export
+   must never block on a manual category prompt, so unmatched rows are exported
+   as "غير مصنف" (Uncategorized) instead. */
+const KANJO_UNCATEGORIZED_LABEL = 'غير مصنف';
 
 const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
 const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'attribute_2_name', 'attribute_2_value', 'attribute_3_name', 'attribute_3_value', 'attribute_4_name', 'attribute_4_value', 'branch', 'price', 'stock', 'thumbnail_url', 'status'];
@@ -4389,7 +4409,11 @@ const kanjoReportExportError = (err) => {
     const error = err || new Error('UNKNOWN_EXPORT_ERROR');
     console.error('[catalog] Kanjo Excel export failed:', error);
     const message = (error && error.message) ? error.message : String(error);
-    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+    /* Non-blocking: prefer an inline toast over a modal alert() so a failed
+       export never freezes the dashboard behind a dialog. */
+    if (typeof window.showToast === 'function') {
+        window.showToast('حدث خطأ أثناء التصدير: ' + message, false);
+    } else if (typeof window !== 'undefined' && typeof window.alert === 'function') {
         window.alert('حدث خطأ أثناء التصدير: ' + message);
     }
 };
@@ -4403,7 +4427,7 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             const key = String((product && product.id) || '');
             const category = match.status === 'matched'
                 ? match.category
-                : (selections[key] || match.category || '');
+                : (selections[key] || match.category || KANJO_UNCATEGORIZED_LABEL);
             productRows.push(kanjoBuildProductRow(product, category));
         }
         /* The variant phase already resolved duplicates/conflicts; fall back to a
@@ -4590,15 +4614,9 @@ window.exportKanjoExcel = async (options) => {
             return;
         }
         const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p) }));
-        /* Multi-match items are already auto-resolved by the matcher, so the modal
-           only ever sees truly unmapped products. */
-        const pending = evaluations.filter((e) => e.match.status === 'unmapped');
-        if (pending.length) {
-            window.openKanjoCategoryAuditModal(pending, (selections) => {
-                kanjoStartVariantPhase(evaluations, selections || {}, opts);
-            });
-            return;
-        }
+        /* Silent, non-blocking export: products the matcher cannot classify are
+           exported as "غير مصنف" (Uncategorized) in kanjoFinalizeExport instead
+           of halting the export behind a manual category-audit prompt. */
         kanjoStartVariantPhase(evaluations, {}, opts);
     } catch (err) {
         kanjoReportExportError(err);
