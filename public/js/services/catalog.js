@@ -4042,6 +4042,29 @@ const fetchDoneCatalogProducts = async () => {
 
 const catalogProductMerchantName = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
 
+/* Full-catalog source for the "include pending" export. Cache-first (a checked
+   box never queries); one REST read — then the SDK — is only issued on the
+   explicit export click when nothing is cached yet. */
+const fetchAllCatalogProductsForExport = async () => {
+    if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
+        return window.allCatalogProductsCache;
+    }
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [])) || [];
+            window.allCatalogProductsCache = items;
+            window._catalogAllProductsLoaded = true;
+            return items;
+        } catch (err) {
+            console.warn('[catalog] full REST fetch failed; trying SDK:', err);
+        }
+    }
+    const items = await fetchAllCatalogProducts();
+    window.allCatalogProductsCache = items;
+    window._catalogAllProductsLoaded = true;
+    return items;
+};
+
 const populateMerchantExportFilter = async (allowFetch = false) => {
     const select = document.getElementById('merchantExportFilter');
     if (!select) return;
@@ -4598,15 +4621,26 @@ window.exportKanjoExcel = async (options) => {
         return;
     }
     try {
-        const allDone = await fetchDoneCatalogProducts();
-        let filtered = allDone;
+        /* "تصدير جميع المنتجات (شامل قيد المراجعة)" toggle, read from the export
+           modal unless a caller overrides it via options. Checking the box itself
+           never queries; the source is the in-memory cache (a single REST read is
+           only issued on the explicit export click when the cache is still empty). */
+        let includePending = opts.includePending;
+        if (typeof includePending !== 'boolean') {
+            const box = document.getElementById('exportIncludePending');
+            includePending = !!(box && box.checked);
+        }
+        const source = includePending
+            ? await fetchAllCatalogProductsForExport()
+            : await fetchDoneCatalogProducts();
+        let filtered = source;
         if (opts.merchantId) {
-            filtered = allDone.filter((p) => String(p.merchantId || '') === String(opts.merchantId));
+            filtered = source.filter((p) => String(p.merchantId || '') === String(opts.merchantId));
         } else if (opts.merchantName) {
-            filtered = allDone.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
+            filtered = source.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
         }
         if (!filtered.length) {
-            if (window.showToast) window.showToast('لا توجد منتجات مكتملة للتصدير', false);
+            if (window.showToast) window.showToast(includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير', false);
             return;
         }
         const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p) }));

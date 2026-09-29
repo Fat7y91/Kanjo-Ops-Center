@@ -866,6 +866,11 @@
 
                     </select>
 
+                    <label for="exportIncludePending" class="flex items-center gap-3 p-3.5 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer select-none hover:bg-[#230535]/5 transition">
+                        <input type="checkbox" id="exportIncludePending" class="w-5 h-5 shrink-0 accent-[#230535]">
+                        <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
+                    </label>
+
                     <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel (Products + Variants)</button>
 
                     <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
