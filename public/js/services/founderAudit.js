@@ -5,8 +5,10 @@
 
    This module owns that workflow:
 
-     - ACCESS   : founders (and admin oversight) only. The content/image editor
-                  (Youssef) is explicitly excluded, as are data-entry reps.
+     - ACCESS   : FOUNDERS ONLY. Admin oversight is not sufficient, and no other
+                  capability grant (e.g. the `kanjoBlackBox` flag) may reveal the
+                  widget. The content/image editor (Youssef) is explicitly
+                  excluded, as are data-entry reps.
      - ROUTING  : pending intake rows are spread deterministically across four
                   founders with the hard (unmatched, empty description) and easy
                   (matched) rows interleaved, so the workload is balanced.
@@ -241,15 +243,16 @@ window.founderAuditAssign = founderAuditAssign;
 
 /* ───────────────────────────── ACCESS CONTROL ───────────────────────────── */
 
-/* Founders own the audit. Admin (محمود) gets oversight access; the four named
-   founders are also accepted by name so they can log in through the shared
-   founder identity and still be routed to their own chunk. The content editor
-   (Youssef) and data-entry are excluded. */
+/* Founders own the audit. Access is STRICTLY founder-only: the founder role, or
+   one of the four named founders (who sign in through the shared founder
+   identity). Admins are deliberately excluded, and no other capability grant
+   (e.g. the `kanjoBlackBox` Black Box flag, or any `admin` role) may unhide this
+   widget. The content editor (Youssef) and data-entry are excluded. */
 window.isFounderAuditUser = () => {
     const u = window.currentUser;
     if (!u) return false;
     const role = String(u.role || '').trim();
-    if (role === 'founder' || role === 'admin') return true;
+    if (role === 'founder') return true;
     return FOUNDER_AUDIT_FOUNDERS.includes(String(u.name || '').trim());
 };
 
