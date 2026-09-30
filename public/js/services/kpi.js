@@ -75,8 +75,18 @@ const KPI_VOLUME_MAX = 10;   // normalized against the top rep's product count
 const KPI_LENGTH_MAX = 10;   // absolute target: avg >= KPI_DESC_TARGET_LENGTH chars
 const KPI_EFFORT_MAX = 10;   // normalized against the top rep's net time
 const KPI_TEXT_MAX = 35;     // valid-description ratio
-const KPI_MEDIA_MAX = 35;    // products-with-images ratio
+const KPI_MEDIA_MAX = 35;    // products-with-images COUNT, normalized against the top rep's count
 const KPI_DESC_TARGET_LENGTH = 50; // healthy average description length (chars)
+
+/* Media points use an ABSOLUTE-max comparison, exactly like the volume block: a
+   rep is measured against the rep with the most image-bearing products, not
+   against their own product count. This stops high-volume reps from being
+   penalized for products intentionally handed off to the studio team (e.g. Sara
+   with 665/1321 images must out-score a low-volume rep with 602/806). */
+const kpiMediaWeight = (withImage, maxImages) => (
+    maxImages > 0 ? (Math.max(0, Number(withImage) || 0) / maxImages) * KPI_MEDIA_MAX : 0
+);
+window.kpiMediaWeight = kpiMediaWeight;
 
 const KPI_COLORS = {
     purple: '#230535',
@@ -827,7 +837,7 @@ const kpiFetchDailyStats = (repId) => {
 const KPI_TEAM_SUMMARY_FIELDS = [
     'repId', 'repName', 'team', 'isEditor',
     'publicTotalProducts', 'publicTotalSeconds',
-    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicUpdatedAt'
+    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicWithImage', 'publicUpdatedAt'
 ];
 
 const kpiRepTeamName = (repName) => {
@@ -855,6 +865,7 @@ const kpiSummaryPayload = (row) => {
         publicAvgDescriptionLength: Math.max(0, Number(row.avgDescriptionLength) || 0),
         publicValidRatio: Math.max(0, Number(row.validRatioRaw) || 0),
         publicImageRatio: Math.max(0, Number(row.imageRatioRaw) || 0),
+        publicWithImage: Math.max(0, Number(row.withImage) || 0),
         publicUpdatedAt: new Date()
     };
 };
@@ -910,7 +921,8 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
                     totalSeconds: 0,
                     avgDescriptionLength: 0,
                     validRatio: 0,
-                    imageRatio: 0
+                    imageRatio: 0,
+                    withImage: 0
                 });
             });
         /* No team filter: rank against every rep company-wide. */
@@ -940,7 +952,8 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
                 totalSeconds: Math.max(0, Number(data.publicTotalSeconds) || 0),
                 avgDescriptionLength: Math.max(0, Number(data.publicAvgDescriptionLength) || 0),
                 validRatio: Math.max(0, Number(data.publicValidRatio) || 0),
-                imageRatio: Math.max(0, Number(data.publicImageRatio) || 0)
+                imageRatio: Math.max(0, Number(data.publicImageRatio) || 0),
+                withImage: Math.max(0, Number(data.publicWithImage) || 0)
             });
         });
         return Array.from(byId.values()).filter((s) => !kpiIsExcludedRepName(s.name));
@@ -968,11 +981,12 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
         score: ownRow && !ownRow.isEditor ? (Number(ownRow.kanjoScore) || 0) : 0,
         validRatio: ownRow ? (Number(ownRow.validRatioRaw) || 0) : 0,
         imageRatio: ownRow ? (Number(ownRow.imageRatioRaw) || 0) : 0,
+        withImage: ownRow ? (Number(ownRow.withImage) || 0) : 0,
         speedSeconds: ownRow && (Number(ownRow.totalProducts) || 0) > 0
             ? (Number(ownRow.avgSecondsPerProduct) || 0)
             : 0
     };
-    const best = { score: 0, validRatio: 0, imageRatio: 0, speedSeconds: 0 };
+    const best = { score: 0, validRatio: 0, imageRatio: 0, withImage: 0, speedSeconds: 0 };
     let hasSpeed = false;
     let hasBenchmark = false;
     field.forEach((r) => {
@@ -983,15 +997,17 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
         const valid = Number(r.validRatio) || 0;
         const image = Number(r.imageRatio) || 0;
         /* Mirror the score a rep sees on their own top card: the live local
-           report normalises volume/effort against the rep themselves, so the
-           only variable parts are the description-length target and the two
-           quality ratios (10 + 35 + 35). */
+           report normalises volume/effort/media against the rep themselves, so
+           those three blocks (10 + 10 + 35) are effectively full, leaving only
+           the description-length target (10) and the valid-text ratio (35) as
+           variable parts. The image-vs-image card below uses absolute counts. */
         const avgLen = Number(r.avgDescriptionLength) || 0;
         const lengthPts = Math.min(1, avgLen / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
-        const selfScore = (seconds > 0 ? KPI_EFFORT_MAX : 0) + KPI_VOLUME_MAX + lengthPts + (valid * KPI_TEXT_MAX) + (image * KPI_MEDIA_MAX);
+        const selfScore = (seconds > 0 ? KPI_EFFORT_MAX : 0) + KPI_VOLUME_MAX + lengthPts + (valid * KPI_TEXT_MAX) + KPI_MEDIA_MAX;
         best.score = Math.max(best.score, selfScore);
         best.validRatio = Math.max(best.validRatio, valid);
         best.imageRatio = Math.max(best.imageRatio, image);
+        best.withImage = Math.max(best.withImage, Number(r.withImage) || 0);
         if (seconds > 0) {
             const sp = seconds / products;
             if (!hasSpeed || sp < best.speedSeconds) { best.speedSeconds = sp; hasSpeed = true; }
@@ -1066,13 +1082,13 @@ const kpiBenchmarkHtml = (benchmark) => {
     };
     const score = higher(own.score, best.score, own.score.toFixed(1) + '%', best.score.toFixed(1) + '%', (v) => v.toFixed(1), 'نقطة');
     const quality = higher(own.validRatio, best.validRatio, (own.validRatio * 100).toFixed(1) + '%', (best.validRatio * 100).toFixed(1) + '%', (v) => (v * 100).toFixed(1), 'نقطة مئوية');
-    const images = higher(own.imageRatio, best.imageRatio, (own.imageRatio * 100).toFixed(1) + '%', (best.imageRatio * 100).toFixed(1) + '%', (v) => (v * 100).toFixed(1), 'نقطة مئوية');
+    const images = higher(own.withImage, best.withImage, (Number(own.withImage) || 0) + ' صورة', (Number(best.withImage) || 0) + ' صورة', (v) => Math.round(v), 'صورة');
     const speed = lower(own.speedSeconds, best.speedSeconds, own.speedSeconds > 0 ? (own.speedSeconds / 60).toFixed(2) + ' د' : '—', best.speedSeconds > 0 ? (best.speedSeconds / 60).toFixed(2) + ' د' : '—', (v) => (v / 60).toFixed(2), 'دقيقة/منتج');
     return `<section class="kpi-panel kpi-benchmark">${head}
         <div class="kpi-benchmark-grid">
             ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-award', color: '#6D28D9', label: 'التقييم الشامل' }, score))}
             ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-star', color: '#37d99a', label: 'جودة الأوصاف' }, quality))}
-            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-image', color: '#230535', label: 'نسبة الصور' }, images))}
+            ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-image', color: '#230535', label: 'عدد الصور' }, images))}
             ${kpiBenchmarkMetricHtml(Object.assign({ icon: 'fa-bolt', color: '#E57723', label: 'مؤشر السرعة' }, speed))}
         </div>
     </section>`;
@@ -1269,12 +1285,18 @@ const kpiBuildReport = async () => {
          b) Length    10 pts = min(avg desc chars / 50, 1) * 10
          c) Effort    10 pts = (net time / maxTime) * 10
          d) Text      35 pts = valid-descriptions ratio * 35
-         e) Media     35 pts = products-with-images ratio * 35
-       The Media Editor (يوسف) is EXCLUDED from max-product/max-time normalization,
-       scoring and the ranking loop; he only keeps his personal stats card. */
+         e) Media     35 pts = (with-image COUNT / max images) * 35
+       Media is deliberately an ABSOLUTE-max comparison, not a per-rep percentage:
+       reps who process a large volume and legitimately hand some products to the
+       studio team must not be penalized for a lower image ratio than a low-volume
+       peer. This mirrors how the volume block already works.
+       The Media Editor (يوسف) is EXCLUDED from max-product/max-time/max-images
+       normalization, scoring and the ranking loop; he only keeps his personal
+       stats card. */
     const fieldRows = rows.filter((r) => !r.isEditor);
     const maxProducts = fieldRows.reduce((m, r) => Math.max(m, r.totalProducts), 0);
     const maxTime = fieldRows.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
+    const maxImages = fieldRows.reduce((m, r) => Math.max(m, r.withImage), 0);
 
     rows.forEach((row) => {
         if (row.isEditor) {
@@ -1287,12 +1309,13 @@ const kpiBuildReport = async () => {
         const lengthWeight = Math.min(1, (Number(row.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
         const effortWeight = maxTime > 0 ? (row.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0;
         const textWeight = row.validRatioRaw * KPI_TEXT_MAX;
-        const mediaWeight = row.imageRatioRaw * KPI_MEDIA_MAX;
+        const mediaWeight = kpiMediaWeight(row.withImage, maxImages);
         row.kanjoBreakdown = { volumeWeight, lengthWeight, effortWeight, textWeight, mediaWeight };
         /* Keep the normalization baselines on the row so the transparent
            "Score Breakdown" modal can explain the exact math (X / max). */
         row.kanjoMaxProducts = maxProducts;
         row.kanjoMaxTime = maxTime;
+        row.kanjoMaxImages = maxImages;
         // RAW 0..100 — rounding happens only at render time.
         row.kanjoScore = volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight;
     });
@@ -1743,7 +1766,8 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
             totalSeconds: Math.max(0, Number(r.totalSeconds) || 0),
             avgDescriptionLength: Math.max(0, Number(r.avgDescriptionLength) || 0),
             validRatio: Math.max(0, Number(r.validRatio) || 0),
-            imageRatio: Math.max(0, Number(r.imageRatio) || 0)
+            imageRatio: Math.max(0, Number(r.imageRatio) || 0),
+            withImage: Math.max(0, Number(r.withImage) || 0)
         }))
         .filter((r) => r.totalProducts > 0);
     const own = {
@@ -1752,16 +1776,18 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
         totalSeconds: Math.max(0, Number(ownRow.totalSeconds) || 0),
         avgDescriptionLength: Math.max(0, Number(ownRow.avgDescriptionLength) || 0),
         validRatio: Math.max(0, Number(ownRow.validRatioRaw) || 0),
-        imageRatio: Math.max(0, Number(ownRow.imageRatioRaw) || 0)
+        imageRatio: Math.max(0, Number(ownRow.imageRatioRaw) || 0),
+        withImage: Math.max(0, Number(ownRow.withImage) || 0)
     };
     const active = own.totalProducts > 0 ? peers.concat([own]) : peers;
     if (!active.length) return { rank: null, total: 0 };
     const maxProducts = active.reduce((m, r) => Math.max(m, r.totalProducts), 0);
     const maxTime = active.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
+    const maxImages = active.reduce((m, r) => Math.max(m, r.withImage), 0);
     const scoreOf = (r) => (maxProducts > 0 ? (r.totalProducts / maxProducts) * KPI_VOLUME_MAX : 0)
         + Math.min(1, (Number(r.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX
         + (maxTime > 0 ? (r.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0)
-        + r.validRatio * KPI_TEXT_MAX + r.imageRatio * KPI_MEDIA_MAX;
+        + r.validRatio * KPI_TEXT_MAX + kpiMediaWeight(r.withImage, maxImages);
     if (own.totalProducts <= 0) return { rank: null, total: active.length };
     own.score = scoreOf(own);
     return { rank: 1 + peers.filter((r) => scoreOf(r) > own.score).length, total: active.length };
@@ -1837,9 +1863,9 @@ const kpiScoreBreakdownHtml = (row) => {
     const b = row.kanjoBreakdown || {};
     const score = Number(row.kanjoScore || 0);
     const validPct = (row.validRatioRaw * 100);
-    const imgPct = (row.imageRatioRaw * 100);
     const maxProducts = Number(row.kanjoMaxProducts || row.totalProducts || 0);
     const maxTime = Number(row.kanjoMaxTime || row.totalSeconds || 0);
+    const maxImages = Number(row.kanjoMaxImages || row.withImage || 0);
     const earned = {
         volumeWeight: Number(b.volumeWeight || 0),
         lengthWeight: Number(b.lengthWeight || 0),
@@ -1852,7 +1878,7 @@ const kpiScoreBreakdownHtml = (row) => {
         lengthWeight: `متوسط ${Math.round(Number(row.avgDescriptionLength) || 0)} حرف/منتج — الهدف ${KPI_DESC_TARGET_LENGTH}+ حرف × ${KPI_LENGTH_MAX} نقاط`,
         effortWeight: `وقت صافٍ ${kpiFormatDurationShort(row.totalSeconds)} — مقارنةً بالأعلى (${kpiFormatDurationShort(maxTime)}) × ${KPI_EFFORT_MAX} نقاط`,
         textWeight: `${validPct.toFixed(1)}% أوصاف صحيحة (${row.validDescriptions} وصف صحيح من ${row.totalProducts}) × ${KPI_TEXT_MAX} نقطة`,
-        mediaWeight: `${imgPct.toFixed(1)}% منتجات بصور (${row.withImage} بصور • ${row.withoutImage} بدون) × ${KPI_MEDIA_MAX} نقطة`,
+        mediaWeight: `${row.withImage} صورة — مقارنةً بأعلى مندوب رفع صور (${maxImages} صورة) × ${KPI_MEDIA_MAX} نقطة`,
     };
     return `
     <div class="kpi-score-final">
