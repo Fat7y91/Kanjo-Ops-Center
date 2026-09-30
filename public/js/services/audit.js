@@ -54,8 +54,15 @@ const auditState = {
     filterAction: '',
     filterUser: '',
     visibleCount: 250,
-    pageSize: 250
+    pageSize: 250,
+    /* Bumped whenever entries/reconstructed change, so the viewer can tell a
+       genuine data change from a plain re-open and skip pointless DOM churn. */
+    dataVersion: 0,
+    /* Signature of the last painted render (data version + active filters). */
+    renderSig: ''
 };
+
+const auditBumpDataVersion = () => { auditState.dataVersion += 1; };
 
 window.kanjoAuditState = auditState;
 
@@ -714,6 +721,7 @@ window.kanjoAuditReconstruct = async ({ persist = false, force = false } = {}) =
     if (!window.kanjoAuditCanView()) return [];
     const entries = await auditCollectReconstructed(force);
     auditState.reconstructed = entries;
+    auditBumpDataVersion();
     if (persist && entries.length) {
         /* Persist the historical trail once so it becomes permanent. Bounded and
            sequential-ish to stay gentle on the REST endpoint. */
@@ -750,6 +758,7 @@ window.runBlackBoxReconstruction = async () => {
             auditState.entries = live.concat(auditState.entries);
         }
         auditState.includeReconstructed = true;
+        auditBumpDataVersion();
         auditRenderBlackBox();
         if (window.showToast) window.showToast(persist ? 'تم توليد وحفظ الأثر الرجعي' : 'تم توليد الأثر الرجعي للعرض');
     } catch (err) {
@@ -926,21 +935,46 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
     });
 }
 
+/* The user filter <select> is rebuilt only when the set of names actually
+   changes; re-opening the modal re-uses the existing options. */
+let auditUserFilterSig = '';
+
 const auditPopulateUserFilter = (entries) => {
     const select = document.getElementById('blackBoxUserFilter');
     if (!select) return;
     const current = select.value;
     const names = Array.from(new Set(entries.map((e) => String(e.userName || '')).filter(Boolean))).sort();
+    const sig = names.join('\u0000');
+    if (sig === auditUserFilterSig && select.options.length) {
+        if (names.includes(current)) select.value = current;
+        return;
+    }
+    auditUserFilterSig = sig;
     select.innerHTML = '<option value="">كل المستخدمين</option>' + names
         .map((n) => `<option value="${auditEscapeHtml(n)}">${auditEscapeHtml(n)}</option>`).join('');
     if (names.includes(current)) select.value = current;
 };
+
+/* Signature of everything that can change what the list should show. When it is
+   unchanged (e.g. simply re-opening the modal) we leave the already-painted DOM
+   alone, which keeps re-opens instant and flicker-free. */
+const auditRenderSignature = () => [
+    auditState.dataVersion,
+    auditState.filterText,
+    auditState.filterAction,
+    auditState.filterUser,
+    auditState.includeReconstructed ? 1 : 0,
+    auditState.visibleCount
+].join('\u0001');
 
 const auditRenderBlackBox = () => {
     const list = document.getElementById('blackBoxList');
     const countEl = document.getElementById('blackBoxCount');
     const moreBtn = document.getElementById('blackBoxMoreBtn');
     if (!list) return;
+    const sig = auditRenderSignature();
+    if (sig === auditState.renderSig && list.childElementCount) return;
+    auditState.renderSig = sig;
     const merged = auditMergeEntries();
     auditPopulateUserFilter(merged);
     const filtered = auditApplyFilters(merged);
@@ -991,15 +1025,28 @@ window.blackBoxToggleReconstructed = (checked) => {
    The explicit "تحديث" button passes force=true to bypass the cache. */
 const AUDIT_ENTRIES_CACHE_KEY = 'audit:entries';
 const AUDIT_ENTRIES_CACHE_TTL = 60 * 1000;
+/* Newest-N window for the live log. The viewer only ever shows a page at a
+   time, so fetching the most recent entries with an ordered + limited query is
+   both cheaper and more useful than paging the entire collection. */
+const AUDIT_ENTRIES_LIMIT = 300;
 
 const auditLoadEntries = async (force) => {
-    if (!window.kanjoRest || typeof window.kanjoRest.list !== 'function') return [];
-    return window.kanjoCache.get(
-        AUDIT_ENTRIES_CACHE_KEY,
-        AUDIT_ENTRIES_CACHE_TTL,
-        () => window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: 300, maxPages: 10 }),
-        !!force
-    );
+    if (!window.kanjoRest) return [];
+    /* Preferred path: ordered (timestamp DESC) + limited query. Falls back to a
+       single bounded page only if the query helper is unavailable. */
+    let loader = null;
+    if (typeof window.kanjoRest.runQuery === 'function') {
+        loader = () => window.kanjoRest.runQuery(
+            AUDIT_COLLECTION,
+            [],
+            AUDIT_ENTRIES_LIMIT,
+            { orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }] }
+        );
+    } else if (typeof window.kanjoRest.list === 'function') {
+        loader = () => window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: AUDIT_ENTRIES_LIMIT, maxPages: 1 });
+    }
+    if (!loader) return [];
+    return window.kanjoCache.get(AUDIT_ENTRIES_CACHE_KEY, AUDIT_ENTRIES_CACHE_TTL, loader, !!force);
 };
 
 window.openBlackBox = async (force) => {
@@ -1013,10 +1060,19 @@ window.openBlackBox = async (force) => {
     /* Raise the entity preview modals above the Black Box while it is open, so a
        founder can inspect a product/merchant without leaving the log. */
     if (document.body) document.body.classList.add('black-box-open');
+
+    /* In-session memory is authoritative: once loaded, re-opening the modal
+       paints instantly from auditState with ZERO reads and NO spinner. Only the
+       first load (or an explicit force/refresh) hits the network. */
+    const hasSnapshot = auditState.loaded && Array.isArray(auditState.entries) && auditState.entries.length > 0;
+    if (hasSnapshot && !force) {
+        auditRenderBlackBox();
+        return;
+    }
+
     const list = document.getElementById('blackBoxList');
     if (list) list.innerHTML = '<div class="text-center py-12 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل السجل...</div></div>';
     try {
-        auditInstallHooks();
         const rows = await auditLoadEntries(!!force);
         auditState.entries = (rows || []).sort((a, b) => {
             const da = (auditToDate(a.timestamp) || auditToDate(a.ts) || new Date(0)).getTime();
@@ -1024,11 +1080,13 @@ window.openBlackBox = async (force) => {
             return db - da;
         });
         auditState.loaded = true;
+        auditBumpDataVersion();
         /* When the log is empty (fresh collection) fall back to the retrospective
            view so the Black Box is never a blank screen. */
         if (!auditState.entries.length) {
             try {
                 auditState.reconstructed = await auditCollectReconstructed();
+                auditBumpDataVersion();
             } catch (err) {
                 console.warn('[audit] auto reconstruction failed:', err);
             }

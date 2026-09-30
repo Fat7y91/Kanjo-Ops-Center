@@ -316,7 +316,10 @@ const restNormalizeOp = (op) => REST_OP_ALIASES[op] || op;
 
 /* Query a top-level collection over REST. `filters` is an array of
    `[fieldPath, op, value]` clauses combined with AND. Returns flat
-   `[{ id, ...fields }]`, matching the SDK snapshot shape. */
+   `[{ id, ...fields }]`, matching the SDK snapshot shape.
+   `options.orderBy` is an optional array of `{ field, direction }` (or
+   `[field, direction]`) clauses so callers can fetch the NEWEST N docs with an
+   ordered + limited query instead of paging the whole collection. */
 const restRunQuery = async (collectionId, filters = [], limit = null, options = {}) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
         fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
@@ -324,6 +327,14 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
     const structuredQuery = { from: [{ collectionId }] };
     if (clauses.length === 1) structuredQuery.where = clauses[0];
     else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
+    if (Array.isArray(options.orderBy) && options.orderBy.length) {
+        structuredQuery.orderBy = options.orderBy.map((ob) => {
+            const field = Array.isArray(ob) ? ob[0] : (ob && (ob.field || ob.fieldPath));
+            const dirRaw = Array.isArray(ob) ? ob[1] : (ob && ob.direction);
+            const direction = String(dirRaw || 'ASCENDING').toUpperCase() === 'DESCENDING' ? 'DESCENDING' : 'ASCENDING';
+            return { field: { fieldPath: field }, direction };
+        });
+    }
     if (limit) structuredQuery.limit = limit;
     /* Optional field mask: without it runQuery returns every field of every
        document (including large Base64 blobs such as tasks.merchantLogo). */
