@@ -1204,6 +1204,11 @@ const intakeCommitBatches = async (entries) => {
         chunk.forEach((entry) => batch.set(window.doc(collectionRef, entry.id), entry.data));
         await batch.commit();
         saved += chunk.length;
+        /* Fold the just-committed rows into every already-loaded product cache so
+           they surface across the UI instantly with 0 extra reads. */
+        if (typeof window.catalogApplyCreatedProductLocally === 'function') {
+            chunk.forEach((entry) => window.catalogApplyCreatedProductLocally({ id: entry.id, ...entry.data }));
+        }
     }
     return saved;
 };

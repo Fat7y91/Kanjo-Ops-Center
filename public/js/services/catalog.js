@@ -179,6 +179,14 @@ const catalogJpegFileName = (name, fallback) => {
 const CATALOG_UPLOAD_TIMEOUT_MS = 60000;
 const CATALOG_UPLOAD_MAX_ATTEMPTS = 3;
 const CATALOG_UPLOAD_BASE_BACKOFF_MS = 1000;
+/* Contention (LockService BUSY, execution-quota, transient execution errors)
+   arrives as an HTTP 200 JSON body from Apps Script's ContentService, so it is
+   easy to mistake for a hard failure and surface to the user. The script lock
+   can be held for up to ~2 minutes by a concurrent upload, so these are retried
+   on a longer schedule — 1s -> 2s -> 4s -> 8s (capped) — and the user never has
+   to press upload again. */
+const CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS = 5;
+const CATALOG_UPLOAD_CONTENTION_MAX_BACKOFF_MS = 8000;
 
 const catalogUploadSleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
@@ -215,10 +223,27 @@ const catalogUploadAttempt = async (url, payload) => {
     }
 };
 
-const catalogUploadRetryDelay = (attempt) => {
-    const base = CATALOG_UPLOAD_BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+const catalogUploadRetryDelay = (attempt, contention = false) => {
+    const ceiling = contention
+        ? CATALOG_UPLOAD_CONTENTION_MAX_BACKOFF_MS
+        : CATALOG_UPLOAD_BASE_BACKOFF_MS * Math.pow(2, CATALOG_UPLOAD_MAX_ATTEMPTS - 1);
+    const base = Math.min(ceiling, CATALOG_UPLOAD_BASE_BACKOFF_MS * Math.pow(2, attempt - 1));
     const jitter = Math.floor(Math.random() * 400);
     return base + jitter;
+};
+
+/* Classify one Apps Script response. ContentService always answers HTTP 200,
+   so a body that is not `{status:'success'}` (BUSY script lock, quota exceeded,
+   a transient execution error, or an unparseable error page) is a *contention*
+   failure that must be retried — not a hard 4xx that should abort the upload.
+   Returns `null` for a successful body, otherwise a tagged Error. */
+const catalogGasResponseError = (ok, status, result) => {
+    if (ok && result && result.status === 'success') return null;
+    const err = new Error((result && result.message) || ('GAS_HTTP_' + status));
+    /* HTTP 200 with a non-success body == GAS-level contention. */
+    err.contention = !!ok;
+    err.retryable = err.contention || status === 429 || status >= 500 || status === 0;
+    return err;
 };
 
 async function uploadCatalogImageToGas(base64Data, fileName, merchantName, imageType) {
@@ -236,29 +261,25 @@ async function uploadCatalogImageToGas(base64Data, fileName, merchantName, image
     });
 
     let lastError = null;
-    for (let attempt = 1; attempt <= CATALOG_UPLOAD_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS; attempt++) {
         try {
             const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
             if (ok && result && result.status === 'success') {
                 const directUrl = catalogDriveViewUrl(result.id || result.url);
                 if (directUrl) return directUrl;
-                throw new Error(result.message || 'GAS API Error');
             }
-            /* Retry only transient server-side failures; a 4xx (other than 429)
-               means the request itself is wrong, so fail fast. */
-            const retryable = status === 429 || status >= 500;
-            const httpErr = new Error((result && result.message) || ('GAS_HTTP_' + status));
-            if (!retryable) throw httpErr;
-            httpErr.retryable = true;
-            throw httpErr;
+            /* A 200 without a usable URL is still transient GAS contention. */
+            throw catalogGasResponseError(ok, status, result)
+                || Object.assign(new Error((result && result.message) || 'GAS API Error'), { retryable: true, contention: true });
         } catch (error) {
             lastError = error;
-            const canRetry = !!error.retryable && attempt < CATALOG_UPLOAD_MAX_ATTEMPTS;
+            const maxAttempts = error.contention ? CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS : CATALOG_UPLOAD_MAX_ATTEMPTS;
+            const canRetry = !!error.retryable && attempt < maxAttempts;
             if (!canRetry) {
                 console.error('GAS Upload Failed (attempt ' + attempt + '):', error);
                 throw error;
             }
-            const wait = catalogUploadRetryDelay(attempt);
+            const wait = catalogUploadRetryDelay(attempt, !!error.contention);
             console.warn('[catalog] upload attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
             await catalogUploadSleep(wait);
         }
@@ -297,24 +318,23 @@ window.copyCatalogImageFromUrl = async (sourceUrl, fileName, merchantName) => {
     });
 
     let lastError = null;
-    for (let attempt = 1; attempt <= CATALOG_UPLOAD_MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS; attempt++) {
         try {
             const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
             if (ok && result && result.status === 'success') {
                 const directUrl = catalogDriveViewUrl(result.id || result.url);
                 if (directUrl) return directUrl;
-                throw new Error(result.message || 'GAS API Error');
             }
-            const retryable = status === 429 || status >= 500;
-            const httpErr = new Error((result && result.message) || ('GAS_HTTP_' + status));
-            if (!retryable) throw httpErr;
-            httpErr.retryable = true;
-            throw httpErr;
+            throw catalogGasResponseError(ok, status, result)
+                || Object.assign(new Error((result && result.message) || 'GAS API Error'), { retryable: true, contention: true });
         } catch (error) {
             lastError = error;
-            const canRetry = !!error.retryable && attempt < CATALOG_UPLOAD_MAX_ATTEMPTS;
+            const maxAttempts = error.contention ? CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS : CATALOG_UPLOAD_MAX_ATTEMPTS;
+            const canRetry = !!error.retryable && attempt < maxAttempts;
             if (!canRetry) throw error;
-            await catalogUploadSleep(catalogUploadRetryDelay(attempt));
+            const wait = catalogUploadRetryDelay(attempt, !!error.contention);
+            console.warn('[catalog] image copy attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
+            await catalogUploadSleep(wait);
         }
     }
     throw lastError || new Error('COPY_FAILED');
@@ -3439,8 +3459,15 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
         }
         payload.variations = variantPayload;
     }
-    if (!(await catalogRestCreate(CATALOG_COLLECTION, payload))) {
-        await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
+    let created = await catalogRestCreate(CATALOG_COLLECTION, payload);
+    if (!created) {
+        const ref = await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
+        created = { id: ref && ref.id, ...payload };
+    }
+    /* Show the new product instantly (0 extra reads) by folding it into every
+       already-loaded cache before the next poll reconciles. */
+    if (created && created.id && typeof window.catalogApplyCreatedProductLocally === 'function') {
+        window.catalogApplyCreatedProductLocally(created);
     }
 };
 
@@ -3494,9 +3521,13 @@ window.syncAllCatalogDrafts = async () => {
     } finally {
         window._catalogSyncing = false;
         await window.renderCatalogDraftsWidget();
-        /* One static refresh after the bulk upload so "My Products" shows the
-           newly synced items without a continuous listener. */
-        if (typeof window.loadMyCatalogProducts === 'function') await window.loadMyCatalogProducts(true);
+        /* The synced products were already folded into every loaded cache by
+           `catalogApplyCreatedProductLocally`, so just repaint from memory here.
+           This deliberately replaces the old forced `loadMyCatalogProducts(true)`
+           (a full re-read of the rep's entire product set) with 0 reads. When
+           that cache was not loaded, its baseline was cleared so the widget's
+           next open reconciles once, count-gated. */
+        if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
     }
 };
 
@@ -4803,6 +4834,90 @@ const patchRepCatalogProductLocally = (productId, patch) => {
     return true;
 };
 window.patchRepCatalogProductLocally = patchRepCatalogProductLocally;
+
+/* Optimistic zero-read insert: immediately after a successful create, fold the
+   new product into every cache that is ALREADY loaded so it appears instantly
+   across the whole UI (rep list, all-products grid/leaderboard, content pending
+   queue, export merchant filter) without a single extra Firestore read.
+   The cheap 120s polling gates compare an aggregation count against these
+   baselines, so each loaded cache's baseline is bumped in lock-step to keep the
+   gate honest. A cache that was never loaded is deliberately NOT populated —
+   that would defeat the deferred lazy-read policy — instead its loaded flag and
+   its count baseline are cleared so the next open reconciles from the server
+   exactly once. */
+const catalogApplyCreatedProductLocally = (product) => {
+    if (!product || !product.id) return;
+    const status = String(product.status || 'pending');
+    const insertUnique = (cache) => {
+        if (!Array.isArray(cache)) return { cache, added: false };
+        if (cache.some((p) => p && p.id === product.id)) return { cache, added: false };
+        return { cache: sortCatalogProductsByCreatedAt([product].concat(cache)), added: true };
+    };
+
+    /* 1) The rep's own list ("منتجاتي"). */
+    if (window._catalogMyProductsLoaded && Array.isArray(window.repCatalogProductsCache)) {
+        const res = insertUnique(window.repCatalogProductsCache);
+        window.repCatalogProductsCache = res.cache;
+        if (res.added && typeof window._catalogMyProductsCount === 'number') window._catalogMyProductsCount += 1;
+    } else {
+        window._catalogMyProductsLoaded = false;
+        window._catalogMyProductsCount = null;
+        window._catalogMyProductsSignature = '';
+    }
+
+    /* 2) The full "all products" grid (manager/admin) + export filter. */
+    if (window._catalogAllProductsLoaded && Array.isArray(window.allCatalogProductsCache)) {
+        const res = insertUnique(window.allCatalogProductsCache);
+        window.allCatalogProductsCache = res.cache;
+        if (res.added && typeof window._catalogAllProductsCount === 'number') window._catalogAllProductsCount += 1;
+    } else {
+        window._catalogAllProductsLoaded = false;
+        window._catalogAllProductsCount = null;
+    }
+
+    /* 3) The content editor's pending queue (pending rows only). */
+    if (status === 'pending') {
+        if (window._catalogPendingLoaded && Array.isArray(window.merchantProductsCache)) {
+            const res = insertUnique(window.merchantProductsCache);
+            window.merchantProductsCache = res.cache;
+            if (res.added && typeof window._catalogPendingCount === 'number') window._catalogPendingCount += 1;
+        } else {
+            window._catalogPendingLoaded = false;
+            window._catalogPendingCount = null;
+        }
+    }
+
+    /* 4) The finished/approved set, only when it is actually loaded. */
+    if (status === 'done' && window._catalogDoneLoaded && Array.isArray(window.doneCatalogProductsCache)) {
+        window.doneCatalogProductsCache = insertUnique(window.doneCatalogProductsCache).cache;
+    }
+
+    /* 5) Delete-request queue (a brand-new row is never requested yet, kept for
+       completeness so the helper stays correct for any create-with-flags path). */
+    if (product.deleteRequested === true) {
+        if (window._catalogDeleteRequestsLoaded && Array.isArray(window.catalogDeleteRequestsCache)) {
+            const res = insertUnique(window.catalogDeleteRequestsCache);
+            window.catalogDeleteRequestsCache = res.cache;
+            if (res.added && typeof window._catalogDeleteRequestsCount === 'number') window._catalogDeleteRequestsCount += 1;
+        } else {
+            window._catalogDeleteRequestsLoaded = false;
+            window._catalogDeleteRequestsCount = null;
+        }
+    }
+
+    /* 6) Autocomplete is scoped per category: invalidate that one category so
+       the next modal open refetches it lazily (never on the create path). */
+    if (window._catalogAutocompleteCategory === product.category) {
+        window._catalogAutocompleteCache = [];
+    }
+
+    /* 7) Repaint whatever is on screen; the export filter reads memory only. */
+    if (typeof populateMerchantExportFilter === 'function') {
+        try { populateMerchantExportFilter(); } catch (err) { /* non-fatal */ }
+    }
+    if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+};
+window.catalogApplyCreatedProductLocally = catalogApplyCreatedProductLocally;
 
 /* Cheap "did this query change?" probe: an aggregation count costs ~1 read per
    1,000 matching documents (minimum 1) instead of one read per document.
