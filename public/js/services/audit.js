@@ -73,9 +73,14 @@ const auditCurrentIdentity = () => {
 /* ─── Strict founder-only access ────────────────────────────────────────
  * The Black Box is reserved EXCLUSIVELY for the primary system founders/owners.
  * The `founder` role is mandatory, and the identity must additionally match the
- * explicit whitelist below (or carry the dedicated `isFounder` flag). Admins
- * such as محمود, reps, and every other manager are hard-blocked. Extend the
- * whitelist to onboard another owner. */
+ * explicit whitelist below (or carry the dedicated `isFounder` flag). Admins,
+ * reps, and every other manager are hard-blocked.
+ *
+ * Single explicit exception: a per-user `kanjoBlackBox: true` flag (granted in
+ * `constants.js`, e.g. محمود / PIN 8492) opens the Black Box without promoting
+ * that operator to the founder role, so no other founder-only surface (payroll
+ * summary, live view, …) leaks. Extend the whitelist or grant the flag to
+ * onboard another viewer. */
 const AUDIT_FOUNDER_WHITELIST = {
     ids: ['3715', 'المؤسسين'],
     names: ['المؤسسين'],
@@ -87,6 +92,8 @@ const auditNormalizeIdentity = (value) => String(value == null ? '' : value).tri
 window.kanjoAuditCanView = () => {
     const u = window.currentUser;
     if (!u) return false;
+    /* Dedicated per-user Black Box grant — role-independent by design. */
+    if (u.kanjoBlackBox === true) return true;
     /* Dedicated founder role flag is mandatory. */
     if (String(u.role || '') !== 'founder') return false;
     /* Explicit owner flag short-circuits the whitelist. */

@@ -28,7 +28,7 @@ const categories = ["🍔 مطاعم وكافيهات", "🛒 سوبر مارك�
 
 const users = { 
 
-    '8492': { name: 'أ/ محمود', role: 'admin' }, 
+    '8492': { name: 'أ/ محمود', role: 'admin', kanjoBlackBox: true }, 
 
     '3715': { name: 'المؤسسين', role: 'founder' }, 
 
