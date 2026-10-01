@@ -1,0 +1,34 @@
+# One-off cleanup of a day's daily_stats.activeSeconds after the midnight
+# rollover bug (a tab open across midnight spilled the previous day's active
+# time into the new day). The tracker fix ships in kpi.js; this workflow wipes
+# the already-written corrupt value. Runs manually from the Actions tab.
+name: Reset KPI day active seconds
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Day to reset (YYYY-MM-DD)'
+        required: true
+        default: '2026-10-01'
+      dry_run:
+        description: 'Dry run (report only, no writes)'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Reset KPI day active seconds
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          SYNC_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node scripts/reset-kpi-day-active.mjs "${{ github.event.inputs.date }}"

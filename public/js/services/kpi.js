@@ -345,14 +345,16 @@ window.kpiValidateDescription = (description, name) => {
 /* ─────────────────── active time tracker ─────────────────── */
 
 const kpiReadActiveStore = () => {
-    const today = kpiLocalDateKey();
     try {
         const raw = localStorage.getItem(KPI_ACTIVE_TIME_KEY);
         const parsed = raw ? JSON.parse(raw) : null;
-        if (!parsed || parsed.date !== today) return { date: today, seconds: 0 };
-        return { date: today, seconds: Math.max(0, Number(parsed.seconds) || 0) };
+        if (!parsed || typeof parsed !== 'object') return { date: '', seconds: 0 };
+        return {
+            date: typeof parsed.date === 'string' ? parsed.date : '',
+            seconds: Math.max(0, Number(parsed.seconds) || 0)
+        };
     } catch (_) {
-        return { date: today, seconds: 0 };
+        return { date: '', seconds: 0 };
     }
 };
 
@@ -360,10 +362,38 @@ const kpiWriteActiveStore = (store) => {
     try { localStorage.setItem(KPI_ACTIVE_TIME_KEY, JSON.stringify(store)); } catch (_) { /* ignore */ }
 };
 
-window._kpiActiveSeconds = kpiReadActiveStore().seconds;
+/* Seed the in-memory counter from localStorage on load, but never carry a
+   previous day's total forward: a stored date that no longer matches today
+   starts the new day at zero. */
+const kpiLoadActiveCounter = () => {
+    const today = kpiLocalDateKey();
+    const store = kpiReadActiveStore();
+    if (store.date === today) {
+        window._kpiActiveSeconds = store.seconds;
+        return;
+    }
+    window._kpiActiveSeconds = 0;
+    kpiWriteActiveStore({ date: today, seconds: 0 });
+};
+
+/* Midnight rollover guard for a tab left open across the day boundary. The
+   stored date is the source of truth; when it no longer matches today, reset
+   the accumulator and re-stamp the store so yesterday's seconds never spill
+   into the new day. Returns true when a rollover happened. */
+const kpiRollActiveDayIfNeeded = () => {
+    const today = kpiLocalDateKey();
+    const store = kpiReadActiveStore();
+    if (store.date === today) return false;
+    window._kpiActiveSeconds = 0;
+    kpiWriteActiveStore({ date: today, seconds: 0 });
+    return true;
+};
+
+window._kpiActiveSeconds = 0;
 window._kpiLastActivity = Date.now();
 window._kpiIdle = false;
 window._kpiTrackerStarted = false;
+kpiLoadActiveCounter();
 
 /* localStorage writes are synchronous and block the main thread, so we no longer
    write on every 1s tick. The in-memory counter updates every second, but it is
@@ -372,9 +402,8 @@ const KPI_PERSIST_INTERVAL_MS = 30000;
 window._kpiLastPersistAt = Date.now();
 
 const kpiPersistActive = () => {
+    kpiRollActiveDayIfNeeded();
     const today = kpiLocalDateKey();
-    const store = kpiReadActiveStore();
-    if (store.date !== today) window._kpiActiveSeconds = 0;
     kpiWriteActiveStore({ date: today, seconds: Math.max(0, Number(window._kpiActiveSeconds) || 0) });
     window._kpiLastPersistAt = Date.now();
 };
@@ -397,9 +426,8 @@ window.kpiSyncActiveTime = async (extra) => {
     if (!window.isKpiTrackedUser || !window.isKpiTrackedUser()) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     if (typeof window.setDoc !== 'function' || !window.db || !window.currentUser) return;
+    kpiRollActiveDayIfNeeded();
     const today = kpiLocalDateKey();
-    const store = kpiReadActiveStore();
-    if (store.date !== today) return;
     const repName = String(window.currentUser.name || '').trim();
     const repId = kpiRepId(repName);
     try {
@@ -449,6 +477,7 @@ window.kpiStartActiveTracker = () => {
     window.addEventListener('beforeunload', onUnload);
     window._kpiTickHandle = setInterval(() => {
         if (document.hidden) return;
+        kpiRollActiveDayIfNeeded();
         if ((Date.now() - window._kpiLastActivity) > KPI_IDLE_MS) {
             window._kpiIdle = true;
             return;
