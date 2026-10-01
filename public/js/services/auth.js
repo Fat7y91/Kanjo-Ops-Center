@@ -382,12 +382,12 @@ function applyThemeAndShowDashboard() {
                is blocked: an onSnapshot here would only 400 on the 'Listen'
                channel and retry forever. */
             if (typeof window.kanjoRestPreferred === 'function' && window.kanjoRestPreferred()) {
-                const loadNotifs = () => window.kanjoRest.runQuery('notifications', [], 50, { orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }] })
+                /* One-shot initial load ONLY. Automated background polling is
+                   forbidden (it leaked tens of thousands of reads); freshness is
+                   manual via a page refresh. No setInterval here. */
+                window.kanjoRest.runQuery('notifications', [], 50, { orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }] })
                     .then((rows) => { if (Array.isArray(rows)) paintNotifs(rows); })
                     .catch(() => {});
-                loadNotifs();
-                const notifTimer = setInterval(loadNotifs, 30000);
-                window._appListenerUnsubscribers.push(() => clearInterval(notifTimer));
             } else if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof orderBy !== 'undefined' && typeof limit !== 'undefined') {
                 const unsub = onSnapshot(query(collection(db, "notifications"), orderBy("timestamp", "desc"), limit(50)), (snap) => {
                     const notifs = [];
@@ -422,13 +422,11 @@ function applyThemeAndShowDashboard() {
         };
         if (isMahmoudOps && !isDataEntry && typeof window.kanjoRestPreferred === 'function' && window.kanjoRestPreferred()
             && typeof where !== 'undefined') {
-            /* Blocked WebChannel: poll the pending requests over REST instead. */
-            const loadPendingTransfers = () => window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], 50)
+            /* One-shot initial load ONLY. Automated background polling is
+               forbidden (it leaked reads); the badge refreshes on page reload. */
+            window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], 50)
                 .then((rows) => { if (Array.isArray(rows)) applyPendingTransfers(rows); })
                 .catch(() => {});
-            loadPendingTransfers();
-            const transferTimer = setInterval(loadPendingTransfers, 30000);
-            window._appListenerUnsubscribers.push(() => clearInterval(transferTimer));
         } else if (isMahmoudOps && !isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
             const unsub = onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending"), limit(50)), (snap) => {
                 const items = [];

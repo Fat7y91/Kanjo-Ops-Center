@@ -504,16 +504,16 @@ window.openAdminTransferQueueLive = () => {
                 window.updateTransferRequestBadge((window._adminTransferRequestsCache || []).length);
             }
         });
-        const loadQueue = () => window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ])
+        /* One-shot initial load ONLY. Automated background polling is forbidden
+           (it leaked reads); the queue refreshes on page reload. */
+        window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ])
             .then((rows) => {
                 if (!Array.isArray(rows)) return;
                 window._adminTransferRequestsCache = rows;
                 paint();
             })
-            .catch((err) => console.error('[admin-queue] REST poll failed:', err));
-        loadQueue();
-        const queueTimer = setInterval(loadQueue, 30000);
-        window._adminTransferQueueUnsub = () => clearInterval(queueTimer);
+            .catch((err) => console.error('[admin-queue] REST load failed:', err));
+        window._adminTransferQueueUnsub = null;
         if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
         window._appListenerUnsubscribers.push(() => window.detachAdminTransferQueue());
         return;
@@ -1268,28 +1268,14 @@ window.listenToTasks = () => {
         }
     };
     const startSilentPolling = () => {
-        if (pollingTimer) return;
-        console.warn('[tasks] real-time stream unavailable; keeping REST data and polling every ' + (SILENT_POLL_INTERVAL_MS / 1000) + 's (count-gated).');
-        const poll = async () => {
-            if (!window._tasksListenerStarted) return;
-            /* A hidden tab has no one watching the board — skip the read so an
-               idle background session does not burn task reads. */
-            if (typeof document !== 'undefined' && document.hidden) return;
-            silentPollTicks += 1;
-            if (!(await dayChangedSinceLastPoll())) return;
-            await readDayTasksFromRest();
-        };
-        pollingTimer = setInterval(poll, SILENT_POLL_INTERVAL_MS);
-        if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
-        window._appListenerUnsubscribers.push(() => {
-            if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
-        });
-        /* Returning to the tab should not wait for the next tick. */
-        if (typeof document !== 'undefined') {
-            const onTasksVisibility = () => { if (!document.hidden) poll(); };
-            document.addEventListener('visibilitychange', onTasksVisibility);
-            window._appListenerUnsubscribers.push(() => document.removeEventListener('visibilitychange', onTasksVisibility));
-        }
+        /* Automated background polling is FORBIDDEN (it was the source of the
+           ~774k/day read spike and the billing leak). Live updates are disabled
+           for this transport; the board keeps the last REST snapshot and refreshes
+           only via the manual "تحديث" button (window.refreshTasksFromRest) or a
+           page reload. Intentionally no setInterval / visibility poll here. */
+        if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
+        console.warn('[tasks] real-time stream unavailable and background polling is disabled; use the manual refresh button.');
+        return;
     };
     /* Manual refresh used by the tasks board "تحديث" button. Always reads the
        selected day once, regardless of the count gate, and resets the gate so

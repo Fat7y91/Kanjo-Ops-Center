@@ -5223,20 +5223,15 @@ window.startCatalogListeners = () => {
     /* Exposed so opening the "all products" widget can pull the full set on
        demand instead of relying on a background poll. */
     window.refreshCatalogFromRest = () => refreshFromRest(true);
-    const pollId = setInterval(() => refreshFromRest(false), 120000);
-    window._appListenerUnsubscribers.push(() => clearInterval(pollId));
-    /* A hidden tab skips polls; refresh once when the user returns so the
-       widgets are not up to two minutes stale. */
-    if (typeof document !== 'undefined') {
-        const onCatalogVisibility = () => { if (!document.hidden) refreshFromRest(false); };
-        document.addEventListener('visibilitychange', onCatalogVisibility);
-        window._appListenerUnsubscribers.push(() => document.removeEventListener('visibilitychange', onCatalogVisibility));
-    }
+    /* Automated background polling is FORBIDDEN (billing leak). Catalog widgets
+       load once here and refresh only on demand: opening the all-products widget
+       calls window.refreshCatalogFromRest() after its 60s staleness check. No
+       setInterval and no visibility-change auto-read. */
 
     /* Best-effort real-time, ONLY when REST is not available. When REST is the
        transport we deliberately do not attach SDK listeners: the blocked
        streaming transport is what produced the offline timeout / Listen-channel
-       errors. The slow REST poll above keeps the widgets fresh instead. */
+       errors. */
     if (!useRest && typeof window.onSnapshot === 'function' && typeof window.collection === 'function' && window.db) {
         const unsubPending = window.onSnapshot(
             window.query(window.collection(window.db, CATALOG_COLLECTION), window.where('status', '==', 'pending')),

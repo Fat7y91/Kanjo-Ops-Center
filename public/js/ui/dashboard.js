@@ -554,6 +554,21 @@ window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
 
 };
 
+/* Shared "merchant profile" card button. Previously declared as a local const
+   inside showCardDetails(), which left renderDashboardNow()'s cross-team search
+   alert referencing an out-of-scope symbol and crashing the rep render with
+   "ReferenceError: getMerchantProfileBtnHtml is not defined". Hoisted to module
+   scope so every call site (incl. dashboard.js:1931) resolves. */
+const getMerchantProfileBtnHtml = (merchantName) => `
+
+    <button onclick="openMerchantProfile('${window.safeString(merchantName)}')" class="bg-purple-100 text-kanjo-primary hover:bg-purple-200 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
+
+        <i class="fa-solid fa-id-card"></i> <span>بطاقة التاجر</span>
+
+    </button>
+
+`;
+
 window.showCardDetails = (cardType) => {
 
     currentStatModalType = cardType;
@@ -575,18 +590,6 @@ window.showCardDetails = (cardType) => {
         list.push({ name, ...data });
 
     });
-
-
-
-    const getMerchantProfileBtnHtml = (merchantName) => `
-
-        <button onclick="openMerchantProfile('${window.safeString(merchantName)}')" class="bg-purple-100 text-kanjo-primary hover:bg-purple-200 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm">
-
-            <i class="fa-solid fa-id-card"></i> <span>بطاقة التاجر</span>
-
-        </button>
-
-    `;
 
 
 

@@ -381,7 +381,8 @@ if (typeof document !== 'undefined') {
         if (typeof window.loadFinancialProfilesForAccounting === 'function') window.loadFinancialProfilesForAccounting();
     };
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshFinancialProfilesIfAccounting(); });
-    setInterval(refreshFinancialProfilesIfAccounting, 5 * 60 * 1000);
+    /* No setInterval: automated background polling is forbidden (billing leak).
+       Profiles refresh on view render, on tab focus above, and after mutations. */
 }
 
 window.approveFinancialProfile = async (id) => {
