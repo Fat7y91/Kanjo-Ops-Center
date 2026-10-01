@@ -22,7 +22,10 @@ const KPI_STATS_SUBCOLLECTION = 'daily_stats';
    overwrite the live board, and reps only read the month they are viewing. */
 const KPI_MONTHLY_SUBCOLLECTION = 'monthly';
 const KPI_PRODUCTS_COLLECTION = 'merchant_products';
-const KPI_ACTIVE_TIME_KEY = 'kanjo_kpi_active_time_v1';
+/* v2: bumped to discard stores written by the pre-fix rollover bug, which
+   stamped a previous day's spillover seconds under the NEW day's date. A fresh
+   key guarantees every client starts the day clean once after this deploy. */
+const KPI_ACTIVE_TIME_KEY = 'kanjo_kpi_active_time_v2';
 const KPI_IMAGE_EDIT_KEY = 'kanjo_kpi_image_edit_v1';
 
 /* Field masks for the KPI reads. `merchant_products` embeds Base64 image
