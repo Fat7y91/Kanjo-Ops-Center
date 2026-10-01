@@ -208,11 +208,29 @@ window.kpiMonthLabel = kpiMonthLabel;
 
 /* The month currently shown by the dashboard. Set before every report build. */
 window._kpiReportMonth = kpiCurrentMonthKey();
+/* Whether the viewer explicitly picked a month. Until they do, the dashboard
+   defaults to the most recent month that actually has data, so a rep is never
+   stranded on a still-empty current month. */
+window._kpiReportMonthUserSet = false;
 
 /* A product belongs to the month it was CREATED in (never the edit date). */
 const kpiProductMonthKey = (p) => {
     const ms = kpiToMillis(p && (p.createdAt || p.created_at || p.updatedAt));
     return ms ? kpiLocalDateKey(ms).slice(0, 7) : '';
+};
+
+/* The most recent month (never newer than the current month) that has at least
+   one product. Used to choose a non-empty default period. Returns '' when there
+   is no dated product at all. */
+const kpiLatestProductMonth = (products) => {
+    const ceiling = kpiCurrentMonthKey();
+    let latest = '';
+    (Array.isArray(products) ? products : []).forEach((p) => {
+        const m = kpiProductMonthKey(p);
+        if (!KPI_MONTH_RE.test(m) || m > ceiling) return;
+        if (m > latest) latest = m;
+    });
+    return latest;
 };
 
 const kpiRepId = (name) => {
@@ -2458,18 +2476,29 @@ window.renderKpiDashboard = async () => {
     const historicalBtn = document.getElementById('kpiHistoricalBtn');
     if (historicalBtn) historicalBtn.classList.toggle('hidden', isRep);
     const viewTitle = document.getElementById('kpiViewTitle');
-    /* Always render the period selector to the state, and clamp it to the
-       current month so a future month can never be selected. */
+    content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
+
+    /* Default (not user-picked) view: land on the most recent month that actually
+       has data instead of a still-empty current month, so a rep always sees a
+       populated board and a real comparison. The product set is memoized, so the
+       report build below reuses it without any extra Firestore reads. */
+    if (!window._kpiReportMonthUserSet) {
+        const scopeProducts = await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
+        window._kpiReportMonth = kpiLatestProductMonth(scopeProducts) || kpiCurrentMonthKey();
+    } else {
+        window._kpiReportMonth = kpiNormalizeMonthKey(window._kpiReportMonth);
+    }
+
+    /* Always render the period selector to the resolved state, and clamp it to
+       the current month so a future month can never be selected. */
     const monthInput = document.getElementById('kpiReportMonth');
     if (monthInput) {
-        window._kpiReportMonth = kpiNormalizeMonthKey(window._kpiReportMonth);
         monthInput.value = window._kpiReportMonth;
         monthInput.max = kpiCurrentMonthKey();
     }
     const monthLabel = kpiMonthLabel(window._kpiReportMonth);
     if (viewTitle) viewTitle.textContent = (isRep ? 'لوحة أدائي' : 'مركز تحليل الأداء والجودة') + ' — ' + monthLabel;
 
-    content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
     try {
         const period = window._kpiReportMonth;
         /* The rep's personal view needs the published leaderboard, and those
@@ -2571,6 +2600,9 @@ window.kpiChangeReportMonth = async (value) => {
     const requested = String(value || '').slice(0, 7);
     if (!KPI_MONTH_RE.test(requested)) return;
     const clamped = requested > kpiCurrentMonthKey() ? kpiCurrentMonthKey() : requested;
+    /* An explicit choice (even the current month) disables the empty-month
+       fallback for the rest of the session. */
+    window._kpiReportMonthUserSet = true;
     if (clamped === window._kpiReportMonth) return;
     window._kpiReportMonth = clamped;
     window._kpiSelectedRepId = null;
