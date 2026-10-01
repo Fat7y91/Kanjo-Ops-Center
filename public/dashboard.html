@@ -2689,11 +2689,13 @@
 
                     <div class="flex flex-wrap items-center gap-2">
 
-                        <label class="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[11px] font-black cursor-pointer transition" style="color-scheme: dark;">
+                        <label id="kpiMonthPickerWrap" onclick="openKpiMonthPicker(event)" class="bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[11px] font-black cursor-pointer transition" style="color-scheme: dark;">
                             <i class="fa-regular fa-calendar text-[#FFD700]"></i>
                             <span class="text-white/80">كشف شهر</span>
                             <input type="month" id="kpiReportMonth" onchange="kpiChangeReportMonth(this.value)" class="bg-transparent text-white font-black text-[11px] outline-none border-0 p-0" />
                         </label>
+
+                        <button type="button" id="kpiExportCsvBtn" onclick="exportKpiLeaderboardCsv()" class="hidden bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-file-arrow-down text-[#FFD700]"></i> تصدير البيانات</button>
 
                         <button type="button" id="kpiRepPreviewBtn" onclick="toggleKpiRepPreview()" class="hidden bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-mobile-screen-button"></i> <span id="kpiRepPreviewBtnLabel">معاينة شاشة المناديب</span></button>
 

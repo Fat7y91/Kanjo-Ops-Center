@@ -1,0 +1,33 @@
+# One-off backfill of rep_kpis/{repId}/monthly/{YYYY-MM} leaderboard
+# summaries, so a historical month (e.g. September 2026) powers the team
+# leaderboard again. Runs manually from the Actions tab.
+name: Backfill KPI month
+
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: 'Month to rebuild (YYYY-MM)'
+        required: true
+        default: '2026-09'
+      dry_run:
+        description: 'Dry run (compute only, no writes)'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Backfill KPI monthly summaries
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          SYNC_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node scripts/backfill-kpi-month.mjs "${{ github.event.inputs.month }}"

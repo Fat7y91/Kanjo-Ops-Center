@@ -2475,6 +2475,9 @@ window.renderKpiDashboard = async () => {
     if (previewLabel) previewLabel.textContent = window._kpiRepPreviewMode ? 'العودة للتحليل الإداري' : 'معاينة شاشة المناديب';
     const historicalBtn = document.getElementById('kpiHistoricalBtn');
     if (historicalBtn) historicalBtn.classList.toggle('hidden', isRep);
+    /* Payroll export is a Founder-only control. */
+    const exportBtn = document.getElementById('kpiExportCsvBtn');
+    if (exportBtn) exportBtn.classList.toggle('hidden', !window.canExportKpiLeaderboard());
     const viewTitle = document.getElementById('kpiViewTitle');
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
 
@@ -2607,6 +2610,76 @@ window.kpiChangeReportMonth = async (value) => {
     window._kpiReportMonth = clamped;
     window._kpiSelectedRepId = null;
     await window.renderKpiDashboard();
+};
+
+/* Open the native month picker when ANY part of the "كشف شهر" control is
+   clicked, not just the tiny calendar glyph. `showPicker()` must run inside the
+   user gesture, which the wrapper's onclick provides. A click directly on the
+   input is left to the browser so the picker is not opened twice. */
+window.openKpiMonthPicker = (event) => {
+    const input = document.getElementById('kpiReportMonth');
+    if (!input) return;
+    if (event && event.target === input) return;
+    try {
+        if (typeof input.showPicker === 'function') { input.showPicker(); return; }
+    } catch (_) { /* fall through to focus + click */ }
+    try { input.focus(); input.click(); } catch (_) { /* ignore */ }
+};
+
+/* Founder-only payroll export. Reads the ALREADY-RENDERED leaderboard from
+   memory (window._kpiLatestReport) and downloads a UTF-8 CSV with a BOM so
+   Arabic opens correctly in Excel. Issues ZERO new Firestore reads. */
+const kpiCsvCell = (value) => {
+    const s = String(value == null ? '' : value);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+window.canExportKpiLeaderboard = () => !!(window.currentUser && window.currentUser.role === 'founder');
+
+window.exportKpiLeaderboardCsv = () => {
+    if (!window.canExportKpiLeaderboard()) {
+        if (window.showToast) window.showToast('تصدير البيانات متاح للمؤسسين فقط', false);
+        return;
+    }
+    const report = window._kpiLatestReport;
+    if (!report || !Array.isArray(report.rows) || !report.rows.length) {
+        if (window.showToast) window.showToast('لا توجد بيانات للتصدير بعد', false);
+        return;
+    }
+    const period = kpiNormalizeMonthKey(report.period || window._kpiReportMonth);
+    const header = ['المندوب', 'الفريق', 'عدد المنتجات', 'الوقت الصافي (دقيقة)', 'متوسط طول الوصف',
+        'نسبة الوصف الصحيح', 'نسبة الصور', 'منتجات بصور', 'درجة كانجو', 'الترتيب'];
+    const lines = [header];
+    report.rows
+        .slice()
+        .sort((a, b) => {
+            if (a.isEditor !== b.isEditor) return a.isEditor ? 1 : -1;
+            return (b.kanjoScore || 0) - (a.kanjoScore || 0) || String(a.name).localeCompare(String(b.name), 'ar');
+        })
+        .forEach((r) => {
+            lines.push([
+                r.name,
+                kpiRepTeamName(r.name),
+                r.totalProducts,
+                Math.round((r.totalSeconds || 0) / 60),
+                Number(r.avgDescriptionLength || 0).toFixed(1),
+                Math.round(Number(r.validRatioRaw || 0) * 100) + '%',
+                Math.round(Number(r.imageRatioRaw || 0) * 100) + '%',
+                r.withImage,
+                r.isEditor ? '' : Number(r.kanjoScore || 0).toFixed(1),
+                r.isEditor ? '' : (r.rank || '')
+            ]);
+        });
+    const csv = '\uFEFF' + lines.map((cols) => cols.map(kpiCsvCell).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Kanjo_KPI_' + period + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
 window.closeKpiDashboard = () => {
