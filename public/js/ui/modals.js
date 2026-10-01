@@ -938,11 +938,11 @@ window.openQuickLinksModal = () => {
 
 
 
-    container.innerHTML = '';
+    const __qlParts = [];
 
     missingLinksMerchants.forEach((item) => {
 
-        container.innerHTML += `
+        __qlParts[__qlParts.length] = `
 
             <div class="bg-purple-50/70 p-4 rounded-2xl border border-purple-100 space-y-3">
 
@@ -969,6 +969,8 @@ window.openQuickLinksModal = () => {
         `;
 
     });
+
+    container.innerHTML = __qlParts.join('');
 
 };
 
@@ -1091,7 +1093,10 @@ window.openViewArchivedReportsModal = async () => {
 
 
 
-    const q = query(collection(db, "archivedReports"), orderBy("timestamp", "desc"));
+    /* Bounded read: the moderation bin only ever needs the newest slice. An
+       unbounded collection read (plus the O(N^2) render below) was a top
+       freeze/billing risk. */
+    const q = query(collection(db, "archivedReports"), orderBy("timestamp", "desc"), limit(100));
 
     /* Managers must not be shown a stale IndexedDB cache of the moderation
        bin; force the initial read to hit the server. The list is small. */
@@ -1116,7 +1121,7 @@ window.openViewArchivedReportsModal = async () => {
 
 
 
-    container.innerHTML = '';
+    const __arParts = [];
 
     snap.forEach(docSnap => {
 
@@ -1124,7 +1129,7 @@ window.openViewArchivedReportsModal = async () => {
 
         const rep = item.report || {};
 
-        container.innerHTML += `
+        __arParts[__arParts.length] = `
 
             <div class="bg-amber-50/70 p-4 rounded-2xl border border-amber-200 space-y-2 text-xs">
 
@@ -1149,6 +1154,8 @@ window.openViewArchivedReportsModal = async () => {
         `;
 
     });
+
+    container.innerHTML = __arParts.join('');
 
 };
 

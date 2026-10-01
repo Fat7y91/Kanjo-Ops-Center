@@ -5,6 +5,24 @@ const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUv
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 
+/* Explicit field mask for every catalog list/query read. A mask is an
+   allow-list, so this deliberately lists every field any catalog widget,
+   export, or search path reads. Unknown/absent field paths are ignored by
+   Firestore, so it is safe to be generous here — what matters is that
+   description/image/base64-style blobs we never render in a list are not
+   downloaded for every one of the thousands of merchant_products docs. */
+const CATALOG_LIST_FIELDS = [
+    'name', 'name_ar', 'name_en', 'description_ar', 'description_en',
+    'base_price', 'price', 'category', 'sku', 'product_type', 'status',
+    'variations', 'image_url', 'imageUrl',
+    'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
+    'deleteRequested', 'deleteRequestedBy',
+    'merchantId', 'merchantName', 'merchant_name',
+    'createdBy', 'created_by', 'createdAt', 'updatedAt', 'updatedBy',
+    'addedBy', 'added_by', 'repName', 'intakeSource',
+    'kanjo_id', 'barcode', 'score', 'uploaded_at'
+];
+
 /* ─── REST-first writes ───
    Field reps work on strict mobile networks where the SDK streaming transport
    is trapped offline, so updateDoc/setDoc/addDoc/deleteDoc hang and the modal
@@ -3263,7 +3281,7 @@ window.refreshCatalogDeleteRequestsFromServer = async () => {
     try {
         let items = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-            items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]);
+            items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]], null, { select: CATALOG_LIST_FIELDS });
         } else {
             if (typeof window.getDocs !== 'function' || !window.db) return;
             const snap = await window.getDocs(
@@ -3937,7 +3955,7 @@ window.loadDoneCatalogProducts = async () => {
         let items = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
             try {
-                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']]);
+                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']], null, { select: CATALOG_LIST_FIELDS });
             } catch (restErr) {
                 console.warn('[catalog] REST done-products fetch failed; trying SDK:', restErr);
             }
@@ -4054,7 +4072,7 @@ const fetchDoneCatalogProducts = async () => {
        transport (whose streaming channel can fail) is only a last resort. */
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
-            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']])) || [];
+            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'done']], null, { select: CATALOG_LIST_FIELDS })) || [];
             window.doneCatalogProductsCache = items;
             window._catalogDoneLoaded = true;
             return items;
@@ -4082,7 +4100,7 @@ const fetchAllCatalogProductsForExport = async () => {
     }
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
-            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [])) || [];
+            const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS })) || [];
             window.allCatalogProductsCache = items;
             window._catalogAllProductsLoaded = true;
             return items;
@@ -4984,7 +5002,7 @@ window.loadMyCatalogProducts = async (force = false) => {
         let items = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
             try {
-                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, filters);
+                items = await window.kanjoRest.runQuery(CATALOG_COLLECTION, filters, null, { select: CATALOG_LIST_FIELDS });
             } catch (restErr) {
                 console.warn('[catalog] REST my-products fetch failed; trying SDK:', restErr);
             }
@@ -5202,7 +5220,7 @@ window.startCatalogListeners = () => {
                             window._catalogAllProductsFetchedAt = Date.now();
                             return;
                         }
-                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, []));
+                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS }));
                         window.allCatalogProductsCache = items;
                         window._catalogAllProductsLoaded = true;
                         window._catalogAllProductsCount = typeof total === 'number' ? total : items.length;
@@ -5230,7 +5248,7 @@ window.startCatalogListeners = () => {
                         try {
                             const pendingCount = await catalogRestCount([['status', '==', 'pending']]);
                             if (pendingCount !== null && window._catalogPendingLoaded && pendingCount === window._catalogPendingCount) return;
-                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']]));
+                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['status', '==', 'pending']], null, { select: CATALOG_LIST_FIELDS }));
                             window.merchantProductsCache = items;
                             window._catalogPendingLoaded = true;
                             window._catalogPendingCount = typeof pendingCount === 'number' ? pendingCount : items.length;
@@ -5245,7 +5263,7 @@ window.startCatalogListeners = () => {
                         try {
                             const deleteCount = await catalogRestCount([['deleteRequested', '==', true]]);
                             if (deleteCount !== null && window._catalogDeleteRequestsLoaded && deleteCount === window._catalogDeleteRequestsCount) return;
-                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]]));
+                            const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [['deleteRequested', '==', true]], null, { select: CATALOG_LIST_FIELDS }));
                             window.catalogDeleteRequestsCache = items;
                             window._catalogDeleteRequestsLoaded = true;
                             window._catalogDeleteRequestsCount = typeof deleteCount === 'number' ? deleteCount : items.length;

@@ -506,7 +506,7 @@ window.openAdminTransferQueueLive = () => {
         });
         /* One-shot initial load ONLY. Automated background polling is forbidden
            (it leaked reads); the queue refreshes on page reload. */
-        window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ])
+        window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], null, { select: ['status', 'taskId', 'taskName', 'fromTeam', 'toTeam', 'requestedBy', 'reason', 'createdAt'] })
             .then((rows) => {
                 if (!Array.isArray(rows)) return;
                 window._adminTransferRequestsCache = rows;

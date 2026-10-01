@@ -68,7 +68,21 @@ const resolveAuditMerchantSource = (baseName, taskMid) => {
     );
 };
 
+/* H5: memoise the heavy (per-merchant, per-task) audit build on the task-memory
+   version. renderDashboardNow calls this on every render; without memoisation it
+   re-scanned the whole task set on each pass and contributed to the UI freeze. */
+let _merchantDocsAuditCache = null;
+
 const buildMerchantDocsAuditData = () => {
+
+    const version = (typeof window.tasksMemoryVersion === 'number' ? window.tasksMemoryVersion : 0)
+        + ':' + (window.merchantsById ? window.merchantsById.size : 0);
+
+    if (_merchantDocsAuditCache && _merchantDocsAuditCache.version === version) {
+
+        return _merchantDocsAuditCache.data;
+
+    }
 
     const merchantsMap = new Map();
 
@@ -164,7 +178,11 @@ const buildMerchantDocsAuditData = () => {
 
     });
 
-    return { total: items.length, uploaded: items.filter((x) => x.driveFolderLink).length, items };
+    const data = { total: items.length, uploaded: items.filter((x) => x.driveFolderLink).length, items };
+
+    _merchantDocsAuditCache = { version, data };
+
+    return data;
 
 };
 
@@ -377,6 +395,17 @@ window.renderMerchantDocsAudit = () => {
 
     }
 
+    /* If the banner is collapsed (hidden) and we already hold a snapshot, reuse it
+       instead of paying for the heavy rebuild; the build is deferred until the
+       banner is actually shown. */
+    if (banner.classList.contains('hidden') && _merchantDocsAuditCache) {
+
+        window.merchantDocsAuditData = _merchantDocsAuditCache.data;
+
+        return;
+
+    }
+
     const data = buildMerchantDocsAuditData();
 
     window.merchantDocsAuditData = data;
@@ -579,7 +608,11 @@ window.showCardDetails = (cardType) => {
 
     const title = document.getElementById('detailsTitle');
 
-    content.innerHTML = '';
+    /* Accumulate markup in an array and write it to the DOM ONCE at the end.
+       The previous `content.innerHTML +=` pattern re-parsed and re-serialised the
+       entire growing subtree on every iteration (O(N^2)) and was the primary
+       cause of the Ops Manager modal freeze on large lists. */
+    const __kanjoParts = [];
 
 
 
@@ -605,7 +638,7 @@ window.showCardDetails = (cardType) => {
 
         list.forEach(item => {
 
-            content.innerHTML += `
+            __kanjoParts[__kanjoParts.length] = `
 
                 <div class="bg-kanjo-light p-4 rounded-2xl border border-purple-100 flex justify-between items-center text-sm">
 
@@ -793,7 +826,7 @@ window.showCardDetails = (cardType) => {
 
         if (signedOrProvList.length === 0) {
 
-            content.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة في هذه الفئة حالياً</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة في هذه الفئة حالياً</div>';
 
         } else {
 
@@ -825,7 +858,7 @@ window.showCardDetails = (cardType) => {
 
 
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="${cardBgClass} p-4 rounded-2xl border shadow-sm space-y-3">
 
@@ -907,7 +940,7 @@ window.showCardDetails = (cardType) => {
 
         list.forEach(item => {
 
-            content.innerHTML += `
+            __kanjoParts[__kanjoParts.length] = `
 
                 <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100 flex justify-between items-center text-sm">
 
@@ -1015,7 +1048,7 @@ window.showCardDetails = (cardType) => {
 
         if (merchantVisitsMap.size === 0) {
 
-            content.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد زيارات مسجلة</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد زيارات مسجلة</div>';
 
         } else {
 
@@ -1051,7 +1084,7 @@ window.showCardDetails = (cardType) => {
 
 
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="bg-orange-50/70 p-4 rounded-2xl border border-orange-100 mb-3">
 
@@ -1087,7 +1120,7 @@ window.showCardDetails = (cardType) => {
 
         if (visitedList.length === 0) {
 
-            content.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">لم تمت زيارة أي محل بعد</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-slate-400 py-6 font-bold">لم تمت زيارة أي محل بعد</div>';
 
         } else {
 
@@ -1101,7 +1134,7 @@ window.showCardDetails = (cardType) => {
 
 
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="p-4 rounded-2xl border ${item.isSigned && item.achieved > 0 ? 'bg-emerald-50 border-emerald-100' : (item.isProvisional ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-200')} flex justify-between items-center text-sm">
 
@@ -1133,7 +1166,7 @@ window.showCardDetails = (cardType) => {
 
             const isFinalSigned = item.isSigned && item.achieved > 0;
 
-            content.innerHTML += `
+            __kanjoParts[__kanjoParts.length] = `
 
                 <div class="bg-white p-4 rounded-2xl border border-purple-100 flex justify-between items-center text-sm shadow-sm">
 
@@ -1165,13 +1198,13 @@ window.showCardDetails = (cardType) => {
 
         if (window.currentUnsignedCategoriesGlobal.length === 0) {
 
-            content.innerHTML = '<div class="text-center text-emerald-600 py-6 font-bold text-base">🎉 رائع جداً! تم التعاقد مع جميع الفئات المتاحة بنجاح.</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-emerald-600 py-6 font-bold text-base">🎉 رائع جداً! تم التعاقد مع جميع الفئات المتاحة بنجاح.</div>';
 
         } else {
 
             window.currentUnsignedCategoriesGlobal.forEach(cat => {
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200 flex justify-between items-center text-sm">
 
@@ -1193,13 +1226,13 @@ window.showCardDetails = (cardType) => {
 
         if (window.topPerformerContractsGlobal.length === 0) {
 
-            content.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة حالياً</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة حالياً</div>';
 
         } else {
 
             window.topPerformerContractsGlobal.forEach(c => {
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="bg-orange-50 p-4 rounded-2xl border border-orange-200 flex justify-between items-center text-sm">
 
@@ -1233,13 +1266,13 @@ window.showCardDetails = (cardType) => {
 
         if (window.topTeamContractsGlobal.length === 0) {
 
-            content.innerHTML = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة حالياً</div>';
+            __kanjoParts[__kanjoParts.length] = '<div class="text-center text-slate-400 py-6 font-bold">لا توجد عقود مسجلة حالياً</div>';
 
         } else {
 
             window.topTeamContractsGlobal.forEach(c => {
 
-                content.innerHTML += `
+                __kanjoParts[__kanjoParts.length] = `
 
                     <div class="bg-blue-50 p-4 rounded-2xl border border-blue-200 flex justify-between items-center text-sm">
 
@@ -1270,6 +1303,8 @@ window.showCardDetails = (cardType) => {
     }
 
 
+
+    content.innerHTML = __kanjoParts.join('');
 
     modal.classList.remove('hidden');
 

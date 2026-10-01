@@ -644,7 +644,7 @@ window.showFounderPayrollDetails = async () => {
 
 
 
-    content.innerHTML = ''; 
+    const __prParts = []; 
 
 
 
@@ -682,7 +682,7 @@ window.showFounderPayrollDetails = async () => {
 
 
 
-    content.innerHTML += `
+    __prParts[__prParts.length] = `
 
         <div class="bg-kanjo-light/80 px-3 py-2 rounded-xl text-xs font-bold text-kanjo-dark mb-2 border border-purple-100">
 
@@ -734,7 +734,7 @@ window.showFounderPayrollDetails = async () => {
 
 
 
-        content.innerHTML += `
+        __prParts[__prParts.length] = `
 
             <div class="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm space-y-2">
 
@@ -761,6 +761,8 @@ window.showFounderPayrollDetails = async () => {
         `;
 
     });
+
+    content.innerHTML = __prParts.join('');
 
 };
 
@@ -962,7 +964,7 @@ window.renderPayrollTable = () => {
        is loading. The memory sync re-runs this render once the data lands. */
     if (typeof window.ensureTaskArchiveLoaded === 'function') window.ensureTaskArchiveLoaded();
 
-    tbody.innerHTML = '';
+    const __ptParts = [];
 
     window.initPayrollPeriodControls();
 
@@ -1094,7 +1096,7 @@ window.renderPayrollTable = () => {
 
 
 
-    tbody.innerHTML += `
+    __ptParts[__ptParts.length] = `
 
         <tr class="bg-purple-50/70 hover:bg-purple-100/50 transition-colors border-b-2 border-purple-200">
 
@@ -1156,7 +1158,7 @@ window.renderPayrollTable = () => {
 
 
 
-        tbody.innerHTML += `
+        __ptParts[__ptParts.length] = `
 
             <tr class="hover:bg-purple-50/50 transition-colors border-b border-purple-50">
 
@@ -1183,6 +1185,8 @@ window.renderPayrollTable = () => {
         `;
 
     });
+
+    tbody.innerHTML = __ptParts.join('');
 
 
 

@@ -676,13 +676,28 @@ window.calculateHistoricalTime = async () => {
     if (window._kpiHistoricalRunning) return null;
     window._kpiHistoricalRunning = true;
     try {
-        const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
+        /* REST-first with an explicit field mask: the historical audit only
+           needs the compact KPI product fields, never the SDK's full-document
+           payload. The SDK is a last resort (its streaming transport can be
+           blocked on strict networks). */
+        let products = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+            try {
+                products = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });
+            } catch (restErr) {
+                console.warn('[kpi] historical REST fetch failed; trying SDK:', restErr);
+            }
+        }
+        if (!products) {
+            products = [];
+            const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
+            snap.forEach((d) => products.push({ id: d.id, ...(d.data() || {}) }));
+        }
         const byRep = new Map();
         let enhancedCount = 0;
         const editedStamps = [];   // timestamps of every enhanced image, globally
         let untimedEnhanced = 0;   // enhanced products with no usable timestamp
-        snap.forEach((d) => {
-            const p = { id: d.id, ...(d.data() || {}) };
+        products.forEach((p) => {
             const rep = kpiProductRepName(p);
             const ms = kpiToMillis(p.createdAt || p.created_at || p.updatedAt);
             if (!byRep.has(rep)) byRep.set(rep, []);
@@ -911,17 +926,33 @@ const kpiFetchDailyStatsUncached = async (repId, monthKey) => {
     try {
         let items = null;
         if (!repId) return { activeSeconds, imageEditSeconds, days };
-        if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
-            items = await window.kanjoRest.list([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION], { select: KPI_DAILY_STATS_FIELDS });
+        /* H1: scope the daily_stats read to the SELECTED MONTH at the query level
+           (date range) instead of listing the rep's entire lifetime and throwing
+           most of it away. The document id IS the date; the `date` field is the
+           filter. */
+        const monthStart = period + '-01';
+        const monthEnd = period + '-31';
+        const dailyFields = KPI_DAILY_STATS_FIELDS.concat(['date']);
+        if (window.kanjoRest && typeof window.kanjoRest.runQueryUnder === 'function') {
+            items = await window.kanjoRest.runQueryUnder(
+                [KPI_REP_COLLECTION, repId],
+                KPI_STATS_SUBCOLLECTION,
+                [['date', '>=', monthStart], ['date', '<=', monthEnd]],
+                null,
+                { select: dailyFields }
+            );
         } else {
-            const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION));
+            const snap = await window.getDocs(window.query(
+                window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION),
+                window.where('date', '>=', monthStart),
+                window.where('date', '<=', monthEnd)
+            ));
             items = [];
             snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
         }
         (items || []).forEach((data) => {
-            /* Only the selected month is summed: the lifetime of the rep is
-               never aggregated again. The document id IS the date
-               (YYYY-MM-DD); the explicit `date` field is the fallback. */
+            /* Already month-scoped by the query; the guard is a belt-and-braces
+               check for any legacy document missing the `date` field. */
             const day = String((data && (data.date || data.id)) || '').slice(0, 10);
             if (day.slice(0, 7) !== period) return;
             activeSeconds += Math.max(0, Number(data.activeSeconds) || 0);

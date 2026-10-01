@@ -355,6 +355,36 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
     return restRowsToDocs(await response.json());
 };
 
+/* Same as runQuery but targets a SUBCOLLECTION. The structured query is posted
+   to the PARENT document resource (`.../documents/{parent}:runQuery`) so the
+   child collection can be range-filtered server-side. Used to fetch a single
+   month of a rep's `daily_stats` instead of listing (and discarding) their whole
+   lifetime. */
+const restRunQueryUnder = async (parentSegments, collectionId, filters = [], limit = null, options = {}) => {
+    const clauses = (filters || []).map(([field, op, value]) => ({
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+    }));
+    const structuredQuery = { from: [{ collectionId }] };
+    if (clauses.length === 1) structuredQuery.where = clauses[0];
+    else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
+    if (limit) structuredQuery.limit = limit;
+    if (options.select && options.select.length) {
+        structuredQuery.select = { fields: options.select.map((fieldPath) => ({ fieldPath })) };
+    }
+    const parentPath = (parentSegments || []).map(encodeURIComponent).join('/');
+    const url = REST_DOCUMENTS_URL + '/' + parentPath + ':runQuery?key=' + encodeURIComponent(firebaseConfig.apiKey);
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: await restAuthHeaders(),
+        body: JSON.stringify({ structuredQuery })
+    });
+    if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error('Firestore REST runQuery failed (' + response.status + '): ' + body.slice(0, 200));
+    }
+    return restRowsToDocs(await response.json());
+};
+
 /* Aggregation count over REST (uses `:runAggregationQuery`). Firestore bills an
    aggregation query at roughly one read per 1,000 matched documents (minimum
    one), not one read per document, so this is the cheap way to ask "did this
@@ -564,6 +594,7 @@ window.kanjoRest = {
     fetchSignedMerchantTasks: restFetchSignedMerchantTasks,
     fetchVipPreContractMerchantTasks: restFetchVipPreContractMerchantTasks,
     runQuery: restRunQuery,
+    runQueryUnder: restRunQueryUnder,
     count: restCount,
     list: restListCollection,
     getDocument: restGetDocument,
