@@ -1567,6 +1567,29 @@ const renderDashboardNow = (snapshot) => {
        only applies while the search box is empty. */
     const isSearching = rawSearchVal.trim() !== '';
 
+    /* Field reps / data-entry cannot pull the heavy archive (see
+       canLoadTaskArchive), so a cross-date merchant search would always come
+       back empty. Bind the search to the lightweight eligible-merchants cache
+       (signed final agreements + admin-granted VIP pre-contract merchants) that
+       those roles DO load on boot, so reps can find their merchants and file
+       their reports again without downloading the ~15MB archive. */
+    let renderSnapshot = snapshot;
+    if (isSearching
+        && typeof window.canLoadTaskArchive === 'function' && !window.canLoadTaskArchive()
+        && Array.isArray(window.finalizedMerchantsCache) && window.finalizedMerchantsCache.length) {
+        const seenIds = new Set();
+        if (typeof snapshot.forEach === 'function') snapshot.forEach((d) => seenIds.add(d.id));
+        const extras = window.finalizedMerchantsCache.filter((e) => e && e.id && !seenIds.has(e.id));
+        if (extras.length) {
+            renderSnapshot = {
+                forEach: (cb) => {
+                    if (typeof snapshot.forEach === 'function') snapshot.forEach(cb);
+                    extras.forEach((e) => cb({ id: e.id, data: () => e }));
+                }
+            };
+        }
+    }
+
     const groupedByTeam = { 'Fox Team': {}, 'Power Team': {} }; 
 
     window.allTasksCache = []; 
@@ -1599,7 +1622,7 @@ const renderDashboardNow = (snapshot) => {
 
 
 
-    snapshot.forEach(doc => { 
+    renderSnapshot.forEach(doc => { 
 
         let task = doc.data(); 
 

@@ -493,6 +493,32 @@ window.openAdminTransferQueueLive = () => {
         renderAdminTransferQueue(listContainer);
     }
 
+    /* Blocked WebChannel: a listener here would only 400 on the 'Listen'
+       channel, so fetch + poll the queue over REST instead. */
+    if (typeof window.kanjoRestPreferred === 'function' && window.kanjoRestPreferred()) {
+        window.detachAdminTransferQueue();
+        const schedule = typeof window.scheduleFrameRender === 'function' ? window.scheduleFrameRender : ((fn) => fn);
+        const paint = () => schedule(() => {
+            renderAdminTransferQueue(listContainer);
+            if (typeof window.updateTransferRequestBadge === 'function') {
+                window.updateTransferRequestBadge((window._adminTransferRequestsCache || []).length);
+            }
+        });
+        const loadQueue = () => window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ])
+            .then((rows) => {
+                if (!Array.isArray(rows)) return;
+                window._adminTransferRequestsCache = rows;
+                paint();
+            })
+            .catch((err) => console.error('[admin-queue] REST poll failed:', err));
+        loadQueue();
+        const queueTimer = setInterval(loadQueue, 30000);
+        window._adminTransferQueueUnsub = () => clearInterval(queueTimer);
+        if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
+        window._appListenerUnsubscribers.push(() => window.detachAdminTransferQueue());
+        return;
+    }
+
     const canListen = typeof onSnapshot === 'function' && typeof query === 'function' && typeof collection === 'function' && typeof where === 'function' && typeof db !== 'undefined';
     if (!canListen) {
         if (typeof showToast === 'function') showToast('تعذر تفعيل التحديث المباشر لطلبات النقل', false);
@@ -939,6 +965,12 @@ window.ensureFinalizedMerchantsLoaded = () => {
             console.log('[KANJO-DIAGNOSTIC] Eligible-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
             /* If the merchant picker is already open, repopulate it now. */
             if (typeof window.refreshCatalogMerchantOptions === 'function') window.refreshCatalogMerchantOptions();
+            /* A rep may have typed a search before this lightweight read landed.
+               Re-render so the search binds to the freshly-cached merchants. */
+            if ((window.currentUser && (window.currentUser.role === 'rep' || window.currentUser.role === 'data_entry'))
+                && window.hasRenderedData && typeof window.renderDashboard === 'function' && window.lastSnapshot) {
+                window.renderDashboard(window.lastSnapshot);
+            }
             return window.finalizedMerchantsCache;
         } catch (err) {
             _finalizedMerchantsPromise = null;
@@ -1177,7 +1209,11 @@ window.listenToTasks = () => {
 
        The board also refreshes immediately when the tab regains focus and via a
        manual "تحديث" button (window.refreshTasksFromRest). */
-    const SILENT_POLL_INTERVAL_MS = 120000;
+    /* When the SDK streaming transport is blocked (WebChannel 'Listen' 400s) the
+       board is kept fresh by this count-gated REST poll, so the interval is the
+       only source of live updates. 30s keeps it responsive while the aggregation
+       gate keeps the read cost to ~one read per tick. */
+    const SILENT_POLL_INTERVAL_MS = 30000;
     const SILENT_POLL_FULL_EVERY = 5;
     let silentPollTicks = 0;
     let silentPollLastCount = null;
@@ -1293,6 +1329,16 @@ window.listenToTasks = () => {
         recoverOrToast(error);
     };
 
+    /* The SDK's streaming transport (WebChannel 'Listen') is blocked on some
+       corporate/preview networks: every listener gets an HTTP 400, the SDK
+       keeps retrying it, and the resulting churn log-spams the console and
+       janks the UI. Whenever the direct REST transport is available we therefore
+       never open a streaming listener and let the count-gated REST poll above
+       keep the board fresh — the same transport strategy the catalog already
+       uses. This removes the failing 'Listen' stream entirely. */
+    const restTransportAvailable = () =>
+        !!(window.kanjoRest && typeof window.kanjoRest.fetchTasks === 'function');
+
     const startFallback = () => {
         fallbackActive = true;
         const page = window._tasksPage;
@@ -1301,6 +1347,10 @@ window.listenToTasks = () => {
             page.buildQuery = buildDateFallback;
             page.cursor = null;
             page.exhausted = true;
+        }
+        if (restTransportAvailable()) {
+            startSilentPolling();
+            return;
         }
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
         currentUnsub = onSnapshot(buildDateFallback(), handleSnapshot, handleRealtimeError);
@@ -1311,6 +1361,10 @@ window.listenToTasks = () => {
        permission-denied retry) — never as the initial fetch. */
     const attachRealtimeListener = () => {
         if (!window._tasksListenerStarted || realtimeFailed || typeof currentUnsub === 'function') return;
+        if (restTransportAvailable()) {
+            startSilentPolling();
+            return;
+        }
         currentUnsub = onSnapshot(fallbackActive ? buildDateFallback() : buildDateQuery(), handleSnapshot, handleRealtimeError);
         registerUnsub();
     };

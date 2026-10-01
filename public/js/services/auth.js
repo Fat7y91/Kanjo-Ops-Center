@@ -375,11 +375,24 @@ function applyThemeAndShowDashboard() {
         if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
 
         if(canViewLive || isAdmin || isAccounting) {
-            if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof orderBy !== 'undefined' && typeof limit !== 'undefined') {
+            const paintNotifs = (notifs) => {
+                if(typeof updateNotificationsUI !== 'undefined') updateNotificationsUI(notifs);
+            };
+            /* Prefer the direct REST transport when the SDK's streaming transport
+               is blocked: an onSnapshot here would only 400 on the 'Listen'
+               channel and retry forever. */
+            if (typeof window.kanjoRestPreferred === 'function' && window.kanjoRestPreferred()) {
+                const loadNotifs = () => window.kanjoRest.runQuery('notifications', [], 50, { orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }] })
+                    .then((rows) => { if (Array.isArray(rows)) paintNotifs(rows); })
+                    .catch(() => {});
+                loadNotifs();
+                const notifTimer = setInterval(loadNotifs, 30000);
+                window._appListenerUnsubscribers.push(() => clearInterval(notifTimer));
+            } else if (typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof orderBy !== 'undefined' && typeof limit !== 'undefined') {
                 const unsub = onSnapshot(query(collection(db, "notifications"), orderBy("timestamp", "desc"), limit(50)), (snap) => {
                     const notifs = [];
                     snap.forEach(d => notifs.push({id: d.id, ...d.data()}));
-                    if(typeof updateNotificationsUI !== 'undefined') updateNotificationsUI(notifs);
+                    paintNotifs(notifs);
                 });
                 window._appListenerUnsubscribers.push(unsub);
             }
@@ -397,8 +410,29 @@ function applyThemeAndShowDashboard() {
            every non-data-entry user. Reps no longer hold a persistent global
            subscription; they get one bounded, self-scoped read below so the
            cross-team search can still flag a request they already submitted. */
-        if (isMahmoudOps && !isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
+        const applyPendingTransfers = (items) => {
+            if (window.pendingTransferTaskIds) window.pendingTransferTaskIds.clear();
+            items.forEach((req) => { if (req && req.taskId && window.pendingTransferTaskIds) window.pendingTransferTaskIds.add(req.taskId); });
+            const transferBadge = document.getElementById('transferBadge');
+            if (transferBadge) {
+                if (items.length > 0) transferBadge.classList.remove('hidden');
+                else transferBadge.classList.add('hidden');
+            }
+            if (window.lastSnapshot && !isAccounting && typeof renderDashboard !== 'undefined') renderDashboard(window.lastSnapshot);
+        };
+        if (isMahmoudOps && !isDataEntry && typeof window.kanjoRestPreferred === 'function' && window.kanjoRestPreferred()
+            && typeof where !== 'undefined') {
+            /* Blocked WebChannel: poll the pending requests over REST instead. */
+            const loadPendingTransfers = () => window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], 50)
+                .then((rows) => { if (Array.isArray(rows)) applyPendingTransfers(rows); })
+                .catch(() => {});
+            loadPendingTransfers();
+            const transferTimer = setInterval(loadPendingTransfers, 30000);
+            window._appListenerUnsubscribers.push(() => clearInterval(transferTimer));
+        } else if (isMahmoudOps && !isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
             const unsub = onSnapshot(query(collection(db, "transferRequests"), where("status", "==", "pending"), limit(50)), (snap) => {
+                const items = [];
+                snap.forEach(docSnap => items.push(docSnap.data()));
                 if(window.pendingTransferTaskIds) window.pendingTransferTaskIds.clear();
                 snap.forEach(docSnap => {
                     const req = docSnap.data();

@@ -574,6 +574,12 @@ window.kanjoRest = {
     parseFields: restFieldsToJs
 };
 
+/* True when the direct REST transport is usable. On networks that reset the
+   SDK's WebChannel stream (every 'Listen' gets an HTTP 400), REST is the only
+   reliable transport, so listeners are replaced by REST polling. */
+window.kanjoRestPreferred = () =>
+    !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
+
 
 /* Shared mutable state (mirrored on window for cross-module bare access in ES Modules) */
 window.editTaskId = null;
