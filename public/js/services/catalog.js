@@ -4203,7 +4203,7 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 27, name: 'المرأة', keywords: ['المرأة'] },
     { id: 50, name: 'الفطائر', keywords: ['الفطائر'] },
     { id: 33, name: 'تسالي', keywords: ['تسالي'] },
-    { id: 4, name: 'ساندوتشات', keywords: ['ساندوتشات'] },
+    { id: 4, name: 'ساندوتشات', keywords: ['ساندوتشات', 'سندوتشات', 'ساندوتش', 'سندوتش', 'سندويتش'] },
     { id: 81, name: 'مجهزة', keywords: ['مجهزة'] },
     { id: 94, name: 'الحمام', keywords: ['الحمام'] },
     { id: 121, name: 'قطط', keywords: ['قطط'] },
@@ -4251,7 +4251,7 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 22, name: 'الشعر', keywords: ['الشعر'] },
     { id: 124, name: 'العناية', keywords: ['العناية'] },
     { id: 85, name: 'متبل', keywords: ['متبل'] },
-    { id: 54, name: 'ساندوتشات', keywords: ['ساندوتشات'] },
+    { id: 54, name: 'ساندوتشات', keywords: ['ساندوتشات', 'سندوتشات', 'ساندوتش', 'سندوتش', 'سندويتش'] },
     { id: 16, name: 'سلطات', keywords: ['سلطات'] },
     { id: 106, name: 'للسيارات', keywords: ['للسيارات'] },
     { id: 46, name: 'كوكتيل', keywords: ['كوكتيل'] },
@@ -4307,33 +4307,52 @@ const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1
 
 /* Normalized substring hit. Both the keyword and the product name pass through
    normalizeArabic first, so minor spelling differences (hamza/alef forms, taa
-   marbuta vs haa, alef maqsura vs yaa, tashkeel/tatweel) never break the match. */
+   marbuta vs haa, alef maqsura vs yaa, tashkeel/tatweel) never break the match.
+   SHORT tokens (normalized length < 4) are matched on a word boundary instead of
+   as a bare substring, so a two/three-letter generic token can never fire inside
+   an unrelated word and steal the classification. */
 const kanjoCategoryKeywordHit = (keyword, haystack) => {
     const kw = normalizeArabic(keyword);
     if (!kw) return false;
+    if (kw.length < 4) {
+        const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp('(?:^|\\s)' + escaped + '(?:\\s|$)').test(haystack);
+    }
     return haystack.indexOf(kw) !== -1;
 };
 
 /* Match info for one category: the character position of its earliest matching
-   keyword (the primary noun usually appears first) plus a `defining` flag that is
+   keyword (the primary noun usually appears first), a `defining` flag that is
    true when a matched keyword IS the category name or a leading part of it (e.g.
-   "مشويات" defines the Grills category, "لحمه" leads "لحوم"). This lets
-   overlapping matches resolve to the category that owns the word. */
+   "مشويات" defines the Grills category, "لحمه" leads "لحوم"), and the length of
+   the longest matched keyword (`specificity`) used as a most-specific-first
+   tie-break. This lets overlapping matches resolve to the category that owns the
+   word, and at equal positions prefers the longer, more specific match. */
 const kanjoCategoryMatchInfo = (cat, haystack) => {
     const nameNorm = normalizeArabic(cat.name);
     let best = -1;
     let defining = false;
+    let specificity = 0;
     cat.keywords.forEach((keyword) => {
         if (!kanjoCategoryKeywordHit(keyword, haystack)) return;
         const kw = normalizeArabic(keyword);
-        if (kw && (nameNorm === kw || nameNorm.indexOf(kw) === 0)) defining = true;
+        if (!kw) return;
+        if (nameNorm === kw || nameNorm.indexOf(kw) === 0) defining = true;
+        specificity = Math.max(specificity, kw.length);
         const pos = haystack.indexOf(kw);
         if (pos === -1) return;
         if (best === -1 || pos < best) best = pos;
     });
     if (best === -1) return null;
-    return { pos: best, defining };
+    return { pos: best, defining, specificity };
 };
+
+/* Categories ordered most-specific first (longest normalized name first) for
+   matching. The canonical KANJO_PRODUCT_CATEGORIES order/id is preserved for the
+   exported value and the audit dropdown; only the matcher walks this view. */
+const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
+    .map((cat, canonical) => ({ cat, canonical }))
+    .sort((a, b) => (normalizeArabic(b.cat.name).length - normalizeArabic(a.cat.name).length) || (a.canonical - b.canonical));
 
 /* Confidence-based matcher. A product matching ONE OR MORE categories is
    auto-resolved to the dominant match (earliest keyword: "بيتزا سي فود" -> Pizza,
@@ -4350,15 +4369,15 @@ const kanjoMatchProductCategory = (product) => {
         .trim();
     const matches = [];
     if (haystack) {
-        KANJO_PRODUCT_CATEGORIES.forEach((cat, order) => {
+        KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
             const info = kanjoCategoryMatchInfo(cat, haystack);
-            if (info) matches.push({ cat, order, pos: info.pos, defining: info.defining ? 1 : 0 });
+            if (info) matches.push({ cat, canonical, pos: info.pos, defining: info.defining ? 1 : 0, specificity: info.specificity });
         });
     }
     if (matches.length) {
-        /* Earliest keyword wins; then the category that "owns" the word; then
-           the canonical (ID) order. */
-        matches.sort((a, b) => (a.pos - b.pos) || (b.defining - a.defining) || (a.order - b.order));
+        /* Earliest keyword wins; then the category that "owns" the word; then the
+           longest (most specific) matched keyword; then the canonical (ID) order. */
+        matches.sort((a, b) => (a.pos - b.pos) || (b.defining - a.defining) || (b.specificity - a.specificity) || (a.canonical - b.canonical));
         const primary = matches[0].cat;
         return {
             status: 'matched',
@@ -4370,45 +4389,73 @@ const kanjoMatchProductCategory = (product) => {
     return { status: 'unmapped', category: '', options: [] };
 };
 
-/* ===== Kanjo strict variant attribute mapper =====
-   The Kanjo bulk importer only accepts attribute names/values from its own
-   template (`ID:X | ATTR:X | Name`). Plain-text option values are translated
-   through a master dictionary derived from Kanjo's variants CSV. Rules are
-   ordered so the most specific tokens win (e.g. "xxl" before "xl" before "l",
-   and taste/bread before the single-letter size tokens). */
-const KANJO_VARIANT_FALLBACK = { name: 'ID:2 | المقاس', value: 'ID:5 | ATTR:2 | وسط' };
+/* ===== Kanjo strict variant translation middleware =====
+   Legacy catalog rows still store pre-schema variant strings (e.g.
+   `ID:2 | المقاس`) while the bulk importer only accepts Kanjo's NEW strict
+   attribute pairs (`ID:X | ATTR:X | Label`). This middleware intercepts every
+   exported variant and remaps both the attribute NAME and the VALUE onto the
+   new IDs. Rules are ordered most-specific-first ("كبير جدا" before "كبير") and
+   the value's attribute family drives the name, so name/value can never drift
+   out of sync. */
+const KANJO_VARIANT_NAME_BY_ATTR = {
+    1: 'ID:1 | الحجم',
+    2: 'ID:2 | الطعم',
+    3: 'ID:3 | نوع العيش',
+    4: 'ID:4 | الصوص'
+};
 
-const KANJO_VARIANT_RULES = [
-    /* A) BREAD (الخبز) — Variant ID: 4 */
-    { name: 'ID:4 | الخبز', value: 'ID:14 | ATTR:4 | خبز سوري', any: ['سوري', 'syrian'] },
-    { name: 'ID:4 | الخبز', value: 'ID:15 | ATTR:4 | عيش فينو', any: ['فينو', 'fino'] },
-    /* B) TASTE (الطعم) — Variant ID: 3 */
-    { name: 'ID:3 | الطعم', value: 'ID:12 | ATTR:3 | حراق', any: ['حراق', 'spicy'] },
-    { name: 'ID:3 | الطعم', value: 'ID:13 | ATTR:3 | عادي', any: ['عادي', 'normal'] },
-    /* C) SIZE (المقاس) — Variant ID: 2 */
-    { name: 'ID:2 | المقاس', value: 'ID:11 | ATTR:2 | كبير جدا', any: ['كبير جدا', 'xxl'] },
-    { name: 'ID:2 | المقاس', value: 'ID:7 | ATTR:2 | كبير', any: ['كبير', 'xl'] },
-    { name: 'ID:2 | المقاس', value: 'ID:18 | ATTR:2 | صاروخ', any: ['صاروخ'] },
-    { name: 'ID:2 | المقاس', value: 'ID:19 | ATTR:2 | شرقي', any: ['شرقي'] },
-    { name: 'ID:2 | المقاس', value: 'ID:6 | ATTR:2 | لارج', any: ['لارج', 'l'] },
-    { name: 'ID:2 | المقاس', value: 'ID:4 | ATTR:2 | صغير', any: ['صغير', 's'] },
-    { name: 'ID:2 | المقاس', value: 'ID:5 | ATTR:2 | وسط', any: ['وسط', 'm'] },
-    /* D) SAUCE (الصوص) — Variant ID: 5 */
-    { name: 'ID:5 | الصوص', value: 'ID:16 | ATTR:5 | أحمر', any: ['أحمر', 'red'] },
-    { name: 'ID:5 | الصوص', value: 'ID:17 | ATTR:5 | أبيض', any: ['أبيض', 'white'] }
+/* Safe default per family, used when a legacy variant carries only an attribute
+   NAME and no recognisable value token. */
+const KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR = {
+    1: 'ID:2 | ATTR:1 | وسط',
+    2: 'ID:7 | ATTR:2 | عادي',
+    3: 'ID:10 | ATTR:3 | عيش فينو',
+    4: 'ID:11 | ATTR:4 | صوص أحمر'
+};
+
+const KANJO_VARIANT_FALLBACK = { name: KANJO_VARIANT_NAME_BY_ATTR[1], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[1] };
+
+/* Legacy variant NAME -> new strict family. */
+const KANJO_VARIANT_NAME_RULES = [
+    { attr: 1, tokens: ['المقاس'] },
+    { attr: 2, tokens: ['الطعم'] },
+    { attr: 3, tokens: ['الخبز'] },
+    { attr: 4, tokens: ['الصوص'] }
 ];
 
-/* Translate a plain-text variant (option name + value) into Kanjo's strict
-   attribute id pair. Returns `{ name, value }` and never fails: unmatched
-   values fall back to Size/Middle so the sheet always passes validation. */
+/* Legacy variant VALUE -> new strict `ID:n | ATTR:n | label`. */
+const KANJO_VARIANT_VALUE_RULES = [
+    { attr: 1, tokens: ['كبير جدا', 'جامبو'], value: 'ID:4 | ATTR:1 | جامبو' },
+    { attr: 1, tokens: ['لارج', 'كبير'], value: 'ID:3 | ATTR:1 | كبير' },
+    { attr: 1, tokens: ['صغير'], value: 'ID:1 | ATTR:1 | صغير' },
+    { attr: 1, tokens: ['وسط'], value: 'ID:2 | ATTR:1 | وسط' },
+    { attr: 1, tokens: ['صاروخ'], value: 'ID:5 | ATTR:1 | صاروخ' },
+    { attr: 1, tokens: ['شرقي'], value: 'ID:6 | ATTR:1 | شرقي' },
+    { attr: 2, tokens: ['عادي'], value: 'ID:7 | ATTR:2 | عادي' },
+    { attr: 2, tokens: ['حار'], value: 'ID:8 | ATTR:2 | حار' },
+    { attr: 3, tokens: ['سوري', 'خبز سوري'], value: 'ID:9 | ATTR:3 | عيش سوري' },
+    { attr: 3, tokens: ['فينو', 'عيش فينو'], value: 'ID:10 | ATTR:3 | عيش فينو' },
+    { attr: 4, tokens: ['أحمر'], value: 'ID:11 | ATTR:4 | صوص أحمر' },
+    { attr: 4, tokens: ['أبيض'], value: 'ID:12 | ATTR:4 | صوص أبيض' }
+];
+
+/* Translate a legacy variant (option name + value) into Kanjo's new strict
+   attribute id pair. Never fails: unmatched variants fall back to Size/Middle so
+   the sheet always passes validation. A matched VALUE always determines both the
+   attribute name and its attribute family, guaranteeing `ID:name == ATTR:name`. */
 const mapVariantToKanjo = (rawName, rawValue) => {
     const haystack = normalizeArabic([rawValue, rawName].filter(Boolean).join(' '));
-    if (haystack) {
-        const hit = KANJO_VARIANT_RULES.find((rule) => rule.any.some((token) => {
-            const t = normalizeArabic(token);
-            return t && haystack.indexOf(t) !== -1;
-        }));
-        if (hit) return { name: hit.name, value: hit.value };
+    const matchesToken = (token) => {
+        const t = normalizeArabic(token);
+        return !!t && haystack.indexOf(t) !== -1;
+    };
+    const valueRule = KANJO_VARIANT_VALUE_RULES.find((rule) => rule.tokens.some(matchesToken));
+    if (valueRule) {
+        return { name: KANJO_VARIANT_NAME_BY_ATTR[valueRule.attr], value: valueRule.value };
+    }
+    const nameRule = KANJO_VARIANT_NAME_RULES.find((rule) => rule.tokens.some(matchesToken));
+    if (nameRule) {
+        return { name: KANJO_VARIANT_NAME_BY_ATTR[nameRule.attr], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[nameRule.attr] };
     }
     return { name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value };
 };
@@ -4419,10 +4466,10 @@ const KANJO_VARIANT_DELETE = '__KANJO_DELETE_VARIANT__';
 const KANJO_VARIANT_ATTRIBUTE_OPTIONS = (() => {
     const list = [];
     const seen = new Set();
-    KANJO_VARIANT_RULES.forEach((rule) => {
+    KANJO_VARIANT_VALUE_RULES.forEach((rule) => {
         if (seen.has(rule.value)) return;
         seen.add(rule.value);
-        list.push({ name: rule.name, value: rule.value });
+        list.push({ name: KANJO_VARIANT_NAME_BY_ATTR[rule.attr], value: rule.value });
     });
     if (!seen.has(KANJO_VARIANT_FALLBACK.value)) {
         list.push({ name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value });
