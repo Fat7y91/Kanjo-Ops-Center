@@ -169,6 +169,46 @@ const kpiLocalDateKey = (value) => {
     return y + '-' + m + '-' + day;
 };
 
+/* ─────────────────── monthly reporting period ───────────────────
+   The KPI dashboard is a MONTHLY view. Every metric (products AND the tracked
+   daily_stats) is scoped to one calendar month so the report never sums a rep's
+   entire lifetime. The default period is the CURRENT month; the founders may
+   pick an earlier month (e.g. سبتمبر 2026) to close its accounts.
+
+   HARD double-counting boundary (OCTOBER 2026): historicalSeconds is a one-time
+   backfill for the pre-tracking lifetime. From 2026-10 onward the live trackers
+   (activeSeconds + imageEditSeconds) are the ONLY source of truth, so the
+   historical backfill is added for every period BEFORE October 2026 and never
+   afterwards. Because all pre-October tracking data lives in a single month,
+   the September view reproduces the legacy calculation exactly. */
+const KPI_MONTH_RE = /^\d{4}-\d{2}$/;
+const kpiCurrentMonthKey = () => kpiLocalDateKey().slice(0, 7);
+const kpiNormalizeMonthKey = (value) => {
+    const m = String(value || '').slice(0, 7);
+    return KPI_MONTH_RE.test(m) ? m : kpiCurrentMonthKey();
+};
+const KPI_HISTORICAL_CUTOFF_MONTH = '2026-10';
+const kpiPeriodIncludesHistorical = (monthKey) => kpiNormalizeMonthKey(monthKey) < KPI_HISTORICAL_CUTOFF_MONTH;
+window.kpiPeriodIncludesHistorical = kpiPeriodIncludesHistorical;
+
+const KPI_MONTH_NAMES_AR = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const kpiMonthLabel = (monthKey) => {
+    const m = kpiNormalizeMonthKey(monthKey);
+    const [y, mo] = m.split('-');
+    const name = KPI_MONTH_NAMES_AR[Math.max(0, Math.min(11, Number(mo) - 1))] || mo;
+    return name + ' ' + y;
+};
+window.kpiMonthLabel = kpiMonthLabel;
+
+/* The month currently shown by the dashboard. Set before every report build. */
+window._kpiReportMonth = kpiCurrentMonthKey();
+
+/* A product belongs to the month it was CREATED in (never the edit date). */
+const kpiProductMonthKey = (p) => {
+    const ms = kpiToMillis(p && (p.createdAt || p.created_at || p.updatedAt));
+    return ms ? kpiLocalDateKey(ms).slice(0, 7) : '';
+};
+
 const kpiRepId = (name) => {
     const clean = String(name || '').trim().replace(/[\/\s]+/g, '_').replace(/[^\u0600-\u06FFa-zA-Z0-9_.-]/g, '');
     return clean || 'unknown';
@@ -342,10 +382,10 @@ window.kpiSyncActiveTime = async (extra) => {
             const ref = window.doc(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today);
             await window.setDoc(ref, payload, { merge: true });
         }
-        /* The day's active/edit totals changed: drop the memoized read so an
-           open dashboard reflects it on the next render. */
+        /* The day's active/edit totals changed: drop the memoized read for the
+           CURRENT month so an open dashboard reflects it on the next render. */
         if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
-            window.kanjoCache.invalidate('kpi:daily:' + repId);
+            window.kanjoCache.invalidate('kpi:daily:' + repId + ':' + today.slice(0, 7));
         }
     } catch (err) {
         console.error('[kpi] active time sync failed:', err);
@@ -796,10 +836,11 @@ const kpiFetchParentRecords = () => {
     return kpiCacheGet(key, kpiFetchParentRecordsUncached);
 };
 
-const kpiFetchDailyStatsUncached = async (repId) => {
+const kpiFetchDailyStatsUncached = async (repId, monthKey) => {
     let activeSeconds = 0;
     let imageEditSeconds = 0;
     let days = 0;
+    const period = kpiNormalizeMonthKey(monthKey);
     try {
         let items = null;
         if (!repId) return { activeSeconds, imageEditSeconds, days };
@@ -808,9 +849,14 @@ const kpiFetchDailyStatsUncached = async (repId) => {
         } else {
             const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION));
             items = [];
-            snap.forEach((d) => items.push(d.data() || {}));
+            snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
         }
         (items || []).forEach((data) => {
+            /* Only the selected month is summed: the lifetime of the rep is
+               never aggregated again. The document id IS the date
+               (YYYY-MM-DD); the explicit `date` field is the fallback. */
+            const day = String((data && (data.date || data.id)) || '').slice(0, 10);
+            if (day.slice(0, 7) !== period) return;
             activeSeconds += Math.max(0, Number(data.activeSeconds) || 0);
             imageEditSeconds += Math.max(0, Number(data.imageEditSeconds) || 0);
             days += 1;
@@ -821,11 +867,12 @@ const kpiFetchDailyStatsUncached = async (repId) => {
     return { activeSeconds, imageEditSeconds, days };
 };
 
-/* Memoized per-rep daily-stats read, keyed by repId, so a re-render or a
-   manager opening the dashboard twice inside the TTL issues no extra reads. */
-const kpiFetchDailyStats = (repId) => {
+/* Memoized per-rep, per-month daily-stats read, so a re-render or a manager
+   opening the dashboard twice inside the TTL issues no extra reads. */
+const kpiFetchDailyStats = (repId, monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey);
     if (!repId) return Promise.resolve({ activeSeconds: 0, imageEditSeconds: 0, days: 0 });
-    return kpiCacheGet('kpi:daily:' + repId, () => kpiFetchDailyStatsUncached(repId));
+    return kpiCacheGet('kpi:daily:' + repId + ':' + period, () => kpiFetchDailyStatsUncached(repId, period));
 };
 
 /* ───────────── Team leaderboard (gamification) ─────────────
@@ -837,7 +884,8 @@ const kpiFetchDailyStats = (repId) => {
 const KPI_TEAM_SUMMARY_FIELDS = [
     'repId', 'repName', 'team', 'isEditor',
     'publicTotalProducts', 'publicTotalSeconds',
-    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicWithImage', 'publicUpdatedAt'
+    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicWithImage',
+    'publicPeriod', 'publicUpdatedAt'
 ];
 
 const kpiRepTeamName = (repName) => {
@@ -866,6 +914,7 @@ const kpiSummaryPayload = (row) => {
         publicValidRatio: Math.max(0, Number(row.validRatioRaw) || 0),
         publicImageRatio: Math.max(0, Number(row.imageRatioRaw) || 0),
         publicWithImage: Math.max(0, Number(row.withImage) || 0),
+        publicPeriod: kpiNormalizeMonthKey(row.period || window._kpiReportMonth),
         publicUpdatedAt: new Date()
     };
 };
@@ -903,7 +952,8 @@ const kpiPublishSummaries = (rows) => {
    payroll roster seeds the list so every rep is counted in the denominator even
    before they have published a summary. Rule-gated by `allow read` for all
    signed-in users. Never lets a failure throw into the dashboard render path. */
-const kpiFetchLeaderboardSummariesUncached = async () => {
+const kpiFetchLeaderboardSummariesUncached = async (monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey);
     try {
         const byId = new Map();
         /* Seed the full company roster so the rank denominator is the total
@@ -943,6 +993,12 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
             const { id, ...data } = row;
             /* Ignore any stale summary published for a data-entry identity. */
             if (kpiIsExcludedRepName(data.repName || id)) return;
+            /* MONTHLY board: only the summaries published FOR the selected
+               period count. A rep who has not republished this month must not
+               leak a previous month's numbers into the current ranking. A
+               missing/invalid period never matches (legacy lifetime docs). */
+            const publishedPeriod = String(data.publicPeriod || '').slice(0, 7);
+            if (!KPI_MONTH_RE.test(publishedPeriod) || publishedPeriod !== period) return;
             byId.set(id, {
                 repId: id,
                 name: data.repName || id,
@@ -965,7 +1021,10 @@ const kpiFetchLeaderboardSummariesUncached = async () => {
 
 /* Memoized leaderboard read, shared across re-renders inside the TTL window.
    Consumers only filter/map the result, so the cached array is never mutated. */
-const kpiFetchLeaderboardSummaries = () => kpiCacheGet('kpi:leaderboard', kpiFetchLeaderboardSummariesUncached);
+const kpiFetchLeaderboardSummaries = (monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey);
+    return kpiCacheGet('kpi:leaderboard:' + period, () => kpiFetchLeaderboardSummariesUncached(period));
+};
 
 /* Anonymous benchmarking: reps compare each of their four scored metrics
    against the single best company-wide value, without ever seeing a peer's
@@ -1123,13 +1182,20 @@ const kpiMinutesPerProductRaw = (seconds, products) => {
     return (Number(seconds) || 0) / 60 / count;
 };
 
-const kpiBuildReport = async () => {
+const kpiBuildReport = async (monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey || window._kpiReportMonth);
+    /* September and earlier keep the historical backfill; October 2026 onward
+       relies exclusively on the live trackers (no double counting). */
+    const includeHistorical = kpiPeriodIncludesHistorical(period);
     /* Reps only load their own catalog products; managers get the full set.
-       Fetch products and parent records concurrently. */
-    const [products, parents] = await Promise.all([
+       Fetch products and parent records concurrently, then scope the products
+       to the selected month (by creation date) so nothing is aggregated for the
+       rep's entire lifetime. */
+    const [allProducts, parents] = await Promise.all([
         kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || ''),
         kpiFetchParentRecords()
     ]);
+    const products = (allProducts || []).filter((p) => kpiProductMonthKey(p) === period);
 
     const reps = new Map();
     const ensureRep = (name) => {
@@ -1196,8 +1262,10 @@ const kpiBuildReport = async () => {
 
     parents.forEach((data, repId) => {
         const rep = ensureRep(data.repName || repId);
-        rep.historicalSeconds = Math.max(0, Number(data.historicalSeconds) || 0);
-        rep.historicalComputedAt = data.historicalComputedAt || null;
+        /* historicalSeconds is a pre-tracking backfill: only periods before the
+           October 2026 boundary may add it, otherwise it is zeroed out. */
+        rep.historicalSeconds = includeHistorical ? Math.max(0, Number(data.historicalSeconds) || 0) : 0;
+        rep.historicalComputedAt = includeHistorical ? (data.historicalComputedAt || null) : null;
     });
 
     /* Attribute the global edited-images count to the image editor's own row,
@@ -1229,7 +1297,7 @@ const kpiBuildReport = async () => {
         ? [reps.get(kpiRepId((window.currentUser && window.currentUser.name) || ''))].filter(Boolean)
         : Array.from(reps.values()).filter((rep) => !kpiIsExcludedRepName(rep.name));
     const rows = await Promise.all(repList.map(async (rep) => {
-        const stats = await kpiFetchDailyStats(rep.repId);
+        const stats = await kpiFetchDailyStats(rep.repId, period);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
         const totalProducts = rep.totalProducts;
         // RAW ratios (0..1) — never pre-rounded.
@@ -1274,7 +1342,8 @@ const kpiBuildReport = async () => {
             trackedDays: stats.days,
             activeDays: dailyCounts.length,
             dailyCounts,
-            lastActiveDate: dailyCounts.length ? dailyCounts[dailyCounts.length - 1].date : null
+            lastActiveDate: dailyCounts.length ? dailyCounts[dailyCounts.length - 1].date : null,
+            period
         };
     }));
 
@@ -1365,10 +1434,14 @@ const kpiBuildReport = async () => {
     totals.minutesPerProductRaw = kpiMinutesPerProductRaw(totals.seconds, totals.products);
 
     /* Fire-and-forget so ranking never waits on the network. Reps publish only
-       their own summary; managers publish the whole roster. */
-    kpiPublishSummaries(rows).catch(() => { /* non-fatal */ });
+       their own summary; managers publish the whole roster. Summaries are keyed
+       by period, and we ONLY publish the LIVE (current) month: browsing a
+       historical month must never overwrite the current board. */
+    if (period === kpiCurrentMonthKey()) {
+        kpiPublishSummaries(rows).catch(() => { /* non-fatal */ });
+    }
 
-    return { rows, totals, generatedAt: new Date() };
+    return { rows, totals, generatedAt: new Date(), period };
 };
 
 /* ─────────────────── Chart.js helpers ─────────────────── */
@@ -1539,18 +1612,22 @@ const kpiRatioBar = (ratio) => ratio >= 0.8 ? KPI_COLORS.green : ratio >= 0.5 ? 
 
 const kpiGlobalSummaryHtml = (report) => {
     const t = report.totals;
+    const periodLabel = kpiMonthLabel(report.period);
+    const includesHistorical = kpiPeriodIncludesHistorical(report.period);
     return `
     <section class="kpi-panel">
         <div class="kpi-panel-head">
             <div class="flex items-center gap-2">
                 <span class="kpi-panel-icon"><i class="fa-solid fa-earth-africa"></i></span>
                 <div>
-                    <h3 class="font-black text-sm text-[#230535]">الملخص العام لكل الفريق</h3>
-                    <p class="text-[11px] font-bold text-slate-400">أرقام إجمالية محسوبة من البيانات الخام بدون تقريب وسيط</p>
+                    <h3 class="font-black text-sm text-[#230535]">الملخص العام لكل الفريق — كشف شهر ${periodLabel}</h3>
+                    <p class="text-[11px] font-bold text-slate-400">أرقام إجمالية لشهر ${periodLabel} محسوبة من البيانات الخام بدون تقريب وسيط</p>
                 </div>
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <span class="kpi-chip">${t.reps} مندوب${t.editors ? ' + ' + t.editors + ' محرر' : ''}</span>
+                <span class="kpi-chip kpi-chip-gold"><i class="fa-regular fa-calendar"></i> ${periodLabel}</span>
+                <span class="kpi-chip ${includesHistorical ? '' : 'kpi-chip-dark'}">${includesHistorical ? 'يتضمن الوقت التاريخي' : 'الوقت الحي فقط (بدون احتساب تاريخي)'}</span>
                 ${t.topScorerName ? `<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-crown"></i> المتصدر: ${kpiEscape(t.topScorerName)} — ${Number(t.topScorerScore || 0).toFixed(1)}%</span>` : ''}
             </div>
         </div>
@@ -2332,7 +2409,8 @@ const kpiScopeReportForRep = (report, repId) => {
     return {
         rows: row ? [row] : [],
         totals: report.totals || {},
-        generatedAt: report.generatedAt || new Date()
+        generatedAt: report.generatedAt || new Date(),
+        period: report.period
     };
 };
 
@@ -2355,15 +2433,25 @@ window.renderKpiDashboard = async () => {
     const historicalBtn = document.getElementById('kpiHistoricalBtn');
     if (historicalBtn) historicalBtn.classList.toggle('hidden', isRep);
     const viewTitle = document.getElementById('kpiViewTitle');
-    if (viewTitle) viewTitle.textContent = isRep ? 'لوحة أدائي' : 'مركز تحليل الأداء والجودة';
+    /* Always render the period selector to the state, and clamp it to the
+       current month so a future month can never be selected. */
+    const monthInput = document.getElementById('kpiReportMonth');
+    if (monthInput) {
+        window._kpiReportMonth = kpiNormalizeMonthKey(window._kpiReportMonth);
+        monthInput.value = window._kpiReportMonth;
+        monthInput.max = kpiCurrentMonthKey();
+    }
+    const monthLabel = kpiMonthLabel(window._kpiReportMonth);
+    if (viewTitle) viewTitle.textContent = (isRep ? 'لوحة أدائي' : 'مركز تحليل الأداء والجودة') + ' — ' + monthLabel;
 
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
     try {
+        const period = window._kpiReportMonth;
         /* The rep's personal view needs the published leaderboard, and those
            two reads are independent — start both before awaiting either so the
            rank/benchmark round-trip overlaps the report build. */
-        const summariesPromise = isRep ? kpiFetchLeaderboardSummaries() : null;
-        const report = await kpiBuildReport();
+        const summariesPromise = isRep ? kpiFetchLeaderboardSummaries(period) : null;
+        const report = await kpiBuildReport(period);
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
 
@@ -2448,6 +2536,19 @@ window.openKpiDashboard = async () => {
     if (dashboard) dashboard.classList.add('hidden');
     if (view) view.classList.remove('hidden');
     try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+    await window.renderKpiDashboard();
+};
+
+/* Switch the reporting month and rebuild the dashboard. The month can never be
+   later than the current one. All daily_stats and product-scoped reads are keyed
+   by month, so no shared cache is invalidated here. */
+window.kpiChangeReportMonth = async (value) => {
+    const requested = String(value || '').slice(0, 7);
+    if (!KPI_MONTH_RE.test(requested)) return;
+    const clamped = requested > kpiCurrentMonthKey() ? kpiCurrentMonthKey() : requested;
+    if (clamped === window._kpiReportMonth) return;
+    window._kpiReportMonth = clamped;
+    window._kpiSelectedRepId = null;
     await window.renderKpiDashboard();
 };
 

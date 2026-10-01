@@ -268,7 +268,7 @@ service cloud.firestore {
           'repId', 'repName', 'team', 'isEditor',
           'publicTotalProducts', 'publicTotalSeconds',
           'publicAvgDescriptionLength',
-          'publicValidRatio', 'publicImageRatio', 'publicWithImage', 'publicUpdatedAt'
+          'publicValidRatio', 'publicImageRatio', 'publicWithImage', 'publicPeriod', 'publicUpdatedAt'
         ];
       }
       function isOwnSummaryCreate() {
