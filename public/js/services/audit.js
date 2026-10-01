@@ -478,12 +478,18 @@ const auditInstallHooks = () => {
         if (!watched) return write();
         /* Snapshot the document BEFORE it is removed so the Delete entry carries
            the deleted record's final contents (the SDK delete hook does the
-           same; this keeps the REST path equivalent). */
+           same; this keeps the REST path equivalent). M3: prefer the in-memory
+           copy (tasksMemory / other caches) and only fall back to a server read
+           when the record is not cached anywhere. */
+        const preId = Array.isArray(segments) ? segments[segments.length - 1] : segments;
+        const cachedBefore = auditLocateCachedDoc(collectionId, preId);
         let before;
         try {
-            before = (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
-                ? window.kanjoRest.getDocument(segments)
-                : Promise.resolve(null);
+            before = cachedBefore
+                ? Promise.resolve(cachedBefore)
+                : ((window.kanjoRest && typeof window.kanjoRest.getDocument === 'function')
+                    ? window.kanjoRest.getDocument(segments)
+                    : Promise.resolve(null));
         } catch (_) {
             before = Promise.resolve(null);
         }

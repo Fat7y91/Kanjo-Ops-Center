@@ -60,6 +60,19 @@
         return hit ? hit.value : undefined;
     };
 
+    /* Return the cached values whose keys start with `prefix`. Callers that need
+       to patch a specific record in EVERY cached collection slice (e.g. the
+       KPI product caches: `kpi:products:all` + `kpi:products:rep:<name>`) use
+       this instead of dropping the whole prefix and paying for a full re-read. */
+    const peekPrefix = (prefix) => {
+        const p = normalizeKey(prefix);
+        const out = [];
+        store.forEach((entry, key) => {
+            if (key.indexOf(p) === 0) out.push(entry.value);
+        });
+        return out;
+    };
+
     const has = (key) => store.has(normalizeKey(key));
 
     const invalidate = (key) => {
@@ -95,6 +108,7 @@
     window.kanjoCache = {
         get: get,
         peek: peek,
+        peekPrefix: peekPrefix,
         has: has,
         invalidate: invalidate,
         invalidatePrefix: invalidatePrefix,

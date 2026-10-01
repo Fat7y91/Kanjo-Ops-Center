@@ -159,10 +159,14 @@ window.resolveCanonicalMerchantId = async (baseName, taskData) => {
     const mem = window.findMerchantIdForBase(baseName);
     if (mem) return mem;
 
-    /* 2) Authoritative server lookup by normalized name (and phone). Reuses the
-       shared merchants loader with `force` so it refreshes the cache too. */
+    /* 2) Authoritative server lookup by normalized name (and phone). H6: reuse
+       the TTL-cached merchant directory instead of forcing a full re-read on
+       every name miss. The cache is kept fresh by `invalidateMerchantsCache`
+       after any in-app write and by the on-focus refresh, so a warm cache is
+       authoritative enough; a cold/expired cache still triggers exactly one
+       read through the shared loader. */
     try {
-        const rows = await window.loadMerchantsCache({ force: true });
+        const rows = await window.loadMerchantsCache();
         const digitKey = (s) => String(s || '').replace(/\D/g, '');
         const candidates = [];
         (rows || []).forEach((rec) => {
@@ -234,9 +238,18 @@ window.getOrCreateMerchantId = async (baseName, taskData) => {
    findMerchantIdForBase would see an empty merchantsById and mint phantom IDs
    for merchants that already have a permanent record. We defer instead; the
    next snapshot (or the merchants listener) re-invokes us. */
-window.ensureMerchantIds = async () => {
+window.ensureMerchantIds = async (force = false) => {
     if (!window.tasksMemory || window.tasksMemory.size === 0) return;
     if (window._merchantIdMigrationRunning) return;
+    /* M2: this is called on every task snapshot; without a gate it re-scanned
+       ALL task docs (grouping by base name + findMerchantIdForBase) even when
+       nothing had changed. Skip the O(N) scan unless the task set or the
+       merchant directory actually moved since the last successful pass. */
+    const signature = (Number(window.tasksMemoryVersion) || 0)
+        + ':' + window.tasksMemory.size
+        + ':' + (window._merchantsLoaded === true ? '1' : '0')
+        + ':' + (window.merchantsById ? window.merchantsById.size : 0);
+    if (!force && window._merchantIdMigrationSignature === signature) return;
     window._merchantIdMigrationRunning = true;
 
     const merchantsReady = window.merchantsById && window.merchantsById.size >= 0 && window._merchantsLoaded === true;
@@ -271,6 +284,7 @@ window.ensureMerchantIds = async () => {
         });
     });
 
+    let writeOk = true;
     try {
         for (let i = 0; i < updates.length; i += 450) {
             const chunk = updates.slice(i, i + 450);
@@ -285,9 +299,14 @@ window.ensureMerchantIds = async () => {
             });
         }
     } catch (err) {
+        writeOk = false;
         console.error("[merchantId] migration write failed (will retry on next snapshot):", err);
     } finally {
         window._merchantIdMigrationRunning = false;
+        /* M2: remember the scanned state so an unchanged snapshot is a no-op.
+           Only record it after a clean pass, so a failed write still retries on
+           the next snapshot instead of being silently skipped. */
+        if (writeOk) window._merchantIdMigrationSignature = signature;
     }
 };
 

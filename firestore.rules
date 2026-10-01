@@ -326,5 +326,17 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && uid == request.auth.uid;
       allow read, delete: if isPrivileged() || isOpsManager();
     }
+
+    // Collection-group read for the GLOBAL leaderboard: a single
+    // `monthly` collection-group query (allDescendants) fetches every rep's
+    // rep_kpis/{repId}/monthly/{YYYY-MM} summary in one round-trip instead of
+    // one read per rep. Only the non-sensitive monthly summaries (counts +
+    // ratios) are reachable this way; writes stay on the scoped path rule
+    // above. Collection-group queries are evaluated against `{path=**}` rules
+    // only, so this explicit grant is required in addition to the hierarchical
+    // match.
+    match /{path=**}/monthly/{period} {
+      allow read: if isSignedIn();
+    }
   }
 }

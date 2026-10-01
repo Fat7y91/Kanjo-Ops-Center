@@ -50,6 +50,14 @@ const KPI_PRODUCT_FIELDS = [
 ];
 const KPI_REP_FIELDS = ['repName', 'historicalSeconds', 'historicalComputedAt'];
 const KPI_DAILY_STATS_FIELDS = ['activeSeconds', 'imageEditSeconds'];
+/* Field mask for the per-month leaderboard summaries. A collection-group read
+   (all reps, one query) uses this so it never pays for unrelated fields. */
+const KPI_MONTHLY_FIELDS = [
+    'repId', 'repName', 'team', 'isEditor',
+    'publicTotalProducts', 'publicTotalSeconds', 'publicAvgDescriptionLength',
+    'publicValidRatio', 'publicImageRatio', 'publicWithImage',
+    'publicPeriod', 'publicUpdatedAt'
+];
 
 /* Shared TTL for the memoized KPI reads. A re-render or a rep switch inside a
    minute reuses the in-memory rows instead of re-reading the collections. */
@@ -69,6 +77,32 @@ const kpiInvalidateProductCache = () => {
     }
 };
 window.kpiInvalidateProductCache = kpiInvalidateProductCache;
+
+/* H7: patch a single product into EVERY cached product slice (the all-products
+   cache and each rep's scoped cache) instead of dropping those caches and
+   re-reading the whole product collection after a rep fixes a description or
+   uploads a missing image. The next report build reads the patched row for
+   free. Falls back to a full invalidation if the caches are not observable. */
+const kpiPatchCachedProducts = (productId, patch) => {
+    if (!productId || !patch) return false;
+    if (!window.kanjoCache || typeof window.kanjoCache.peekPrefix !== 'function') {
+        kpiInvalidateProductCache();
+        return false;
+    }
+    let touched = 0;
+    window.kanjoCache.peekPrefix('kpi:products:').forEach((value) => {
+        if (!Array.isArray(value)) return;
+        for (let i = 0; i < value.length; i++) {
+            const row = value[i];
+            if (row && row.id === productId) {
+                value[i] = Object.assign({}, row, patch);
+                touched += 1;
+            }
+        }
+    });
+    return touched > 0;
+};
+window.kpiPatchCachedProducts = kpiPatchCachedProducts;
 
 const KPI_IDLE_MS = 3 * 60 * 1000;          // pause after 3 minutes of inactivity
 const KPI_SESSION_BREAK_MS = 15 * 60 * 1000; // gap larger than this = new session
@@ -403,6 +437,13 @@ kpiLoadActiveCounter();
    persisted at most once per 30s (plus explicitly on tab hide / unload). */
 const KPI_PERSIST_INTERVAL_MS = 30000;
 window._kpiLastPersistAt = Date.now();
+/* H4: last values actually written to Firestore, so a sync with no change is
+   skipped. `null` forces the first write of the session to establish presence. */
+window._kpiLastSyncedActiveSeconds = null;
+window._kpiLastSyncedImageEditSeconds = null;
+/* Active-seconds accumulated between remote syncs (5 minutes instead of the
+   former 1 minute). The local 1s tick still drives the live counter. */
+const KPI_SYNC_INTERVAL_SECONDS = 300;
 
 const kpiPersistActive = () => {
     kpiRollActiveDayIfNeeded();
@@ -433,21 +474,37 @@ window.kpiSyncActiveTime = async (extra) => {
     const today = kpiLocalDateKey();
     const repName = String(window.currentUser.name || '').trim();
     const repId = kpiRepId(repName);
+    const extraObj = (extra && typeof extra === 'object') ? extra : null;
+    const nextActive = Math.max(0, Number(
+        extraObj && extraObj.activeSeconds != null ? extraObj.activeSeconds : window._kpiActiveSeconds
+    ) || 0);
+    const nextImage = Math.max(0, Number(
+        extraObj && extraObj.imageEditSeconds != null ? extraObj.imageEditSeconds : kpiImageEditSecondsToday()
+    ) || 0);
+    /* H4: write ONLY when a tracked total actually changed. Previously the same
+       document was re-written every 60 active-seconds even when the value was
+       identical (e.g. an idle-but-visible tab), which was a large daily write
+       sink. The first sync of a session is forced (sentinel is null). */
+    if (window._kpiLastSyncedActiveSeconds === nextActive
+        && window._kpiLastSyncedImageEditSeconds === nextImage) {
+        return;
+    }
     try {
         const payload = {
             repId,
             repName,
             team: String(window.currentUser.team || ''),
             date: today,
-            activeSeconds: Math.max(0, Number(window._kpiActiveSeconds) || 0),
-            imageEditSeconds: kpiImageEditSecondsToday(),
+            activeSeconds: nextActive,
+            imageEditSeconds: nextImage,
             updatedAt: new Date()
         };
-        if (extra && typeof extra === 'object') Object.assign(payload, extra);
         if (!(await kpiRestMerge([KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today], payload))) {
             const ref = window.doc(window.db, KPI_REP_COLLECTION, repId, KPI_STATS_SUBCOLLECTION, today);
             await window.setDoc(ref, payload, { merge: true });
         }
+        window._kpiLastSyncedActiveSeconds = nextActive;
+        window._kpiLastSyncedImageEditSeconds = nextImage;
         /* The day's active/edit totals changed: drop the memoized read for the
            CURRENT month so an open dashboard reflects it on the next render. */
         if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
@@ -487,7 +544,16 @@ window.kpiStartActiveTracker = () => {
         }
         window._kpiActiveSeconds += 1;
         kpiMaybePersistActive();
-        if (window._kpiActiveSeconds % 60 === 0) window.kpiSyncActiveTime();
+        /* H4: remote sync every 5 minutes of accumulated activity (was 1), and
+           only when the total has moved since the last successful write. A
+           midnight rollover (counter resets below the synced value) syncs
+           immediately so the new day's zero is not lost. */
+        const synced = window._kpiLastSyncedActiveSeconds;
+        if (synced == null
+            || window._kpiActiveSeconds < synced
+            || (window._kpiActiveSeconds - synced) >= KPI_SYNC_INTERVAL_SECONDS) {
+            window.kpiSyncActiveTime();
+        }
     }, 1000);
     window.kpiSyncActiveTime();
     /* Never leak the 1s tick, the input listeners or the lifecycle listeners
@@ -504,6 +570,12 @@ window.kpiStartActiveTracker = () => {
             window._kpiTickHandle = null;
         }
         window._kpiTrackerStarted = false;
+        /* H4: reset the change-gate sentinels so the NEXT session (possibly a
+           different user) forces its first write instead of being skipped when
+           its counters coincidentally restart at the previous session's last
+           synced values. */
+        window._kpiLastSyncedActiveSeconds = null;
+        window._kpiLastSyncedImageEditSeconds = null;
     });
 };
 
@@ -774,11 +846,16 @@ window.calculateHistoricalTime = async () => {
             }, { merge: true });
             results.push({ rep: info.rep, repId, seconds: info.seconds, count: info.count });
         }
-        /* Historical seconds were rewritten for every rep: drop the memoized
-           rep_kpis/leaderboard so the dashboard below reads the fresh values. */
-        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
-            window.kanjoCache.invalidatePrefix('kpi:repkpis');
-            window.kanjoCache.invalidatePrefix('kpi:leaderboard');
+        /* M4: historical seconds were rewritten for every rep. Drop only the
+           keys that can reflect them (the aggregate rep_kpis slice and the
+           viewer's own slice) plus the currently-viewed leaderboard month,
+           instead of every memoized leaderboard period. */
+        if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
+            window.kanjoCache.invalidate('kpi:repkpis:all');
+            const viewerName = String((window.currentUser && window.currentUser.name) || '');
+            if (viewerName) window.kanjoCache.invalidate('kpi:repkpis:own:' + viewerName);
+            const viewMonth = kpiNormalizeMonthKey(window._kpiReportMonth || kpiCurrentMonthKey());
+            window.kanjoCache.invalidate('kpi:leaderboard:' + viewMonth);
         }
 
         const creditMinutes = Math.round(editorCredit / 60);
@@ -1024,11 +1101,13 @@ const kpiPublishSummary = async (row) => {
         if (!(await kpiRestMerge(segments, payload))) {
             await window.setDoc(window.doc(window.db, ...segments), payload, { merge: true });
         }
-        /* The published rows changed: drop the memoized leaderboard so the next
-           read (and every viewer) sees the fresh summary. */
-        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
-            window.kanjoCache.invalidatePrefix('kpi:repkpis');
-            window.kanjoCache.invalidatePrefix('kpi:leaderboard');
+        /* M4: drop only the keys this publish can have changed (the published
+           month's leaderboard + the affected rep_kpis slice) instead of every
+           memoized period. */
+        if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
+            window.kanjoCache.invalidate('kpi:leaderboard:' + period);
+            window.kanjoCache.invalidate('kpi:repkpis:all');
+            if (payload.repName) window.kanjoCache.invalidate('kpi:repkpis:own:' + payload.repName);
         }
     } catch (err) {
         /* Non-fatal: a rep publishes only their own row; managers publish all. */
@@ -1101,24 +1180,53 @@ const kpiFetchLeaderboardSummariesUncached = async (monthKey) => {
             });
         };
 
-        await Promise.all(Array.from(byId.keys()).map(async (repId) => {
-            let data = null;
+        /* H2: fetch EVERY rep's summary for this period in ONE collection-group
+           query (from `monthly`, allDescendants) instead of N per-rep document
+           reads. The `repId` field carries the parent identity, so no path data
+           is required. Needs a collection-group index + rule; on any failure we
+           transparently fall back to the per-rep reads. */
+        let grouped = null;
+        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
             try {
-                data = await kpiReadDoc([KPI_REP_COLLECTION, repId, KPI_MONTHLY_SUBCOLLECTION, period]);
-            } catch (monthErr) {
-                console.warn('[kpi] monthly summary fetch failed for ' + repId + ':', monthErr);
+                grouped = await window.kanjoRest.runQuery(
+                    KPI_MONTHLY_SUBCOLLECTION,
+                    [['publicPeriod', '==', period]],
+                    null,
+                    { allDescendants: true, select: KPI_MONTHLY_FIELDS }
+                );
+            } catch (groupErr) {
+                console.warn('[kpi] collection-group leaderboard fetch failed; using per-rep reads:', groupErr);
+                grouped = null;
             }
-            if (!data) {
-                /* Transitional fallback: honor a summary a not-yet-updated client
-                   wrote to the root document for this same period. */
+        }
+
+        if (Array.isArray(grouped)) {
+            grouped.forEach((data) => {
+                const id = String((data && data.repId) || '').trim();
+                /* Only roster reps are ranked (same membership as the previous
+                   per-rep reads, which only ever queried the seeded ids). */
+                if (id && byId.has(id)) applySummary(id, data);
+            });
+        } else {
+            await Promise.all(Array.from(byId.keys()).map(async (repId) => {
+                let data = null;
                 try {
-                    data = await kpiReadDoc([KPI_REP_COLLECTION, repId]);
-                } catch (fallbackErr) {
-                    console.warn('[kpi] fallback summary fetch failed for ' + repId + ':', fallbackErr);
+                    data = await kpiReadDoc([KPI_REP_COLLECTION, repId, KPI_MONTHLY_SUBCOLLECTION, period]);
+                } catch (monthErr) {
+                    console.warn('[kpi] monthly summary fetch failed for ' + repId + ':', monthErr);
                 }
-            }
-            applySummary(repId, data);
-        }));
+                if (!data) {
+                    /* Transitional fallback: honor a summary a not-yet-updated
+                       client wrote to the root document for this same period. */
+                    try {
+                        data = await kpiReadDoc([KPI_REP_COLLECTION, repId]);
+                    } catch (fallbackErr) {
+                        console.warn('[kpi] fallback summary fetch failed for ' + repId + ':', fallbackErr);
+                    }
+                }
+                applySummary(repId, data);
+            }));
+        }
 
         return Array.from(byId.values()).filter((s) => !kpiIsExcludedRepName(s.name));
     } catch (err) {
@@ -2350,7 +2458,9 @@ window.kpiSaveFixedDescription = async (productId) => {
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixList [data-fix-id]').length;
         if (window.showToast) window.showToast('تم حفظ الوصف بنجاح — تحسّن مؤشرك', true);
-        kpiInvalidateProductCache();
+        /* H7: patch the edited row into the in-memory caches; the report rebuild
+           below re-reads it without a full product re-fetch. */
+        kpiPatchCachedProducts(productId, descPatch);
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixDescriptions();
@@ -2487,7 +2597,9 @@ window.kpiUploadMissingImage = async (productId, input) => {
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixImagesList [data-fix-img-id]').length;
         if (window.showToast) window.showToast('تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
-        kpiInvalidateProductCache();
+        /* H7: patch the uploaded row into the in-memory caches instead of
+           invalidating and re-fetching the whole product list. */
+        kpiPatchCachedProducts(productId, imagePatch);
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixImages();

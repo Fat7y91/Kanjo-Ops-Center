@@ -23,13 +23,13 @@ import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
 
-/* Populate category dropdowns */
-categories.sort().forEach(c => {
-    const mCat = document.getElementById('mCat');
-    const editCat = document.getElementById('editCat');
-    if (mCat) mCat.innerHTML += `<option value="${c}">${c}</option>`;
-    if (editCat) editCat.innerHTML += `<option value="${c}">${c}</option>`;
-});
+/* Populate category dropdowns (build the option list once instead of
+   re-serialising the whole select on every iteration). */
+const categoryOptionsHtml = categories.sort().map((c) => `<option value="${c}">${c}</option>`).join('');
+const mCat = document.getElementById('mCat');
+const editCat = document.getElementById('editCat');
+if (mCat) mCat.innerHTML = categoryOptionsHtml;
+if (editCat) editCat.innerHTML = categoryOptionsHtml;
 
 /* Restore session — but ONLY after the Firebase auth baseline (anonymous sign-in)
    has resolved, so the strict Firestore rules never reject the first reads and the

@@ -3011,21 +3011,11 @@ window.calculateTopPerformer = calculateTopPerformer;
 window.calculateTopTeam = calculateTopTeam;
 
 /* ─── Infinite scroll / Load More ───
-   The full ordered task set is now streamed once (local-first), so there is no
-   next page. window.loadMoreTasks() is kept as a no-op for compatibility. */
-window.setupInfiniteScroll = () => {
-    const maybeLoadMore = () => {
-        if (typeof window.loadMoreTasks !== 'function') return;
-        const container = document.getElementById('tasksContainer');
-        if (!container) return;
-        const rect = container.getBoundingClientRect();
-        if (rect.bottom <= window.innerHeight + 400) {
-            window.loadMoreTasks();
-        }
-    };
-    window.addEventListener('scroll', maybeLoadMore, { passive: true });
-    document.addEventListener('scroll', maybeLoadMore, { capture: true, passive: true });
-};
+   The full ordered task set is streamed once (local-first), so there is no
+   pagination: window.loadMoreTasks() is a NO-OP. The former window + document
+   capture scroll listeners fired on every scroll tick only to call that no-op,
+   so they are removed instead of left as dead CPU churn. */
+window.setupInfiniteScroll = () => {};
 
 window.setupInfiniteScroll();
 

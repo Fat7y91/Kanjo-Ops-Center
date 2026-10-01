@@ -325,6 +325,7 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
         fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
     }));
     const structuredQuery = { from: [{ collectionId }] };
+    if (options.allDescendants) structuredQuery.from[0].allDescendants = true;
     if (clauses.length === 1) structuredQuery.where = clauses[0];
     else if (clauses.length > 1) structuredQuery.where = { compositeFilter: { op: 'AND', filters: clauses } };
     if (Array.isArray(options.orderBy) && options.orderBy.length) {

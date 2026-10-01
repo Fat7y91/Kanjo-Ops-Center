@@ -424,7 +424,7 @@ function applyThemeAndShowDashboard() {
             && typeof where !== 'undefined') {
             /* One-shot initial load ONLY. Automated background polling is
                forbidden (it leaked reads); the badge refreshes on page reload. */
-            window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], 50)
+            window.kanjoRest.runQuery('transferRequests', [ where("status", "==", "pending") ], 50, { select: ['status', 'taskId'] })
                 .then((rows) => { if (Array.isArray(rows)) applyPendingTransfers(rows); })
                 .catch(() => {});
         } else if (isMahmoudOps && !isDataEntry && typeof onSnapshot !== 'undefined' && typeof query !== 'undefined' && typeof collection !== 'undefined' && typeof db !== 'undefined' && typeof where !== 'undefined' && typeof limit !== 'undefined') {
