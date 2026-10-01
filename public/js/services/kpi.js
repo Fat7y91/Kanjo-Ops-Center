@@ -2702,7 +2702,11 @@ window.exportKpiLeaderboardCsv = () => {
                 r.isEditor ? '' : (r.rank || '')
             ]);
         });
-    const csv = '\uFEFF' + lines.map((cols) => cols.map(kpiCsvCell).join(',')).join('\r\n');
+    /* Force Excel to treat commas as the column delimiter regardless of the
+       machine's locale: on Arabic Windows the list separator can default to a
+       different character, which crams everything into column A. The `sep=,`
+       directive on its own first line (after the BOM) overrides that. */
+    const csv = '\uFEFF' + 'sep=,\r\n' + lines.map((cols) => cols.map(kpiCsvCell).join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
