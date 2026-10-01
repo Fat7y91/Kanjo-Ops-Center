@@ -4,10 +4,12 @@
      1. RBAC gate for the KPI dashboard (Founders + Operations Manager only).
      2. Interaction-based active time tracker (localStorage + idle timeout) that
         syncs to rep_kpis/{repId}/daily_stats/{date}.
-     3. Retroactive historical time calculator (calculateHistoricalTime).
-     4. Image-editor (content team) work-time tracker.
-     5. Strict anti-gaming quality validation (descriptions, images, variables).
-     6. Full-page Master-Detail analytics dashboard with Chart.js visualizations.
+     3. Per-month leaderboard summaries published to
+        rep_kpis/{repId}/monthly/{YYYY-MM} (non-sensitive counts + ratios only).
+     4. Retroactive historical time calculator (calculateHistoricalTime).
+     5. Image-editor (content team) work-time tracker.
+     6. Strict anti-gaming quality validation (descriptions, images, variables).
+     7. Full-page Master-Detail analytics dashboard with Chart.js visualizations.
 
    Precision contract: every metric is kept as RAW (unrounded) values under the
    hood; rounding (toFixed/formatting) happens ONLY at the final render step so
@@ -15,6 +17,10 @@
 
 const KPI_REP_COLLECTION = 'rep_kpis';
 const KPI_STATS_SUBCOLLECTION = 'daily_stats';
+/* Per-month leaderboard summaries: rep_kpis/{repId}/monthly/{YYYY-MM}. Keying
+   each month as its own document means building a historical month can never
+   overwrite the live board, and reps only read the month they are viewing. */
+const KPI_MONTHLY_SUBCOLLECTION = 'monthly';
 const KPI_PRODUCTS_COLLECTION = 'merchant_products';
 const KPI_ACTIVE_TIME_KEY = 'kanjo_kpi_active_time_v1';
 const KPI_IMAGE_EDIT_KEY = 'kanjo_kpi_image_edit_v1';
@@ -222,6 +228,17 @@ const kpiRestMerge = async (segments, data) => {
     if (!window.kanjoRest || typeof window.kanjoRest.patch !== 'function') return false;
     await window.kanjoRest.patch(segments, data);
     return true;
+};
+
+/* Read one document by path segments over REST, falling back to the SDK. A 404
+   yields null via the REST helper, and a missing SDK snapshot is normalized to
+   null as well, so callers never distinguish "absent" from "error". */
+const kpiReadDoc = async (segments) => {
+    if (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
+        return window.kanjoRest.getDocument(segments);
+    }
+    const snap = await window.getDoc(window.doc(window.db, ...segments));
+    return (snap && snap.exists && snap.exists()) ? { id: snap.id, ...(snap.data() || {}) } : null;
 };
 
 const kpiToMillis = (value) => {
@@ -877,16 +894,11 @@ const kpiFetchDailyStats = (repId, monthKey) => {
 
 /* ───────────── Team leaderboard (gamification) ─────────────
    Reps may see each other on a shared board, but NOT each other's products or
-   pricing. We publish only non-sensitive raw stats onto rep_kpis/{repId}:
-   product count, net seconds and the two quality ratios. The Kanjo score is
-   then recomputed client-side over the team so every viewer sees the exact
-   same ranking without ever reading merchant_products. */
-const KPI_TEAM_SUMMARY_FIELDS = [
-    'repId', 'repName', 'team', 'isEditor',
-    'publicTotalProducts', 'publicTotalSeconds',
-    'publicAvgDescriptionLength', 'publicValidRatio', 'publicImageRatio', 'publicWithImage',
-    'publicPeriod', 'publicUpdatedAt'
-];
+   pricing. We publish only non-sensitive raw stats onto
+   rep_kpis/{repId}/monthly/{YYYY-MM}: product count, net seconds and the two
+   quality ratios. The Kanjo score is then recomputed client-side over the team
+   so every viewer sees the exact same ranking without ever reading
+   merchant_products. */
 
 const kpiRepTeamName = (repName) => {
     const name = String(repName || '').trim();
@@ -922,12 +934,17 @@ const kpiSummaryPayload = (row) => {
 const kpiPublishSummary = async (row) => {
     const payload = kpiSummaryPayload(row);
     if (!payload) return;
+    const period = kpiNormalizeMonthKey(payload.publicPeriod);
+    if (!KPI_MONTH_RE.test(period)) return;
     try {
-        if (!(await kpiRestMerge([KPI_REP_COLLECTION, payload.repId], payload))) {
-            await window.setDoc(window.doc(window.db, KPI_REP_COLLECTION, payload.repId), payload, { merge: true });
+        /* Write the month's summary to its own document so it is impossible to
+           clobber another month (rep_kpis/{repId}/monthly/{YYYY-MM}). */
+        const segments = [KPI_REP_COLLECTION, payload.repId, KPI_MONTHLY_SUBCOLLECTION, period];
+        if (!(await kpiRestMerge(segments, payload))) {
+            await window.setDoc(window.doc(window.db, ...segments), payload, { merge: true });
         }
-        /* The published rows changed: drop the memoized rep_kpis/leaderboard so
-           the next read (and every viewer) sees the fresh summary. */
+        /* The published rows changed: drop the memoized leaderboard so the next
+           read (and every viewer) sees the fresh summary. */
         if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
             window.kanjoCache.invalidatePrefix('kpi:repkpis');
             window.kanjoCache.invalidatePrefix('kpi:leaderboard');
@@ -948,55 +965,45 @@ const kpiPublishSummaries = (rows) => {
     return Promise.all(targets.map(kpiPublishSummary));
 };
 
-/* Read every rep's published leaderboard summary (GLOBAL leaderboard). The
-   payroll roster seeds the list so every rep is counted in the denominator even
-   before they have published a summary. Rule-gated by `allow read` for all
-   signed-in users. Never lets a failure throw into the dashboard render path. */
+/* Read the selected month's leaderboard summaries (GLOBAL board). Each roster
+   rep's summary lives at rep_kpis/{repId}/monthly/{YYYY-MM}, so we read exactly
+   the month being viewed — one small document per rep, no merchant_products and
+   no daily_stats reads. The payroll roster seeds the list so every rep is
+   counted in the denominator even before they have published this month.
+   Rule-gated by `allow read` for all signed-in users. Never lets a failure throw
+   into the dashboard render path. */
 const kpiFetchLeaderboardSummariesUncached = async (monthKey) => {
     const period = kpiNormalizeMonthKey(monthKey);
     try {
         const byId = new Map();
+        const seedRow = (repId, name, team) => ({
+            repId,
+            name,
+            team: String(team || '').trim(),
+            isEditor: false,
+            totalProducts: 0,
+            totalSeconds: 0,
+            avgDescriptionLength: 0,
+            validRatio: 0,
+            imageRatio: 0,
+            withImage: 0
+        });
         /* Seed the full company roster so the rank denominator is the total
            number of reps, not just those who have published a summary yet. */
         (Array.isArray(window.KANJO_REP_PAYROLL) ? window.KANJO_REP_PAYROLL : [])
             .filter((p) => p && p.name)
             .forEach((p) => {
                 const repId = kpiRepId(p.name);
-                byId.set(repId, {
-                    repId,
-                    name: p.name,
-                    team: String(p.team || '').trim(),
-                    isEditor: false,
-                    totalProducts: 0,
-                    totalSeconds: 0,
-                    avgDescriptionLength: 0,
-                    validRatio: 0,
-                    imageRatio: 0,
-                    withImage: 0
-                });
+                byId.set(repId, seedRow(repId, p.name, p.team));
             });
-        /* No team filter: rank against every rep company-wide. */
-        let rows = null;
-        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-            try {
-                rows = await window.kanjoRest.runQuery(KPI_REP_COLLECTION, [], null, { select: KPI_TEAM_SUMMARY_FIELDS });
-            } catch (restErr) {
-                console.warn('[kpi] REST leaderboard fetch failed; trying SDK:', restErr);
-            }
-        }
-        if (!rows) {
-            const snap = await window.getDocs(window.collection(window.db, KPI_REP_COLLECTION));
-            rows = [];
-            snap.forEach((d) => rows.push({ id: d.id, ...(d.data() || {}) }));
-        }
-        rows.forEach((row) => {
-            const { id, ...data } = row;
+
+        /* Only the summary published FOR the selected period counts. A rep who
+           has not published this month must not leak a previous month's numbers
+           into the ranking; a missing/invalid period never matches. */
+        const applySummary = (id, data) => {
+            if (!data) return;
             /* Ignore any stale summary published for a data-entry identity. */
             if (kpiIsExcludedRepName(data.repName || id)) return;
-            /* MONTHLY board: only the summaries published FOR the selected
-               period count. A rep who has not republished this month must not
-               leak a previous month's numbers into the current ranking. A
-               missing/invalid period never matches (legacy lifetime docs). */
             const publishedPeriod = String(data.publicPeriod || '').slice(0, 7);
             if (!KPI_MONTH_RE.test(publishedPeriod) || publishedPeriod !== period) return;
             byId.set(id, {
@@ -1011,7 +1018,27 @@ const kpiFetchLeaderboardSummariesUncached = async (monthKey) => {
                 imageRatio: Math.max(0, Number(data.publicImageRatio) || 0),
                 withImage: Math.max(0, Number(data.publicWithImage) || 0)
             });
-        });
+        };
+
+        await Promise.all(Array.from(byId.keys()).map(async (repId) => {
+            let data = null;
+            try {
+                data = await kpiReadDoc([KPI_REP_COLLECTION, repId, KPI_MONTHLY_SUBCOLLECTION, period]);
+            } catch (monthErr) {
+                console.warn('[kpi] monthly summary fetch failed for ' + repId + ':', monthErr);
+            }
+            if (!data) {
+                /* Transitional fallback: honor a summary a not-yet-updated client
+                   wrote to the root document for this same period. */
+                try {
+                    data = await kpiReadDoc([KPI_REP_COLLECTION, repId]);
+                } catch (fallbackErr) {
+                    console.warn('[kpi] fallback summary fetch failed for ' + repId + ':', fallbackErr);
+                }
+            }
+            applySummary(repId, data);
+        }));
+
         return Array.from(byId.values()).filter((s) => !kpiIsExcludedRepName(s.name));
     } catch (err) {
         console.error('[kpi] leaderboard fetch failed:', err);
@@ -1434,12 +1461,10 @@ const kpiBuildReport = async (monthKey) => {
     totals.minutesPerProductRaw = kpiMinutesPerProductRaw(totals.seconds, totals.products);
 
     /* Fire-and-forget so ranking never waits on the network. Reps publish only
-       their own summary; managers publish the whole roster. Summaries are keyed
-       by period, and we ONLY publish the LIVE (current) month: browsing a
-       historical month must never overwrite the current board. */
-    if (period === kpiCurrentMonthKey()) {
-        kpiPublishSummaries(rows).catch(() => { /* non-fatal */ });
-    }
+       their own row; managers publish the whole roster. Each summary is written
+       to its own per-month document, so building (or rebuilding) a historical
+       month can never overwrite the live board. */
+    kpiPublishSummaries(rows).catch(() => { /* non-fatal */ });
 
     return { rows, totals, generatedAt: new Date(), period };
 };

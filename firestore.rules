@@ -298,6 +298,18 @@ service cloud.firestore {
         allow read: if legacy() || isManagerViewer() || isOwnRep();
         allow write: if legacy() || isManagerViewer() || isOwnRep();
       }
+
+      // Per-month leaderboard summary: rep_kpis/{repId}/monthly/{YYYY-MM}.
+      // Same non-sensitive payload as the root summary, but keyed by month so
+      // historical rebuilds never clobber the live board. Readable by every
+      // signed-in user (GLOBAL board); writable only by the owning rep or a
+      // manager.
+      match /monthly/{period} {
+        allow read: if isSignedIn();
+        allow create: if legacy() || isManagerViewer() || isOwnSummaryCreate();
+        allow update: if legacy() || isManagerViewer() || isOwnSummaryUpdate();
+        allow delete: if legacy() || isManagerViewer();
+      }
     }
 
     // 4) Security bootstrap / enrollment bookkeeping. Clients never read or
