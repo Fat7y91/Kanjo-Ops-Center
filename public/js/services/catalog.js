@@ -4313,7 +4313,6 @@ const KANJO_PRODUCT_CATEGORIES = [
 ];
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
-const KANJO_CATEGORY_VALUES = KANJO_PRODUCT_CATEGORIES.map((cat) => kanjoCategoryValue(cat));
 
 /* Silent fallback for products the keyword matcher cannot classify: the export
    must never block on a manual category prompt, so unmatched rows are exported
@@ -4329,12 +4328,21 @@ const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1
    SHORT tokens (normalized length < 4) are matched on a word boundary instead of
    as a bare substring, so a two/three-letter generic token can never fire inside
    an unrelated word and steal the classification. */
+/* Whole-word occurrence test (spaces only — normalizeArabic collapses runs and
+   trims, so a keyword bounded by start/end or a single space is an exact word).
+   Used to give a real word-boundary hit priority over a mere substring hit when
+   two candidates would otherwise tie. */
+const kanjoCategoryBoundaryHit = (kw, haystack) => {
+    if (!kw) return false;
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(?:^|\\s)' + escaped + '(?:\\s|$)').test(haystack);
+};
+
 const kanjoCategoryKeywordHit = (keyword, haystack) => {
     const kw = normalizeArabic(keyword);
     if (!kw) return false;
     if (kw.length < 4) {
-        const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        return new RegExp('(?:^|\\s)' + escaped + '(?:\\s|$)').test(haystack);
+        return kanjoCategoryBoundaryHit(kw, haystack);
     }
     return haystack.indexOf(kw) !== -1;
 };
@@ -4342,27 +4350,30 @@ const kanjoCategoryKeywordHit = (keyword, haystack) => {
 /* Match info for one category: the character position of its earliest matching
    keyword (the primary noun usually appears first), a `defining` flag that is
    true when a matched keyword IS the category name or a leading part of it (e.g.
-   "مشويات" defines the Grills category, "لحمه" leads "لحوم"), and the length of
-   the longest matched keyword (`specificity`) used as a most-specific-first
-   tie-break. This lets overlapping matches resolve to the category that owns the
-   word, and at equal positions prefers the longer, more specific match. */
+   "مشويات" defines the Grills category, "لحمه" leads "لحوم"), a `boundary` flag
+   for exact-word hits, the matched keyword length (`specificity`), and the
+   category NAME length (`nameLen`). The matcher orders by these so a word-boundary
+   hit beats a substring hit, and the longer (more specific) category name wins at
+   equal positions — exactly the requested "boundaries + longer names first". */
 const kanjoCategoryMatchInfo = (cat, haystack) => {
     const nameNorm = normalizeArabic(cat.name);
     let best = -1;
     let defining = false;
+    let boundary = false;
     let specificity = 0;
     cat.keywords.forEach((keyword) => {
         if (!kanjoCategoryKeywordHit(keyword, haystack)) return;
         const kw = normalizeArabic(keyword);
         if (!kw) return;
         if (nameNorm === kw || nameNorm.indexOf(kw) === 0) defining = true;
+        if (kanjoCategoryBoundaryHit(kw, haystack)) boundary = true;
         specificity = Math.max(specificity, kw.length);
         const pos = haystack.indexOf(kw);
         if (pos === -1) return;
         if (best === -1 || pos < best) best = pos;
     });
     if (best === -1) return null;
-    return { pos: best, defining, specificity };
+    return { pos: best, defining, boundary, specificity, nameLen: nameNorm.length };
 };
 
 /* Categories ordered most-specific first (longest normalized name first) for
@@ -4372,30 +4383,184 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
     .map((cat, canonical) => ({ cat, canonical }))
     .sort((a, b) => (normalizeArabic(b.cat.name).length - normalizeArabic(a.cat.name).length) || (a.canonical - b.canonical));
 
-/* Confidence-based matcher. A product matching ONE OR MORE categories is
-   auto-resolved to the dominant match (earliest keyword: "بيتزا سي فود" -> Pizza,
-   "كريب جمبري" -> Crepe) and passes through with no manual review. Only names
-   with ZERO matches are returned as `unmapped` and routed to the audit modal.
+/* ── Vendor-scoped category allow-list ──────────────────────────────────────
+   The vendor's activity label is stored on every catalog product as `category`
+   (e.g. "🍔 مطاعم وكافيهات"). It decides which of the Kanjo product categories
+   are even candidates, so a restaurant can never be auto-classified into a
+   butcher/roastery bucket such as "فراخ", "لحوم" or "محمص".
+
+   Rules are tried in order; the FIRST whose token appears in the (normalized)
+   activity label wins. A vendor type with no rule is UNMAPPED and keeps the full
+   category list — the export never hard-blocks on an unknown vertical, and the
+   interactive audit modal still forces a valid choice for any ambiguous row. */
+const KANJO_VENDOR_CATEGORY_RULES = [
+    {
+        match: ['مطاعم', 'مطعم', 'كافيه', 'كافيهات', 'ريستوران', 'restaurant', 'cafe'],
+        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'كرسبي', 'كشري', 'كيك', 'مقبلات', 'وافل', 'مشويات', 'حواوشي', 'مصري', 'بيتزا', 'قهوة', 'القهوة', 'باستا', 'ساندوتشات', 'شاورما', 'باردة', 'فريش', 'حلويات', 'الساخن', 'ميلك شيك', 'مشروبات', 'سموزي', 'سلطات', 'كوكتيل', 'شرقي', 'كريب', 'طيور', 'الطيور', 'أسماك', 'سي فود', 'متبل', 'طازج']
+    },
+    {
+        match: ['جزارة', 'جزار', 'لحوم', 'butcher'],
+        allow: ['لحوم', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة', 'مصنعات', 'مخبوزات']
+    },
+    {
+        match: ['دواجن', 'فراخ', 'poultry'],
+        allow: ['فراخ', 'طيور', 'الطيور', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة']
+    },
+    {
+        match: ['أسماك', 'اسماك', 'سمك', 'سي فود', 'fish', 'seafood'],
+        allow: ['أسماك', 'سي فود', 'فيليه', 'مجمدات', 'مجهزة', 'طازج']
+    },
+    {
+        match: ['خضار', 'فاكهة', 'خضروات', 'vegetable', 'fruit'],
+        allow: ['الخضار', 'خضرة', 'للطبخ', 'الفاكهة', 'الموسمية', 'مستوردة', 'عضوي', 'مجهزة', 'طازج', 'البقوليات']
+    },
+    {
+        match: ['مخبوزات', 'مخبز', 'خبز', 'bakery', 'معجنات'],
+        allow: ['الخبز', 'المعجنات', 'الفطائر', 'حلويات', 'كيك', 'بسكوت', 'مخبوزات', 'وافل']
+    },
+    {
+        match: ['عصائر', 'عصير', 'juice'],
+        allow: ['مشروبات', 'سموزي', 'كوكتيل', 'فريش', 'باردة']
+    },
+    {
+        match: ['عطارة', 'توابل', 'بهارات', 'محمص', 'roastery', 'spices'],
+        allow: ['البهارات', 'الأعشاب', 'البقوليات', 'العسل', 'مجفف', 'الخلطات', 'قهوة', 'القهوة', 'محمص', 'مكسرات', 'التسالي', 'السناكس', 'تمور']
+    },
+    {
+        match: ['مسليات', 'مكسرات', 'تسالي', 'snacks', 'nuts'],
+        allow: ['مكسرات', 'التسالي', 'السناكس', 'محمص', 'تسالي', 'بسكوت']
+    },
+    {
+        match: ['حلويات', 'حلواني', 'sweets', 'dessert'],
+        allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات']
+    },
+    {
+        match: ['لبنة', 'ألبان', 'البان', 'dairy'],
+        allow: ['مجهزة', 'مجمدات', 'للطبخ', 'عضوي', 'طازج', 'بقالة']
+    },
+    {
+        match: ['صيدليات', 'صيدلية', 'pharmacy'],
+        allow: ['الأدوية', 'مسكنات', 'فيتامينات', 'المناعة', 'صحي', 'العناية', 'سبلايز', 'مزمنة', 'المشترك', 'الأم']
+    },
+    {
+        match: ['كوزماتكس', 'عناية شخصية', 'تجميل', 'cosmetic', 'beauty'],
+        allow: ['ماكياج', 'البشرة', 'الشعر', 'الجسم', 'الأظافر', 'الشفاه', 'رموش', 'العطور', 'العناية', 'الشخصية', 'المرأة', 'مستلزمات']
+    },
+    {
+        match: ['موبايل', 'إكسسوارات موبايل', 'mobile'],
+        allow: ['موبايلات', 'جرابات', 'شواحن', 'باوربانك', 'سماعات', 'سمارت', 'التصوير', 'اكسسوارات', 'البطاريات', 'الأجهزة', 'مستلزمات', 'جيمنج']
+    },
+    {
+        match: ['كهرباء', 'كهربائية', 'الكترونيات', 'electronics', 'electric'],
+        allow: ['الإضاءة', 'البطاريات', 'الأجهزة', 'كشافات', 'الأدوات', 'مستلزمات', 'جيمنج', 'سمارت']
+    },
+    {
+        match: ['منظفات', 'أدوات نظافة', 'نظافة', 'cleaning', 'detergent'],
+        allow: ['منظفات', 'ورقيات', 'معطرات', 'الأسطح', 'الحمام', 'المطبخ', 'الحشرات', 'الأدوات', 'مستلزمات', 'ثلاجة']
+    },
+    {
+        match: ['مستلزمات المطبخ', 'أطقم صيني', 'طقم صيني', 'kitchen'],
+        allow: ['المطبخ', 'الأدوات', 'الأجهزة', 'مستلزمات', 'ثلاجة']
+    },
+    {
+        match: ['لعب أطفال', 'كنترول', 'ألعاب', 'toys'],
+        allow: ['الأطفال', 'أطفال', 'بوكسات', 'اكسسوارات', 'مستلزمات', 'مدرسية', 'الرسم']
+    },
+    {
+        match: ['حيوانات', 'أليفة', 'pets'],
+        allow: ['كلاب', 'قطط', 'الطيور', 'طيور', 'أعلاف', 'العناية', 'مستلزمات', 'المزارع']
+    },
+    {
+        match: ['مكتبات', 'مكتبة', 'قرطاسية', 'stationery', 'books'],
+        allow: ['مكتبية', 'مدرسية', 'الرسم', 'مستلزمات']
+    },
+    {
+        match: ['هدايا', 'ورود', 'gifts', 'flowers'],
+        allow: ['المناسبات', 'العشرات', 'بوكسات', 'اكسسوارات', 'العطور']
+    },
+    {
+        match: ['مفروشات', 'أثاث', 'furniture'],
+        allow: ['منزلية', 'مستلزمات', 'المنزلية']
+    },
+    {
+        match: ['رياضية', 'رياضة', 'sports'],
+        allow: ['الملابس', 'رجالية', 'نسائية', 'المناسبات', 'اكسسوارات', 'مستلزمات']
+    },
+    {
+        match: ['سباكة', 'plumbing'],
+        allow: ['الأدوات', 'مستلزمات', 'الأجهزة']
+    },
+    {
+        match: ['صيانة', 'فني', 'خدمات', 'maintenance', 'services'],
+        allow: ['الأدوات', 'الأجهزة', 'مستلزمات', 'الإضاءة', 'كشافات', 'البطاريات']
+    }
+];
+
+/* Resolve the rule that owns this vendor's activity label. */
+const kanjoVendorRuleFor = (vendorType) => {
+    const hay = normalizeArabic(vendorType);
+    if (!hay) return null;
+    return KANJO_VENDOR_CATEGORY_RULES.find((rule) => rule.match
+        .some((token) => hay.indexOf(normalizeArabic(token)) !== -1)) || null;
+};
+
+/* The candidate categories for a vendor type. Unknown/unmapped vendors keep the
+   complete list (non-blocking); a mapped vendor is strictly narrowed to its
+   allowed names. An empty intersection also falls back to the full list so a
+   typo in a rule can never produce an empty dropdown. */
+const kanjoVendorAllowedCategories = (vendorType) => {
+    const rule = kanjoVendorRuleFor(vendorType);
+    if (!rule) return KANJO_PRODUCT_CATEGORIES;
+    const allowed = new Set(rule.allow.map((name) => normalizeArabic(name)));
+    const list = KANJO_PRODUCT_CATEGORIES.filter((cat) => allowed.has(normalizeArabic(cat.name)));
+    return list.length ? list : KANJO_PRODUCT_CATEGORIES;
+};
+
+/* Confidence-based matcher, scoped to a vendor type. A product matching ONE OR
+   MORE allowed categories is auto-resolved to the dominant match (earliest
+   keyword: "بيتزا سي فود" -> Pizza, "كريب جمبري" -> Crepe). Only names with ZERO
+   allowed matches are returned as `unmapped` for the interactive audit modal.
    Returns:
    - { status: 'matched',  category, options }  1+ matches, auto-resolved
    - { status: 'unmapped', category: '' }       nothing matched, needs review */
-const kanjoMatchProductCategory = (product) => {
+const kanjoMatchProductCategory = (product, vendorType) => {
+    const vendor = String(vendorType != null && vendorType !== ''
+        ? vendorType
+        : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
+    const allowedCats = kanjoVendorAllowedCategories(vendor);
+    const allowedNames = new Set(allowedCats.map((cat) => normalizeArabic(cat.name)));
+    const allowedValues = new Set(allowedCats.map((cat) => kanjoCategoryValue(cat)));
     const existing = String((product && product.category) || '').trim();
-    const existingOfficial = KANJO_CATEGORY_VALUES.indexOf(existing) !== -1 ? existing : '';
+    const existingOfficial = allowedValues.has(existing) ? existing : '';
     const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
         .replace(/\s+/g, ' ')
         .trim();
     const matches = [];
     if (haystack) {
         KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
+            if (!allowedNames.has(normalizeArabic(cat.name))) return;
             const info = kanjoCategoryMatchInfo(cat, haystack);
-            if (info) matches.push({ cat, canonical, pos: info.pos, defining: info.defining ? 1 : 0, specificity: info.specificity });
+            if (info) matches.push({
+                cat,
+                canonical,
+                pos: info.pos,
+                defining: info.defining ? 1 : 0,
+                boundary: info.boundary ? 1 : 0,
+                specificity: info.specificity,
+                nameLen: info.nameLen
+            });
         });
     }
     if (matches.length) {
-        /* Earliest keyword wins; then the category that "owns" the word; then the
-           longest (most specific) matched keyword; then the canonical (ID) order. */
-        matches.sort((a, b) => (a.pos - b.pos) || (b.defining - a.defining) || (b.specificity - a.specificity) || (a.canonical - b.canonical));
+        /* Earliest keyword wins; then the category that "owns" the word; then an
+           exact word-boundary hit; then the longer category name; then the
+           longest matched keyword; then the canonical (ID) order. */
+        matches.sort((a, b) => (a.pos - b.pos)
+            || (b.defining - a.defining)
+            || (b.boundary - a.boundary)
+            || (b.nameLen - a.nameLen)
+            || (b.specificity - a.specificity)
+            || (a.canonical - b.canonical));
         const primary = matches[0].cat;
         return {
             status: 'matched',
@@ -4707,6 +4872,20 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
 
 let _kanjoAuditState = null;
 
+/* One <option> per distinct category NAME (the Kanjo table repeats several names
+   under different IDs; showing the duplicates only confuses the operator). The
+   first canonical ID for a name is used as the value. */
+const kanjoCategoryOptionsHtml = (categories) => {
+    const seen = new Set();
+    return (categories || []).map((cat) => {
+        const name = normalizeArabic(cat.name);
+        if (seen.has(name)) return '';
+        seen.add(name);
+        const value = kanjoCategoryValue(cat);
+        return '<option value="' + catalogEscapeHtml(value) + '">' + catalogEscapeHtml(value) + '</option>';
+    }).join('');
+};
+
 window.openKanjoCategoryAuditModal = (items, onConfirm) => {
     const modal = document.getElementById('kanjoCategoryAuditModal');
     const body = document.getElementById('kanjoCategoryAuditBody');
@@ -4716,10 +4895,6 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
         return;
     }
     _kanjoAuditState = { items: items || [], onConfirm };
-    const optionsHtml = KANJO_PRODUCT_CATEGORIES.map((cat) => {
-        const value = kanjoCategoryValue(cat);
-        return '<option value="' + catalogEscapeHtml(value) + '">' + catalogEscapeHtml(value) + '</option>';
-    }).join('');
     body.innerHTML = (items || []).map((entry) => {
         const p = entry.product || {};
         const key = String(p.id || '');
@@ -4729,10 +4904,18 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
         const sub = (nameAr && nameEn && nameAr !== nameEn)
             ? '<div class="text-[10px] text-slate-400 font-bold mt-0.5 break-words">' + catalogEscapeHtml(nameEn) + '</div>'
             : '';
+        /* Only categories valid for THIS product's vendor type are offered. */
+        const vendorType = String(entry.vendorType || p.category || '').trim();
+        const optionsHtml = kanjoCategoryOptionsHtml(kanjoVendorAllowedCategories(vendorType));
+        const vendorBadge = vendorType
+            ? '<span class="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-lg bg-purple-100 text-[#230535] max-w-[45%] truncate" title="' + catalogEscapeHtml(vendorType) + '">' + catalogEscapeHtml(vendorType) + '</span>'
+            : '';
         return '<div class="kanjo-audit-row bg-kanjo-light/60 border border-purple-100 rounded-2xl p-3">'
             + '<div class="flex items-start justify-between gap-2 mb-2">'
             + '<div class="min-w-0"><div class="font-black text-sm text-[#230535] break-words">' + catalogEscapeHtml(label) + '</div>' + sub + '</div>'
-            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-700">غير مطابق</span>'
+            + '<div class="flex flex-col items-end gap-1">' + vendorBadge
+            + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-700">غير مصنّف</span>'
+            + '</div>'
             + '</div>'
             + '<select class="kanjo-audit-select w-full p-3 bg-white border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]"'
             + ' data-product-key="' + catalogEscapeHtml(key) + '">'
@@ -4878,11 +5061,27 @@ window.exportKanjoExcel = async (options) => {
             if (window.showToast) window.showToast(includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير', false);
             return;
         }
-        const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p) }));
-        /* Silent, non-blocking export: products the matcher cannot classify are
-           exported as "غير مصنف" (Uncategorized) in kanjoFinalizeExport instead
-           of halting the export behind a manual category-audit prompt. */
-        kanjoStartVariantPhase(evaluations, {}, opts);
+        /* Vendor type = the merchant activity label stored on each product
+           (`category`, e.g. "🍔 مطاعم وكافيهات"). Each product is matched against
+           ONLY its own vendor's category allow-list, so cross-vertical false
+           positives (a restaurant landing in "فراخ"/"لحوم") are impossible. */
+        const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || opts.vendorType || '').trim();
+        const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+        const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, opts);
+        /* Intercept: any product the smart matcher cannot classify PAUSES the
+           export behind the interactive audit modal. The operator must pick a
+           valid category (scoped to the vendor type) before the file is built. */
+        const unmapped = evaluations.filter((e) => e.match.status !== 'matched');
+        if (unmapped.length) {
+            if (window.openKanjoCategoryAuditModal) {
+                window.openKanjoCategoryAuditModal(
+                    unmapped.map((e) => ({ product: e.product, vendorType: vendorTypeOf(e.product) })),
+                    proceed
+                );
+                return;
+            }
+        }
+        proceed({});
     } catch (err) {
         kanjoReportExportError(err);
     }
