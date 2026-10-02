@@ -4312,6 +4312,33 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 37, name: 'حلويات', keywords: ['حلويات'] },
 ];
 
+/* Curated semantic synonym families (Egyptian menu wording) merged into each
+   category's keyword list. These are the mandatory food-vertical mapping rules:
+   they let the matcher classify common items whose name never literally repeats
+   the category name (مكرونة -> باستا, فطيرة -> الفطائر, كفتة -> مشويات,
+   جمبري -> أسماك, كنافة -> حلويات, عصير -> مشروبات, بانيه -> كرسبي, ...).
+   Additive only: the original name keyword always stays, and the canonical
+   position/specificity ordering still decides overlaps, so a "بيتزا سي فود"
+   stays بيتزا (the leading noun) rather than flipping to أسماك. */
+const KANJO_CATEGORY_SYNONYMS = {
+    'باستا': ['مكرونة', 'اسباجيتي', 'مبكبكة', 'نجرسكو', 'فيتوتشيني', 'لازانيا', 'بشاميل'],
+    'الفطائر': ['فطير', 'فطيرة', 'فطاير', 'مشلتت'],
+    'مشويات': ['كفتة', 'كفته', 'كباب', 'شيش طاووق', 'طرب', 'ريش', 'نيفة', 'كبدة مشوية', 'فرخة مشوية'],
+    'أسماك': ['جمبري', 'سبيط', 'سمك', 'فيليه', 'كابوريا', 'سي فود', 'حنشان', 'جندوفلي'],
+    'حلويات': ['أم علي', 'ام علي', 'أرز بلبن', 'مهلبية', 'كاسترد', 'كنافة', 'بسبوسة', 'نوتيلا', 'تشيز كيك'],
+    'مشروبات': ['عصير', 'صاروخ', 'سموزي', 'ميلك شيك', 'بيبسي', 'كانز', 'مياه', 'قهوة', 'شاي'],
+    'كرسبي': ['بانيه', 'زنجر', 'كريسبي', 'كرسبي', 'ستربس', 'دجاج مقلي', 'بروست'],
+    'طواجن': ['طاجن'],
+    'ساندوتشات': ['رغيف']
+};
+KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
+    const extra = KANJO_CATEGORY_SYNONYMS[cat.name];
+    if (!extra) return;
+    extra.forEach((token) => {
+        if (cat.keywords.indexOf(token) === -1) cat.keywords.push(token);
+    });
+});
+
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
 
 /* Silent fallback for products the keyword matcher cannot classify: the export
@@ -4396,7 +4423,7 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
 const KANJO_VENDOR_CATEGORY_RULES = [
     {
         match: ['مطاعم', 'مطعم', 'كافيه', 'كافيهات', 'ريستوران', 'restaurant', 'cafe'],
-        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'كرسبي', 'كشري', 'كيك', 'مقبلات', 'وافل', 'مشويات', 'حواوشي', 'مصري', 'بيتزا', 'قهوة', 'القهوة', 'باستا', 'ساندوتشات', 'شاورما', 'باردة', 'فريش', 'حلويات', 'الساخن', 'ميلك شيك', 'مشروبات', 'سموزي', 'سلطات', 'كوكتيل', 'شرقي', 'كريب', 'طيور', 'الطيور', 'أسماك', 'سي فود', 'متبل', 'طازج']
+        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'الفطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات']
     },
     {
         match: ['جزارة', 'جزار', 'لحوم', 'butcher'],
@@ -4552,23 +4579,38 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         });
     }
     if (matches.length) {
+        /* Spec exclusion: a generic "ساندوتش/رغيف" wrapper must not swallow a real
+           برجر / شاورما / حواوشي filling — drop the wrapper when a stronger
+           filling category is present, regardless of word position. */
+        const SANDWICH_OVERRIDES = ['برجر', 'شاورما', 'حواوشي'];
+        const hasFilling = matches.some((m) => SANDWICH_OVERRIDES.indexOf(m.cat.name) !== -1);
+        const pool = (hasFilling ? matches.filter((m) => m.cat.name !== 'ساندوتشات') : matches);
+        const ranked = pool.length ? pool : matches;
         /* Earliest keyword wins; then the category that "owns" the word; then an
            exact word-boundary hit; then the longer category name; then the
            longest matched keyword; then the canonical (ID) order. */
-        matches.sort((a, b) => (a.pos - b.pos)
+        ranked.sort((a, b) => (a.pos - b.pos)
             || (b.defining - a.defining)
             || (b.boundary - a.boundary)
             || (b.nameLen - a.nameLen)
             || (b.specificity - a.specificity)
             || (a.canonical - b.canonical));
-        const primary = matches[0].cat;
+        const primary = ranked[0].cat;
         return {
             status: 'matched',
             category: kanjoCategoryValue(primary),
-            options: matches.map((match) => match.cat)
+            options: ranked.map((match) => match.cat)
         };
     }
     if (existingOfficial) return { status: 'matched', category: existingOfficial, options: [] };
+    /* Last-resort "وجبة" rule: a generic meal with no other signal maps to the
+       Egyptian set (مصري). It fires only after every specific family failed, so
+       "وجبة بانيه" still resolves to كرسبي, "وجبة شيش طاووق" to مشويات, etc. */
+    const mealNameNorm = normalizeArabic('مصري');
+    if (haystack && haystack.indexOf(normalizeArabic('وجبة')) !== -1 && allowedNames.has(mealNameNorm)) {
+        const meal = allowedCats.find((cat) => normalizeArabic(cat.name) === mealNameNorm);
+        if (meal) return { status: 'matched', category: kanjoCategoryValue(meal), options: [] };
+    }
     return { status: 'unmapped', category: '', options: [] };
 };
 
