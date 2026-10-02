@@ -4314,6 +4314,11 @@ const KANJO_PRODUCT_CATEGORIES = [
        bakery entry ID:50 "الفطائر"; the operator explicitly confirmed the
        restaurant vertical is ID:161. */
     { id: 161, name: 'فطائر', keywords: ['فطائر'] },
+    /* 2026 restaurant verticals introduced by the Ops Manager. Both are offered
+       only to restaurants via the vendor rule below; "فراخ" therefore repeats the
+       poultry name and MUST be pinned per-domain. */
+    { id: 163, name: 'اللمة', keywords: ['اللمة', 'لمه'] },
+    { id: 164, name: 'فراخ', keywords: ['فراخ'] },
 ];
 
 /* ===== Export text normalization (auto-typo correction) =====
@@ -4384,6 +4389,53 @@ KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
 });
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
+
+/* ===== Semantic auto-tagging (dataset-driven) =====
+   The Ops Manager wants ADDITIVE tags on top of the keyword match, so a chicken
+   dish can be exported as both "مشويات" and "فراخ". The trigger lists below were
+   derived from the real catalogue. Arabic has no ASCII word characters, so a JS
+   `\b` never fires next to Arabic letters — we use a Unicode-aware boundary
+   (`\p{L}`/`\p{N}`) instead, which still prevents the dessert "شكلمة" from
+   matching "لمة". Terms are normalized with normalizeArabic so hamza/taa-marbuta
+   spelling variants unify. */
+const KANJO_LAMMA_TERMS = ['صينية', 'صينيه', 'صنية', 'كيلو', 'عائلية', 'عائلي', 'لمة', 'اللمة', 'اللمه', 'صحاب', 'حبايب', 'دستة', 'دسته', 'توفير', 'وليمة'];
+const KANJO_CHICKEN_TERMS = ['فراخ', 'دجاج', 'فرخة', 'فرخه', 'شيش', 'بانيه', 'تشيكن', 'زنجر', 'كرسبي', 'استربس', 'ستربس'];
+const KANJO_LAMMA_CATEGORY_ID = 163;
+const KANJO_CHICKEN_CATEGORY_ID = 164;
+
+const kanjoSemanticTermRegex = (terms) => {
+    const escaped = (terms || []).map((t) => normalizeArabic(t)).filter(Boolean)
+        .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .filter((t, i, arr) => arr.indexOf(t) === i);
+    if (!escaped.length) return null;
+    return new RegExp('(?:^|[^\\p{L}\\p{N}])(?:' + escaped.join('|') + ')(?![\\p{L}\\p{N}])', 'u');
+};
+const KANJO_LAMMA_RE = kanjoSemanticTermRegex(KANJO_LAMMA_TERMS);
+const KANJO_CHICKEN_RE = kanjoSemanticTermRegex(KANJO_CHICKEN_TERMS);
+const kanjoHasSemanticTerm = (haystack, re) => !!haystack && !!re && re.test(haystack);
+
+/* Parse an already-official category cell (single value or comma-joined multi
+   value). Returns the cell unchanged when EVERY part is a category this vendor
+   is allowed to use, otherwise ''. */
+const kanjoOfficialCategoryString = (value, allowedValues) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
+    if (!parts.length) return '';
+    return parts.every((p) => allowedValues.has(p)) ? parts.join(', ') : '';
+};
+
+/* Join a manual audit selection (array from the multi-select modal, or a legacy
+   single string) into the comma-separated cell the Kanjo importer expects. */
+const kanjoJoinCategorySelection = (selection, fallback) => {
+    if (Array.isArray(selection)) {
+        const values = selection.map((s) => String(s || '').trim()).filter(Boolean);
+        if (values.length) return values.join(', ');
+    } else if (typeof selection === 'string' && selection.trim()) {
+        return selection.trim();
+    }
+    return fallback || KANJO_UNCATEGORIZED_LABEL;
+};
 
 /* Silent fallback for products the keyword matcher cannot classify: the export
    must never block on a manual category prompt, so unmatched rows are exported
@@ -4467,11 +4519,12 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
 const KANJO_VENDOR_CATEGORY_RULES = [
     {
         match: ['مطاعم', 'مطعم', 'كافيه', 'كافيهات', 'ريستوران', 'restaurant', 'cafe'],
-        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'فطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات'],
+        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'فطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات', 'اللمة', 'فراخ'],
         /* Names that repeat across verticals MUST resolve to the restaurant ID
            only: desserts = 37 (NOT 82 butcher offal / 51 / 47), seafood = 10
-           (NOT 87 fish shop), drinks = 17 (NOT 34 juice bar), sandwiches = 4. */
-        pins: { 'حلويات': [37], 'أسماك': [10], 'مشروبات': [17], 'ساندوتشات': [4] }
+           (NOT 87 fish shop), drinks = 17 (NOT 34 juice bar), sandwiches = 4,
+           chicken = 164 (NOT 83 poultry). */
+        pins: { 'حلويات': [37], 'أسماك': [10], 'مشروبات': [17], 'ساندوتشات': [4], 'فراخ': [164] }
     },
     {
         match: ['جزارة', 'جزار', 'لحوم', 'butcher'],
@@ -4481,7 +4534,9 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['دواجن', 'فراخ', 'poultry'],
-        allow: ['فراخ', 'طيور', 'الطيور', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة']
+        allow: ['فراخ', 'طيور', 'الطيور', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة'],
+        /* Poultry "فراخ" is ID:83 — never the restaurant vertical 164. */
+        pins: { 'فراخ': [83] }
     },
     {
         match: ['أسماك', 'اسماك', 'سمك', 'سي فود', 'fish', 'seafood'],
@@ -4612,29 +4667,33 @@ const kanjoVendorAllowedCategories = (vendorType) => {
     return list.length ? list : KANJO_PRODUCT_CATEGORIES;
 };
 
-/* Confidence-based matcher, scoped to a vendor type. A product matching ONE OR
-   MORE allowed categories is auto-resolved to the dominant match (earliest
-   keyword: "بيتزا سي فود" -> Pizza, "كريب جمبري" -> Crepe). Only names with ZERO
-   allowed matches are returned as `unmapped` for the interactive audit modal.
-   Returns:
-   - { status: 'matched',  category, options }  1+ matches, auto-resolved
-   - { status: 'unmapped', category: '' }       nothing matched, needs review */
+/* Multi-category matcher, scoped to a vendor type. Every allowed category whose
+   keyword (or synonym) appears in the product name is collected, ranked
+   (earliest keyword, owning word, boundary hit, longer name/keyword, canonical
+   ID), de-duplicated by category NAME, and the additive semantic tags
+   (اللمة / فراخ) are appended. The result is the comma-separated cell the Kanjo
+   importer expects, e.g. "ID:9 | مشويات, ID:164 | فراخ". Only products with
+   neither a keyword nor a semantic hit are `unmapped`. Returns:
+   - { status: 'matched',  category, categories, primary, options }
+   - { status: 'unmapped', category: '', categories: [], options: [] } */
 const kanjoMatchProductCategory = (product, vendorType) => {
     const vendor = String(vendorType != null && vendorType !== ''
         ? vendorType
         : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
+    const rule = kanjoVendorRuleFor(vendor);
     const allowedCats = kanjoVendorAllowedCategories(vendor);
     /* Scope by ID, NOT by name: a name like "حلويات" exists in several verticals,
        so a name set would leak every duplicate back into this vendor's matcher. */
     const allowedIds = new Set(allowedCats.map((cat) => cat.id));
     const allowedValues = new Set(allowedCats.map((cat) => kanjoCategoryValue(cat)));
     const existing = String((product && product.category) || '').trim();
-    const existingOfficial = allowedValues.has(existing) ? existing : '';
+    const existingOfficial = kanjoOfficialCategoryString(existing, allowedValues);
     const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
         .replace(/\s+/g, ' ')
         .trim();
-    const matches = [];
+    const ranked = [];
     if (haystack) {
+        const matches = [];
         KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
             if (!allowedIds.has(cat.id)) return;
             const info = kanjoCategoryMatchInfo(cat, haystack);
@@ -4648,40 +4707,68 @@ const kanjoMatchProductCategory = (product, vendorType) => {
                 nameLen: info.nameLen
             });
         });
+        if (matches.length) {
+            /* Spec exclusion: a generic "ساندوتش/رغيف" wrapper must not swallow a
+               real برجر / شاورما / حواوشي filling — drop the wrapper when a
+               stronger filling category is present, regardless of position. */
+            const SANDWICH_OVERRIDES = ['برجر', 'شاورما', 'حواوشي'];
+            const hasFilling = matches.some((m) => SANDWICH_OVERRIDES.indexOf(m.cat.name) !== -1);
+            const pool = (hasFilling ? matches.filter((m) => m.cat.name !== 'ساندوتشات') : matches);
+            const sorted = (pool.length ? pool : matches).slice().sort((a, b) => (a.pos - b.pos)
+                || (b.defining - a.defining)
+                || (b.boundary - a.boundary)
+                || (b.nameLen - a.nameLen)
+                || (b.specificity - a.specificity)
+                || (a.canonical - b.canonical));
+            sorted.forEach((m) => ranked.push(m.cat));
+        }
     }
-    if (matches.length) {
-        /* Spec exclusion: a generic "ساندوتش/رغيف" wrapper must not swallow a real
-           برجر / شاورما / حواوشي filling — drop the wrapper when a stronger
-           filling category is present, regardless of word position. */
-        const SANDWICH_OVERRIDES = ['برجر', 'شاورما', 'حواوشي'];
-        const hasFilling = matches.some((m) => SANDWICH_OVERRIDES.indexOf(m.cat.name) !== -1);
-        const pool = (hasFilling ? matches.filter((m) => m.cat.name !== 'ساندوتشات') : matches);
-        const ranked = pool.length ? pool : matches;
-        /* Earliest keyword wins; then the category that "owns" the word; then an
-           exact word-boundary hit; then the longer category name; then the
-           longest matched keyword; then the canonical (ID) order. */
-        ranked.sort((a, b) => (a.pos - b.pos)
-            || (b.defining - a.defining)
-            || (b.boundary - a.boundary)
-            || (b.nameLen - a.nameLen)
-            || (b.specificity - a.specificity)
-            || (a.canonical - b.canonical));
-        const primary = ranked[0].cat;
+    /* Additive semantic tags. Only fires when the vendor's own rule explicitly
+       offers the category (so restaurants get them; the no-rule full-list
+       fallback does not). Appended after the keyword matches, اللمة then فراخ. */
+    if (rule && haystack) {
+        if (allowedIds.has(KANJO_LAMMA_CATEGORY_ID) && kanjoHasSemanticTerm(haystack, KANJO_LAMMA_RE)) {
+            const cat = allowedCats.find((c) => c.id === KANJO_LAMMA_CATEGORY_ID);
+            if (cat) ranked.push(cat);
+        }
+        if (allowedIds.has(KANJO_CHICKEN_CATEGORY_ID) && kanjoHasSemanticTerm(haystack, KANJO_CHICKEN_RE)) {
+            const cat = allowedCats.find((c) => c.id === KANJO_CHICKEN_CATEGORY_ID);
+            if (cat) ranked.push(cat);
+        }
+    }
+    /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
+       exported once, mirroring the single option shown in the audit modal. */
+    const seenNames = new Set();
+    const orderedCats = [];
+    ranked.forEach((cat) => {
+        const name = normalizeArabic(cat.name);
+        if (seenNames.has(name)) return;
+        seenNames.add(name);
+        orderedCats.push(cat);
+    });
+    if (orderedCats.length) {
+        const values = orderedCats.map((cat) => kanjoCategoryValue(cat));
         return {
             status: 'matched',
-            category: kanjoCategoryValue(primary),
-            options: ranked.map((match) => match.cat)
+            category: values.join(', '),
+            categories: values,
+            primary: values[0],
+            options: orderedCats
         };
     }
-    if (existingOfficial) return { status: 'matched', category: existingOfficial, options: [] };
+    if (existingOfficial) {
+        const values = existingOfficial.split(', ').filter(Boolean);
+        return { status: 'matched', category: existingOfficial, categories: values, primary: values[0] || '', options: [] };
+    }
     /* Last-resort "وجبة" rule: a generic meal with no other signal maps to the
        Egyptian set (مصري). It fires only after every specific family failed, so
        "وجبة بانيه" still resolves to كرسبي, "وجبة شيش طاووق" to مشويات, etc. */
     const meal = allowedCats.find((cat) => normalizeArabic(cat.name) === normalizeArabic('مصري'));
     if (haystack && haystack.indexOf(normalizeArabic('وجبة')) !== -1 && meal) {
-        return { status: 'matched', category: kanjoCategoryValue(meal), options: [] };
+        const value = kanjoCategoryValue(meal);
+        return { status: 'matched', category: value, categories: [value], primary: value, options: [] };
     }
-    return { status: 'unmapped', category: '', options: [] };
+    return { status: 'unmapped', category: '', categories: [], primary: '', options: [] };
 };
 
 /* ===== Kanjo strict variant translation middleware =====
@@ -4958,7 +5045,7 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             const key = String((product && product.id) || '');
             const category = match.status === 'matched'
                 ? match.category
-                : (selections[key] || match.category || KANJO_UNCATEGORIZED_LABEL);
+                : kanjoJoinCategorySelection(selections[key], match.category);
             productRows.push(kanjoBuildProductRow(product, category));
         }
         /* The variant phase already resolved duplicates/conflicts; fall back to a
@@ -4984,17 +5071,24 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
 
 let _kanjoAuditState = null;
 
-/* One <option> per distinct category NAME (the Kanjo table repeats several names
+/* One checkbox per distinct category NAME (the Kanjo table repeats several names
    under different IDs; showing the duplicates only confuses the operator). The
-   first canonical ID for a name is used as the value. */
-const kanjoCategoryOptionsHtml = (categories) => {
+   first canonical ID for a name is used as the value. The container scrolls so a
+   long vertical (restaurants) stays usable, and multiple boxes can be ticked to
+   assign several categories to the same product. */
+const kanjoCategoryCheckboxesHtml = (categories, key) => {
     const seen = new Set();
+    const safeKey = catalogEscapeHtml(key);
     return (categories || []).map((cat) => {
         const name = normalizeArabic(cat.name);
         if (seen.has(name)) return '';
         seen.add(name);
         const value = kanjoCategoryValue(cat);
-        return '<option value="' + catalogEscapeHtml(value) + '">' + catalogEscapeHtml(value) + '</option>';
+        return '<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-kanjo-light cursor-pointer">'
+            + '<input type="checkbox" class="kanjo-audit-cat-check h-4 w-4 shrink-0"'
+            + ' data-product-key="' + safeKey + '" value="' + catalogEscapeHtml(value) + '">'
+            + '<span class="text-xs font-bold text-[#230535] break-words">' + catalogEscapeHtml(value) + '</span>'
+            + '</label>';
     }).join('');
 };
 
@@ -5018,7 +5112,7 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
             : '';
         /* Only categories valid for THIS product's vendor type are offered. */
         const vendorType = String(entry.vendorType || p.category || '').trim();
-        const optionsHtml = kanjoCategoryOptionsHtml(kanjoVendorAllowedCategories(vendorType));
+        const optionsHtml = kanjoCategoryCheckboxesHtml(kanjoVendorAllowedCategories(vendorType), key);
         const vendorBadge = vendorType
             ? '<span class="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-lg bg-purple-100 text-[#230535] max-w-[45%] truncate" title="' + catalogEscapeHtml(vendorType) + '">' + catalogEscapeHtml(vendorType) + '</span>'
             : '';
@@ -5029,11 +5123,10 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
             + '<span class="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg bg-rose-100 text-rose-700">غير مصنّف</span>'
             + '</div>'
             + '</div>'
-            + '<select class="kanjo-audit-select w-full p-3 bg-white border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]"'
-            + ' data-product-key="' + catalogEscapeHtml(key) + '">'
-            + '<option value="" disabled selected>اختر التصنيف الصحيح...</option>'
+            + '<div class="text-[10px] font-bold text-slate-400 mb-1">يمكن اختيار أكثر من تصنيف</div>'
+            + '<div class="kanjo-audit-cats grid grid-cols-1 sm:grid-cols-2 gap-0.5 max-h-44 overflow-y-auto bg-white border border-purple-100 rounded-xl p-1.5">'
             + optionsHtml
-            + '</select>'
+            + '</div>'
             + '</div>';
     }).join('');
     if (countEl) countEl.textContent = String((items || []).length);
@@ -5045,15 +5138,22 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
 window.confirmKanjoCategoryAudit = () => {
     if (!_kanjoAuditState) return;
     const selections = {};
+    const checked = {};
+    document.querySelectorAll('#kanjoCategoryAuditBody .kanjo-audit-cat-check:checked').forEach((box) => {
+        const key = box.getAttribute('data-product-key') || '';
+        const value = String(box.value || '').trim();
+        if (!value) return;
+        if (!checked[key]) checked[key] = [];
+        if (checked[key].indexOf(value) === -1) checked[key].push(value);
+    });
     let missing = 0;
-    document.querySelectorAll('#kanjoCategoryAuditBody .kanjo-audit-select').forEach((sel) => {
-        const key = sel.getAttribute('data-product-key') || '';
-        const value = String(sel.value || '');
-        if (!value) { missing++; return; }
-        selections[key] = value;
+    (_kanjoAuditState.items || []).forEach((entry) => {
+        const key = String((entry.product && entry.product.id) || '');
+        if (checked[key] && checked[key].length) selections[key] = checked[key];
+        else missing++;
     });
     if (missing) {
-        if (window.showToast) window.showToast('برجاء تحديد تصنيف لكل المنتجات (' + missing + ' متبقي)', false);
+        if (window.showToast) window.showToast('برجاء تحديد تصنيف واحد على الأقل لكل منتج (' + missing + ' متبقي)', false);
         return;
     }
     const onConfirm = _kanjoAuditState.onConfirm;
