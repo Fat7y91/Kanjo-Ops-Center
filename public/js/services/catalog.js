@@ -4316,6 +4316,42 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 161, name: 'فطائر', keywords: ['فطائر'] },
 ];
 
+/* ===== Export text normalization (auto-typo correction) =====
+   Data-entry reps spell the same word many ways ("سندوش", "سندوتش", "ساندويتش",
+   "ساندويش"). Unifying the spelling BEFORE both the category matcher and the
+   Excel writer means (a) the matcher hits its keyword/alias list far more often
+   and (b) the exported sheet reads professionally instead of echoing the typo.
+   Rules are applied left-to-right; the original catalogue record is never
+   mutated — only the row that goes into the sheet is corrected. */
+const KANJO_TEXT_NORMALIZATION_RULES = [
+    { re: /ساندوتشات|سندوتشات|ساندويتش|ساندويش|سندوش|سندوتش/g, to: 'ساندوتش' },
+    { re: /فطاير/g, to: 'فطائر' },
+    { re: /بسطرمه/g, to: 'بسطرمة' },
+    { re: /شاورمه|شاورمة/g, to: 'شاورما' },
+    { re: /بيتزه/g, to: 'بيتزا' },
+    { re: /سلطه/g, to: 'سلطة' },
+    { re: /كريمه/g, to: 'كريمة' },
+    { re: /مكرونه/g, to: 'مكرونة' }
+];
+
+const kanjoNormalizeProductText = (value) => {
+    let out = String(value == null ? '' : value);
+    if (!out) return out;
+    KANJO_TEXT_NORMALIZATION_RULES.forEach((rule) => { out = out.replace(rule.re, rule.to); });
+    return out;
+};
+
+/* Shallow COPY with normalized name_ar + description_ar. Returns the original
+   object untouched when there is nothing to correct, so routine exports do not
+   allocate. */
+const kanjoWithNormalizedText = (product) => {
+    if (!product || typeof product !== 'object') return product;
+    const nameAr = kanjoNormalizeProductText(product.name_ar);
+    const descAr = kanjoNormalizeProductText(product.description_ar);
+    if (nameAr === (product.name_ar || '') && descAr === (product.description_ar || '')) return product;
+    return Object.assign({}, product, { name_ar: nameAr, description_ar: descAr });
+};
+
 /* Curated semantic synonym families (Egyptian menu wording) merged into each
    category's keyword list. These are the mandatory food-vertical mapping rules:
    they let the matcher classify common items whose name never literally repeats
@@ -4334,7 +4370,10 @@ const KANJO_CATEGORY_SYNONYMS = {
     'مشروبات': ['عصير', 'صاروخ', 'سموزي', 'ميلك شيك', 'بيبسي', 'كانز', 'مياه', 'قهوة', 'شاي'],
     'كرسبي': ['بانيه', 'زنجر', 'كريسبي', 'كرسبي', 'ستربس', 'دجاج مقلي', 'بروست'],
     'طواجن': ['طاجن'],
-    'ساندوتشات': ['رغيف']
+    /* Alias list: every misspelling the reps actually type still routes to the
+       ساندوتشات category (ID:4 restaurant / ID:54 other) even before the export
+       normalizer rewrites the sheet text. */
+    'ساندوتشات': ['رغيف', 'ساندوتش', 'سندوتش', 'ساندويتش', 'ساندويش', 'سندوش', 'سندوتشات']
 };
 KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
     const extra = KANJO_CATEGORY_SYNONYMS[cat.name];
@@ -5134,6 +5173,11 @@ window.exportKanjoExcel = async (options) => {
             if (window.showToast) window.showToast(includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير', false);
             return;
         }
+        /* Auto-correct data-entry typos on name_ar/description_ar BEFORE the
+           matcher runs and BEFORE the workbook is built, so both the automated
+           categorization and the exported sheet use the same unified spelling.
+           The in-memory catalogue is untouched (copies only). */
+        filtered = filtered.map((p) => kanjoWithNormalizedText(p));
         /* Vendor type = the merchant activity label stored on each product
            (`category`, e.g. "🍔 مطاعم وكافيهات"). Each product is matched against
            ONLY its own vendor's category allow-list, so cross-vertical false
