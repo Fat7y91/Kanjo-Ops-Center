@@ -4807,11 +4807,14 @@ const KANJO_VARIANT_NAME_BY_ATTR = {
     1: 'ID:1 | الحجم',
     2: 'ID:2 | الطعم',
     3: 'ID:3 | نوع العيش',
-    4: 'ID:4 | الصوص'
+    4: 'ID:4 | الصوص',
+    5: 'ID:5 | تحويجة القهوة',
+    6: 'ID:6 | الوزن',
+    7: 'ID:7 | حجم العبوة',
+    8: 'ID:8 | العدد'
 };
 
-/* Safe default per family, used when a legacy variant carries only an attribute
-   NAME and no recognisable value token. */
+/* Safe default per family, exposed for the variant conflict modal options. */
 const KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR = {
     1: 'ID:2 | ATTR:1 | وسط',
     2: 'ID:7 | ATTR:2 | عادي',
@@ -4821,15 +4824,8 @@ const KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR = {
 
 const KANJO_VARIANT_FALLBACK = { name: KANJO_VARIANT_NAME_BY_ATTR[1], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[1] };
 
-/* Legacy variant NAME -> new strict family. */
-const KANJO_VARIANT_NAME_RULES = [
-    { attr: 1, tokens: ['المقاس'] },
-    { attr: 2, tokens: ['الطعم'] },
-    { attr: 3, tokens: ['الخبز'] },
-    { attr: 4, tokens: ['الصوص'] }
-];
-
-/* Legacy variant VALUE -> new strict `ID:n | ATTR:n | label`. */
+/* Legacy variant VALUE -> new strict `ID:n | ATTR:n | label`, exposed as the flat
+   option list for the (unused) variant conflict modal. */
 const KANJO_VARIANT_VALUE_RULES = [
     { attr: 1, tokens: ['كبير جدا', 'جامبو'], value: 'ID:4 | ATTR:1 | جامبو' },
     { attr: 1, tokens: ['لارج', 'كبير'], value: 'ID:3 | ATTR:1 | كبير' },
@@ -4845,42 +4841,182 @@ const KANJO_VARIANT_VALUE_RULES = [
     { attr: 4, tokens: ['أبيض'], value: 'ID:12 | ATTR:4 | صوص أبيض' }
 ];
 
-/* Translate a legacy variant (option name + value) into one Kanjo strict
-   attribute assignment PER family, e.g. "صغير سوري" -> ATTR:1 (size) AND
-   ATTR:3 (bread). Distributing each match to its own attribute column (instead
-   of dumping everything into attribute_1) is what stops "صغير ايطالي" and
-   "صغير سوري" collapsing into two identical rows. Never fails: when nothing is
-   recognised it falls back to Size/Middle so the sheet always validates.
-   A matched VALUE always determines both the attribute name and its family,
-   guaranteeing `ID:name == ATTR:name`. */
+/* EXACT Kanjo alias dictionary (Dashboard Template v2). Each entry maps a raw
+   variant word/phrase to a REAL template value of the form
+   `ID:<valueId> | ATTR:<groupId> | <label>`. Values are collected in array
+   order (de-duplicated) and packed into the four sheet attribute slots. */
+const KANJO_ALIAS_MAPPINGS = [
+  // 1. SIZE & MAGNITUDE (ATTR:1)
+  { regex: /\b(S|صغير|سنجاب)\b/i, value: 'ID:1 | ATTR:1 | صغير' },
+  { regex: /\b(M|وسط|ميديم)\b/i, value: 'ID:2 | ATTR:1 | وسط' },
+  { regex: /\b(L|كبير|لارج)\b/i, value: 'ID:3 | ATTR:1 | كبير' },
+  { regex: /\b(XL|اكس لارج)\b/i, value: 'ID:51 | ATTR:1 | اكس لارج' },
+  { regex: /\b(جامبو)\b/i, value: 'ID:4 | ATTR:1 | جامبو' },
+  { regex: /\b(صاروخ)\b/i, value: 'ID:5 | ATTR:1 | صاروخ' },
+  { regex: /\b(شرقي|شرقى)\b/i, value: 'ID:6 | ATTR:1 | شرقي' },
+  { regex: /\b(سنجل)\b/i, value: 'ID:48 | ATTR:1 | سنجل' },
+  { regex: /\b(دبل|دابل)\b/i, value: 'ID:50 | ATTR:1 | دبل' },
+  { regex: /\b(عائلي|عائلية)\b/i, value: 'ID:49 | ATTR:1 | عائلي' },
+
+  // 2. BREAD TYPES (ATTR:3)
+  { regex: /\b(سوري)\b/i, value: 'ID:9 | ATTR:3 | عيش سوري' },
+  { regex: /\b(فينو)\b/i, value: 'ID:10 | ATTR:3 | عيش فينو' },
+  { regex: /\b(بلدي|بلدى)\b/i, value: 'ID:44 | ATTR:3 | بلدي' },
+  { regex: /\b(فرنساوي|فرنسي)\b/i, value: 'ID:45 | ATTR:3 | فرنساوي' },
+  { regex: /\b(كيزر)\b/i, value: 'ID:46 | ATTR:3 | كيزر' },
+  { regex: /\b(عيش سادة|خبز سادة)\b/i, value: 'ID:47 | ATTR:3 | سادة' },
+
+  // 3. COFFEE BLENDS (ATTR:5)
+  { regex: /\b(سادة|ساده)\b/i, value: 'ID:13 | ATTR:5 | سادة' },
+  { regex: /\b(محوج)\b/i, value: 'ID:14 | ATTR:5 | محوج' },
+  { regex: /\b(فاتح)\b/i, value: 'ID:15 | ATTR:5 | فاتح' },
+  { regex: /\b(غامق)\b/i, value: 'ID:16 | ATTR:5 | غامق' },
+  { regex: /\b(بن مشكل|مشكل)\b/i, value: 'ID:17 | ATTR:5 | مشكل' },
+  { regex: /\b(تركي)\b/i, value: 'ID:18 | ATTR:5 | تركي' },
+  { regex: /\b(كويتي)\b/i, value: 'ID:19 | ATTR:5 | كويتي' },
+  { regex: /\b(العميد)\b/i, value: 'ID:20 | ATTR:5 | العميد' },
+  { regex: /\b(ديل)\b/i, value: 'ID:21 | ATTR:5 | ديل' },
+  { regex: /\b(بندق)\b/i, value: 'ID:22 | ATTR:5 | بندق' },
+
+  // 4. WEIGHT (ATTR:6)
+  { regex: /\b(جرام)\b/i, value: 'ID:23 | ATTR:6 | جرام' },
+  { regex: /\b(ثمن)\b/i, value: 'ID:24 | ATTR:6 | ثمن كيلو' },
+  { regex: /\b(ربع)\b/i, value: 'ID:25 | ATTR:6 | ربع كيلو' },
+  { regex: /\b(نص)\b/i, value: 'ID:26 | ATTR:6 | نص كيلو' },
+  { regex: /\b(750 جرام|750)\b/i, value: 'ID:27 | ATTR:6 | 750 جرام' },
+  { regex: /\b(1 كيلو|كيلو)\b/i, value: 'ID:28 | ATTR:6 | كيلو' },
+
+  // 5. VOLUME (ATTR:7)
+  { regex: /\b(30 ملل|30ملل|30ml|30 ml)\b/i, value: 'ID:31 | ATTR:7 | 30 ملل' },
+  { regex: /\b(50 ملل|50ملل|50ml|50 ml)\b/i, value: 'ID:33 | ATTR:7 | 50 ملل' },
+  { regex: /\b(100 ملل|100ملل|100ml|100 ml)\b/i, value: 'ID:38 | ATTR:7 | 100 ملل' },
+
+  // 6. QUANTITY (ATTR:8)
+  { regex: /\b(قطعتين|2 قطعة|2 قطعه)\b/i, value: 'ID:39 | ATTR:8 | قطعتين' },
+  { regex: /\b(3 قطع|3قطع)\b/i, value: 'ID:40 | ATTR:8 | 3 قطع' },
+  { regex: /\b(5 قطع|5قطع)\b/i, value: 'ID:42 | ATTR:8 | 5 قطع' },
+  { regex: /\b(بوكس 6|6 قطع|6قطع)\b/i, value: 'ID:43 | ATTR:8 | بوكس 6 قطع' }
+];
+
+/* Fold the same characters normalizeArabic folds so a pattern written with
+   ة/ى/أ still matches the normalised haystack. */
+const KANJO_ALIAS_CHAR_FOLD = { 'ة': 'ه', 'ى': 'ي', 'أ': 'ا', 'إ': 'ا', 'آ': 'ا', 'ٱ': 'ا', 'ئ': 'ي', 'ؤ': 'و' };
+
+/* `\b` does not work next to Arabic letters, so swap the leading/trailing word
+   boundaries for Unicode-aware ones and normalise the pattern's Arabic chars. */
+const kanjoAliasRegex = (mapping) => {
+    if (mapping._compiled) return mapping._compiled;
+    let source = String((mapping.regex && mapping.regex.source) || '');
+    source = source.replace(/^\\b/, '(?<![\\p{L}\\p{N}])').replace(/\\b$/, '(?![\\p{L}\\p{N}])');
+    source = source.replace(/[ةىأإآٱئؤ]/g, (ch) => KANJO_ALIAS_CHAR_FOLD[ch] || ch);
+    mapping._compiled = new RegExp(source, 'iu');
+    return mapping._compiled;
+};
+const kanjoAliasRegexGlobal = (mapping) => {
+    if (mapping._compiledGlobal) return mapping._compiledGlobal;
+    mapping._compiledGlobal = new RegExp(kanjoAliasRegex(mapping).source, 'giu');
+    return mapping._compiledGlobal;
+};
+
+/* Taste/Sauce are not part of the alias dictionary but are real ATTR:2 / ATTR:4
+   template values; kept so legacy variants do not lose them. */
+const KANJO_VARIANT_TASTE_SAUCE_RULES = [
+    { tokens: ['عادي'], value: 'ID:7 | ATTR:2 | عادي' },
+    { tokens: ['حار'], value: 'ID:8 | ATTR:2 | حار' },
+    { tokens: ['أحمر'], value: 'ID:11 | ATTR:4 | صوص أحمر' },
+    { tokens: ['أبيض'], value: 'ID:12 | ATTR:4 | صوص أبيض' }
+];
+const KANJO_VARIANT_ALIAS_FALLBACK_VALUE = 'ID:1 | ATTR:1 | صغير';
+
+/* Words inside a product's variants that NO alias/supplemental rule recognises.
+   They are appended to the parent product's name_ar so nothing is lost (the
+   raw variant name when the variant matches nothing at all). */
+const kanjoVariantUnrecognizedWords = (product) => {
+    const variations = Array.isArray(product && product.variations)
+        ? product.variations.filter((v) => v && String(v.name || '').trim())
+        : [];
+    const out = [];
+    const seen = new Set();
+    variations.forEach((v) => {
+        const raw = String(v.name || '').trim();
+        if (!raw) return;
+        const rawWords = raw.split(/\s+/).filter(Boolean);
+        const normWords = rawWords.map((w) => normalizeArabic(w));
+        const normText = normWords.join(' ');
+        if (!normText) return;
+        const covered = new Array(normText.length).fill(false);
+        const cover = (from, len) => {
+            for (let k = from; k < from + len; k++) covered[k] = true;
+        };
+        const coverSubstring = (token) => {
+            if (!token) return;
+            let i = normText.indexOf(token);
+            while (i !== -1) { cover(i, token.length); i = normText.indexOf(token, i + 1); }
+        };
+        KANJO_VARIANT_TASTE_SAUCE_RULES.forEach((r) => r.tokens.forEach((t) => coverSubstring(normalizeArabic(t))));
+        KANJO_ALIAS_MAPPINGS.forEach((mapping) => {
+            const re = kanjoAliasRegexGlobal(mapping);
+            re.lastIndex = 0;
+            let m;
+            while ((m = re.exec(normText)) !== null) {
+                cover(m.index, m[0].length);
+                if (m[0].length === 0) re.lastIndex++;
+            }
+        });
+        let cursor = 0;
+        normWords.forEach((w, i) => {
+            const start = cursor;
+            cursor = start + w.length + 1;
+            if (!w.length) return;
+            let isCovered = false;
+            for (let k = start; k < start + w.length; k++) if (covered[k]) { isCovered = true; break; }
+            if (isCovered) return;
+            const key = normalizeArabic(rawWords[i]);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            out.push(rawWords[i]);
+        });
+    });
+    return out;
+};
+
+/* Translate a legacy variant name into up to four Kanjo attribute assignments.
+   Every value in KANJO_ALIAS_MAPPINGS whose pattern matches the normalised
+   variant name is collected in dictionary order (de-duplicated) and packed into
+   the four sheet slots (attribute_1..4). A value's own `ATTR:n` marker decides
+   its attribute NAME, so the group always matches the value. More than four
+   matches keep the first four. When nothing matches, the size defaults to a real
+   ID (صغير) and the raw variant name is preserved by
+   kanjoVariantUnrecognizedWords — never turned into an invalid synthetic ID. */
 const mapVariantToKanjo = (rawName, rawValue) => {
     const haystack = normalizeArabic([rawValue, rawName].filter(Boolean).join(' '));
     const matchesToken = (token) => {
         const t = normalizeArabic(token);
         return !!t && haystack.indexOf(t) !== -1;
     };
-    const byAttr = {};
-    /* Value rules win; the FIRST rule for a family fills that family only. */
-    KANJO_VARIANT_VALUE_RULES.forEach((rule) => {
-        if (byAttr[rule.attr] !== undefined) return;
-        if (rule.tokens.some(matchesToken)) {
-            byAttr[rule.attr] = { name: KANJO_VARIANT_NAME_BY_ATTR[rule.attr], value: rule.value };
-        }
+    const values = [];
+    const seen = new Set();
+    const pushValue = (value) => {
+        if (value && !seen.has(value)) { seen.add(value); values.push(value); }
+    };
+    KANJO_ALIAS_MAPPINGS.forEach((mapping) => {
+        if (kanjoAliasRegex(mapping).test(haystack)) pushValue(mapping.value);
     });
-    /* A named family with no recognised value (e.g. "المقاس") still gets its
-       safe default, provided that family is still free. */
-    KANJO_VARIANT_NAME_RULES.forEach((rule) => {
-        if (byAttr[rule.attr] !== undefined) return;
-        if (rule.tokens.some(matchesToken)) {
-            byAttr[rule.attr] = { name: KANJO_VARIANT_NAME_BY_ATTR[rule.attr], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[rule.attr] };
-        }
+    KANJO_VARIANT_TASTE_SAUCE_RULES.forEach((rule) => {
+        if (rule.tokens.some(matchesToken)) pushValue(rule.value);
     });
-    const list = Object.keys(byAttr).map(Number).sort((a, b) => a - b)
-        .map((attr) => ({ attr, name: byAttr[attr].name, value: byAttr[attr].value }));
-    if (!list.length) {
-        return [{ attr: 1, name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value }];
+    if (!values.length) {
+        return [{ attr: 1, name: KANJO_VARIANT_NAME_BY_ATTR[1], value: KANJO_VARIANT_ALIAS_FALLBACK_VALUE }];
     }
-    return list;
+    return values.slice(0, 4).map((value, index) => {
+        const attrMatch = /ATTR:(\d+)/.exec(value);
+        const group = attrMatch ? Number(attrMatch[1]) : (index + 1);
+        return {
+            attr: index + 1,
+            name: KANJO_VARIANT_NAME_BY_ATTR[group] || KANJO_VARIANT_FALLBACK.name,
+            value
+        };
+    });
 };
 
 /* Sentinel + flat option list used by the variant conflict modal so the admin
@@ -4929,10 +5065,7 @@ const kanjoBuildVariantRow = (p, v, index) => {
         price: Number(v && v.price) || 0,
         stock: Number(v && v.stock) || 0,
         thumbnail_url: catalogDirectImageUrl((v && v.image_url) || '') || '',
-        status: 'active',
-        /* Not part of the sheet (json_to_sheet drops keys outside the header):
-           retained only so the collision failsafe can name the offending option. */
-        raw_variant_name: String((v && v.name) || '')
+        status: 'active'
     };
     /* Each assignment lands in ITS OWN attribute family. */
     assignments.forEach((a) => {
@@ -5093,52 +5226,18 @@ const kanjoReportExportError = (err) => {
     }
 };
 
-/* Attribute-collision failsafe. Two variants of the SAME product must never
-   export the exact same attribute combination or the Kanjo importer rejects the
-   file. When a collision is found, inject the raw option name into the first
-   free attribute family as `ID:99 | ATTR:n | <name>`. If all four families are
-   already used (rare), fall back to a discriminator appended to attribute_4. */
-const KANJO_COLLISION_VALUE_ID = 99;
-const kanjoForceUniqueVariantCombos = (rows) => {
-    const seenByProduct = new Map();
-    (rows || []).forEach((row) => {
-        if (!row || typeof row !== 'object') return;
-        const productKey = String(row.product_key || '');
-        if (!seenByProduct.has(productKey)) seenByProduct.set(productKey, new Set());
-        const seen = seenByProduct.get(productKey);
-        const signature = () => [1, 2, 3, 4]
-            .map((n) => String(row['attribute_' + n + '_value'] || '')).join('\u0002');
-        const freeSlot = () => {
-            for (let n = 1; n <= 4; n++) {
-                const name = String(row['attribute_' + n + '_name'] || '').trim();
-                const value = String(row['attribute_' + n + '_value'] || '').trim();
-                if (!name && !value) return n;
-            }
-            return 0;
-        };
-        const raw = String(row.raw_variant_name || row.variant_sku || '').trim() || 'خيار';
-        let guard = 0;
-        while (seen.has(signature()) && guard < 100) {
-            guard++;
-            const slot = freeSlot();
-            const label = guard === 1 ? raw : (raw + ' ' + guard);
-            if (slot) {
-                row['attribute_' + slot + '_name'] = KANJO_VARIANT_NAME_BY_ATTR[slot] || KANJO_VARIANT_FALLBACK.name;
-                row['attribute_' + slot + '_value'] = 'ID:' + KANJO_COLLISION_VALUE_ID + ' | ATTR:' + slot + ' | ' + label;
-            } else {
-                row.attribute_4_value = 'ID:' + KANJO_COLLISION_VALUE_ID + ' | ATTR:4 | ' + label;
-            }
-        }
-        seen.add(signature());
-    });
-    return rows;
-};
-
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
         const productRows = [];
         const uniqueSkuById = new Map();
         const seenSkus = new Set();
+        /* Qualifiers/units that no variant rule could map are preserved on the
+           parent product name instead of being lost or turned into fake IDs. */
+        const variantNameSuffix = new Map();
+        evaluations.forEach(({ product }) => {
+            const extra = kanjoVariantUnrecognizedWords(product);
+            if (extra.length) variantNameSuffix.set(String((product && product.id) || ''), extra.join(' '));
+        });
         for (let i = 0; i < evaluations.length; i++) {
             if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
             const { product, match } = evaluations[i];
@@ -5147,6 +5246,8 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
                 ? match.category
                 : kanjoJoinCategorySelection(selections[key], match.category);
             const row = kanjoBuildProductRow(product, category);
+            const extraName = variantNameSuffix.get(key);
+            if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
             /* Deduplicate the parent SKU. Reps duplicate products, and the Kanjo
                importer rejects any repeated sku. A blank sku falls back to the
                (always unique) doc id so the cell is never empty. */
@@ -5171,8 +5272,12 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             variantRows = [];
             evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
         }
-        /* Re-point each variant at its parent's deduped sku, renumber variant_sku
-           per parent, then force every attribute combination unique. */
+        /* Re-point each variant at its parent's deduped sku and renumber
+           variant_sku per parent. Distinct raw options can still resolve to the
+           same attribute signature when their words are not in the alias
+           dictionary; those rows stay separate (one per distinct price) and the
+           unrecognised words are preserved on the product name rather than
+           becoming an invalid synthetic ID. */
         const variantSeq = new Map();
         variantRows.forEach((row) => {
             const parentKey = String(row.product_key || '');
@@ -5182,8 +5287,6 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             variantSeq.set(uniqueSku, n);
             row.variant_sku = uniqueSku + '-V' + n;
         });
-        kanjoForceUniqueVariantCombos(variantRows);
-        variantRows.forEach((row) => { delete row.raw_variant_name; });
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
