@@ -2582,6 +2582,25 @@ function calculateTopTeam(tasks) {
 
 }
 
+/* Report-timeline helpers shared by the task cards. The task's `reports` array
+   is append-only (oldest first) and may contain legacy empty entries (actor +
+   timestamp only). Newest-first sorting + empty filtering keeps the card
+   timeline consistent with the notifications feed. */
+const taskReportSortTime = (r) => {
+    if (!r) return 0;
+    const ts = r.timestamp;
+    if (ts && typeof ts === 'object') {
+        if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+        if (ts.seconds != null) return ts.seconds * 1000;
+    }
+    const raw = ts || (r.date ? `${r.date} ${r.time || '00:00:00'}` : '');
+    if (!raw) return 0;
+    const t = Date.parse(String(raw).trim().replace(' ', 'T'));
+    return isNaN(t) ? 0 : t;
+};
+const taskReportBoxHasContent = (r) => !!r && ['general', 'merchant', 'team', 'next', 'contactName', 'contactRole', 'contactPhone']
+    .some((k) => String(r[k] || '').trim() !== '');
+
 window.renderTasks = (grouped) => { 
 
     let html = ''; const todayStr = new Date().toISOString().slice(0, 10);
@@ -2660,9 +2679,15 @@ window.renderTasks = (grouped) => {
 
             (t.reports || []).forEach(r => {
 
+                /* Drop empty legacy reports (name + timestamp only). */
+                if (!taskReportBoxHasContent(r)) return;
+
                 const dedupKey = `${r.name || ''}_${r.general || ''}_${r.merchant || ''}_${r.contactPhone || ''}`;
 
-                if (!uniqueReportsMap.has(dedupKey)) {
+                const existing = uniqueReportsMap.get(dedupKey);
+
+                /* Keep the NEWEST occurrence of a duplicate, not the first. */
+                if (!existing || taskReportSortTime(r) > taskReportSortTime(existing)) {
 
                     uniqueReportsMap.set(dedupKey, r);
 
@@ -2672,11 +2697,7 @@ window.renderTasks = (grouped) => {
 
             const sortedReports = Array.from(uniqueReportsMap.values()).sort((a, b) => {
 
-                const timeA = a.timestamp || `${a.date || ''} ${a.time || ''}`;
-
-                const timeB = b.timestamp || `${b.date || ''} ${b.time || ''}`;
-
-                return timeB.localeCompare(timeA);
+                return taskReportSortTime(b) - taskReportSortTime(a);
 
             });
 

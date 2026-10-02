@@ -390,8 +390,13 @@ const auditDescribePatch = (collectionId, segments, data, previous) => {
        so a failed pre-read still yields a best-effort diff. */
     const before = (previous && Object.keys(previous).length) ? previous : (auditFindProduct(id) || {});
     const changes = auditBuildChanges(before, data || {});
+    /* No real change (the write only touched bookkeeping/noise fields, or the
+       values were identical): do NOT create an audit row. Previously every such
+       no-op product patch produced an empty "name + timestamp" entry, which
+       spammed the merchant history / Black Box. */
+    if (!changes.length) return null;
     const { previousData, newData } = auditChangesToData(changes);
-    const detail = changes.length ? changes.map((c) => c.label).join('، ') : 'بيانات';
+    const detail = changes.map((c) => c.label).join('، ');
     return {
         actionType: 'update',
         entityKind: kind,
@@ -424,6 +429,8 @@ const auditDescribeRemove = (collectionId, segments) => {
 const auditMirrorWrite = (collectionId, entry) => {
     if (!collectionId || collectionId === AUDIT_COLLECTION) return;
     if (!AUDIT_WATCHED_COLLECTIONS[collectionId]) return;
+    /* A descriptor may return null when a patch changed nothing (no-op write). */
+    if (!entry) return;
     /* Every session's writes are recorded (reps do the catalog work); the
        founder gate applies to READING the Black Box, never to appending. */
     auditWrite(entry);
@@ -801,9 +808,24 @@ const auditMergeEntries = () => {
     return merged;
 };
 
+/* A Black Box entry is "empty" when it carries no human-readable text, no
+   target entity and no field-level diff — i.e. only an actor + timestamp. */
+const auditEntryIsEmpty = (e) => {
+    if (!e) return true;
+    const hasText = String(e.description || '').trim() !== '';
+    const hasTarget = String(e.targetName || e.targetId || '').trim() !== '';
+    const hasChanges = (Array.isArray(e.changes) && e.changes.length > 0)
+        || (e.previousData && Object.keys(e.previousData).length > 0)
+        || (e.newData && Object.keys(e.newData).length > 0);
+    return !hasText && !hasTarget && !hasChanges;
+};
+
 const auditApplyFilters = (entries) => {
     const text = auditState.filterText.trim().toLowerCase();
     return entries.filter((e) => {
+        /* Hide empty rows (no text, no target, no diff). These are the no-op
+           writes legacy clients created before the hook skipped them. */
+        if (auditEntryIsEmpty(e)) return false;
         if (auditState.filterAction && e.actionType !== auditState.filterAction) return false;
         if (auditState.filterUser && String(e.userName || '') !== auditState.filterUser) return false;
         if (!text) return true;

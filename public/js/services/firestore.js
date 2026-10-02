@@ -92,6 +92,33 @@ const taskQuickViewEscape = (value) => String(value == null ? '' : value)
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+/* Report timeline helpers. Reports are stored as an append-only array inside
+   the task document, so they arrive OLDEST-first; the merchant history modal
+   must render them NEWEST-first (matching the notifications feed). A report is
+   considered empty when it carries no free text and no contact info — those are
+   the "name + timestamp only" boxes that used to spam the timeline. */
+const taskReportTime = (r) => {
+    if (!r) return 0;
+    const ts = r.timestamp;
+    if (ts && typeof ts === 'object') {
+        if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+        if (ts.seconds != null) return ts.seconds * 1000;
+    }
+    const raw = ts || (r.date ? `${r.date} ${r.time || '00:00:00'}` : '');
+    if (!raw) return 0;
+    const norm = String(raw).trim().replace(' ', 'T');
+    const t = Date.parse(norm);
+    return isNaN(t) ? 0 : t;
+};
+
+const taskReportHasContent = (r) => !!r && ['general', 'merchant', 'team', 'next', 'contactName', 'contactRole', 'contactPhone']
+    .some((k) => String(r[k] || '').trim() !== '');
+
+const taskReportsNewestFirst = (reports) => (Array.isArray(reports) ? reports : [])
+    .filter(taskReportHasContent)
+    .slice()
+    .sort((a, b) => taskReportTime(b) - taskReportTime(a));
+
 window.closeTaskQuickView = () => {
     const modal = document.getElementById('taskQuickViewModal');
     if (modal) modal.classList.add('hidden');
@@ -132,7 +159,7 @@ window.openTaskQuickView = (task) => {
         ? attendances.map((a) => `<div class="flex items-center justify-between gap-2 text-[11px] font-bold ${a.type === 'start' ? 'text-green-700' : 'text-red-600'} bg-white border border-purple-100 rounded-xl px-2.5 py-1.5"><span>${taskQuickViewEscape(a.user)} — ${a.type === 'start' ? 'بدء زيارة' : 'إنهاء زيارة'} ${taskQuickViewEscape(a.time || '')}</span>${a.loc ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.loc)}" target="_blank" class="underline text-blue-600 whitespace-nowrap">الخريطة</a>` : ''}</div>`).join('')
         : '<div class="text-[11px] font-bold text-slate-400">لا توجد زيارات مسجلة</div>';
 
-    const reports = Array.isArray(task.reports) ? task.reports : [];
+    const reports = taskReportsNewestFirst(task.reports);
     const reportsHtml = reports.length
         ? reports.map((r) => `<div class="bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
             <div class="flex items-center justify-between gap-2">
@@ -691,22 +718,25 @@ window.submitReport = async () => {
         const tBase = getBaseName(tData.name);
         if (tBase === baseName) {
             if (id === activeTaskId) {
-                const payload = {
-                    reports: arrayUnion({ 
-                        name: currentUser.name, 
-                        time: new Date().toLocaleTimeString(), 
-                        date: todayStr, 
-                        timestamp: nowTimestampStr,
-                        contactName: document.getElementById('repContactName').value,
-                        contactRole: document.getElementById('repContactRole').value,
-                        contactPhone: document.getElementById('repContactPhone').value,
-                        general: document.getElementById('repGeneral').value, 
-                        merchant: document.getElementById('repMerchant').value, 
-                        team: document.getElementById('repTeam').value, 
-                        next: document.getElementById('repNext').value 
-                    })
-
+                /* Only append a report when the rep actually wrote something (or
+                   captured a contact). A submit with no text/content used to
+                   create an empty "name + timestamp" report box in the merchant
+                   timeline; the contract/visit updates below still apply. */
+                const reportEntry = {
+                    name: currentUser.name,
+                    time: new Date().toLocaleTimeString(),
+                    date: todayStr,
+                    timestamp: nowTimestampStr,
+                    contactName: document.getElementById('repContactName').value,
+                    contactRole: document.getElementById('repContactRole').value,
+                    contactPhone: document.getElementById('repContactPhone').value,
+                    general: document.getElementById('repGeneral').value,
+                    merchant: document.getElementById('repMerchant').value,
+                    team: document.getElementById('repTeam').value,
+                    next: document.getElementById('repNext').value
                 };
+                const payload = {};
+                if (taskReportHasContent(reportEntry)) payload.reports = arrayUnion(reportEntry);
 
                 // For a routine visit on an existing contract, keep the original
                 // contract fields (isSigned/isProvisional/achieved/target/time) untouched.
