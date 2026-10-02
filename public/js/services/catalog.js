@@ -4310,6 +4310,10 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 78, name: 'مستلزمات', keywords: ['مستلزمات'] },
     { id: 91, name: 'مجمدات', keywords: ['مجمدات'] },
     { id: 37, name: 'حلويات', keywords: ['حلويات'] },
+    /* Restaurant feteer ("فطائر" — no definite article). Distinct from the
+       bakery entry ID:50 "الفطائر"; the operator explicitly confirmed the
+       restaurant vertical is ID:161. */
+    { id: 161, name: 'فطائر', keywords: ['فطائر'] },
 ];
 
 /* Curated semantic synonym families (Egyptian menu wording) merged into each
@@ -4323,6 +4327,7 @@ const KANJO_PRODUCT_CATEGORIES = [
 const KANJO_CATEGORY_SYNONYMS = {
     'باستا': ['مكرونة', 'اسباجيتي', 'مبكبكة', 'نجرسكو', 'فيتوتشيني', 'لازانيا', 'بشاميل'],
     'الفطائر': ['فطير', 'فطيرة', 'فطاير', 'مشلتت'],
+    'فطائر': ['فطير', 'فطيرة', 'فطاير', 'مشلتت'],
     'مشويات': ['كفتة', 'كفته', 'كباب', 'شيش طاووق', 'طرب', 'ريش', 'نيفة', 'كبدة مشوية', 'فرخة مشوية'],
     'أسماك': ['جمبري', 'سبيط', 'سمك', 'فيليه', 'كابوريا', 'سي فود', 'حنشان', 'جندوفلي'],
     'حلويات': ['أم علي', 'ام علي', 'أرز بلبن', 'مهلبية', 'كاسترد', 'كنافة', 'بسبوسة', 'نوتيلا', 'تشيز كيك'],
@@ -4423,11 +4428,17 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
 const KANJO_VENDOR_CATEGORY_RULES = [
     {
         match: ['مطاعم', 'مطعم', 'كافيه', 'كافيهات', 'ريستوران', 'restaurant', 'cafe'],
-        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'الفطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات']
+        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'فطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات'],
+        /* Names that repeat across verticals MUST resolve to the restaurant ID
+           only: desserts = 37 (NOT 82 butcher offal / 51 / 47), seafood = 10
+           (NOT 87 fish shop), drinks = 17 (NOT 34 juice bar), sandwiches = 4. */
+        pins: { 'حلويات': [37], 'أسماك': [10], 'مشروبات': [17], 'ساندوتشات': [4] }
     },
     {
         match: ['جزارة', 'جزار', 'لحوم', 'butcher'],
-        allow: ['لحوم', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة', 'مصنعات', 'مخبوزات']
+        allow: ['لحوم', 'قطعيات', 'فيليه', 'مجمدات', 'مجهزة', 'مصنعات', 'مخبوزات', 'حلويات'],
+        /* Butcher "حلويات" is meat offal/sweetbreads, ID:82 — never a dessert. */
+        pins: { 'حلويات': [82] }
     },
     {
         match: ['دواجن', 'فراخ', 'poultry'],
@@ -4435,7 +4446,9 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['أسماك', 'اسماك', 'سمك', 'سي فود', 'fish', 'seafood'],
-        allow: ['أسماك', 'سي فود', 'فيليه', 'مجمدات', 'مجهزة', 'طازج']
+        allow: ['أسماك', 'سي فود', 'فيليه', 'مجمدات', 'مجهزة', 'طازج'],
+        /* Fish shop seafood = 87 (NOT restaurant seafood = 10). */
+        pins: { 'أسماك': [87] }
     },
     {
         match: ['خضار', 'فاكهة', 'خضروات', 'vegetable', 'fruit'],
@@ -4443,11 +4456,16 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['مخبوزات', 'مخبز', 'خبز', 'bakery', 'معجنات'],
-        allow: ['الخبز', 'المعجنات', 'الفطائر', 'حلويات', 'كيك', 'بسكوت', 'مخبوزات', 'وافل']
+        allow: ['الخبز', 'المعجنات', 'الفطائر', 'حلويات', 'كيك', 'بسكوت', 'مخبوزات', 'وافل'],
+        /* Bakery feteer = 50 "الفطائر" (NOT restaurant = 161). Bakery/general
+           sweets are 51/47 — never the restaurant 37 or butcher 82. */
+        pins: { 'الفطائر': [50], 'حلويات': [51, 47] }
     },
     {
         match: ['عصائر', 'عصير', 'juice'],
-        allow: ['مشروبات', 'سموزي', 'كوكتيل', 'فريش', 'باردة']
+        allow: ['مشروبات', 'سموزي', 'كوكتيل', 'فريش', 'باردة'],
+        /* Juice bar drinks = 34 (NOT restaurant drinks = 17). */
+        pins: { 'مشروبات': [34] }
     },
     {
         match: ['عطارة', 'توابل', 'بهارات', 'محمص', 'roastery', 'spices'],
@@ -4459,7 +4477,9 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['حلويات', 'حلواني', 'sweets', 'dessert'],
-        allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات']
+        allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات'],
+        /* Confectionery sweets = 51/47 — never restaurant 37 or butcher 82. */
+        pins: { 'حلويات': [51, 47] }
     },
     {
         match: ['لبنة', 'ألبان', 'البان', 'dairy'],
@@ -4533,13 +4553,23 @@ const kanjoVendorRuleFor = (vendorType) => {
 
 /* The candidate categories for a vendor type. Unknown/unmapped vendors keep the
    complete list (non-blocking); a mapped vendor is strictly narrowed to its
-   allowed names. An empty intersection also falls back to the full list so a
-   typo in a rule can never produce an empty dropdown. */
+   allowed names. When a name repeats across verticals (e.g. "حلويات" exists for
+   restaurant, butcher, bakery and confectionery), `rule.pins[name]` forces the
+   domain-correct ID(s) so a vendor can never select another vertical's category.
+   An empty intersection also falls back to the full list so a typo in a rule can
+   never produce an empty dropdown. */
 const kanjoVendorAllowedCategories = (vendorType) => {
     const rule = kanjoVendorRuleFor(vendorType);
     if (!rule) return KANJO_PRODUCT_CATEGORIES;
     const allowed = new Set(rule.allow.map((name) => normalizeArabic(name)));
-    const list = KANJO_PRODUCT_CATEGORIES.filter((cat) => allowed.has(normalizeArabic(cat.name)));
+    const pins = {};
+    Object.keys(rule.pins || {}).forEach((name) => { pins[normalizeArabic(name)] = rule.pins[name]; });
+    const list = KANJO_PRODUCT_CATEGORIES.filter((cat) => {
+        const name = normalizeArabic(cat.name);
+        if (!allowed.has(name)) return false;
+        const pinned = pins[name];
+        return pinned ? pinned.indexOf(cat.id) !== -1 : true;
+    });
     return list.length ? list : KANJO_PRODUCT_CATEGORIES;
 };
 
@@ -4555,7 +4585,9 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         ? vendorType
         : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
     const allowedCats = kanjoVendorAllowedCategories(vendor);
-    const allowedNames = new Set(allowedCats.map((cat) => normalizeArabic(cat.name)));
+    /* Scope by ID, NOT by name: a name like "حلويات" exists in several verticals,
+       so a name set would leak every duplicate back into this vendor's matcher. */
+    const allowedIds = new Set(allowedCats.map((cat) => cat.id));
     const allowedValues = new Set(allowedCats.map((cat) => kanjoCategoryValue(cat)));
     const existing = String((product && product.category) || '').trim();
     const existingOfficial = allowedValues.has(existing) ? existing : '';
@@ -4565,7 +4597,7 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     const matches = [];
     if (haystack) {
         KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
-            if (!allowedNames.has(normalizeArabic(cat.name))) return;
+            if (!allowedIds.has(cat.id)) return;
             const info = kanjoCategoryMatchInfo(cat, haystack);
             if (info) matches.push({
                 cat,
@@ -4606,10 +4638,9 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     /* Last-resort "وجبة" rule: a generic meal with no other signal maps to the
        Egyptian set (مصري). It fires only after every specific family failed, so
        "وجبة بانيه" still resolves to كرسبي, "وجبة شيش طاووق" to مشويات, etc. */
-    const mealNameNorm = normalizeArabic('مصري');
-    if (haystack && haystack.indexOf(normalizeArabic('وجبة')) !== -1 && allowedNames.has(mealNameNorm)) {
-        const meal = allowedCats.find((cat) => normalizeArabic(cat.name) === mealNameNorm);
-        if (meal) return { status: 'matched', category: kanjoCategoryValue(meal), options: [] };
+    const meal = allowedCats.find((cat) => normalizeArabic(cat.name) === normalizeArabic('مصري'));
+    if (haystack && haystack.indexOf(normalizeArabic('وجبة')) !== -1 && meal) {
+        return { status: 'matched', category: kanjoCategoryValue(meal), options: [] };
     }
     return { status: 'unmapped', category: '', options: [] };
 };
