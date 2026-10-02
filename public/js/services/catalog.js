@@ -4811,7 +4811,8 @@ const KANJO_VARIANT_NAME_BY_ATTR = {
     5: 'ID:5 | تحويجة القهوة',
     6: 'ID:6 | الوزن',
     7: 'ID:7 | حجم العبوة',
-    8: 'ID:8 | العدد'
+    8: 'ID:8 | العدد',
+    9: 'ID:9 | نوع العجينة'
 };
 
 /* Safe default per family, exposed for the variant conflict modal options. */
@@ -4853,7 +4854,7 @@ const KANJO_ALIAS_MAPPINGS = [
   { regex: /\b(XL|اكس لارج)\b/i, value: 'ID:51 | ATTR:1 | اكس لارج' },
   { regex: /\b(جامبو)\b/i, value: 'ID:4 | ATTR:1 | جامبو' },
   { regex: /\b(صاروخ)\b/i, value: 'ID:5 | ATTR:1 | صاروخ' },
-  { regex: /\b(شرقي|شرقى)\b/i, value: 'ID:6 | ATTR:1 | شرقي' },
+  { regex: /\b(دبل لارج|دابل لارج)\b/i, value: 'ID:56 | ATTR:1 | دبل لارج' },
   { regex: /\b(سنجل)\b/i, value: 'ID:48 | ATTR:1 | سنجل' },
   { regex: /\b(دبل|دابل)\b/i, value: 'ID:50 | ATTR:1 | دبل' },
   { regex: /\b(عائلي|عائلية)\b/i, value: 'ID:49 | ATTR:1 | عائلي' },
@@ -4895,7 +4896,13 @@ const KANJO_ALIAS_MAPPINGS = [
   { regex: /\b(قطعتين|2 قطعة|2 قطعه)\b/i, value: 'ID:39 | ATTR:8 | قطعتين' },
   { regex: /\b(3 قطع|3قطع)\b/i, value: 'ID:40 | ATTR:8 | 3 قطع' },
   { regex: /\b(5 قطع|5قطع)\b/i, value: 'ID:42 | ATTR:8 | 5 قطع' },
-  { regex: /\b(بوكس 6|6 قطع|6قطع)\b/i, value: 'ID:43 | ATTR:8 | بوكس 6 قطع' }
+  { regex: /\b(بوكس 6|6 قطع|6قطع)\b/i, value: 'ID:43 | ATTR:8 | بوكس 6 قطع' },
+
+  // 7. CRUST TYPE (ATTR:9)
+  { regex: /\b(شرقي|شرقى)\b/i, value: 'ID:52 | ATTR:9 | شرقي' },
+  { regex: /\b(إيطالي|ايطالي)\b/i, value: 'ID:53 | ATTR:9 | إيطالي' },
+  { regex: /\b(عجينة عادية|عجينه عاديه)\b/i, value: 'ID:54 | ATTR:9 | عادي' },
+  { regex: /\b(ملفوف|رول)\b/i, value: 'ID:55 | ATTR:9 | ملفوف' }
 ];
 
 /* Fold the same characters normalizeArabic folds so a pattern written with
@@ -4919,13 +4926,16 @@ const kanjoAliasRegexGlobal = (mapping) => {
 };
 
 /* Taste/Sauce are not part of the alias dictionary but are real ATTR:2 / ATTR:4
-   template values; kept so legacy variants do not lose them. */
-const KANJO_VARIANT_TASTE_SAUCE_RULES = [
-    { tokens: ['عادي'], value: 'ID:7 | ATTR:2 | عادي' },
-    { tokens: ['حار'], value: 'ID:8 | ATTR:2 | حار' },
-    { tokens: ['أحمر'], value: 'ID:11 | ATTR:4 | صوص أحمر' },
-    { tokens: ['أبيض'], value: 'ID:12 | ATTR:4 | صوص أبيض' }
+   template values; kept so legacy variants do not lose them. Written as bounded
+   patterns so "عادي" never fires inside "عجينة عادية". */
+const KANJO_VARIANT_TASTE_SAUCE_MAPPINGS = [
+    { regex: /\b(عادي)\b/i, value: 'ID:7 | ATTR:2 | عادي' },
+    { regex: /\b(حار)\b/i, value: 'ID:8 | ATTR:2 | حار' },
+    { regex: /\b(أحمر)\b/i, value: 'ID:11 | ATTR:4 | صوص أحمر' },
+    { regex: /\b(أبيض)\b/i, value: 'ID:12 | ATTR:4 | صوص أبيض' }
 ];
+/* Full matcher set: the exact alias dictionary first, then the supplementals. */
+const KANJO_VARIANT_MAPPINGS = KANJO_ALIAS_MAPPINGS.concat(KANJO_VARIANT_TASTE_SAUCE_MAPPINGS);
 const KANJO_VARIANT_ALIAS_FALLBACK_VALUE = 'ID:1 | ATTR:1 | صغير';
 
 /* Words inside a product's variants that NO alias/supplemental rule recognises.
@@ -4948,13 +4958,7 @@ const kanjoVariantUnrecognizedWords = (product) => {
         const cover = (from, len) => {
             for (let k = from; k < from + len; k++) covered[k] = true;
         };
-        const coverSubstring = (token) => {
-            if (!token) return;
-            let i = normText.indexOf(token);
-            while (i !== -1) { cover(i, token.length); i = normText.indexOf(token, i + 1); }
-        };
-        KANJO_VARIANT_TASTE_SAUCE_RULES.forEach((r) => r.tokens.forEach((t) => coverSubstring(normalizeArabic(t))));
-        KANJO_ALIAS_MAPPINGS.forEach((mapping) => {
+        KANJO_VARIANT_MAPPINGS.forEach((mapping) => {
             const re = kanjoAliasRegexGlobal(mapping);
             re.lastIndex = 0;
             let m;
@@ -4981,30 +4985,35 @@ const kanjoVariantUnrecognizedWords = (product) => {
 };
 
 /* Translate a legacy variant name into up to four Kanjo attribute assignments.
-   Every value in KANJO_ALIAS_MAPPINGS whose pattern matches the normalised
-   variant name is collected in dictionary order (de-duplicated) and packed into
-   the four sheet slots (attribute_1..4). A value's own `ATTR:n` marker decides
-   its attribute NAME, so the group always matches the value. More than four
-   matches keep the first four. When nothing matches, the size defaults to a real
-   ID (صغير) and the raw variant name is preserved by
-   kanjoVariantUnrecognizedWords — never turned into an invalid synthetic ID. */
+   Every value in KANJO_VARIANT_MAPPINGS whose pattern matches the normalised
+   variant name is collected, and only the LONGEST non-overlapping matches are
+   kept (so "دبل لارج" is never also read as "دبل" + "لارج"). Survivors are
+   ordered by dictionary order and packed into attribute_1..4 (first four). A
+   value's own `ATTR:n` marker decides its attribute NAME, so the group always
+   matches the value. When nothing matches, the size defaults to a real ID
+   (صغير) and the raw variant name is preserved by kanjoVariantUnrecognizedWords
+   — never turned into an invalid synthetic ID. */
 const mapVariantToKanjo = (rawName, rawValue) => {
     const haystack = normalizeArabic([rawValue, rawName].filter(Boolean).join(' '));
-    const matchesToken = (token) => {
-        const t = normalizeArabic(token);
-        return !!t && haystack.indexOf(t) !== -1;
-    };
-    const values = [];
-    const seen = new Set();
-    const pushValue = (value) => {
-        if (value && !seen.has(value)) { seen.add(value); values.push(value); }
-    };
-    KANJO_ALIAS_MAPPINGS.forEach((mapping) => {
-        if (kanjoAliasRegex(mapping).test(haystack)) pushValue(mapping.value);
+    const candidates = [];
+    KANJO_VARIANT_MAPPINGS.forEach((mapping, order) => {
+        const re = kanjoAliasRegexGlobal(mapping);
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(haystack)) !== null) {
+            if (m[0].length) candidates.push({ value: mapping.value, order, start: m.index, end: m.index + m[0].length });
+            if (m[0].length === 0) re.lastIndex++;
+        }
     });
-    KANJO_VARIANT_TASTE_SAUCE_RULES.forEach((rule) => {
-        if (rule.tokens.some(matchesToken)) pushValue(rule.value);
+    candidates.sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.order - b.order);
+    const claimed = [];
+    const accepted = new Map();
+    candidates.forEach((c) => {
+        if (claimed.some(([s, e]) => c.start < e && c.end > s)) return;
+        claimed.push([c.start, c.end]);
+        if (!accepted.has(c.value)) accepted.set(c.value, c.order);
     });
+    const values = [...accepted.entries()].sort((a, b) => a[1] - b[1]).map(([value]) => value);
     if (!values.length) {
         return [{ attr: 1, name: KANJO_VARIANT_NAME_BY_ATTR[1], value: KANJO_VARIANT_ALIAS_FALLBACK_VALUE }];
     }
