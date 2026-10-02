@@ -712,61 +712,72 @@ window.submitReport = async () => {
 
     const hasProtectedContract = (tData) => tData && ((tData.isSigned === true && (Number(tData.achieved) || 0) > 0) || (!canEditContract && tData.isProvisional === true));
 
+    /* Only append a report when the rep actually wrote something (or captured a
+       contact). A submit with no text/content used to create an empty
+       "name + timestamp" report box in the merchant timeline; the contract/visit
+       updates below still apply.
+
+       The report MUST land on the exact task the rep filed it from. That task is
+       not always resident in `tasksMemory`: a field rep searching the archive
+       renders cards from the lightweight `finalizedMerchantsCache`, so the old
+       memory-scan write skipped the append while the "new report" notification
+       was still emitted — the phantom notification. Build the entry once, write
+       it to `activeTaskId` unconditionally, and only notify when it was saved. */
+    const reportEntry = {
+        name: currentUser.name,
+        time: new Date().toLocaleTimeString(),
+        date: todayStr,
+        timestamp: nowTimestampStr,
+        contactName: document.getElementById('repContactName').value,
+        contactRole: document.getElementById('repContactRole').value,
+        contactPhone: document.getElementById('repContactPhone').value,
+        general: document.getElementById('repGeneral').value,
+        merchant: document.getElementById('repMerchant').value,
+        team: document.getElementById('repTeam').value,
+        next: document.getElementById('repNext').value
+    };
+    const hasReportContent = taskReportHasContent(reportEntry);
+    const activeTaskInMemory = window.tasksMemory.has(activeTaskId);
+
     const batch = writeBatch(db);
 
+    /* Sibling docs of the same merchant (never the active task): a routine visit
+       must not clobber an existing contract either. */
     window.tasksMemory.forEach((tData, id) => {
-        const tBase = getBaseName(tData.name);
-        if (tBase === baseName) {
-            if (id === activeTaskId) {
-                /* Only append a report when the rep actually wrote something (or
-                   captured a contact). A submit with no text/content used to
-                   create an empty "name + timestamp" report box in the merchant
-                   timeline; the contract/visit updates below still apply. */
-                const reportEntry = {
-                    name: currentUser.name,
-                    time: new Date().toLocaleTimeString(),
-                    date: todayStr,
-                    timestamp: nowTimestampStr,
-                    contactName: document.getElementById('repContactName').value,
-                    contactRole: document.getElementById('repContactRole').value,
-                    contactPhone: document.getElementById('repContactPhone').value,
-                    general: document.getElementById('repGeneral').value,
-                    merchant: document.getElementById('repMerchant').value,
-                    team: document.getElementById('repTeam').value,
-                    next: document.getElementById('repNext').value
-                };
-                const payload = {};
-                if (taskReportHasContent(reportEntry)) payload.reports = arrayUnion(reportEntry);
-
-                // For a routine visit on an existing contract, keep the original
-                // contract fields (isSigned/isProvisional/achieved/target/time) untouched.
-                if (!isRoutineVisit || !hasProtectedContract(tData)) {
-                    payload.isSigned = isSigned;
-                    payload.isProvisional = isProvisional;
-                    payload.achieved = (isSigned || isProvisional) ? achieved : 0;
-                    payload.target = seriesTarget;
-                    // Keep the original signing date on an already-finalized contract so
-                    // the contract never moves to a later payroll month.
-                    if (!(tData.isSigned === true && (Number(tData.achieved) || 0) > 0)) {
-                        payload.time = todayStr;
-                    }
-                }
-
-                batch.update(doc(db, "tasks", id), payload);
-            } else {
-                // Sibling docs of the same merchant: a routine visit must not clobber
-                // an existing contract either.
-                if (!isRoutineVisit || !hasProtectedContract(tData)) {
-                    batch.update(doc(db, "tasks", id), {
-                        isSigned: isSigned,
-                        isProvisional: isProvisional,
-                        achieved: (isSigned || isProvisional) ? achieved : 0,
-                        target: seriesTarget
-                    });
-                }
-            }
+        if (id === activeTaskId) return;
+        if (getBaseName(tData.name) !== baseName) return;
+        if (!isRoutineVisit || !hasProtectedContract(tData)) {
+            batch.update(doc(db, "tasks", id), {
+                isSigned: isSigned,
+                isProvisional: isProvisional,
+                achieved: (isSigned || isProvisional) ? achieved : 0,
+                target: seriesTarget
+            });
         }
     });
+
+    /* The active task. When it is resident we apply the same protection rules as
+       before. When it is not (a signed/VIP card from the archive search) we still
+       write the report, but refuse to touch contract fields on a routine visit
+       because we cannot prove the existing contract is not protected. */
+    const activePayload = {};
+    if (hasReportContent) activePayload.reports = arrayUnion(reportEntry);
+    const canWriteActiveContract = !isRoutineVisit
+        || (activeTaskInMemory && !hasProtectedContract(activeTaskData));
+    if (canWriteActiveContract) {
+        activePayload.isSigned = isSigned;
+        activePayload.isProvisional = isProvisional;
+        activePayload.achieved = (isSigned || isProvisional) ? achieved : 0;
+        activePayload.target = seriesTarget;
+        // Keep the original signing date on an already-finalized contract so the
+        // contract never moves to a later payroll month. Only knowable in memory.
+        if (activeTaskInMemory && !(activeTaskData.isSigned === true && (Number(activeTaskData.achieved) || 0) > 0)) {
+            activePayload.time = todayStr;
+        }
+    }
+    if (Object.keys(activePayload).length) {
+        batch.update(doc(db, "tasks", activeTaskId), activePayload);
+    }
 
     // أُنشئ المتابعة داخل نفس الدفعة لدمج أحداث الاستماع (snapshot) في حدث واحد
     if (createNew && nextDate) { 
@@ -804,12 +815,17 @@ window.submitReport = async () => {
         return;
     }
 
-    try {
-        await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
-    } catch (err) {
-        /* The report itself is already saved; a failed notification must not
-           make the user think the save failed. */
-        console.error('[report] notify manager failed:', err);
+    /* Notify only when a report entry was actually appended. An empty submit
+       (contract-only / routine visit with no text) must NOT raise a
+       "new report" badge the manager can never find. */
+    if (hasReportContent) {
+        try {
+            await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
+        } catch (err) {
+            /* The report itself is already saved; a failed notification must not
+               make the user think the save failed. */
+            console.error('[report] notify manager failed:', err);
+        }
     }
 
     if (typeof window.ensureMerchantIds === 'function') window.ensureMerchantIds();
