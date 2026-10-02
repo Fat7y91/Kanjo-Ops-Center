@@ -4319,6 +4319,9 @@ const KANJO_PRODUCT_CATEGORIES = [
        poultry name and MUST be pinned per-domain. */
     { id: 163, name: 'اللمة', keywords: ['اللمة', 'لمه'] },
     { id: 164, name: 'فراخ', keywords: ['فراخ'] },
+    /* 2026 restaurant fries vertical. "بطاطس" is the canonical keyword; the
+       colloquial pack/serving words are handled by the semantic rules below. */
+    { id: 165, name: 'بطاطس', keywords: ['بطاطس'] },
 ];
 
 /* ===== Export text normalization (auto-typo correction) =====
@@ -4329,7 +4332,7 @@ const KANJO_PRODUCT_CATEGORIES = [
    Rules are applied left-to-right; the original catalogue record is never
    mutated — only the row that goes into the sheet is corrected. */
 const KANJO_TEXT_NORMALIZATION_RULES = [
-    { re: /ساندوتشات|سندوتشات|ساندويتش|ساندويش|سندوش|سندوتش/g, to: 'ساندوتش' },
+    { re: /ساندوتشات|سندوتشات|ساندويتش|ساندويش|ساندوش|سندوش|سندوتش/g, to: 'ساندوتش' },
     { re: /فطاير/g, to: 'فطائر' },
     { re: /بسطرمه/g, to: 'بسطرمة' },
     { re: /شاورمه|شاورمة/g, to: 'شاورما' },
@@ -4413,6 +4416,19 @@ const kanjoSemanticTermRegex = (terms) => {
 const KANJO_LAMMA_RE = kanjoSemanticTermRegex(KANJO_LAMMA_TERMS);
 const KANJO_CHICKEN_RE = kanjoSemanticTermRegex(KANJO_CHICKEN_TERMS);
 const kanjoHasSemanticTerm = (haystack, re) => !!haystack && !!re && re.test(haystack);
+
+/* Extended restaurant-only add-ons. Each rule maps a normalized trigger to the
+   category ID(s) the Ops Manager wants tagged, e.g. any salad wording exports
+   as سلطات + مقبلات + إضافات at once. IDs are applied in order and only when the
+   vendor's rule explicitly allows them (see kanjoMatchProductCategory), so these
+   never leak into a non-restaurant vertical. The regexes reuse the Unicode-aware
+   boundary helper, so "محمرة" cannot fire inside an unrelated word. */
+const KANJO_RESTAURANT_ADDON_RULES = [
+    { ids: [149], terms: ['صوص', 'إضافة', 'اضافة', 'إضافه', 'اضافه', 'اكسترا'] },
+    { ids: [16, 147, 149], terms: ['سلطة', 'سلطه'] },
+    { ids: [165, 149], terms: ['بطاطس', 'باكيت', 'باكت', 'محمرة'] },
+    { ids: [4], terms: ['ساندوتش'] }
+].map((rule) => ({ ids: rule.ids, re: kanjoSemanticTermRegex(rule.terms) }));
 
 /* Parse an already-official category cell (single value or comma-joined multi
    value). Returns the cell unchanged when EVERY part is a category this vendor
@@ -4519,7 +4535,11 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
 const KANJO_VENDOR_CATEGORY_RULES = [
     {
         match: ['مطاعم', 'مطعم', 'كافيه', 'كافيهات', 'ريستوران', 'restaurant', 'cafe'],
-        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'فطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات', 'اللمة', 'فراخ'],
+        /* Marks the restaurant vertical so the additive semantic tagging (which is
+           restaurant-only by spec) can be gated explicitly instead of relying on
+           the allow-list alone. */
+        restaurant: true,
+        allow: ['إضافات', 'برجر', 'بيتي', 'طواجن', 'عروض', 'فطائر', 'كرسبي', 'كشري', 'مشروبات', 'مقبلات', 'مشويات', 'أسماك', 'حواوشي', 'مصري', 'بيتزا', 'شاورما', 'ساندوتشات', 'باستا', 'كريب', 'سلطات', 'حلويات', 'اللمة', 'فراخ', 'بطاطس'],
         /* Names that repeat across verticals MUST resolve to the restaurant ID
            only: desserts = 37 (NOT 82 butcher offal / 51 / 47), seafood = 10
            (NOT 87 fish shop), drinks = 17 (NOT 34 juice bar), sandwiches = 4,
@@ -4723,18 +4743,22 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             sorted.forEach((m) => ranked.push(m.cat));
         }
     }
-    /* Additive semantic tags. Only fires when the vendor's own rule explicitly
-       offers the category (so restaurants get them; the no-rule full-list
-       fallback does not). Appended after the keyword matches, اللمة then فراخ. */
-    if (rule && haystack) {
-        if (allowedIds.has(KANJO_LAMMA_CATEGORY_ID) && kanjoHasSemanticTerm(haystack, KANJO_LAMMA_RE)) {
-            const cat = allowedCats.find((c) => c.id === KANJO_LAMMA_CATEGORY_ID);
+    /* Additive semantic tags — RESTAURANT ONLY (spec: never push these IDs for a
+       non-restaurant vendor_type). The vendor's rule must be the restaurant
+       vertical AND explicitly allow the target ID. Appended after the keyword
+       matches so keyword hits always stay primary: اللمة, فراخ, then the
+       sauces/salads/fries/sandwich add-ons. */
+    if (haystack && rule && rule.restaurant) {
+        const pushSemanticId = (id) => {
+            if (!allowedIds.has(id)) return;
+            const cat = allowedCats.find((c) => c.id === id);
             if (cat) ranked.push(cat);
-        }
-        if (allowedIds.has(KANJO_CHICKEN_CATEGORY_ID) && kanjoHasSemanticTerm(haystack, KANJO_CHICKEN_RE)) {
-            const cat = allowedCats.find((c) => c.id === KANJO_CHICKEN_CATEGORY_ID);
-            if (cat) ranked.push(cat);
-        }
+        };
+        if (kanjoHasSemanticTerm(haystack, KANJO_LAMMA_RE)) pushSemanticId(KANJO_LAMMA_CATEGORY_ID);
+        if (kanjoHasSemanticTerm(haystack, KANJO_CHICKEN_RE)) pushSemanticId(KANJO_CHICKEN_CATEGORY_ID);
+        KANJO_RESTAURANT_ADDON_RULES.forEach((addon) => {
+            if (kanjoHasSemanticTerm(haystack, addon.re)) addon.ids.forEach(pushSemanticId);
+        });
     }
     /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
        exported once, mirroring the single option shown in the audit modal. */
