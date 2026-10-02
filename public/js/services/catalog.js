@@ -4845,25 +4845,42 @@ const KANJO_VARIANT_VALUE_RULES = [
     { attr: 4, tokens: ['أبيض'], value: 'ID:12 | ATTR:4 | صوص أبيض' }
 ];
 
-/* Translate a legacy variant (option name + value) into Kanjo's new strict
-   attribute id pair. Never fails: unmatched variants fall back to Size/Middle so
-   the sheet always passes validation. A matched VALUE always determines both the
-   attribute name and its attribute family, guaranteeing `ID:name == ATTR:name`. */
+/* Translate a legacy variant (option name + value) into one Kanjo strict
+   attribute assignment PER family, e.g. "صغير سوري" -> ATTR:1 (size) AND
+   ATTR:3 (bread). Distributing each match to its own attribute column (instead
+   of dumping everything into attribute_1) is what stops "صغير ايطالي" and
+   "صغير سوري" collapsing into two identical rows. Never fails: when nothing is
+   recognised it falls back to Size/Middle so the sheet always validates.
+   A matched VALUE always determines both the attribute name and its family,
+   guaranteeing `ID:name == ATTR:name`. */
 const mapVariantToKanjo = (rawName, rawValue) => {
     const haystack = normalizeArabic([rawValue, rawName].filter(Boolean).join(' '));
     const matchesToken = (token) => {
         const t = normalizeArabic(token);
         return !!t && haystack.indexOf(t) !== -1;
     };
-    const valueRule = KANJO_VARIANT_VALUE_RULES.find((rule) => rule.tokens.some(matchesToken));
-    if (valueRule) {
-        return { name: KANJO_VARIANT_NAME_BY_ATTR[valueRule.attr], value: valueRule.value };
+    const byAttr = {};
+    /* Value rules win; the FIRST rule for a family fills that family only. */
+    KANJO_VARIANT_VALUE_RULES.forEach((rule) => {
+        if (byAttr[rule.attr] !== undefined) return;
+        if (rule.tokens.some(matchesToken)) {
+            byAttr[rule.attr] = { name: KANJO_VARIANT_NAME_BY_ATTR[rule.attr], value: rule.value };
+        }
+    });
+    /* A named family with no recognised value (e.g. "المقاس") still gets its
+       safe default, provided that family is still free. */
+    KANJO_VARIANT_NAME_RULES.forEach((rule) => {
+        if (byAttr[rule.attr] !== undefined) return;
+        if (rule.tokens.some(matchesToken)) {
+            byAttr[rule.attr] = { name: KANJO_VARIANT_NAME_BY_ATTR[rule.attr], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[rule.attr] };
+        }
+    });
+    const list = Object.keys(byAttr).map(Number).sort((a, b) => a - b)
+        .map((attr) => ({ attr, name: byAttr[attr].name, value: byAttr[attr].value }));
+    if (!list.length) {
+        return [{ attr: 1, name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value }];
     }
-    const nameRule = KANJO_VARIANT_NAME_RULES.find((rule) => rule.tokens.some(matchesToken));
-    if (nameRule) {
-        return { name: KANJO_VARIANT_NAME_BY_ATTR[nameRule.attr], value: KANJO_VARIANT_DEFAULT_VALUE_BY_ATTR[nameRule.attr] };
-    }
-    return { name: KANJO_VARIANT_FALLBACK.name, value: KANJO_VARIANT_FALLBACK.value };
+    return list;
 };
 
 /* Sentinel + flat option list used by the variant conflict modal so the admin
@@ -4895,13 +4912,13 @@ const kanjoBuildProductRow = (p, category) => {
 };
 
 const kanjoBuildVariantRow = (p, v, index) => {
-    const mapped = mapVariantToKanjo(v && v.name, v && v.name);
-    return {
+    const assignments = mapVariantToKanjo(v && v.name, v && v.name);
+    const row = {
         product_key: (p && p.id) || '',
         variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
-        attribute_1_name: mapped.name,
-        attribute_1_value: mapped.value,
         /* Kanjo expects the full attribute/branch column set even when unused. */
+        attribute_1_name: '',
+        attribute_1_value: '',
         attribute_2_name: '',
         attribute_2_value: '',
         attribute_3_name: '',
@@ -4912,8 +4929,17 @@ const kanjoBuildVariantRow = (p, v, index) => {
         price: Number(v && v.price) || 0,
         stock: Number(v && v.stock) || 0,
         thumbnail_url: catalogDirectImageUrl((v && v.image_url) || '') || '',
-        status: 'active'
+        status: 'active',
+        /* Not part of the sheet (json_to_sheet drops keys outside the header):
+           retained only so the collision failsafe can name the offending option. */
+        raw_variant_name: String((v && v.name) || '')
     };
+    /* Each assignment lands in ITS OWN attribute family. */
+    assignments.forEach((a) => {
+        row['attribute_' + a.attr + '_name'] = a.name;
+        row['attribute_' + a.attr + '_value'] = a.value;
+    });
+    return row;
 };
 
 const kanjoBuildVariantRows = (p) => {
@@ -4951,7 +4977,14 @@ const kanjoCollectVariantEntries = (evaluations) => {
     return entries;
 };
 
-const kanjoVariantGroupKey = (entry) => String(entry.product_key) + '\u0001' + String(entry.attribute_1_value);
+/* The FULL attribute combination (all four families), not just attribute_1:
+   "صغير ايطالي" and "صغير سوري" share the size but differ in bread, and must be
+   treated as two distinct variants. */
+const kanjoVariantAttributeSignature = (entry) => {
+    const row = (entry && entry.row) || {};
+    return [1, 2, 3, 4].map((n) => String(row['attribute_' + n + '_value'] || '')).join('\u0002');
+};
+const kanjoVariantGroupKey = (entry) => String(entry.product_key) + '\u0001' + kanjoVariantAttributeSignature(entry);
 
 /* Group by product + resolved Kanjo attribute value. */
 const kanjoGroupVariantEntries = (entries) => {
@@ -5060,9 +5093,52 @@ const kanjoReportExportError = (err) => {
     }
 };
 
+/* Attribute-collision failsafe. Two variants of the SAME product must never
+   export the exact same attribute combination or the Kanjo importer rejects the
+   file. When a collision is found, inject the raw option name into the first
+   free attribute family as `ID:99 | ATTR:n | <name>`. If all four families are
+   already used (rare), fall back to a discriminator appended to attribute_4. */
+const KANJO_COLLISION_VALUE_ID = 99;
+const kanjoForceUniqueVariantCombos = (rows) => {
+    const seenByProduct = new Map();
+    (rows || []).forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        const productKey = String(row.product_key || '');
+        if (!seenByProduct.has(productKey)) seenByProduct.set(productKey, new Set());
+        const seen = seenByProduct.get(productKey);
+        const signature = () => [1, 2, 3, 4]
+            .map((n) => String(row['attribute_' + n + '_value'] || '')).join('\u0002');
+        const freeSlot = () => {
+            for (let n = 1; n <= 4; n++) {
+                const name = String(row['attribute_' + n + '_name'] || '').trim();
+                const value = String(row['attribute_' + n + '_value'] || '').trim();
+                if (!name && !value) return n;
+            }
+            return 0;
+        };
+        const raw = String(row.raw_variant_name || row.variant_sku || '').trim() || 'خيار';
+        let guard = 0;
+        while (seen.has(signature()) && guard < 100) {
+            guard++;
+            const slot = freeSlot();
+            const label = guard === 1 ? raw : (raw + ' ' + guard);
+            if (slot) {
+                row['attribute_' + slot + '_name'] = KANJO_VARIANT_NAME_BY_ATTR[slot] || KANJO_VARIANT_FALLBACK.name;
+                row['attribute_' + slot + '_value'] = 'ID:' + KANJO_COLLISION_VALUE_ID + ' | ATTR:' + slot + ' | ' + label;
+            } else {
+                row.attribute_4_value = 'ID:' + KANJO_COLLISION_VALUE_ID + ' | ATTR:4 | ' + label;
+            }
+        }
+        seen.add(signature());
+    });
+    return rows;
+};
+
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
         const productRows = [];
+        const uniqueSkuById = new Map();
+        const seenSkus = new Set();
         for (let i = 0; i < evaluations.length; i++) {
             if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
             const { product, match } = evaluations[i];
@@ -5070,7 +5146,21 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             const category = match.status === 'matched'
                 ? match.category
                 : kanjoJoinCategorySelection(selections[key], match.category);
-            productRows.push(kanjoBuildProductRow(product, category));
+            const row = kanjoBuildProductRow(product, category);
+            /* Deduplicate the parent SKU. Reps duplicate products, and the Kanjo
+               importer rejects any repeated sku. A blank sku falls back to the
+               (always unique) doc id so the cell is never empty. */
+            const base = String((product && product.sku) || '').trim() || key || 'SKU';
+            let sku = base;
+            let suffix = 1;
+            while (seenSkus.has(sku)) { sku = base + '-D' + suffix; suffix++; }
+            seenSkus.add(sku);
+            uniqueSkuById.set(key, sku);
+            row.sku = sku;
+            /* Variants link to their parent via product_key, so it must carry the
+               NEW deduped sku on BOTH sheets or the relation breaks. */
+            row.product_key = sku;
+            productRows.push(row);
         }
         /* The variant phase already resolved duplicates/conflicts; fall back to a
            straight build only when called without pre-computed entries. */
@@ -5081,6 +5171,19 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             variantRows = [];
             evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
         }
+        /* Re-point each variant at its parent's deduped sku, renumber variant_sku
+           per parent, then force every attribute combination unique. */
+        const variantSeq = new Map();
+        variantRows.forEach((row) => {
+            const parentKey = String(row.product_key || '');
+            const uniqueSku = uniqueSkuById.get(parentKey) || parentKey;
+            row.product_key = uniqueSku;
+            const n = (variantSeq.get(uniqueSku) || 0) + 1;
+            variantSeq.set(uniqueSku, n);
+            row.variant_sku = uniqueSku + '-V' + n;
+        });
+        kanjoForceUniqueVariantCombos(variantRows);
+        variantRows.forEach((row) => { delete row.raw_variant_name; });
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
