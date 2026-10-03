@@ -2993,12 +2993,14 @@ const renderCatalogStatusFilterBar = (groups) => {
     if (!bar) return;
     const counts = catalogMerchantStatusCounts(groups);
     const active = String(window._catalogStatusFilter || '');
+    /* Premium interactive pills: [icon] label (count). Each chip is a real
+       button with an aria-pressed state so the active filter is unmistakable. */
     bar.innerHTML = catalogMerchantStatusFilters.map((f) => {
         const on = f.key === active;
         return `<button type="button" onclick="onCatalogStatusFilterChange('${f.key}')" class="catalog-status-chip${on ? ' is-active' : ''}" aria-pressed="${on ? 'true' : 'false'}">
-            <i class="fa-solid ${f.icon}"></i>
-            <span>${f.label}</span>
-            <span class="catalog-status-chip-count">${counts[f.key] || 0}</span>
+            <i class="fa-solid ${f.icon}" aria-hidden="true"></i>
+            <span class="catalog-status-chip-label">${f.label}</span>
+            <span class="catalog-status-chip-count">(${counts[f.key] || 0})</span>
         </button>`;
     }).join('');
 };

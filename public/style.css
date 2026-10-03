@@ -779,63 +779,90 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .catalog-card-grid { min-height: 160px; }
 }
 
-/* ─── Merchant-card status filter chips (all-products folder grid) ───
-   Pure client-side triage controls. Brand palette only: deep purple #230535,
-   gold #FFD700, pending orange #E57723. */
+/* ─── Merchant-card status filter pills (all-products folder grid) ───
+   Premium interactive pill buttons — not a stats bar. Brand palette only:
+   deep purple #230535, indigo #4B0082, gold #FFD700. */
 #catalogStatusFilterBar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .catalog-status-chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.42rem 0.7rem;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
     border-radius: 9999px;
-    background: #fff;
-    border: 1.5px solid rgba(35, 5, 53, 0.15);
+    border: 1.5px solid rgba(35, 5, 53, 0.14);
+    background: #ffffff;
     color: #230535;
-    font-size: 0.7rem;
-    font-weight: 900;
+    font-size: 0.75rem;
+    font-weight: 800;
     line-height: 1;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    user-select: none;
+    box-shadow: 0 1px 2px rgba(35, 5, 53, 0.06);
+    transition: background-color 0.16s ease, border-color 0.16s ease,
+        color 0.16s ease, box-shadow 0.16s ease, transform 0.12s ease;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
 }
 
-.catalog-status-chip:hover {
-    border-color: #FFD700;
-    background: rgba(255, 215, 0, 0.12);
+.catalog-status-chip i {
+    font-size: 0.8rem;
+    color: #6D28D9;
+    transition: color 0.16s ease;
 }
 
+/* Clear affordance: warm gold hover + a subtle lift/shadow. */
+.catalog-status-chip:hover {
+    border-color: #FFD700;
+    background: rgba(255, 215, 0, 0.14);
+    box-shadow: 0 8px 18px -10px rgba(35, 5, 53, 0.4);
+    transform: translateY(-1px);
+}
+
+.catalog-status-chip:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.catalog-status-chip:focus-visible {
+    outline: 2px solid #4B0082;
+    outline-offset: 2px;
+}
+
+/* Selected filter: filled Kanjo purple, white label, gold accent + count. */
 .catalog-status-chip.is-active {
     background: #230535;
     border-color: #230535;
+    color: #ffffff;
+    box-shadow: 0 10px 22px -10px rgba(35, 5, 53, 0.8);
+}
+
+.catalog-status-chip.is-active i {
     color: #FFD700;
 }
 
 .catalog-status-chip-count {
-    display: inline-grid;
-    place-items: center;
-    min-width: 1.25rem;
-    height: 1.25rem;
-    padding: 0 0.3rem;
-    border-radius: 9999px;
-    background: rgba(35, 5, 53, 0.1);
-    color: #230535;
-    font-size: 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.65;
+    transition: color 0.16s ease, opacity 0.16s ease;
 }
 
 .catalog-status-chip.is-active .catalog-status-chip-count {
-    background: rgba(255, 215, 0, 0.25);
     color: #FFD700;
+    opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .catalog-status-chip { transition: none; }
+    .catalog-status-chip:hover,
+    .catalog-status-chip:active { transform: none; }
 }
 
 /* ─────────────────── KPI dashboard (Founders + Ops Manager) ─────────────────── */
