@@ -218,6 +218,46 @@ window.closeTaskQuickView = () => {
 
 window.openTaskQuickView = (task) => {
     if (!task) return;
+    /* Lightweight merchant cards (the rep archive search and the catalog picker)
+       are field-masked and do NOT carry the embedded `reports` array, while
+       submitReport writes reports into that array on the full task document.
+       Rendering the modal from such a card always showed "لا توجد تقارير" even
+       after a report was saved. Fetch the authoritative task once and cache it
+       so the modal reads the exact same source the report was written to. */
+    if (task.id && !Array.isArray(task.reports)) {
+        window._taskQuickViewFullCache = window._taskQuickViewFullCache || new Map();
+        window._taskQuickViewFetching = window._taskQuickViewFetching || new Set();
+        const cache = window._taskQuickViewFullCache;
+        if (cache.has(task.id)) {
+            task = cache.get(task.id);
+        } else if (!window._taskQuickViewFetching.has(task.id)) {
+            window._taskQuickViewFetching.add(task.id);
+            /* Prefer the transport-independent REST reader (same one the task
+               lists use) so this works on networks that reset the SDK stream. */
+            const fetchFull = async () => {
+                if (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
+                    return window.kanjoRest.getDocument(['tasks', task.id]);
+                }
+                const snap = await window.getDoc(window.doc(window.db, 'tasks', task.id));
+                return (snap && typeof snap.exists === 'function' && snap.exists())
+                    ? { id: task.id, ...snap.data() }
+                    : null;
+            };
+            Promise.resolve().then(fetchFull).then((full) => {
+                const resolved = (full && typeof full === 'object') ? full : task;
+                cache.set(task.id, resolved);
+                window._taskQuickViewFetching.delete(task.id);
+                window.openTaskQuickView(resolved);
+            }).catch(() => {
+                cache.set(task.id, task);
+                window._taskQuickViewFetching.delete(task.id);
+                window.openTaskQuickView(task);
+            });
+            return;
+        } else {
+            return;
+        }
+    }
     const modal = document.getElementById('taskQuickViewModal');
     const body = document.getElementById('taskQuickViewBody');
     const titleEl = document.getElementById('taskQuickViewTitle');
@@ -941,6 +981,12 @@ window.submitReport = async () => {
        (contract-only / routine visit with no text) must NOT raise a
        "new report" badge the manager can never find. */
     if (hasReportContent) {
+        /* Drop the cached quick-view copy of this task so the next open re-reads
+           the authoritative document (with the report just written) instead of
+           a stale lightweight card that never carried `reports`. */
+        if (window._taskQuickViewFullCache && activeTaskId) {
+            window._taskQuickViewFullCache.delete(activeTaskId);
+        }
         try {
             await window.notifyManager(`تقرير جديد من ${currentUser.name}`, `تم إضافة تقرير للمحل: ${baseName}`, 'report', activeTaskId, todayStr);
         } catch (err) {

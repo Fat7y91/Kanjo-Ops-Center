@@ -679,21 +679,31 @@ window.saveMerchantProfile = async () => {
 
     if (contactName || contactPhone) {
 
-        const reportsBatch = writeBatch(db);
+        /* Attach the contact to the LATEST report of each matching task inside a
+           transaction (read fresh, then write). The old code wrote the whole
+           in-memory array back, silently erasing any report appended by another
+           user (submitReport uses arrayUnion) since this card was loaded. */
+        await Promise.all(matchingIds.map((id) => runTransaction(db, async (tx) => {
 
-        matchingIds.forEach((id) => {
+            const ref = doc(db, "tasks", id);
 
-            const tData = window.tasksMemory.get(id);
+            const snap = await tx.get(ref);
 
-            let reports = tData.reports || [];
+            if (!snap.exists()) return;
+
+            const reports = Array.isArray(snap.data().reports) ? snap.data().reports.slice() : [];
 
             if (reports.length > 0) {
 
-                reports[reports.length - 1].contactName = contactName || reports[reports.length - 1].contactName;
+                const last = Object.assign({}, reports[reports.length - 1]);
 
-                reports[reports.length - 1].contactRole = contactRole || reports[reports.length - 1].contactRole;
+                last.contactName = contactName || last.contactName;
 
-                reports[reports.length - 1].contactPhone = contactPhone || reports[reports.length - 1].contactPhone;
+                last.contactRole = contactRole || last.contactRole;
+
+                last.contactPhone = contactPhone || last.contactPhone;
+
+                reports[reports.length - 1] = last;
 
             } else {
 
@@ -708,6 +718,8 @@ window.saveMerchantProfile = async () => {
                     date: todayStr,
 
                     timestamp: `${todayStr} ${new Date().toLocaleTimeString()}`,
+
+                    ts: Date.now(),
 
                     contactName: contactName,
 
@@ -727,11 +739,9 @@ window.saveMerchantProfile = async () => {
 
             }
 
-            reportsBatch.update(doc(db, "tasks", id), { reports: reports });
+            tx.update(ref, { reports: reports });
 
-        });
-
-        await reportsBatch.commit();
+        })));
 
     }
 
@@ -1038,11 +1048,49 @@ window.confirmArchiveReport = async () => {
 
     const reportToArchive = taskData.reports[activeReportArchiveIndex];
 
-    const updatedReports = taskData.reports.filter((_, idx) => idx !== activeReportArchiveIndex);
+    /* Remove exactly this report from the LIVE server array inside a transaction.
+       The old code wrote the in-memory array back wholesale, which silently
+       erased any report another user had appended (arrayUnion in submitReport)
+       since this modal was opened — the "phantom" notification whose report had
+       vanished. Matching by report identity also drops only one occurrence. */
+    const reportIdentity = (r) => [
+        (r && r.ts) || '', (r && r.name) || '', (r && r.date) || '',
+        (r && r.time) || '', (r && r.general) || '', (r && r.contactPhone) || ''
+    ].join('|');
+
+    const targetIdentity = reportIdentity(reportToArchive);
+
+    const removed = await runTransaction(db, async (tx) => {
+
+        const snap = await tx.get(taskDocRef);
+
+        if (!snap.exists()) return false;
+
+        const liveReports = Array.isArray(snap.data().reports) ? snap.data().reports : [];
+
+        const liveIndex = liveReports.findIndex((r) => reportIdentity(r) === targetIdentity);
+
+        if (liveIndex === -1) return false;
+
+        const nextReports = liveReports.slice();
+
+        nextReports.splice(liveIndex, 1);
+
+        tx.update(taskDocRef, { reports: nextReports });
+
+        return true;
+
+    });
 
 
 
-    await updateDoc(taskDocRef, { reports: updatedReports });
+    if (!removed) {
+
+        closeArchiveReportModal();
+
+        return showToast("تعذر العثور على التقرير في النسخة الأخيرة، برجاء إعادة فتح البطاقة والمحاولة", false);
+
+    }
 
 
 
