@@ -4322,6 +4322,37 @@ const KANJO_PRODUCT_CATEGORIES = [
     /* 2026 restaurant fries vertical. "بطاطس" is the canonical keyword; the
        colloquial pack/serving words are handled by the semantic rules below. */
     { id: 165, name: 'بطاطس', keywords: ['بطاطس'] },
+    /* ===== Desserts & Cafés vertical (الحلو) — Ops Manager, 2026 =====
+       A new vendor type "الحلو" with a two-level tree: standalone dessert items
+       plus a "مشروبات" parent (ID:176) whose children are beverages. The Kanjo
+       export workbook has a SINGLE `category` column (see
+       KANJO_PRODUCTS_SHEET_COLUMNS), so per the export spec the CHILD id is
+       emitted; there is no category_path column to populate. The `parent`
+       metadata is kept here for documentation and a future hierarchical export.
+
+       Several names repeat existing categories (كريب/طواجن/وافل/كيك/سموذي/ميلك شيك),
+       so the "الحلو" vendor rule below pins each to its dessert ID exactly like
+       the existing حلويات pins — the matcher is ID-scoped, never name-scoped. */
+    { id: 166, name: 'كريب', keywords: ['كريب', 'crepe', 'crêpe'] },
+    { id: 167, name: 'مولتن', keywords: ['مولتن', 'molten'] },
+    { id: 168, name: 'فريسكا', keywords: ['فريسكا', 'فري سكا', 'freska', 'fresca'] },
+    { id: 169, name: 'سينابون', keywords: ['سينابون', 'cinnabon'] },
+    { id: 170, name: 'زلابيا', keywords: ['زلابيا', 'زلابية', 'zalabya', 'zalabia'] },
+    { id: 171, name: 'طواجن', keywords: ['طواجن', 'طاجن', 'tagine'] },
+    { id: 172, name: 'وافل', keywords: ['وافل', 'waffle'] },
+    { id: 173, name: 'بان كيك', keywords: ['بان كيك', 'بانكيك', 'pancake'] },
+    { id: 174, name: 'كيك', keywords: ['كيك', 'كيكة', 'cake'] },
+    { id: 175, name: 'أم علي', keywords: ['أم علي', 'ام علي', 'om ali', 'umm ali'] },
+    /* Children of parent ID:176 "مشروبات" (beverage sub-tree). */
+    { id: 177, name: 'ماتشا', keywords: ['ماتشا', 'matcha'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 178, name: 'بوبا', keywords: ['بوبا', 'boba', 'bubble tea'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 179, name: 'زبادو', keywords: ['زبادو', 'zabado'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 180, name: 'سموذي', keywords: ['سموذي', 'سموزي', 'smoothie'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 181, name: 'ميلك شيك', keywords: ['ميلك شيك', 'ميلكشيك', 'milkshake'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 182, name: 'صودا', keywords: ['صودا', 'soda', 'موهيتو', 'mojito', 'صن شاين', 'sunshine'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 183, name: 'عصير', keywords: ['عصير', 'juice'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 184, name: 'آيس كوفي', keywords: ['آيس كوفي', 'ايس كوفي', 'iced coffee', 'ice coffee'], parent: { id: 176, name: 'مشروبات' } },
+    { id: 185, name: 'فرابيه', keywords: ['فرابيه', 'فرابية', 'frappe'], parent: { id: 176, name: 'مشروبات' } },
 ];
 
 /* ===== Export text normalization (auto-typo correction) =====
@@ -4544,7 +4575,10 @@ const KANJO_VENDOR_CATEGORY_RULES = [
            only: desserts = 37 (NOT 82 butcher offal / 51 / 47), seafood = 10
            (NOT 87 fish shop), drinks = 17 (NOT 34 juice bar), sandwiches = 4,
            chicken = 164 (NOT 83 poultry). */
-        pins: { 'حلويات': [37], 'أسماك': [10], 'مشروبات': [17], 'ساندوتشات': [4], 'فراخ': [164] }
+        /* 2026: "كريب"/"طواجن" now ALSO exist in the dessert tree (166/171) and the
+           audit dropdown reads this allow-list directly, so pin the restaurant IDs
+           to keep the dessert duplicates out of a restaurant's options. */
+        pins: { 'حلويات': [37], 'أسماك': [10], 'مشروبات': [17], 'ساندوتشات': [4], 'فراخ': [164], 'كريب': [13], 'طواجن': [150] }
     },
     {
         match: ['جزارة', 'جزار', 'لحوم', 'butcher'],
@@ -4572,8 +4606,9 @@ const KANJO_VENDOR_CATEGORY_RULES = [
         match: ['مخبوزات', 'مخبز', 'خبز', 'bakery', 'معجنات'],
         allow: ['الخبز', 'المعجنات', 'الفطائر', 'حلويات', 'كيك', 'بسكوت', 'مخبوزات', 'وافل'],
         /* Bakery feteer = 50 "الفطائر" (NOT restaurant = 161). Bakery/general
-           sweets are 51/47 — never the restaurant 37 or butcher 82. */
-        pins: { 'الفطائر': [50], 'حلويات': [51, 47] }
+           sweets are 51/47 — never the restaurant 37 or butcher 82. "كيك"/"وافل"
+           also exist in the dessert tree (174/172), pinned out here. */
+        pins: { 'الفطائر': [50], 'حلويات': [51, 47], 'كيك': [156, 52], 'وافل': [157] }
     },
     {
         match: ['عصائر', 'عصير', 'juice'],
@@ -4592,8 +4627,27 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     {
         match: ['حلويات', 'حلواني', 'sweets', 'dessert'],
         allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات'],
-        /* Confectionery sweets = 51/47 — never restaurant 37 or butcher 82. */
-        pins: { 'حلويات': [51, 47] }
+        /* Confectionery sweets = 51/47 — never restaurant 37 or butcher 82.
+           "كيك"/"وافل" also exist in the dessert tree (174/172), pinned out here. */
+        pins: { 'حلويات': [51, 47], 'كيك': [156, 52], 'وافل': [157] }
+    },
+    /* Desserts & Cafés vertical ("الحلو", 2026). Deliberately listed AFTER the
+       confectionery rule above so a "حلويات"/"حلواني" label keeps its existing
+       confectionery IDs (51/47) and never falls through to the dessert tree.
+       Only labels containing "الحلو"/"حلو" but matching no earlier token (i.e.
+       the new "الحلو" type) reach this rule. Repeated names are pinned to their
+       dessert IDs so they can never resolve to another vertical's category. */
+    {
+        match: ['الحلو', 'حلو', 'dessert', 'desserts'],
+        allow: ['كريب', 'مولتن', 'فريسكا', 'سينابون', 'زلابيا', 'طواجن', 'وافل', 'بان كيك', 'كيك', 'أم علي', 'ماتشا', 'بوبا', 'زبادو', 'سموذي', 'ميلك شيك', 'صودا', 'عصير', 'آيس كوفي', 'فرابيه'],
+        pins: {
+            'كريب': [166],
+            'طواجن': [171],
+            'وافل': [172],
+            'كيك': [174],
+            'سموذي': [180],
+            'ميلك شيك': [181]
+        }
     },
     {
         match: ['لبنة', 'ألبان', 'البان', 'dairy'],
