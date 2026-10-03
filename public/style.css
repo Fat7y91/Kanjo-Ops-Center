@@ -15,21 +15,27 @@ body { font-family: 'Cairo', sans-serif; -webkit-tap-highlight-color: transparen
 
 input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
-/* The opt-out MUST use !important: the global rule below forces display:block
-   !important to defeat OS overlay scrollbars, and an !important declaration can
-   only be beaten by another !important declaration with higher specificity. */
+/* The opt-out keeps deliberate scrollbar hiding (e.g. the horizontal chip
+   strips). It must use !important so it still wins over the branded rules,
+   which share its specificity and are declared later in this file — except for
+   the modal bodies, which intentionally opt back in (see below). */
 .hide-scrollbar::-webkit-scrollbar { display: none !important; }
 
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* —— Global branded scrollbar (royal purple #4B0082, always-visible 8px pill) ——
-   Auto-hiding is NOT acceptable: Windows 11 / macOS treat trackpads as overlay
-   devices and hide a themed scrollbar entirely. `display:block !important` plus
-   an explicit opaque-ish track forces the bar to keep rendering on every device,
-   with `-webkit-appearance:none` stripping the native chrome so the branded
-   thumb shows. Elements that opt out via .hide-scrollbar win with their own
-   !important (higher specificity). */
-*::-webkit-scrollbar {
+/* —— Branded scrollbar INSIDE scrollable containers (royal purple #4B0082) ——
+   The bar belongs on the popups' own scroll areas (Black Box, Contracts, …),
+   NOT on the window edge, so the old `*` selector is gone. These selectors
+   target modal/scroll bodies specifically. Those containers also carry
+   `.hide-scrollbar`; because this block is declared AFTER that opt-out and
+   shares its specificity, the branded bar wins for any element that is BOTH
+   `.overflow-y-auto` and `.hide-scrollbar` — i.e. the actual modal lists.
+   `.overflow-x-auto` chip strips are intentionally left out so they stay
+   scrollbar-free. */
+.modal-body::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar,
+.overflow-y-auto::-webkit-scrollbar,
+.offcanvas-body::-webkit-scrollbar {
     width: 8px !important;
     height: 8px !important;
     display: block !important;
@@ -37,19 +43,31 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     background: rgba(0, 0, 0, 0.03) !important;
 }
 
-*::-webkit-scrollbar-thumb {
+.modal-body::-webkit-scrollbar-thumb,
+.overflow-auto::-webkit-scrollbar-thumb,
+.overflow-y-auto::-webkit-scrollbar-thumb,
+.offcanvas-body::-webkit-scrollbar-thumb {
     background-color: #4B0082 !important;
     border-radius: 10px !important;
     border: 2px solid transparent;
-    background-clip: content-box;
+    background-clip: padding-box;
 }
 
-*::-webkit-scrollbar-thumb:hover { background-color: #230535 !important; }
+.modal-body::-webkit-scrollbar-thumb:hover,
+.overflow-auto::-webkit-scrollbar-thumb:hover,
+.overflow-y-auto::-webkit-scrollbar-thumb:hover,
+.offcanvas-body::-webkit-scrollbar-thumb:hover { background-color: #230535 !important; }
 
-*::-webkit-scrollbar-corner { background: transparent; }
+.modal-body::-webkit-scrollbar-corner,
+.overflow-auto::-webkit-scrollbar-corner,
+.overflow-y-auto::-webkit-scrollbar-corner,
+.offcanvas-body::-webkit-scrollbar-corner { background: transparent; }
 
 /* Firefox equivalent. */
-* { scrollbar-width: thin; scrollbar-color: #4B0082 rgba(0, 0, 0, 0.03); }
+.modal-body,
+.overflow-auto,
+.overflow-y-auto,
+.offcanvas-body { scrollbar-width: thin; scrollbar-color: #4B0082 rgba(0, 0, 0, 0.03); }
 
 /* —— System-backfilled reports ——
    Visits restored by the automated backfill are genuine, but must be visually
