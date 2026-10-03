@@ -5664,18 +5664,7 @@ window.exportDoneCatalogProducts = async () => {
     }
     const select = document.getElementById('merchantExportFilter');
     const merchantName = String((select && select.value) || '').trim();
-    if (!merchantName) {
-        if (window.showToast) window.showToast('اختر التاجر من القائمة للتصدير', false);
-        return;
-    }
-    /* The dropdown value is the merchant name; the ZIP bridge resolves it to the
-       merchant's task id and runs exportVendorZipForTask so this button ships the
-       full bundle (Excel + logo + Drive docs) instead of a raw .xlsx. */
-    if (typeof window.exportVendorZipForMerchant !== 'function') {
-        if (window.showToast) window.showToast('تعذر تحميل وحدة التصدير، أعد تحميل الصفحة', false);
-        return;
-    }
-    return window.exportVendorZipForMerchant(merchantName);
+    return window.exportKanjoExcel(merchantName ? { merchantName } : {});
 };
 
 const fetchAllCatalogProducts = async () => {
@@ -5746,13 +5735,8 @@ window.exportMerchantKanjoSheet = async () => {
     const nameEl = document.getElementById('mpMerchantName');
     const merchantName = String(window.activeMerchantBaseName || (nameEl && nameEl.innerText) || '').trim();
     if (!merchantName) return window.showToast('افتح بطاقة تاجر أولاً', false);
-    /* Same ZIP pipeline as the dashboard export dropdown — no merchant export
-       falls back to a standalone .xlsx download. */
-    if (typeof window.exportVendorZipForMerchant !== 'function') {
-        if (window.showToast) window.showToast('تعذر تحميل وحدة التصدير، أعد تحميل الصفحة', false);
-        return;
-    }
-    return window.exportVendorZipForMerchant(merchantName);
+    const merchantId = (window.findMerchantIdForBase && window.findMerchantIdForBase(merchantName)) || '';
+    return window.exportKanjoExcel({ merchantName, merchantId });
 };
 
 const sortCatalogProductsByCreatedAt = (items) => {
