@@ -5,6 +5,19 @@ const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUv
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 
+/* Data-entry ingestion sources. Products written by these pipelines belong to
+   the data-entry operator, NOT to a field rep, so they must never enter a rep's
+   "expected images" denominator (see kpi.js). */
+const CATALOG_MENU_IMPORT_SOURCE = 'menu_excel_import';
+const CATALOG_PHARMACY_INTAKE_SOURCE = 'pharmacy_inventory_intake';
+
+/* Tag describing HOW the media editor completed an image task. Persisted on the
+   product (`edit_type`) so the analytics breakdown can split the editor's
+   processed total into its three real streams. */
+const CATALOG_EDIT_TYPE_FROM_SCRATCH = 'from_scratch';
+const CATALOG_EDIT_TYPE_AI = 'ai_edit';
+const CATALOG_EDIT_TYPE_DIRECT = 'direct_approval';
+
 /* Explicit field mask for every catalog list/query read. A mask is an
    allow-list, so this deliberately lists every field any catalog widget,
    export, or search path reads. Unknown/absent field paths are ignored by
@@ -19,7 +32,9 @@ const CATALOG_LIST_FIELDS = [
     'deleteRequested', 'deleteRequestedBy',
     'merchantId', 'merchantName', 'merchant_name',
     'createdBy', 'created_by', 'createdAt', 'updatedAt', 'updatedBy',
-    'addedBy', 'added_by', 'repName', 'intakeSource',
+    'addedBy', 'added_by', 'repName', 'intakeSource', 'importSource',
+    'image_locked_by', 'image_locked_by_name', 'image_locked_at', 'image_uploaded_by',
+    'edit_type', 'edited_by', 'edited_at',
     'kanjo_id', 'barcode', 'score', 'uploaded_at'
 ];
 
@@ -44,6 +59,33 @@ const catalogRestDelete = async (segments) => {
     await window.kanjoRest.remove(segments);
     return true;
 };
+
+/* The signed-in operator's PIN. Stored on the session identity at PIN login
+   (auth.js) and preserved across claims reconciliation; falls back to a reverse
+   lookup in the canonical users table by name for restored/claims-only sessions.
+   Used as the concurrency lock token (`image_locked_by`). */
+const catalogCurrentUserPin = () => {
+    const u = window.currentUser || {};
+    const direct = String(u.pin || u.pinCode || '').trim();
+    if (direct) return direct;
+    const users = window.users || {};
+    const name = String(u.name || '').trim();
+    const keys = Object.keys(users);
+    for (let i = 0; i < keys.length; i++) {
+        if (users[keys[i]] && String(users[keys[i]].name || '') === name) return String(keys[i]);
+    }
+    return '';
+};
+window.catalogCurrentUserPin = catalogCurrentUserPin;
+
+/* A data-entry/imported product (menu Excel import or pharmacy intake). These
+   are attributed to the data-entry operator and are deliberately excluded from
+   a field rep's product/image denominator. */
+const catalogIsImportedProduct = (p) => !!p && (
+    String(p.importSource || '').trim() === CATALOG_MENU_IMPORT_SOURCE
+    || String(p.intakeSource || '').trim() === CATALOG_PHARMACY_INTAKE_SOURCE
+);
+window.catalogIsImportedProduct = catalogIsImportedProduct;
 
 window.merchantProductsCache = window.merchantProductsCache || [];
 window.repCatalogProductsCache = window.repCatalogProductsCache || [];
@@ -1050,6 +1092,34 @@ window.closeImageLightbox = () => {
     if (overlay) overlay.classList.add('hidden');
     if (img) { img.style.display = 'none'; img.removeAttribute('src'); img.dataset.fallbacks = '[]'; }
     if (empty) empty.classList.add('hidden');
+};
+
+/* High-resolution, inline image preview via SweetAlert2 (no browser download).
+   Reads the element's `data-full-img` (a Drive url/id) and upgrades it to the
+   largest renderable Google thumbnail. Falls back to the built-in lightbox /
+   native dialog when the SweetAlert2 CDN is unavailable. */
+window.catalogOpenSwalImage = (el) => {
+    const node = (el && el.getAttribute) ? el : null;
+    const raw = node ? String(node.getAttribute('data-full-img') || '').trim() : '';
+    const title = node ? String(node.getAttribute('data-image-title') || '').trim() : '';
+    const urls = raw ? catalogDriveLightboxUrls(raw, 'w2000') : [];
+    const primary = urls[0] || raw;
+    if (!primary) { window.openImageViewer(''); return; }
+    if (typeof window.Swal === 'undefined') {
+        window.openImageViewer(raw, urls.slice(1));
+        return;
+    }
+    window.Swal.fire({
+        title: title ? catalogEscapeHtml(title) : undefined,
+        imageUrl: primary,
+        imageAlt: title,
+        confirmButtonText: 'إغلاق',
+        confirmButtonColor: '#230535',
+        width: 'min(94vw, 920px)',
+        padding: '0.75rem',
+        showCloseButton: true,
+        imageClass: 'rounded-xl'
+    });
 };
 
 /* ─────────── Product details modal (admin/manager audit) ───────────
@@ -3780,6 +3850,15 @@ const removeCatalogPendingProductFromUi = (productId, merchantName) => {
     if (list && catalogPendingProducts().length === 0) markCatalogPendingEmpty(list);
 };
 
+/* Provenance patch stamped on every completed image task so the analytics can
+   classify it (added from scratch / AI-edited / directly approved) and attribute
+   it to the media editor's PIN. */
+const catalogEditMetaPatch = (editType) => ({
+    edit_type: String(editType || '').trim(),
+    edited_by: catalogCurrentUserPin(),
+    edited_at: new Date()
+});
+
 const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
     const urls = Array.isArray(enhancedUrls) ? enhancedUrls.slice() : [];
     const patch = {
@@ -3789,22 +3868,112 @@ const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
         updatedBy: (window.currentUser && window.currentUser.name) || ''
     };
     if (options && options.status) patch.status = options.status;
+    /* Callers may attach provenance (edit_type / edited_by) so the completion is
+       classified without a second write. */
+    if (options && options.extra && typeof options.extra === 'object') {
+        Object.assign(patch, options.extra);
+    }
     /* Merge-patch the SAME document: re-uploads overwrite the existing enhanced
        image fields in place instead of creating a duplicate product. */
     if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], patch))) {
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
     }
+    /* A completion changes the editor's global processed total and the imported
+       pool, so drop only those bounded, separate caches (never the full list). */
+    if (patch.status === 'done' && typeof window.kpiInvalidateImportCaches === 'function') {
+        window.kpiInvalidateImportCaches();
+    }
     return patch;
 };
 
-const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount) => {
+const completeCatalogProductIfReady = async (productId, product, enhancedUrls, rawCount, editType) => {
     const filled = enhancedUrls.filter(Boolean);
     if (filled.length !== rawCount) return false;
-    await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, rawCount), { status: 'done' });
+    await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, rawCount), {
+        status: 'done',
+        extra: catalogEditMetaPatch(editType)
+    });
     delete window._catalogEnhancedUploads[productId];
     removeCatalogPendingProductFromUi(productId, (product && product.merchantName) || '');
     window.showToast('تم اعتماد المنتج بعد رفع كل الصور المحسّنة');
     return true;
+};
+
+/* Move a product that was just completed straight into the in-memory "done"
+   cache (it is not there yet when the action started from the pending queue).
+   Keeps the Completed tab correct without re-reading the collection. */
+const catalogInsertDoneLocally = (productId, enhancedUrls) => {
+    if (updateDoneCatalogProductLocally(productId, enhancedUrls)) return;
+    const pending = (window.merchantProductsCache || []).find((p) => p.id === productId);
+    if (!pending) return;
+    const doneRow = Object.assign({}, pending, {
+        enhancedImageUrl: enhancedUrls[0] || '',
+        enhancedImageUrls: enhancedUrls.slice(),
+        status: 'done'
+    });
+    window.doneCatalogProductsCache = (window.doneCatalogProductsCache || []).concat([doneRow]);
+};
+
+/* Professional confirmation dialog for the "direct approval" shortcut. */
+const catalogConfirmDirectApproval = async (product) => {
+    const name = (product && (product.name_ar || product.name_en || product.name)) || '';
+    const message = 'هل أنت متأكد؟ لا حاجة لتعديلات؟';
+    if (typeof window.Swal === 'undefined') {
+        return window.confirm(message + '\n' + name);
+    }
+    const res = await window.Swal.fire({
+        title: 'اعتماد مباشر',
+        html: '<div style="font-weight:800;font-size:15px">' + message + '</div>'
+            + (name ? '<div style="margin-top:6px;font-weight:900;color:#230535">' + catalogEscapeHtml(name) + '</div>' : ''),
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'نعم، اعتماد مباشر',
+        cancelButtonText: 'إلغاء',
+        confirmButtonColor: '#230535',
+        cancelButtonColor: '#94a3b8',
+        reverseButtons: true
+    });
+    return !!(res && res.isConfirmed);
+};
+
+/* Direct approval: the original (raw) image is already good enough, so map it to
+   the final/enhanced field and mark the product done — no edit, no upload. The
+   button is only ever rendered when a raw image exists. */
+window.catalogDirectApproveProduct = async (productId) => {
+    if (!window.isCatalogContentUser()) {
+        if (window.showToast) window.showToast('الاعتماد المباشر متاح لفريق المحتوى فقط', false);
+        return;
+    }
+    const product = (window.merchantProductsCache || []).find((p) => p.id === productId)
+        || (window.doneCatalogProductsCache || []).find((p) => p.id === productId);
+    if (!product) {
+        if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
+        return;
+    }
+    const rawUrls = catalogRawImageUrls(product);
+    if (!rawUrls.length) {
+        if (window.showToast) window.showToast('لا توجد صورة أصلية للاعتماد المباشر', false);
+        return;
+    }
+    if (!(await catalogConfirmDirectApproval(product))) return;
+    const btn = document.getElementById('catalogDirectApproveBtn-' + productId);
+    const prevHtml = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; }
+    try {
+        await persistCatalogEnhancedUrls(productId, rawUrls.slice(), {
+            status: 'done',
+            extra: catalogEditMetaPatch(CATALOG_EDIT_TYPE_DIRECT)
+        });
+        if (typeof window.kpiCompleteImageEdit === 'function') window.kpiCompleteImageEdit(productId);
+        removeCatalogPendingProductFromUi(productId, product.merchantName || '');
+        catalogInsertDoneLocally(productId, rawUrls.slice());
+        if (window._catalogDoneLoaded) renderCatalogDoneCards();
+        if (window.showToast) window.showToast('تم الاعتماد المباشر للمنتج بنجاح', true);
+    } catch (err) {
+        console.error('[catalog] direct approval failed:', err);
+        if (window.showToast) window.showToast('تعذر اعتماد المنتج', false);
+        if (btn) { btn.disabled = false; btn.innerHTML = prevHtml; }
+    }
 };
 
 window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) => {
@@ -3830,6 +3999,9 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
     const rawUrls = catalogRawImageUrls(product);
     const targetCount = catalogEnhanceTargetCount(product);
     const idx = Number(imageIndex) || 0;
+    /* Provenance: enhancing an existing rep image = AI edit; supplying the image
+       for a product that had none = added from scratch. */
+    const editType = rawUrls.length ? CATALOG_EDIT_TYPE_AI : CATALOG_EDIT_TYPE_FROM_SCRATCH;
     const isCompleted = String(product.status || '') === 'done'
         || catalogEnhancedImageUrls(product).some(Boolean);
     const modePrefix = mode === 'done' ? 'done' : 'pending';
@@ -3857,7 +4029,10 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
         if (isCompleted) {
             /* Already completed: overwrite the replaced slot in place, keep the
                remaining enhanced images, and stay in the completed list. */
-            await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, targetCount), { status: 'done' });
+            await persistCatalogEnhancedUrls(productId, enhancedUrls.slice(0, targetCount), {
+                status: 'done',
+                extra: catalogEditMetaPatch(editType)
+            });
             delete window._catalogEnhancedUploads[productId];
             if ((window.merchantProductsCache || []).some((p) => p.id === productId)) {
                 removeCatalogPendingProductFromUi(productId, product.merchantName || '');
@@ -3866,7 +4041,7 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
             window.showToast('تم استبدال الصورة المحسّنة بنجاح');
             renderCatalogDoneCards();
         } else {
-            const done = await completeCatalogProductIfReady(productId, product, enhancedUrls, targetCount);
+            const done = await completeCatalogProductIfReady(productId, product, enhancedUrls, targetCount, editType);
             if (!done) {
                 window.showToast('تم رفع الصورة المحسّنة (' + enhancedUrls.filter(Boolean).length + '/' + rawUrls.length + ')');
                 renderCatalogPendingCards();
@@ -3988,10 +4163,19 @@ const renderCatalogProductCard = (p, mode) => {
         } else if (hasEnhanced) {
             actionHtml = '<span class="text-[10px] font-black text-emerald-600 flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> تم</span>';
         } else {
-            actionHtml = uploadBtn;
+            /* Direct approval is only offered when an original (raw) image exists
+               and the product is still pending: the editor vouches for the raw
+               shot without editing it. */
+            const directBtn = (u && i === 0)
+                ? `<button type="button" id="catalogDirectApproveBtn-${id}" onclick="catalogDirectApproveProduct('${id}')" class="bg-emerald-600 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-emerald-700 transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-stamp"></i> اعتماد مباشر
+                    </button>`
+                : '';
+            actionHtml = uploadBtn + directBtn;
         }
+        const fullPreview = preview ? catalogEscapeHtml(catalogDirectImageUrl(preview)) : '';
         const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" loading="lazy" decoding="async" class="w-14 h-14 rounded-lg object-cover border ${hasEnhanced ? 'catalog-enhanced-thumb' : 'border-[#FFD700]/40'} shrink-0" onerror="this.style.display='none'">`
+            ? `<img src="${thumb}" data-full-img="${fullPreview}" data-image-title="${name}" alt="" loading="lazy" decoding="async" class="w-14 h-14 rounded-lg object-cover border ${hasEnhanced ? 'catalog-enhanced-thumb' : 'border-[#FFD700]/40'} shrink-0 cursor-pointer transition hover:opacity-80" onclick="event.stopPropagation();catalogOpenSwalImage(this)" title="عرض الصورة بالحجم الكامل" onerror="this.style.display='none'">`
             : `<div class="w-14 h-14 rounded-lg grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image text-lg"></i></div>`;
         const downloadBtn = u
             ? `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">

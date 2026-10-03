@@ -44,6 +44,9 @@ const KPI_PRODUCT_FIELDS = [
     'enhanced_image_urls', 'enhanced_image_url', 'enhancedImage', 'enhanced_image',
     'raw_image_urls', 'raw_image_url', 'main_image_url',
     'has_enhanced_image', 'hasEnhancedImage', 'status', 'image_status', 'imageStatus',
+    'importSource', 'intakeSource',
+    'image_locked_by', 'image_locked_by_name', 'image_locked_at', 'image_uploaded_by', 'image_uploaded_at',
+    'edit_type', 'edited_by', 'edited_at',
     'imageUpdatedAt', 'image_updated_at', 'enhancedImageUpdatedAt', 'enhanced_image_updated_at',
     'imagesUpdatedAt', 'images_updated_at', 'imageEditCompletedAt', 'image_edit_completed_at',
     'enhancedAt', 'enhanced_at', 'updatedAt', 'updated_at', 'createdAt', 'created_at'
@@ -740,6 +743,80 @@ const kpiResolveImageEditorName = () => {
     return 'يوسف';
 };
 
+/* ─── Distributed image-upload helpers (imported products + concurrency) ───
+   Imported/data-entry products are attributed to the data-entry operator, never
+   to a field rep, so they never enter a rep's image DENOMINATOR. When a rep
+   claims one for upload, only their NUMERATOR is credited (a bonus). */
+const kpiIsImportedProduct = (p) => !!p && (
+    String(p.importSource || '').trim() === 'menu_excel_import'
+    || String(p.intakeSource || '').trim() === 'pharmacy_inventory_intake'
+);
+
+const kpiProductImageUploaderName = (p) => String(
+    (p && (p.image_uploaded_by || p.image_locked_by_name)) || ''
+).trim();
+
+/* Month the import image was actually uploaded in (falls back to creation). */
+const kpiUploadMonthKey = (p) => {
+    const ms = kpiToMillis(p && (p.image_locked_at || p.image_uploaded_at || p.createdAt));
+    return ms ? kpiLocalDateKey(ms).slice(0, 7) : '';
+};
+
+/* The signed-in operator's PIN — the concurrency lock token. */
+const kpiCurrentUserPin = () => {
+    const u = window.currentUser || {};
+    const direct = String(u.pin || u.pinCode || '').trim();
+    if (direct) return direct;
+    const table = window.users || {};
+    const name = String(u.name || '').trim();
+    const keys = Object.keys(table);
+    for (let i = 0; i < keys.length; i++) {
+        if (table[keys[i]] && String(table[keys[i]].name || '') === name) return String(keys[i]);
+    }
+    return '';
+};
+window.kpiCurrentUserPin = kpiCurrentUserPin;
+
+/* Atomically claim a shared imported product before uploading. First writer
+   wins: if another PIN already holds the lock, or the image was already added,
+   the caller aborts and the row is hidden from the picker. Non-imported rows
+   are not locked (they belong to the rep's own queue). */
+const kpiClaimImportedImageLock = async (productId, repName, pin) => {
+    if (!(window.runTransaction && window.db && window.doc)) return { ok: true, skipped: true };
+    try {
+        const res = await window.runTransaction(window.db, async (tx) => {
+            const ref = window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId);
+            const snap = await tx.get(ref);
+            if (!snap.exists()) return { ok: false, reason: 'missing' };
+            const d = snap.data() || {};
+            if (!kpiIsImportedProduct(d)) return { ok: false, reason: 'not_imported' };
+            const lockedBy = String(d.image_locked_by || '');
+            if (lockedBy && lockedBy !== String(pin)) {
+                return { ok: false, reason: 'locked', lockedByName: d.image_locked_by_name || '' };
+            }
+            if (kpiProductHasRawImage(d)) return { ok: false, reason: 'already' };
+            tx.update(ref, {
+                image_locked_by: pin,
+                image_locked_by_name: repName,
+                image_locked_at: new Date(),
+                updatedAt: new Date()
+            });
+            return { ok: true };
+        });
+        return res || { ok: false, reason: 'unknown' };
+    } catch (err) {
+        console.warn('[kpi] imported image lock failed:', err);
+        return { ok: false, reason: 'error' };
+    }
+};
+
+/* Image completion ratio, hard-capped at 100% so a rep who uploads extra
+   imported images (numerator-only bonus) never exceeds a full score. */
+const kpiImageRatioCapped = (withImage, totalProducts) => {
+    if (totalProducts > 0) return Math.max(0, Math.min(1, withImage / totalProducts));
+    return withImage > 0 ? 1 : 0;
+};
+
 window.calculateHistoricalTime = async () => {
     if (!window.canViewKpiDashboard()) {
         if (window.showToast) window.showToast('هذه الأداة متاحة للمؤسسين ومدير العمليات فقط', false);
@@ -948,10 +1025,104 @@ const kpiFetchProductsForRep = (repName) => {
     return kpiCacheGet(key, () => kpiFetchProductsForRepUncached(repName));
 };
 
+/* Imported (menu-import) products that still lack an image — the shared pool a
+   field rep may claim. Cached so repeated modal opens cost nothing. */
+const kpiFetchImportedMissingUncached = async () => {
+    let items = null;
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['importSource', '==', 'menu_excel_import']], null, { select: KPI_PRODUCT_FIELDS });
+        } catch (restErr) { console.warn('[kpi] REST imported fetch failed; trying SDK:', restErr); }
+    }
+    if (!items && typeof window.getDocs === 'function' && window.db) {
+        const ref = window.query(
+            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
+            window.where('importSource', '==', 'menu_excel_import')
+        );
+        const snap = await window.getDocs(ref);
+        items = [];
+        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    }
+    return (items || []).filter((p) => kpiProductNeedsRawImage(p));
+};
+const kpiFetchImportedMissingProducts = () => kpiCacheGet('kpi:products:imported-missing', kpiFetchImportedMissingUncached);
+
+/* Imported products a rep has already claimed/uploaded — credits their image
+   numerator and locates the row during the upload write. */
+const kpiFetchImportedUploadsForRepUncached = async (repName) => {
+    const name = String(repName || '').trim();
+    if (!name) return [];
+    let items = null;
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['image_uploaded_by', '==', name]], null, { select: KPI_PRODUCT_FIELDS });
+        } catch (restErr) { console.warn('[kpi] REST import-uploads fetch failed; trying SDK:', restErr); }
+    }
+    if (!items && typeof window.getDocs === 'function' && window.db) {
+        const ref = window.query(
+            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
+            window.where('image_uploaded_by', '==', name)
+        );
+        const snap = await window.getDocs(ref);
+        items = [];
+        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    }
+    return items || [];
+};
+const kpiFetchImportedUploadsForRep = (repName) => kpiCacheGet(
+    'kpi:products:impupload:' + String(repName || '').trim(),
+    () => kpiFetchImportedUploadsForRepUncached(repName)
+);
+
+/* The media editor's processed set: every completed (done) product. Editor
+   accounts are field-rep scoped, so this grants the editor a true global total
+   without pulling the entire collection. */
+const kpiFetchEditorProcessedUncached = async () => {
+    let items = null;
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['status', '==', 'done']], null, { select: KPI_PRODUCT_FIELDS });
+        } catch (restErr) { console.warn('[kpi] REST editor-processed fetch failed; trying SDK:', restErr); }
+    }
+    if (!items && typeof window.getDocs === 'function' && window.db) {
+        const ref = window.query(
+            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
+            window.where('status', '==', 'done')
+        );
+        const snap = await window.getDocs(ref);
+        items = [];
+        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    }
+    return items || [];
+};
+const kpiFetchEditorProcessedProducts = () => kpiCacheGet('kpi:products:editor-processed', kpiFetchEditorProcessedUncached);
+
+const kpiInvalidateImportCaches = () => {
+    if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+        window.kanjoCache.invalidatePrefix('kpi:products:imported-missing');
+        window.kanjoCache.invalidatePrefix('kpi:products:impupload:');
+        window.kanjoCache.invalidatePrefix('kpi:products:editor-processed');
+    }
+};
+window.kpiInvalidateImportCaches = kpiInvalidateImportCaches;
+
 /* Reps get a scoped fetch of their own products; managers get the full set
-   for the cross-rep audit tools. */
+   for the cross-rep audit tools. The media editor additionally receives the
+   global "done" set so his Total Processed counter is truthful. */
 const kpiFetchProductsForScope = async (repName) => {
-    if (window.isFieldRepUser()) return kpiFetchProductsForRep(repName);
+    if (window.isFieldRepUser()) {
+        if (kpiIsEditorName(repName)) return kpiFetchEditorProcessedProducts();
+        const [own, importedUploads] = await Promise.all([
+            kpiFetchProductsForRep(repName),
+            kpiFetchImportedUploadsForRep(repName)
+        ]);
+        /* Dedupe by id in case a rep both authored and uploaded the same import. */
+        const merged = new Map();
+        own.concat(importedUploads).forEach((p) => {
+            if (p && p.id && !merged.has(p.id)) merged.set(p.id, p);
+        });
+        return Array.from(merged.values());
+    }
     return kpiFetchAllProducts();
 };
 
@@ -1437,7 +1608,33 @@ const kpiBuildReport = async (monthKey) => {
     };
 
     let editedImagesTotal = 0;
+    const editedBreakdown = { fromScratch: 0, aiEdit: 0, directApproval: 0 };
+    /* Classify a completed image task into exactly one of the editor's three
+       real streams; rows written before `edit_type` existed are inferred from
+       whether an original (raw) image was present. */
+    const classifyEditorWork = (p) => {
+        const t = String(p.edit_type || '').toLowerCase();
+        if (t === 'direct_approval') editedBreakdown.directApproval += 1;
+        else if (t === 'from_scratch') editedBreakdown.fromScratch += 1;
+        else if (t === 'ai_edit') editedBreakdown.aiEdit += 1;
+        else if (kpiProductHasRawImage(p)) editedBreakdown.aiEdit += 1;
+        else editedBreakdown.fromScratch += 1;
+    };
     products.forEach((p) => {
+        if (kpiIsImportedProduct(p)) {
+            /* Imported/data-entry products belong to the data-entry operator and
+               NEVER enter any rep's denominator. A field rep who claimed one gets
+               a numerator-only bonus; the editor still gets processing credit. */
+            if (kpiProductHasEnhancedImage(p)) { editedImagesTotal += 1; classifyEditorWork(p); }
+            const uploader = kpiProductImageUploaderName(p);
+            if (uploader && !kpiIsEditorName(uploader) && !kpiIsExcludedRepName(uploader)
+                && kpiProductHasRawImage(p) && kpiUploadMonthKey(p) === period) {
+                const upRep = ensureRep(uploader);
+                upRep.withImage += 1;
+                upRep.importImagesUploaded = (upRep.importImagesUploaded || 0) + 1;
+            }
+            return;
+        }
         const rep = ensureRep(kpiProductRepName(p));
         rep.totalProducts += 1;
         const merchant = kpiProductMerchantName(p);
@@ -1447,7 +1644,7 @@ const kpiBuildReport = async (monthKey) => {
 
         /* Global image-edit count: independent of the data-entry metric and
            attributed to the image editor, not to the product's creator. */
-        if (kpiProductHasEnhancedImage(p)) editedImagesTotal += 1;
+        if (kpiProductHasEnhancedImage(p)) { editedImagesTotal += 1; classifyEditorWork(p); }
 
         const variations = kpiProductVariations(p);
         if (variations.length > 0) {
@@ -1488,7 +1685,13 @@ const kpiBuildReport = async (monthKey) => {
        ensuring the row exists even when he created no products himself. */
     const editorRowName = kpiResolveImageEditorName();
     const editorRankId = kpiRepId(editorRowName);
-    ensureRep(editorRowName).editedImagesCount = editedImagesTotal;
+    const editorRep = ensureRep(editorRowName);
+    editorRep.editedImagesCount = editedImagesTotal;
+    editorRep.editedBreakdown = {
+        fromScratch: editedBreakdown.fromScratch,
+        aiEdit: editedBreakdown.aiEdit,
+        directApproval: editedBreakdown.directApproval
+    };
 
     /* Materialize every payroll rep for managers so the leaderboard still lists
        teammates who have not added a product yet (they render with zeros). */
@@ -1516,8 +1719,9 @@ const kpiBuildReport = async (monthKey) => {
         const stats = await kpiFetchDailyStats(rep.repId, period);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
         const totalProducts = rep.totalProducts;
-        // RAW ratios (0..1) — never pre-rounded.
-        const imageRatioRaw = totalProducts ? (rep.withImage / totalProducts) : 0;
+        // RAW ratios (0..1) — never pre-rounded. Image ratio is HARD-CAPPED at 1
+        // because imported uploads credit the numerator without the denominator.
+        const imageRatioRaw = kpiImageRatioCapped(rep.withImage, totalProducts);
         const descBase = rep.nonEmptyDescriptions || totalProducts;
         const validRatioRaw = descBase ? (rep.validDescriptions / descBase) : 0;
         const junkRatioRaw = descBase ? (rep.junkDescriptions / descBase) : 0;
@@ -1534,6 +1738,8 @@ const kpiBuildReport = async (monthKey) => {
             isEditor: rep.repId === editorRankId,
             totalProducts,
             editedImagesCount: rep.editedImagesCount || 0,
+            editedBreakdown: rep.editedBreakdown || null,
+            importImagesUploaded: rep.importImagesUploaded || 0,
             merchantsCount: rep.merchants.size,
             withImage: rep.withImage,
             withoutImage: Math.max(0, totalProducts - rep.withImage),
@@ -1954,7 +2160,12 @@ const kpiDeepDiveHtml = (row) => {
 
                 <div class="kpi-financial-grid">
                     <div class="kpi-fin-row"><span>عدد المنتجات المُدخلة</span><span class="kpi-fin-val">${row.totalProducts}</span></div>
-                    <div class="kpi-fin-row"><span>عدد الصور المُحررة (عبر كل المناديب)</span><span class="kpi-fin-val text-[#6D28D9]">${row.editedImagesCount || 0}</span></div>
+                    <div class="kpi-fin-row"><span>${row.isEditor ? 'إجمالي الصور المُعالجة' : 'عدد الصور المُحررة (عبر كل المناديب)'}</span><span class="kpi-fin-val text-[#6D28D9]">${row.editedImagesCount || 0}</span></div>
+                    ${row.isEditor && row.editedBreakdown ? `
+                    <div class="kpi-fin-row"><span class="pr-4 text-slate-400"><i class="fa-solid fa-image"></i> من صورة أصلية (تحسين AI)</span><span class="kpi-fin-val text-slate-500">${row.editedBreakdown.aiEdit || 0}</span></div>
+                    <div class="kpi-fin-row"><span class="pr-4 text-slate-400"><i class="fa-solid fa-pen-ruler"></i> تعديل من الصفر</span><span class="kpi-fin-val text-slate-500">${row.editedBreakdown.fromScratch || 0}</span></div>
+                    <div class="kpi-fin-row"><span class="pr-4 text-slate-400"><i class="fa-solid fa-circle-check"></i> اعتماد مباشر بدون تعديل</span><span class="kpi-fin-val text-slate-500">${row.editedBreakdown.directApproval || 0}</span></div>
+                    ` : ''}
                     <div class="kpi-fin-row"><span>عدد التجار المُضافين</span><span class="kpi-fin-val">${row.merchantsCount}</span></div>
                     <div class="kpi-fin-row"><span>أيام النشاط الفعلي</span><span class="kpi-fin-val">${row.activeDays || row.trackedDays || 0}</span></div>
                     <div class="kpi-fin-row"><span>وقت إدخال التفاعل (دقيق)</span><span class="kpi-fin-val">${kpiFormatDurationExact(row.activeSeconds)}</span></div>
@@ -2310,7 +2521,7 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
             </div>
             <div class="text-center shrink-0">
                 ${isEditor
-                    ? `<div class="text-[10px] font-black text-white/60">الصور المُحررة</div>
+                    ? `<div class="text-[10px] font-black text-white/60">إجمالي الصور المُعالجة</div>
                        <div class="font-black text-base text-white">${row.editedImagesCount || 0}</div>`
                     : `<div class="text-[10px] font-black text-white/60">التقييم الشامل</div>
                        <div class="font-black text-xl text-[#FFD700]">${Number(row.kanjoScore || 0).toFixed(1)}%</div>`}
@@ -2321,17 +2532,15 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
 
         <div class="kpi-personal-cards">
             ${isEditor
-                ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'عدد الصور المُحررة', foot: 'إجمالي الصور التي حررتها' })
-                : kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: breakdownCall })}
-            ${isEditor ? '' : kpiPersonalCard({ tone: 'indigo', icon: 'fa-box-open', value: Number(breakdown.volumeWeight || 0).toFixed(1) + ' / ' + KPI_VOLUME_MAX, label: 'حجم المنتجات', foot: row.totalProducts + ' منتج مسجل', onclick: breakdownCall })}
-            ${isEditor ? '' : kpiPersonalCard({ tone: 'purple', icon: 'fa-text-width', value: Number(breakdown.lengthWeight || 0).toFixed(1) + ' / ' + KPI_LENGTH_MAX, label: 'متوسط طول الوصف', foot: 'متوسط ' + avgDescLength + ' حرف/منتج', onclick: breakdownCall })}
-            ${isEditor
-                ? kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: validPct.toFixed(1) + '%', label: 'جودة الأوصاف الصحيحة', foot: junk > 0 ? junk + ' وصف يحتاج إصلاح' : 'لا توجد أوصاف وهمية' })
-                : kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: Number(breakdown.textWeight || 0).toFixed(1) + ' / ' + KPI_TEXT_MAX, label: 'جودة الأوصاف', foot: validPct.toFixed(1) + '% وصف صحيح' + (junk > 0 ? ' • ' + junk + ' وهمي' : ''), onclick: breakdownCall })}
-            ${isEditor
-                ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: (row.imageRatioRaw * 100).toFixed(0) + '%', label: 'نسبة المنتجات بالصور', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور' })
-                : kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: Number(breakdown.mediaWeight || 0).toFixed(1) + ' / ' + KPI_MEDIA_MAX, label: 'جودة الوسائط (الصور)', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور', onclick: breakdownCall })}
-            ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}
+                /* A single, stress-free counter — the detailed breakdown is an
+                   admin-only view (see kpiDeepDiveHtml). */
+                ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'إجمالي الصور المُعالجة', foot: 'إجمالي الصور المكتملة والمعتمدة' })
+                : `${kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-box-open', value: Number(breakdown.volumeWeight || 0).toFixed(1) + ' / ' + KPI_VOLUME_MAX, label: 'حجم المنتجات', foot: row.totalProducts + ' منتج مسجل', onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'purple', icon: 'fa-text-width', value: Number(breakdown.lengthWeight || 0).toFixed(1) + ' / ' + KPI_LENGTH_MAX, label: 'متوسط طول الوصف', foot: 'متوسط ' + avgDescLength + ' حرف/منتج', onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: Number(breakdown.textWeight || 0).toFixed(1) + ' / ' + KPI_TEXT_MAX, label: 'جودة الأوصاف', foot: validPct.toFixed(1) + '% وصف صحيح' + (junk > 0 ? ' • ' + junk + ' وهمي' : ''), onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: Number(breakdown.mediaWeight || 0).toFixed(1) + ' / ' + KPI_MEDIA_MAX, label: 'جودة الوسائط (الصور)', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور', onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}`}
         </div>
 
         ${warningHtml}
@@ -2497,6 +2706,7 @@ const kpiFixImageItemHtml = (p) => {
             </div>
             <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-image"></i> بدون صورة</span>
         </div>
+        ${kpiIsImportedProduct(p) ? '<div class="mt-1"><span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-file-import"></i> منتج مُستورد — سبق الرفع يفيد مؤشرك</span></div>' : ''}
         <div class="flex justify-end mt-2">
             <input type="file" id="kpiImgInput_${pid}" accept="image/*" class="hidden" onchange="kpiUploadMissingImage('${pid}', this)">
             <button type="button" id="kpiImgUpload_${pid}" onclick="document.getElementById('kpiImgInput_${pid}').click()" class="kpi-fix-save"><i class="fa-solid fa-upload"></i> رفع صورة</button>
@@ -2524,8 +2734,24 @@ window.openKpiFixImages = async (repId) => {
             ? String((window.currentUser && window.currentUser.name) || repId)
             : (row ? row.name : repId);
         if (sub) sub.textContent = repName + ' • جاري التحميل...';
-        const all = await kpiFetchProductsForScope(repName);
-        const missing = all.filter((p) => kpiProductRepName(p) === repName && kpiProductNeedsRawImage(p));
+        const isRepScope = window.isFieldRepUser() && !kpiIsEditorName(repName);
+        const [all, importedMissing] = await Promise.all([
+            kpiFetchProductsForScope(repName),
+            isRepScope ? kpiFetchImportedMissingProducts() : Promise.resolve([])
+        ]);
+        const myPin = kpiCurrentUserPin();
+        const missing = [];
+        const seenIds = new Set();
+        const pushMissing = (p) => {
+            if (!p || seenIds.has(p.id) || !kpiProductNeedsRawImage(p)) return;
+            /* Hide rows another rep already holds the lock on (they will win). */
+            if (p.image_locked_by && String(p.image_locked_by) !== String(myPin)) return;
+            seenIds.add(p.id);
+            missing.push(p);
+        };
+        all.forEach((p) => { if (kpiProductRepName(p) === repName) pushMissing(p); });
+        /* Imported products are a shared, global pool — credit the NUMERATOR only. */
+        importedMissing.forEach(pushMissing);
         window._kpiFixImageAllowedIds = new Set(missing.map((p) => p.id));
         if (sub) sub.textContent = repName + ' • ' + missing.length + ' منتج بدون صور';
         if (!missing.length) {
@@ -2570,16 +2796,44 @@ window.kpiUploadMissingImage = async (productId, input) => {
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري الرفع...'; }
     try {
-        const all = await kpiFetchProductsForScope(
-            String((window.currentUser && window.currentUser.name) || '')
-        );
-        const product = all.find((p) => p.id === productId);
+        const repName = String((window.currentUser && window.currentUser.name) || '');
+        const myPin = kpiCurrentUserPin();
+        const all = await kpiFetchProductsForScope(repName);
+        let product = all.find((p) => p.id === productId);
+        let isImported = !!product && kpiIsImportedProduct(product);
+        if (!product) {
+            /* The global imported pool is not part of the rep's scope fetch. */
+            const pool = await kpiFetchImportedMissingProducts();
+            product = pool.find((p) => p.id === productId);
+            if (product) isImported = true;
+        }
         /* Re-check the strict guard right before writing — never overwrite the editor. */
         if (!product || !kpiProductNeedsRawImage(product)) {
             if (window.showToast) window.showToast('تم تحديث هذا المنتج بالفعل — لا حاجة للرفع', false);
             if (btn) { btn.disabled = false; btn.innerHTML = original; }
             if (input) input.value = '';
             return;
+        }
+        /* Concurrency lock: the imported pool is shared, first claim wins. */
+        if (isImported) {
+            const claim = await kpiClaimImportedImageLock(productId, repName, myPin);
+            if (!claim.ok && claim.reason !== 'skipped' && claim.reason !== 'not_imported') {
+                const stale = document.querySelector('[data-fix-img-id="' + productId + '"]');
+                if (stale) stale.remove();
+                if (window.showToast) {
+                    window.showToast(
+                        claim.reason === 'locked'
+                            ? ('سبقك مندوب آخر إلى هذا المنتج' + (claim.lockedByName ? ' — ' + claim.lockedByName : ''))
+                            : (claim.reason === 'already'
+                                ? 'تم رفع صورة لهذا المنتج بالفعل'
+                                : 'تعذّر تأمين هذا المنتج، حاول مرة أخرى'),
+                        false
+                    );
+                }
+                if (btn) { btn.disabled = false; btn.innerHTML = original; }
+                if (input) input.value = '';
+                return;
+            }
         }
         const merchantName = product.merchantName || product.merchant || product.merchant_name || 'Unknown';
         const url = await window.uploadCatalogRawImage(file, merchantName);
@@ -2590,16 +2844,27 @@ window.kpiUploadMissingImage = async (productId, input) => {
             status: 'pending',
             updatedAt: new Date()
         };
+        /* Provenance: credit the claiming rep (numerator-only) and stamp the lock. */
+        if (isImported) {
+            imagePatch.image_uploaded_by = repName;
+            imagePatch.image_uploaded_at = new Date();
+            imagePatch.image_locked_by = myPin;
+            imagePatch.image_locked_by_name = repName;
+        }
         if (!(await kpiRestMerge([KPI_PRODUCTS_COLLECTION, productId], imagePatch))) {
             await window.updateDoc(window.doc(window.db, KPI_PRODUCTS_COLLECTION, productId), imagePatch);
         }
         const item = document.querySelector('[data-fix-img-id="' + productId + '"]');
         if (item) item.remove();
         const remaining = document.querySelectorAll('#kpiFixImagesList [data-fix-img-id]').length;
-        if (window.showToast) window.showToast('تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
+        if (window.showToast) window.showToast(isImported
+            ? 'تم رفع الصورة واحتسابها في مؤشرك — شكراً لمساهمتك'
+            : 'تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
         /* H7: patch the uploaded row into the in-memory caches instead of
-           invalidating and re-fetching the whole product list. */
+           invalidating and re-fetching the whole product list. Imported pools
+           are separate caches, so invalidate only those. */
         kpiPatchCachedProducts(productId, imagePatch);
+        if (isImported) kpiInvalidateImportCaches();
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixImages();
