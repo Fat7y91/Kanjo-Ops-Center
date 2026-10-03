@@ -248,4 +248,34 @@ window.exportVendorZipForTask = async (taskId) => {
     });
 };
 
+/* Bridge used by every merchant export surface (the dashboard export dropdown
+   and the merchant-profile card). It resolves the selected merchant name to its
+   most recent task and hands the task id straight to exportVendorZipForTask, so
+   all exports share the one ZIP pipeline. When no task is in memory it still
+   builds the full ZIP straight from the merchant record (including the stored
+   logo), so the bundle is never downgraded to a bare .xlsx. */
+window.exportVendorZipForMerchant = (merchantName) => {
+    const name = String(merchantName || '').trim();
+    if (!name) {
+        vendorZipToast('اختر التاجر أولاً', false);
+        return;
+    }
+    const base = (typeof window.getBaseName === 'function') ? window.getBaseName(name) : name;
+    const tasks = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
+    const baseOf = (t) => {
+        const raw = (t && (t.name || t.merchantName)) || '';
+        return (typeof window.getBaseName === 'function') ? window.getBaseName(raw) : raw;
+    };
+    const matches = tasks.filter((t) => t && (baseOf(t) === base || (t.merchantId && t.merchantId === base)));
+    const task = matches.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
+    if (task && task.id) return window.exportVendorZipForTask(task.id);
+    const logoTask = matches.find((t) => t.merchantLogo);
+    const merchantId = (window.findMerchantIdForBase ? (window.findMerchantIdForBase(base) || '') : '');
+    return window.exportVendorZip({
+        merchantId,
+        merchantName: base || name,
+        logo: logoTask ? logoTask.merchantLogo : ''
+    });
+};
+
 export { };
