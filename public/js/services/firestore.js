@@ -107,40 +107,95 @@ const taskReportNormalizeDigits = (value) => String(value == null ? '' : value)
     .replace(/ص/g, 'AM')
     .replace(/م/g, 'PM');
 
+/* Month names that may replace the numeric month in hand-entered dates. */
+const TASK_REPORT_MONTHS = {
+    'يناير': 1, 'فبراير': 2, 'مارس': 3, 'ابريل': 4, 'مايو': 5, 'يونيو': 6,
+    'يوليو': 7, 'اغسطس': 8, 'سبتمبر': 9, 'اكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12,
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12
+};
+const taskReportMonthNumber = (token) => {
+    const key = String(token || '').trim().toLowerCase().replace(/[أإآٱ]/g, 'ا');
+    return TASK_REPORT_MONTHS[key] || 0;
+};
+
+/* Parse a present date/time string into epoch millis (local time). Returns NaN
+   when the string is unrecognisable so the caller can apply its failsafe. Covers
+   ISO/RFC, `YYYY-M-D` / `D-M-YYYY` with '-' '/' '.' or spaces, 1-or-2 digit
+   month/day, optional time with variable spacing around AM/PM (English + Arabic),
+   and Arabic/English month names. */
+const taskReportParseString = (value) => {
+    const s = taskReportNormalizeDigits(String(value).trim()).replace(/[,\u060C]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s) return NaN;
+    /* Normalise date separators to '-' so one regex covers '-', '/', '.' and
+       spaces. Deliberately NOT delegating to Date.parse first: it would read an
+       ambiguous "1/10/2026" as US month/day and silently pick the wrong month. */
+    const norm = s.replace(/[\/.]/g, '-');
+    const timeMatch = /(?:^|[^0-9:])(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(norm);
+    const timeOf = () => {
+        if (!timeMatch) return { h: 0, m: 0, sec: 0 };
+        let h = Number(timeMatch[1]);
+        const mer = (timeMatch[4] || '').toUpperCase();
+        if (mer === 'AM' && h === 12) h = 0;
+        else if (mer === 'PM' && h < 12) h += 12;
+        return { h, m: Number(timeMatch[2]), sec: Number(timeMatch[3] || 0) };
+    };
+    /* Named month: "1 أكتوبر 2026" / "Oct 1, 2026" / "2026 Oct 1". */
+    const tokens = norm.split(/[\s-]+/).filter(Boolean);
+    const monthIndex = tokens.findIndex((t) => taskReportMonthNumber(t));
+    if (monthIndex !== -1) {
+        const month = taskReportMonthNumber(tokens[monthIndex]);
+        const day = Number(tokens.filter((t, i) => i !== monthIndex && /^\d{1,2}$/.test(t))[0]);
+        const year = Number(tokens.filter((t) => /^\d{4}$/.test(t))[0]);
+        if (day && day <= 31 && year) { const t = timeOf(); return new Date(year, month - 1, day, t.h, t.m, t.sec).getTime(); }
+    }
+    /* Numeric date: YYYY-M-D (4-digit year first) or D-M-YYYY (year last; up to
+       4 digits so a full year is never truncated to two). */
+    const parts = /^(\d{1,4})-(\d{1,2})-(\d{1,4})/.exec(norm);
+    if (parts) {
+        let year, month, day;
+        if (parts[1].length === 4) { year = Number(parts[1]); month = Number(parts[2]); day = Number(parts[3]); }
+        else { day = Number(parts[1]); month = Number(parts[2]); year = Number(parts[3]); if (year < 100) year += 2000; }
+        if (year && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            const t = timeOf();
+            return new Date(year, month - 1, day, t.h, t.m, t.sec).getTime();
+        }
+    }
+    return NaN;
+};
+
 const taskReportToMillis = (value) => {
     if (value == null || value === '') return 0;
     if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
     if (value instanceof Date) return value.getTime();
     if (typeof value === 'object') {
-        if (typeof value.toDate === 'function') { try { return value.toDate().getTime(); } catch (err) { return 0; } }
+        if (typeof value.toDate === 'function') { try { return value.toDate().getTime(); } catch (err) { return NaN; } }
         if (value.seconds != null) return Number(value.seconds) * 1000;
         if (value._seconds != null) return Number(value._seconds) * 1000;
-        return 0;
+        return NaN;
     }
-    const s = taskReportNormalizeDigits(String(value).trim());
-    if (!s) return 0;
-    const direct = Date.parse(s.replace(/ /g, 'T'));
-    if (!isNaN(direct)) return direct;
-    /* Explicit component parse (local time) for legacy "YYYY-MM-DD HH:MM[:SS] [AM|PM]". */
-    const m = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(s);
-    if (m) {
-        let hour = Number(m[4]);
-        const mer = (m[7] || '').toUpperCase();
-        if (mer === 'AM' && hour === 12) hour = 0;
-        else if (mer === 'PM' && hour < 12) hour += 12;
-        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, Number(m[5]), Number(m[6] || 0)).getTime();
-    }
-    const dm = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-    if (dm) return new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), 0, 0, 0).getTime();
-    return 0;
+    return taskReportParseString(value);
 };
 
 const taskReportTime = (r) => {
     if (!r) return 0;
-    if (r.ts != null) { const n = taskReportToMillis(r.ts); if (n) return n; }
-    const fromTs = taskReportToMillis(r.timestamp);
-    if (fromTs) return fromTs;
-    if (r.date) return taskReportToMillis(`${r.date} ${r.time || '00:00:00'}`) || taskReportToMillis(r.date);
+    if (r.ts != null) { const n = taskReportToMillis(r.ts); if (Number.isFinite(n) && n) return n; }
+    if (r.timestamp != null && r.timestamp !== '') {
+        const n = taskReportToMillis(r.timestamp);
+        if (Number.isFinite(n) && n) return n;
+    }
+    const raw = r.date
+        ? `${r.date} ${r.time || ''}`.trim()
+        : (r.timestamp ? String(r.timestamp) : (r.time ? String(r.time) : ''));
+    if (raw) {
+        const n = taskReportParseString(raw);
+        if (Number.isFinite(n) && n) return n;
+        /* Failsafe: a NEW report whose date we cannot decode must surface at the
+           TOP of the newest-first list instead of silently vanishing at the
+           bottom. Log the exact failing string so the format can be fixed. */
+        console.warn('Unparseable report date:', raw);
+        return Date.now();
+    }
     return 0;
 };
 /* Shared with the dashboard task-card timeline so both surfaces parse legacy
