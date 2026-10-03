@@ -1,0 +1,31 @@
+name: Export Live Firestore Indexes
+
+on:
+  push:
+    branches:
+      - chore/export-live-firestore-indexes
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write Firebase service account
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+      - name: Export live indexes
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true
+        run: |
+          npx -y firebase-tools@latest firestore:indexes --project kanjo-desouk > "$RUNNER_TEMP/live-indexes.json"
+          echo "=====BEGIN_INDEXES====="
+          cat "$RUNNER_TEMP/live-indexes.json"
+          echo "=====END_INDEXES====="
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-firestore-indexes
+          path: ${{ runner.temp }}/live-indexes.json
