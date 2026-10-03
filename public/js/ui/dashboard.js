@@ -2775,10 +2775,14 @@ window.renderTasks = (grouped) => {
                 }
 
 
+                const isSystemReport = (typeof window.taskReportIsSystemGenerated === 'function')
+                    ? window.taskReportIsSystemGenerated(r)
+                    : false;
 
                 return `
 
-                    <div class="bg-white p-3.5 rounded-2xl text-sm text-slate-800 border border-purple-200 shadow-sm space-y-2 w-full h-auto break-words">
+                    <div class="${isSystemReport ? 'system-generated-report ' : ''}bg-white p-3.5 rounded-2xl text-sm text-slate-800 border border-purple-200 shadow-sm space-y-2 w-full h-auto break-words">
+
 
                         <div class="flex justify-between items-center border-b border-purple-100 pb-2">
 
@@ -2786,7 +2790,7 @@ window.renderTasks = (grouped) => {
 
                                 <span class="w-6 h-6 rounded-full bg-kanjo-light text-kanjo-primary font-black flex items-center justify-center text-xs shadow-sm">${r.name ? r.name.charAt(0) : 'م'}</span>
 
-                                <b class="text-kanjo-dark font-black text-sm sm:text-base">${r.name}</b>
+                                <b class="text-kanjo-dark font-black text-sm sm:text-base">${r.name}${isSystemReport && typeof window.taskReportSystemBadge === 'function' ? window.taskReportSystemBadge() : ''}</b>
 
                             </div>
 

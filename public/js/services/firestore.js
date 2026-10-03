@@ -210,6 +210,18 @@ const taskReportsNewestFirst = (reports) => (Array.isArray(reports) ? reports : 
     .slice()
     .sort((a, b) => taskReportTime(b) - taskReportTime(a));
 
+/* Reports restored by a system backfill carry this exact corporate marker in
+   their body. They are genuine visits, but must be visually flagged as automated
+   entries so they are never mistaken for a rep's own field notes. */
+const TASK_REPORT_SYSTEM_MARKER = 'تم تأكيد الزيارة واحتسابها بنجاح ضمن التحديث الأخير للنظام';
+const taskReportIsSystemGenerated = (r) => !!r && ['general', 'merchant', 'next']
+    .some((k) => String(r[k] || '').includes(TASK_REPORT_SYSTEM_MARKER));
+window.taskReportIsSystemGenerated = taskReportIsSystemGenerated;
+
+/* Inline "System Note" pill rendered next to the rep's name on an automated entry. */
+const TASK_REPORT_SYSTEM_BADGE = '<span class="system-report-badge" title="ملاحظة نظام مُعتمدة"><i class="fa-solid fa-gear"></i> ملاحظة نظام</span>';
+window.taskReportSystemBadge = () => TASK_REPORT_SYSTEM_BADGE;
+
 window.closeTaskQuickView = () => {
     const modal = document.getElementById('taskQuickViewModal');
     if (modal) modal.classList.add('hidden');
@@ -305,15 +317,18 @@ window.openTaskQuickView = (task) => {
         ? `<button type="button" onclick="window.loadMoreTaskReports()" class="w-full mt-1 bg-kanjo-primary/10 hover:bg-kanjo-primary/20 text-kanjo-primary font-black text-[11px] py-2 rounded-xl transition">عرض المزيد (${remainingReports} تقرير)</button>`
         : '';
     const reportsHtml = allReports.length
-        ? (reports.map((r) => `<div class="bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
+        ? (reports.map((r) => {
+            const isSystemReport = taskReportIsSystemGenerated(r);
+            return `<div class="${isSystemReport ? 'system-generated-report ' : ''}bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
             <div class="flex items-center justify-between gap-2">
-                <span class="font-black text-xs text-kanjo-dark">${taskQuickViewEscape(r.name)}</span>
+                <span class="font-black text-xs text-kanjo-dark">${taskQuickViewEscape(r.name)}${isSystemReport ? TASK_REPORT_SYSTEM_BADGE : ''}</span>
                 <span class="text-[10px] font-bold text-slate-400">${taskQuickViewEscape(r.date || '')} ${taskQuickViewEscape(r.time || '')}</span>
             </div>
             ${r.general ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات عامة: ${taskQuickViewEscape(r.general)}</div>` : ''}
             ${r.merchant ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات التاجر: ${taskQuickViewEscape(r.merchant)}</div>` : ''}
             ${r.next ? `<div class="text-[11px] text-purple-800 font-black">القادم: ${taskQuickViewEscape(r.next)}</div>` : ''}
-        </div>`).join('') + loadMoreHtml)
+        </div>`;
+        }).join('') + loadMoreHtml)
         : '<div class="text-[11px] font-bold text-slate-400">لا توجد تقارير</div>';
 
     if (titleEl) titleEl.textContent = name;

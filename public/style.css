@@ -19,24 +19,61 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* —— Global custom scrollbar (brand: royal purple #4B0082 on a light track) ——
-   Slim and elegant, replacing the default browser chrome app-wide. Elements
-   that intentionally opt out via .hide-scrollbar keep their scrollbar hidden. */
-::-webkit-scrollbar { width: 10px; height: 10px; }
+/* —— Global branded scrollbar (royal purple #4B0082, slim 6px pill) ——
+   Sleek and modern, replacing the default browser chrome app-wide. Elements that
+   intentionally opt out via .hide-scrollbar keep their scrollbar hidden (the
+   class selector outranks the universal rule below). */
+*::-webkit-scrollbar { width: 6px; height: 6px; }
 
-::-webkit-scrollbar-track { background: #F5F3FF; }
+*::-webkit-scrollbar-track { background: rgba(103, 58, 183, 0.06); border-radius: 10px; }
 
-::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, #4B0082 0%, #6D28D9 100%);
-    border-radius: 999px;
-    border: 2px solid #F5F3FF;
+*::-webkit-scrollbar-thumb {
+    background: #4B0082;
+    border-radius: 10px;
 }
 
-::-webkit-scrollbar-thumb:hover { background: #230535; }
+*::-webkit-scrollbar-thumb:hover { background: #230535; }
 
-::-webkit-scrollbar-corner { background: #F5F3FF; }
+*::-webkit-scrollbar-corner { background: transparent; }
 
-* { scrollbar-width: thin; scrollbar-color: #4B0082 #F5F3FF; }
+/* Firefox equivalent. */
+* { scrollbar-width: thin; scrollbar-color: #4B0082 rgba(103, 58, 183, 0.06); }
+
+/* —— System-backfilled reports ——
+   Visits restored by the automated backfill are genuine, but must be visually
+   distinct from a rep's own field notes: tinted surface, dashed border, muted
+   italic body and a gear "System Note" pill beside the author. */
+.system-generated-report {
+    background: rgba(103, 58, 183, 0.05) !important;
+    border-style: dashed !important;
+    border-color: rgba(103, 58, 183, 0.35) !important;
+    color: #64748b;
+    font-style: italic;
+}
+
+.system-generated-report .text-slate-700,
+.system-generated-report .text-slate-800,
+.system-generated-report .text-slate-900 {
+    color: #64748b !important;
+}
+
+.system-generated-report .system-report-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    vertical-align: middle;
+    margin-inline-start: 6px;
+    font-style: normal;
+    font-weight: 800;
+    font-size: 10px;
+    line-height: 1;
+    color: #4B0082;
+    background: rgba(103, 58, 183, 0.12);
+    border: 1px solid rgba(103, 58, 183, 0.25);
+    border-radius: 999px;
+    padding: 3px 7px;
+    white-space: nowrap;
+}
 
 /* —— Sticky modal headers ——
    Long modals keep their title + close button pinned while the body scrolls.
