@@ -143,10 +143,41 @@ const parseRawText = async (text, category) => {
     return null; // caller keeps its own synchronous parser as the fallback
 };
 
+const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/* Same SheetJS serialization as writeWorkbook, but resolves with a Blob instead
+   of triggering a download. Used by the client-side vendor ZIP export so the
+   generated workbook can be appended to the archive. */
+const buildWorkbookBlob = async (sheets, fileName) => {
+    if (WORKER_SUPPORTED) {
+        try {
+            const result = await run({ type: 'xlsx', sheets: sheets, fileName: fileName, bookType: 'xlsx' });
+            if (result && result.buffer) return new Blob([result.buffer], { type: result.mime || MIME_XLSX });
+        } catch (err) {
+            console.warn('[exportWorker] xlsx blob offload failed; using main thread:', err && err.message);
+        }
+    }
+    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('EXCEL_LIB_UNAVAILABLE');
+    const workbook = XLSX.utils.book_new();
+    (sheets || []).forEach((sheet) => {
+        const header = sheet.header || [];
+        const worksheet = (sheet.rows && sheet.rows.length)
+            ? XLSX.utils.json_to_sheet(sheet.rows, header.length ? { header: header } : undefined)
+            : XLSX.utils.aoa_to_sheet([header]);
+        if (sheet.colWidth && header.length) {
+            worksheet['!cols'] = header.map(() => ({ wch: sheet.colWidth }));
+        }
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name || 'Sheet');
+    });
+    const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    return new Blob([buffer], { type: MIME_XLSX });
+};
+
 window.kanjoExportWorker = {
     supported: WORKER_SUPPORTED,
     run: run,
     writeWorkbook: writeWorkbook,
+    buildWorkbookBlob: buildWorkbookBlob,
     parseJson: parseJson,
     parseCsv: parseCsv,
     parseRawText: parseRawText,

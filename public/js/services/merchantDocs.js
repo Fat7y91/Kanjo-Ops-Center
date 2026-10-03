@@ -594,26 +594,64 @@ const callDriveScript = async (payload) => {
     }
 };
 
-window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantName, docs = []) => {
-    const now = new Date();
-    const by = (window.currentUser && window.currentUser.name) || '';
-
-    /* Build a per-docType audit map (commercial / tax / menu). Merge with any
-       previously tracked documents so re-uploads append without wiping data. */
+/* Pure merge of newly-uploaded document records into a merchant's existing
+   `documents` map. Kept side-effect free so the persistence contract is unit
+   testable. Each docType keeps its cumulative `names` (back-compat) AND a
+   `files` list of `{name, id, url}` records (id/url returned by the Drive
+   script) so the ZIP export can fetch the actual attachments. */
+window.kanjoMergeMerchantDocuments = (existing, docs, now, by) => {
+    const documents = (existing && typeof existing === 'object') ? { ...existing } : {};
     const docsByType = {};
     (Array.isArray(docs) ? docs : []).forEach((d) => {
         if (!d || !d.docType) return;
         const key = String(d.docType);
         if (!docsByType[key]) docsByType[key] = [];
-        if (d.name) docsByType[key].push(d.name);
+        const name = String(d.name || '').trim();
+        if (!name) return;
+        docsByType[key].push({
+            name,
+            id: String(d.driveFileId || d.id || ''),
+            url: String(d.driveFileUrl || d.url || '')
+        });
     });
-    let documents = {};
+    Object.entries(docsByType).forEach(([key, entries]) => {
+        const prev = (documents[key] && typeof documents[key] === 'object') ? documents[key] : {};
+        const prevFiles = Array.isArray(prev.files) ? prev.files : [];
+        const seenFiles = new Set();
+        const files = [];
+        prevFiles.concat(entries).forEach((entry) => {
+            const id = String((entry && entry.id) || '');
+            const name = String((entry && entry.name) || '');
+            const dedupeKey = id || name;
+            if (!name || seenFiles.has(dedupeKey)) return;
+            seenFiles.add(dedupeKey);
+            files.push({ name, id, url: String((entry && entry.url) || '') });
+        });
+        const names = entries.map((entry) => entry.name);
+        documents[key] = {
+            ...prev,
+            uploaded: true,
+            count: (Number(prev.count) || 0) + names.length,
+            names: (Array.isArray(prev.names) ? prev.names : []).concat(names),
+            files,
+            lastUploadAt: now,
+            lastUploadedBy: by
+        };
+    });
+    return documents;
+};
+
+window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantName, docs = []) => {
+    const now = new Date();
+    const by = (window.currentUser && window.currentUser.name) || '';
+
     /* Read the authoritative merchant record from Firestore first so the
        cumulative count is computed against the server state, never a stale
        in-memory cache. This guarantees legacy counts of OTHER doc types
        (e.g. tax/commercial) survive a Menu-only upload even on the very first
        upload of a session or right after a backfill. Fall back to the
        in-memory map only if the fresh read fails (e.g. offline). */
+    let documents = {};
     const merchantRef = doc(db, "merchants", merchantId);
     try {
         const snap = await getDoc(merchantRef);
@@ -632,17 +670,7 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
             documents = { ...existingRec.documents };
         }
     }
-    Object.entries(docsByType).forEach(([key, names]) => {
-        const prev = (documents[key] && typeof documents[key] === 'object') ? documents[key] : {};
-        documents[key] = {
-            ...prev,
-            uploaded: true,
-            count: (Number(prev.count) || 0) + names.length,
-            names: (Array.isArray(prev.names) ? prev.names : []).concat(names),
-            lastUploadAt: now,
-            lastUploadedBy: by
-        };
-    });
+    documents = window.kanjoMergeMerchantDocuments(documents, docs, now, by);
 
     const merchantRec = {
         merchantId,
@@ -791,7 +819,20 @@ window.submitMerchantDocs = async () => {
 
         if (!folderLink) throw new Error('NO_FOLDER_LINK');
 
-        const uploadedDocs = payloadFiles.map((f) => ({ docType: f.docType, name: f.name }));
+        /* The Drive script returns the created (or reused) file records with their
+           stable id + webViewLink. Persist them alongside the name so the vendor
+           ZIP export can fetch the actual attachments back. */
+        const returnedFiles = Array.isArray(data && data.files) ? data.files : [];
+        const uploadedDocs = payloadFiles.map((f) => {
+            const match = returnedFiles.find((r) => r && r.docType === f.docType && r.name === f.name)
+                || returnedFiles.find((r) => r && r.name === f.name);
+            return {
+                docType: f.docType,
+                name: f.name,
+                driveFileId: String((match && match.id) || ''),
+                driveFileUrl: String((match && match.url) || '')
+            };
+        });
 
         await window.persistDriveFolder(draft.merchantId, folderId, folderLink, draft.baseName, uploadedDocs);
 

@@ -97,19 +97,55 @@ const taskQuickViewEscape = (value) => String(value == null ? '' : value)
    must render them NEWEST-first (matching the notifications feed). A report is
    considered empty when it carries no free text and no contact info — those are
    the "name + timestamp only" boxes that used to spam the timeline. */
+/* Eastern-Arabic/Persian digits and the Arabic AM/PM markers must be normalised
+   before parsing: `submitReport` stores `toLocaleTimeString('ar-EG')` output such
+   as "2026-10-01 ١٠:٣٠:٤٥ ص". Without this, those reports parse to NaN → sort to
+   the BOTTOM of the newest-first timeline and vanish from the top of the list. */
+const taskReportNormalizeDigits = (value) => String(value == null ? '' : value)
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/ص/g, 'AM')
+    .replace(/م/g, 'PM');
+
+const taskReportToMillis = (value) => {
+    if (value == null || value === '') return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'object') {
+        if (typeof value.toDate === 'function') { try { return value.toDate().getTime(); } catch (err) { return 0; } }
+        if (value.seconds != null) return Number(value.seconds) * 1000;
+        if (value._seconds != null) return Number(value._seconds) * 1000;
+        return 0;
+    }
+    const s = taskReportNormalizeDigits(String(value).trim());
+    if (!s) return 0;
+    const direct = Date.parse(s.replace(/ /g, 'T'));
+    if (!isNaN(direct)) return direct;
+    /* Explicit component parse (local time) for legacy "YYYY-MM-DD HH:MM[:SS] [AM|PM]". */
+    const m = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(s);
+    if (m) {
+        let hour = Number(m[4]);
+        const mer = (m[7] || '').toUpperCase();
+        if (mer === 'AM' && hour === 12) hour = 0;
+        else if (mer === 'PM' && hour < 12) hour += 12;
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), hour, Number(m[5]), Number(m[6] || 0)).getTime();
+    }
+    const dm = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (dm) return new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), 0, 0, 0).getTime();
+    return 0;
+};
+
 const taskReportTime = (r) => {
     if (!r) return 0;
-    const ts = r.timestamp;
-    if (ts && typeof ts === 'object') {
-        if (typeof ts.toDate === 'function') return ts.toDate().getTime();
-        if (ts.seconds != null) return ts.seconds * 1000;
-    }
-    const raw = ts || (r.date ? `${r.date} ${r.time || '00:00:00'}` : '');
-    if (!raw) return 0;
-    const norm = String(raw).trim().replace(' ', 'T');
-    const t = Date.parse(norm);
-    return isNaN(t) ? 0 : t;
+    if (r.ts != null) { const n = taskReportToMillis(r.ts); if (n) return n; }
+    const fromTs = taskReportToMillis(r.timestamp);
+    if (fromTs) return fromTs;
+    if (r.date) return taskReportToMillis(`${r.date} ${r.time || '00:00:00'}`) || taskReportToMillis(r.date);
+    return 0;
 };
+/* Shared with the dashboard task-card timeline so both surfaces parse legacy
+   Arabic-locale timestamps identically. */
+window.taskReportTimeMs = taskReportTime;
 
 const taskReportHasContent = (r) => !!r && ['general', 'merchant', 'team', 'next', 'contactName', 'contactRole', 'contactPhone']
     .some((k) => String(r[k] || '').trim() !== '');
@@ -132,7 +168,14 @@ window.openTaskQuickView = (task) => {
     const titleEl = document.getElementById('taskQuickViewTitle');
     const subtitleEl = document.getElementById('taskQuickViewSubtitle');
     if (!modal || !body) return;
+    /* Client-side report pagination: keep the embedded array untouched (no extra
+       reads) but render only the newest page and grow it on demand. Reset to the
+       first page only when a DIFFERENT task is opened, so "Load More" survives
+       the re-render. */
+    const sameTask = window._taskQuickViewTaskId === (task.id || '');
     window._taskQuickViewTaskId = task.id || '';
+    window._taskQuickViewTask = task;
+    if (!sameTask || !window._taskQuickViewReportLimit) window._taskQuickViewReportLimit = 5;
 
     const name = task.name || 'مهمة غير معروفة';
     const team = task.team || '-';
@@ -159,9 +202,15 @@ window.openTaskQuickView = (task) => {
         ? attendances.map((a) => `<div class="flex items-center justify-between gap-2 text-[11px] font-bold ${a.type === 'start' ? 'text-green-700' : 'text-red-600'} bg-white border border-purple-100 rounded-xl px-2.5 py-1.5"><span>${taskQuickViewEscape(a.user)} — ${a.type === 'start' ? 'بدء زيارة' : 'إنهاء زيارة'} ${taskQuickViewEscape(a.time || '')}</span>${a.loc ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a.loc)}" target="_blank" class="underline text-blue-600 whitespace-nowrap">الخريطة</a>` : ''}</div>`).join('')
         : '<div class="text-[11px] font-bold text-slate-400">لا توجد زيارات مسجلة</div>';
 
-    const reports = taskReportsNewestFirst(task.reports);
-    const reportsHtml = reports.length
-        ? reports.map((r) => `<div class="bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
+    const allReports = taskReportsNewestFirst(task.reports);
+    const reportLimit = Math.max(5, Number(window._taskQuickViewReportLimit) || 5);
+    const reports = allReports.slice(0, reportLimit);
+    const remainingReports = allReports.length - reports.length;
+    const loadMoreHtml = remainingReports > 0
+        ? `<button type="button" onclick="window.loadMoreTaskReports()" class="w-full mt-1 bg-kanjo-primary/10 hover:bg-kanjo-primary/20 text-kanjo-primary font-black text-[11px] py-2 rounded-xl transition">عرض المزيد (${remainingReports} تقرير)</button>`
+        : '';
+    const reportsHtml = allReports.length
+        ? (reports.map((r) => `<div class="bg-white border border-purple-100 rounded-xl p-2.5 space-y-1">
             <div class="flex items-center justify-between gap-2">
                 <span class="font-black text-xs text-kanjo-dark">${taskQuickViewEscape(r.name)}</span>
                 <span class="text-[10px] font-bold text-slate-400">${taskQuickViewEscape(r.date || '')} ${taskQuickViewEscape(r.time || '')}</span>
@@ -169,14 +218,19 @@ window.openTaskQuickView = (task) => {
             ${r.general ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات عامة: ${taskQuickViewEscape(r.general)}</div>` : ''}
             ${r.merchant ? `<div class="text-[11px] text-slate-700 font-semibold">ملاحظات التاجر: ${taskQuickViewEscape(r.merchant)}</div>` : ''}
             ${r.next ? `<div class="text-[11px] text-purple-800 font-black">القادم: ${taskQuickViewEscape(r.next)}</div>` : ''}
-        </div>`).join('')
+        </div>`).join('') + loadMoreHtml)
         : '<div class="text-[11px] font-bold text-slate-400">لا توجد تقارير</div>';
 
     if (titleEl) titleEl.textContent = name;
     if (subtitleEl) subtitleEl.textContent = `${team} • ${cat} • يوم ${date}`;
 
     body.innerHTML = `
-        <div class="flex flex-wrap items-center gap-2">${statusBadge}</div>
+        <div class="flex flex-wrap items-center gap-2">${statusBadge}${(() => {
+            const canExport = (window.isCatalogAdminUser && window.isCatalogAdminUser());
+            return canExport
+                ? `<button type="button" onclick="window.exportVendorZipForTask('${task.id || ''}')" class="bg-[#230535] hover:bg-[#4B0082] text-white px-3 py-1.5 rounded-full text-[11px] font-black flex items-center gap-1 transition"><i class="fa-solid fa-file-zipper"></i> تصدير التاجر (ZIP)</button>`
+                : '';
+        })()}</div>
         ${progressHtml}
         ${task.notes ? `<div class="bg-amber-50 border border-amber-100 rounded-2xl p-3 text-xs text-slate-700"><span class="font-black text-amber-800 block mb-0.5">ملاحظات توجيهية:</span>${taskQuickViewEscape(task.notes)}</div>` : ''}
         <div class="grid grid-cols-2 gap-2 text-xs">
@@ -188,11 +242,20 @@ window.openTaskQuickView = (task) => {
             <div class="space-y-1.5">${visitsHtml}</div>
         </div>
         <div class="bg-slate-50 border border-purple-100 rounded-2xl p-3 space-y-2">
-            <div class="font-black text-xs text-kanjo-dark"><i class="fa-solid fa-file-lines text-kanjo-primary"></i> التقارير (${reports.length})</div>
+            <div class="font-black text-xs text-kanjo-dark"><i class="fa-solid fa-file-lines text-kanjo-primary"></i> التقارير (${allReports.length})</div>
             <div class="space-y-1.5">${reportsHtml}</div>
         </div>`;
 
     modal.classList.remove('hidden');
+};
+
+/* Grows the currently-open task's report page by 5 and re-renders. Because the
+   task id is unchanged, openTaskQuickView keeps the accumulated limit. */
+window.loadMoreTaskReports = () => {
+    const task = window._taskQuickViewTask;
+    if (!task) return;
+    window._taskQuickViewReportLimit = (Number(window._taskQuickViewReportLimit) || 5) + 5;
+    window.openTaskQuickView(task);
 };
 
 window.goToTaskInList = () => {
@@ -728,6 +791,10 @@ window.submitReport = async () => {
         time: new Date().toLocaleTimeString(),
         date: todayStr,
         timestamp: nowTimestampStr,
+        /* Numeric epoch (ms) alongside the display string: the app has no reports
+           query/orderBy, so the timeline sorts client-side and a numeric field is
+           immune to locale digit/AM-PM formatting differences. */
+        ts: Date.now(),
         contactName: document.getElementById('repContactName').value,
         contactRole: document.getElementById('repContactRole').value,
         contactPhone: document.getElementById('repContactPhone').value,

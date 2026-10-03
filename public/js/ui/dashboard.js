@@ -2588,14 +2588,17 @@ function calculateTopTeam(tasks) {
    timeline consistent with the notifications feed. */
 const taskReportSortTime = (r) => {
     if (!r) return 0;
+    /* Prefer the shared, locale-aware parser (handles Eastern-Arabic digits and
+       Arabic AM/PM markers) defined in firestore.js. */
+    if (typeof window.taskReportTimeMs === 'function') return window.taskReportTimeMs(r);
     const ts = r.timestamp;
     if (ts && typeof ts === 'object') {
         if (typeof ts.toDate === 'function') return ts.toDate().getTime();
         if (ts.seconds != null) return ts.seconds * 1000;
     }
-    const raw = ts || (r.date ? `${r.date} ${r.time || '00:00:00'}` : '');
+    const raw = r.ts || ts || (r.date ? `${r.date} ${r.time || '00:00:00'}` : '');
     if (!raw) return 0;
-    const t = Date.parse(String(raw).trim().replace(' ', 'T'));
+    const t = Date.parse(String(raw).trim().replace(/ /g, 'T'));
     return isNaN(t) ? 0 : t;
 };
 const taskReportBoxHasContent = (r) => !!r && ['general', 'merchant', 'team', 'next', 'contactName', 'contactRole', 'contactPhone']

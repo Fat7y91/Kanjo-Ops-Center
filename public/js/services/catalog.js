@@ -5235,67 +5235,74 @@ const kanjoReportExportError = (err) => {
     }
 };
 
+/* Builds the Products/Variants rows (no I/O, no download) so both the normal
+   export and the vendor ZIP can share the exact same sheet content. */
+const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => {
+    const productRows = [];
+    const uniqueSkuById = new Map();
+    const seenSkus = new Set();
+    /* Qualifiers/units that no variant rule could map are preserved on the
+       parent product name instead of being lost or turned into fake IDs. */
+    const variantNameSuffix = new Map();
+    evaluations.forEach(({ product }) => {
+        const extra = kanjoVariantUnrecognizedWords(product);
+        if (extra.length) variantNameSuffix.set(String((product && product.id) || ''), extra.join(' '));
+    });
+    for (let i = 0; i < evaluations.length; i++) {
+        if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
+        const { product, match } = evaluations[i];
+        const key = String((product && product.id) || '');
+        const category = match.status === 'matched'
+            ? match.category
+            : kanjoJoinCategorySelection(selections[key], match.category);
+        const row = kanjoBuildProductRow(product, category);
+        const extraName = variantNameSuffix.get(key);
+        if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
+        /* Deduplicate the parent SKU. Reps duplicate products, and the Kanjo
+           importer rejects any repeated sku. A blank sku falls back to the
+           (always unique) doc id so the cell is never empty. */
+        const base = String((product && product.sku) || '').trim() || key || 'SKU';
+        let sku = base;
+        let suffix = 1;
+        while (seenSkus.has(sku)) { sku = base + '-D' + suffix; suffix++; }
+        seenSkus.add(sku);
+        uniqueSkuById.set(key, sku);
+        row.sku = sku;
+        /* Variants link to their parent via product_key, so it must carry the
+           NEW deduped sku on BOTH sheets or the relation breaks. */
+        row.product_key = sku;
+        productRows.push(row);
+    }
+    /* The variant phase already resolved duplicates/conflicts; fall back to a
+       straight build only when called without pre-computed entries. */
+    let variantRows;
+    if (Array.isArray(variantEntries)) {
+        variantRows = variantEntries.map((entry) => entry.row);
+    } else {
+        variantRows = [];
+        evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
+    }
+    /* Re-point each variant at its parent's deduped sku and renumber
+       variant_sku per parent. Distinct raw options can still resolve to the
+       same attribute signature when their words are not in the alias
+       dictionary; those rows stay separate (one per distinct price) and the
+       unrecognised words are preserved on the product name rather than
+       becoming an invalid synthetic ID. */
+    const variantSeq = new Map();
+    variantRows.forEach((row) => {
+        const parentKey = String(row.product_key || '');
+        const uniqueSku = uniqueSkuById.get(parentKey) || parentKey;
+        row.product_key = uniqueSku;
+        const n = (variantSeq.get(uniqueSku) || 0) + 1;
+        variantSeq.set(uniqueSku, n);
+        row.variant_sku = uniqueSku + '-V' + n;
+    });
+    return { productRows, variantRows };
+};
+
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
-        const productRows = [];
-        const uniqueSkuById = new Map();
-        const seenSkus = new Set();
-        /* Qualifiers/units that no variant rule could map are preserved on the
-           parent product name instead of being lost or turned into fake IDs. */
-        const variantNameSuffix = new Map();
-        evaluations.forEach(({ product }) => {
-            const extra = kanjoVariantUnrecognizedWords(product);
-            if (extra.length) variantNameSuffix.set(String((product && product.id) || ''), extra.join(' '));
-        });
-        for (let i = 0; i < evaluations.length; i++) {
-            if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
-            const { product, match } = evaluations[i];
-            const key = String((product && product.id) || '');
-            const category = match.status === 'matched'
-                ? match.category
-                : kanjoJoinCategorySelection(selections[key], match.category);
-            const row = kanjoBuildProductRow(product, category);
-            const extraName = variantNameSuffix.get(key);
-            if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
-            /* Deduplicate the parent SKU. Reps duplicate products, and the Kanjo
-               importer rejects any repeated sku. A blank sku falls back to the
-               (always unique) doc id so the cell is never empty. */
-            const base = String((product && product.sku) || '').trim() || key || 'SKU';
-            let sku = base;
-            let suffix = 1;
-            while (seenSkus.has(sku)) { sku = base + '-D' + suffix; suffix++; }
-            seenSkus.add(sku);
-            uniqueSkuById.set(key, sku);
-            row.sku = sku;
-            /* Variants link to their parent via product_key, so it must carry the
-               NEW deduped sku on BOTH sheets or the relation breaks. */
-            row.product_key = sku;
-            productRows.push(row);
-        }
-        /* The variant phase already resolved duplicates/conflicts; fall back to a
-           straight build only when called without pre-computed entries. */
-        let variantRows;
-        if (Array.isArray(variantEntries)) {
-            variantRows = variantEntries.map((entry) => entry.row);
-        } else {
-            variantRows = [];
-            evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
-        }
-        /* Re-point each variant at its parent's deduped sku and renumber
-           variant_sku per parent. Distinct raw options can still resolve to the
-           same attribute signature when their words are not in the alias
-           dictionary; those rows stay separate (one per distinct price) and the
-           unrecognised words are preserved on the product name rather than
-           becoming an invalid synthetic ID. */
-        const variantSeq = new Map();
-        variantRows.forEach((row) => {
-            const parentKey = String(row.product_key || '');
-            const uniqueSku = uniqueSkuById.get(parentKey) || parentKey;
-            row.product_key = uniqueSku;
-            const n = (variantSeq.get(uniqueSku) || 0) + 1;
-            variantSeq.set(uniqueSku, n);
-            row.variant_sku = uniqueSku + '-V' + n;
-        });
+        const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, variantEntries);
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
@@ -5304,6 +5311,60 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
     } catch (err) {
         kanjoReportExportError(err);
     }
+};
+
+/* Build (but do NOT download) the same Products/Variants workbook so the
+   client-side vendor ZIP export can append it as an archive entry. */
+const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const kanjoBuildWorkbookBlob = async (productRows, variantRows, fileName) => {
+    const sheets = [
+        { name: 'Products', header: KANJO_PRODUCTS_SHEET_COLUMNS, rows: productRows, colWidth: 22 },
+        { name: 'Variants', header: KANJO_VARIANTS_SHEET_COLUMNS, rows: variantRows, colWidth: 22 }
+    ];
+    if (window.kanjoExportWorker && typeof window.kanjoExportWorker.buildWorkbookBlob === 'function') {
+        return window.kanjoExportWorker.buildWorkbookBlob(sheets, fileName);
+    }
+    if (typeof XLSX === 'undefined' || !XLSX.utils) throw new Error('مكتبة Excel غير محمّلة، أعد تحميل الصفحة');
+    const wb = XLSX.utils.book_new();
+    const wsProducts = kanjoSheetFromRows(KANJO_PRODUCTS_SHEET_COLUMNS, productRows);
+    const wsVariants = kanjoSheetFromRows(KANJO_VARIANTS_SHEET_COLUMNS, variantRows);
+    wsProducts['!cols'] = KANJO_PRODUCTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+    wsVariants['!cols'] = KANJO_VARIANTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+    XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
+    XLSX.utils.book_append_sheet(wb, wsVariants, 'Variants');
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([buffer], { type: MIME_XLSX });
+};
+
+/* Non-interactive vendor workbook builder used by the ZIP export. Unlike the
+   modal export it never pauses behind the category audit: products the matcher
+   cannot classify fall back to their own stored category. */
+window.kanjoBuildVendorWorkbookBlob = async (opts) => {
+    const o = opts || {};
+    const includePending = o.includePending !== false;
+    const source = includePending ? await fetchAllCatalogProductsForExport() : await fetchDoneCatalogProducts();
+    let filtered = source;
+    if (o.merchantId) {
+        filtered = source.filter((p) => String(p.merchantId || '') === String(o.merchantId));
+    } else if (o.merchantName) {
+        filtered = source.filter((p) => catalogProductMerchantName(p) === o.merchantName);
+    }
+    if (!filtered.length) return { blob: null, fileName: '', productCount: 0, variantCount: 0 };
+    filtered = filtered.map((p) => kanjoWithNormalizedText(p));
+    const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || o.vendorType || '').trim();
+    const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+    const selections = {};
+    evaluations.forEach(({ product, match }) => {
+        if (match.status === 'matched') return;
+        const fallback = String((product && (product.category || product.vendor_type)) || '').trim();
+        if (fallback) selections[String((product && product.id) || '')] = [fallback];
+    });
+    const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, undefined);
+    const merchantName = String(o.merchantName || '').trim();
+    const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
+    const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+    const blob = await kanjoBuildWorkbookBlob(productRows, variantRows, fileName);
+    return { blob, fileName, productCount: productRows.length, variantCount: variantRows.length };
 };
 
 /* ===== Interactive pre-export category audit ===== */
