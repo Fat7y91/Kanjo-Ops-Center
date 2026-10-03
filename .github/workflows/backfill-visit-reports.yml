@@ -1,0 +1,23 @@
+# Manually-triggered one-off maintenance job: restore the 2026-10-01 visit reports
+# that were lost before the report-write path was fixed (Sara: Happy / XO
+# Cosmetics, Mustafa: ابو سعده / بن ربيع). Uses the surviving notification
+# timestamps and a corporate placeholder. Idempotent; safe to re-run.
+name: Backfill visit reports
+on:
+  workflow_dispatch:
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write Firebase service account
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+      - name: Backfill visit reports
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          FIREBASE_PROJECT_ID: kanjo-desouk
+        run: |
+          npm install firebase-admin@12
+          node scripts/backfill-visit-reports.mjs
