@@ -4322,17 +4322,19 @@ const KANJO_PRODUCT_CATEGORIES = [
     /* 2026 restaurant fries vertical. "بطاطس" is the canonical keyword; the
        colloquial pack/serving words are handled by the semantic rules below. */
     { id: 165, name: 'بطاطس', keywords: ['بطاطس'] },
-    /* ===== Desserts & Cafés vertical (الحلو) — Ops Manager, 2026 =====
-       A new vendor type "الحلو" with a two-level tree: standalone dessert items
-       plus a "مشروبات" parent (ID:176) whose children are beverages. The Kanjo
-       export workbook has a SINGLE `category` column (see
-       KANJO_PRODUCTS_SHEET_COLUMNS), so per the export spec the CHILD id is
-       emitted; there is no category_path column to populate. The `parent`
-       metadata is kept here for documentation and a future hierarchical export.
+    /* ===== Desserts & Cafés tree — merged into the "حلويات" vendor type =====
+       Ops Manager, 2026: the standalone "الحلو" vendor type was scrapped and
+       this dictionary folded into the existing حلويات auto-tagging rule, so no
+       merchant has to be migrated. Two-level tree: standalone dessert items plus
+       a "مشروبات" parent (ID:176) whose children are beverages. The Kanjo export
+       workbook has a SINGLE `category` column (see KANJO_PRODUCTS_SHEET_COLUMNS),
+       so per the export spec the CHILD id is emitted; there is no category_path
+       column to populate. The `parent` metadata is kept here for documentation
+       and a future hierarchical export.
 
-       Several names repeat existing categories (كريب/طواجن/وافل/كيك/سموذي/ميلك شيك),
-       so the "الحلو" vendor rule below pins each to its dessert ID exactly like
-       the existing حلويات pins — the matcher is ID-scoped, never name-scoped. */
+       Several names repeat existing categories (كريب/طواجن/وافل/كيك/سموذي/ميلك شيك);
+       the merged حلويات rule below pins each shared name to its legacy AND
+       dessert IDs — the matcher is ID-scoped, never name-scoped. */
     { id: 166, name: 'كريب', keywords: ['كريب', 'crepe', 'crêpe'] },
     { id: 167, name: 'مولتن', keywords: ['مولتن', 'molten'] },
     { id: 168, name: 'فريسكا', keywords: ['فريسكا', 'فري سكا', 'freska', 'fresca'] },
@@ -4625,29 +4627,22 @@ const KANJO_VENDOR_CATEGORY_RULES = [
         allow: ['مكسرات', 'التسالي', 'السناكس', 'محمص', 'تسالي', 'بسكوت']
     },
     {
+        /* "حلويات" now carries the ENTIRE merged dictionary. Ops Manager
+           decision (2026): scrap the separate "الحلو" vendor type and fold its
+           Desserts & Cafés tree into the existing حلويات type instead, so no
+           merchant has to be migrated.
+
+           Legacy confectionery fallbacks stay intact (51/47 حلويات, 156 كيك,
+           66 بوكسات, بسكوت …) while names shared with the dessert tree pin to
+           BOTH id sets:
+             كيك  -> 156, 52, 174
+             وافل -> 157, 172
+           Names unique to the dessert tree stay dessert-only (كريب 166,
+           طواجن 171, سموذي 180, ميلك شيك 181). The matcher is ID-scoped, so a
+           restaurant/bakery/butcher vendor never sees these IDs. */
         match: ['حلويات', 'حلواني', 'sweets', 'dessert'],
-        allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات'],
-        /* Confectionery sweets = 51/47 — never restaurant 37 or butcher 82.
-           "كيك"/"وافل" also exist in the dessert tree (174/172), pinned out here. */
-        pins: { 'حلويات': [51, 47], 'كيك': [156, 52], 'وافل': [157] }
-    },
-    /* Desserts & Cafés vertical ("الحلو", 2026). Deliberately listed AFTER the
-       confectionery rule above so a "حلويات"/"حلواني" label keeps its existing
-       confectionery IDs (51/47) and never falls through to the dessert tree.
-       Only labels containing "الحلو"/"حلو" but matching no earlier token (i.e.
-       the new "الحلو" type) reach this rule. Repeated names are pinned to their
-       dessert IDs so they can never resolve to another vertical's category. */
-    {
-        match: ['الحلو', 'حلو', 'dessert', 'desserts'],
-        allow: ['كريب', 'مولتن', 'فريسكا', 'سينابون', 'زلابيا', 'طواجن', 'وافل', 'بان كيك', 'كيك', 'أم علي', 'ماتشا', 'بوبا', 'زبادو', 'سموذي', 'ميلك شيك', 'صودا', 'عصير', 'آيس كوفي', 'فرابيه'],
-        pins: {
-            'كريب': [166],
-            'طواجن': [171],
-            'وافل': [172],
-            'كيك': [174],
-            'سموذي': [180],
-            'ميلك شيك': [181]
-        }
+        allow: ['حلويات', 'كيك', 'بسكوت', 'وافل', 'بوكسات', 'كريب', 'مولتن', 'فريسكا', 'سينابون', 'زلابيا', 'طواجن', 'بان كيك', 'أم علي', 'ماتشا', 'بوبا', 'زبادو', 'سموذي', 'ميلك شيك', 'صودا', 'عصير', 'آيس كوفي', 'فرابيه'],
+        pins: { 'حلويات': [51, 47], 'كيك': [156, 52, 174], 'وافل': [157, 172], 'كريب': [166], 'طواجن': [171], 'سموذي': [180], 'ميلك شيك': [181] }
     },
     {
         match: ['لبنة', 'ألبان', 'البان', 'dairy'],
