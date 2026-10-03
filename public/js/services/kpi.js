@@ -1806,7 +1806,7 @@ const kpiAvatarHtml = (name) => {
     const url = (window.userImageMap && window.userImageMap[name]) || '';
     const initial = (String(name || '').trim().charAt(0)) || '?';
     if (url) {
-        return `<img src="${kpiEscape(url)}" alt="${kpiEscape(name)}" data-initial="${kpiEscape(initial)}" class="kpi-rep-avatar" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'kpi-rep-avatar kpi-rep-avatar-fallback',textContent:this.dataset.initial}))">`;
+        return `<img src="${kpiEscape(url)}" alt="${kpiEscape(name)}" data-initial="${kpiEscape(initial)}" loading="lazy" decoding="async" class="kpi-rep-avatar" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'kpi-rep-avatar kpi-rep-avatar-fallback',textContent:this.dataset.initial}))">`;
     }
     return `<div class="kpi-rep-avatar kpi-rep-avatar-fallback">${kpiEscape(initial)}</div>`;
 };

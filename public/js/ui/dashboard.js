@@ -573,7 +573,7 @@ window.renderMerchantNameLink = (name, showLogo = true, extraClass = '') => {
 
         if (logoTask && logoTask.merchantLogo) {
 
-            logoHtml = `<img src="${logoTask.merchantLogo}" alt="شعار التاجر" class="w-8 h-8 rounded-full border border-gray-200 object-cover inline-block mr-2 align-middle">`;
+            logoHtml = `<img src="${logoTask.merchantLogo}" alt="شعار التاجر" loading="lazy" decoding="async" class="w-8 h-8 rounded-full border border-gray-200 object-cover inline-block mr-2 align-middle">`;
 
         }
 
@@ -2436,7 +2436,7 @@ function calculateTopPerformer(tasks) {
 
         performerEl.innerHTML = `${selectedRepName} (${contractsCount} عقود | متوسط ${avgAchieved.toFixed(1)}%)`;
 
-        performerIconContainer.innerHTML = `<img src="${imgFileName}" alt="${selectedRepName}" class="w-full h-full object-cover rounded-xl shadow-sm">`;
+        performerIconContainer.innerHTML = `<img src="${imgFileName}" alt="${selectedRepName}" decoding="async" class="w-full h-full object-cover rounded-xl shadow-sm">`;
 
         performerIconContainer.className = "bg-white border border-orange-200 p-0.5 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0 overflow-hidden";
 
@@ -2566,7 +2566,7 @@ function calculateTopTeam(tasks) {
 
         teamEl.innerHTML = `${selectedTeamName} (${contractsCount} عقود | متوسط ${avgAchieved.toFixed(1)}%)`;
 
-        teamIconContainer.innerHTML = `<img src="${logoFileName}" alt="${selectedTeamName}" class="w-full h-full object-contain p-1">`;
+        teamIconContainer.innerHTML = `<img src="${logoFileName}" alt="${selectedTeamName}" decoding="async" class="w-full h-full object-contain p-1">`;
 
         teamIconContainer.className = "bg-white border border-blue-200 p-0.5 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0 overflow-hidden";
 
@@ -2889,7 +2889,7 @@ window.renderTasks = (grouped) => {
             const merchantProfileBtn = `<button onclick="openMerchantProfile('${window.safeString(baseN)}')" class="bg-purple-100 text-kanjo-primary hover:bg-purple-200 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-sm"><i class="fa-solid fa-id-card"></i> <span>بطاقة التاجر</span></button>`;
 
             const merchantLogoHtml = t.merchantLogo
-                ? `<img src="${t.merchantLogo}" alt="شعار التاجر" class="w-10 h-10 object-contain rounded-lg border border-purple-100 bg-white p-0.5 shadow-sm">`
+                ? `<img src="${t.merchantLogo}" alt="شعار التاجر" loading="lazy" decoding="async" class="w-10 h-10 object-contain rounded-lg border border-purple-100 bg-white p-0.5 shadow-sm">`
                 : '';
 
             const updateLogoBtn = `<button onclick="openMerchantLogoUpdate('${t.id}')" class="bg-amber-50 text-amber-700 hover:bg-amber-100 px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-amber-200 shadow-sm"><i class="fa-solid fa-image"></i> <span>تحديث اللوجو</span></button>`;

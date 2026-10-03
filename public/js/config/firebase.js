@@ -528,12 +528,15 @@ const restPatchDocument = async (segments, data) => {
 };
 
 /* Reads the `tasks` collection straight over REST. `team` scopes a rep to their
-   own team; `date` scopes to a single day (omit for the full archive). */
+   own team; `date` scopes to a single day (omit for the full archive).
+   Day-scoped reads keep the full document because the live dashboard cards paint
+   the embedded Base64 `merchantLogo`. Only the date-less archive read drops that
+   blob, via the shared mask (see `restFetchTasksArchive`). */
 const restFetchTasks = async ({ team = null, date = null } = {}) => {
     const filters = [];
     if (team) filters.push(['team', 'EQUAL', team]);
     if (date) filters.push(['time', 'EQUAL', date]);
-    const docs = await restRunQuery('tasks', filters);
+    const docs = await restRunQuery('tasks', filters, null, date ? undefined : { select: TASKS_ARCHIVE_SELECT });
     /* runQuery preserves no order without an explicit orderBy; the dashboard
        expects newest-first, so sort by the `time` field descending. */
     docs.sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')));

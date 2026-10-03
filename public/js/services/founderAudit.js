@@ -702,7 +702,7 @@ const founderAuditCardHtml = (product, mode) => {
     const image = founderAuditProductImage(product);
     const thumb = image ? founderAuditThumbnailUrl(image) : '';
     const imageHtml = thumb
-        ? '<img src="' + founderAuditEscapeHtml(thumb) + '" alt="" class="w-full h-full object-cover" loading="lazy" onerror="this.style.display=\'none\'">'
+        ? '<img src="' + founderAuditEscapeHtml(thumb) + '" alt="" class="w-full h-full object-cover" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">'
         : '<i class="fa-regular fa-image text-2xl text-slate-300"></i>';
     /* Clickable thumbnail with a hover affordance; opens the full-resolution
        lightbox. Rows without an image keep a plain, non-interactive box. */

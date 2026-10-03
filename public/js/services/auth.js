@@ -237,9 +237,9 @@ function applyThemeAndShowDashboard() {
     const avatarContainer = document.getElementById('userAvatarContainer');
     if (avatarContainer) {
         if (window.userImageMap && window.userImageMap[currentUser.name]) {
-            avatarContainer.innerHTML = `<img src="${window.userImageMap[currentUser.name]}" alt="${currentUser.name}" class="w-7 h-7 rounded-full object-cover border border-purple-300 shadow-sm">`;
+            avatarContainer.innerHTML = `<img src="${window.userImageMap[currentUser.name]}" alt="${currentUser.name}" decoding="async" class="w-7 h-7 rounded-full object-cover border border-purple-300 shadow-sm">`;
         } else {
-            avatarContainer.innerHTML = `<img src="logo.png" alt="Kanjo" class="w-7 h-7 rounded-full object-contain p-0.5 bg-white border border-purple-200">`;
+            avatarContainer.innerHTML = `<img src="logo.png" alt="Kanjo" decoding="async" class="w-7 h-7 rounded-full object-contain p-0.5 bg-white border border-purple-200">`;
         }
     }
     

@@ -976,7 +976,7 @@ const catalogClickableThumbHtml = (p, opts) => {
     if (!thumb || !full) {
         return `<div class="${boxClass}" ${click} title="عرض الصورة" role="button"><i class="fa-regular fa-image"></i></div>`;
     }
-    return `<img src="${thumb}" data-full-img="${full}" alt="" loading="lazy" class="${imgClass}" ${click} title="عرض الصورة بالحجم الكامل" onerror="this.style.display='none'">`;
+    return `<img src="${thumb}" data-full-img="${full}" alt="" loading="lazy" decoding="async" class="${imgClass}" ${click} title="عرض الصورة بالحجم الكامل" onerror="this.style.display='none'">`;
 };
 
 /* Open the shared lightbox for a specific product, resolving its full-resolution
@@ -1191,7 +1191,7 @@ const renderCatalogSavedImages = (product) => {
     box.innerHTML = urls.map((u) => {
         const thumb = catalogEscapeHtml(catalogDriveThumbnailUrl(u) || catalogDriveViewUrl(u) || u);
         const full = catalogEscapeHtml(catalogDriveViewUrl(u) || u);
-        return `<img src="${thumb}" data-full="${full}" alt="صورة محفوظة" class="w-20 h-20 rounded-xl object-cover border-2 border-[#230535]/25 shadow-sm cursor-pointer" onclick="openImageLightbox(this)" data-full-img="${full}" onerror="if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full;}else{this.style.display='none';}">`;
+        return `<img src="${thumb}" data-full="${full}" alt="صورة محفوظة" loading="lazy" decoding="async" class="w-20 h-20 rounded-xl object-cover border-2 border-[#230535]/25 shadow-sm cursor-pointer" onclick="openImageLightbox(this)" data-full-img="${full}" onerror="if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full;}else{this.style.display='none';}">`;
     }).join('');
 };
 
@@ -1412,7 +1412,7 @@ window.searchMasterCatalog = () => {
         const thumbSrc = catalogEscapeHtml(masterCatalogThumbUrl(item.image_url));
         const fullSrc = catalogEscapeHtml(masterCatalogFullImageUrl(item.image_url) || item.image_url || '');
         const thumb = thumbSrc
-            ? `<img src="${thumbSrc}" data-full="${fullSrc}" alt="" class="w-14 h-14 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full;}else{this.style.display='none';}">`
+            ? `<img src="${thumbSrc}" data-full="${fullSrc}" alt="" loading="lazy" decoding="async" class="w-14 h-14 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="if(this.dataset.full&&this.src!==this.dataset.full){this.src=this.dataset.full;}else{this.style.display='none';}">`
             : `<div class="w-14 h-14 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
         return `<button type="button" onclick="selectMasterCatalogItem('${id}')" class="w-full bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3 text-right hover:bg-[#FFD700]/10 transition">
             ${thumb}
@@ -1591,7 +1591,7 @@ const renderCatalogNameSuggestions = () => {
             : catalogEscapeHtml(product.base_price);
         const thumb = catalogProductThumbUrl(product);
         const thumbHtml = thumb
-            ? `<img src="${catalogEscapeHtml(thumb)}" alt="" loading="lazy" class="w-11 h-11 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+            ? `<img src="${catalogEscapeHtml(thumb)}" alt="" loading="lazy" decoding="async" class="w-11 h-11 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
             : `<div class="w-11 h-11 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
         return `<button type="button" data-catalog-suggest-id="${id}" class="w-full flex items-center gap-3 px-3 py-2 text-right hover:bg-[#FFD700]/15 active:bg-[#FFD700]/25 transition border-b border-purple-50 last:border-b-0">
             ${thumbHtml}
@@ -2432,6 +2432,17 @@ window.toggleCatalogGroupedAccordion = (elId, event) => {
         window[mapName] = openMap;
     }
 
+    /* Lazy group body: collapsed groups ship an empty body, so build the cards
+       on the first expand. Subsequent toggles reuse the already-built nodes. */
+    if (willOpen && body.children.length === 0) {
+        const renderKey = accordion.getAttribute('data-catalog-render-key') || '';
+        const registry = window._catalogAccordionRegistry && window._catalogAccordionRegistry[renderKey];
+        const groupProducts = registry && registry.groups ? registry.groups[merchantName] : null;
+        if (registry && Array.isArray(groupProducts)) {
+            body.innerHTML = groupProducts.map(registry.renderCard).join('');
+        }
+    }
+
     /* Release the height lock once the browser has laid out the new content. */
     requestAnimationFrame(() => {
         requestAnimationFrame(() => { accordion.style.minHeight = ''; });
@@ -2454,13 +2465,22 @@ const renderCatalogMerchantAccordionList = (list, products, openMapName, idPrefi
     }
     const openMap = window[openMapName] || {};
     window[openMapName] = openMap;
+    /* Lazy group rendering: collapsed merchant groups contribute ONLY their
+       header to the DOM; the product cards are built on first expand. A rep
+       with 1,500+ products therefore pays for a handful of headers on mount
+       instead of building every card synchronously. The group payload and its
+       card renderer are stashed in a registry the toggle looks up. */
+    window._catalogAccordionRegistry = window._catalogAccordionRegistry || {};
+    const registry = { renderCard, groups: {} };
+    window._catalogAccordionRegistry[idPrefix] = registry;
     list.innerHTML = groupCatalogProductsByMerchant(products).map((group) => {
         const accordionId = catalogMerchantDomId(group.merchantName);
         const elId = idPrefix + '-' + accordionId;
         const safeName = catalogEscapeHtml(group.merchantName);
         const isOpen = !!openMap[group.merchantName];
-        const cards = group.products.map(renderCard).join('');
-        return `<div id="${elId}" data-catalog-merchant="${safeName}" data-open-map="${openMapName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
+        registry.groups[group.merchantName] = group.products;
+        const cards = isOpen ? group.products.map(renderCard).join('') : '';
+        return `<div id="${elId}" data-catalog-merchant="${safeName}" data-open-map="${openMapName}" data-catalog-render-key="${idPrefix}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
             <button type="button" onclick="toggleCatalogGroupedAccordion('${elId}', event)" class="w-full bg-white text-[#230535] px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#FFD700]/10 transition">
                 <span class="font-black text-sm truncate">${safeName}</span>
                 <span class="flex items-center gap-2 shrink-0">
@@ -2600,7 +2620,7 @@ const renderCatalogMerchantFolderCard = (group) => {
     const counts = catalogProductStatusCounts(group.products);
     const logo = catalogMerchantLogoUrl(group.merchantName);
     const logoHtml = logo
-        ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
+        ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" decoding="async" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
         : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
     return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card">
         <div class="flex justify-center mb-3">${logoHtml}</div>
@@ -2638,6 +2658,16 @@ const renderCatalogAllProductCard = (p) => {
 
 const catalogAllProductsEmptyHtml = '<div class="col-span-full text-center py-8 text-slate-400 font-bold"><i class="fa-solid fa-box-open text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مرفوعة بعد</div></div>';
 
+/* Initial-render cap for a single merchant's product grid. A merchant can hold
+   hundreds of products; building every card synchronously on mount janks
+   low-end devices, so only the first page is painted and the rest is revealed
+   on demand through "عرض المزيد". */
+const CATALOG_MERCHANT_GRID_PAGE = 120;
+window.showMoreCatalogMerchantProducts = () => {
+    window._catalogMerchantRenderLimit = (Number(window._catalogMerchantRenderLimit) || CATALOG_MERCHANT_GRID_PAGE) + CATALOG_MERCHANT_GRID_PAGE;
+    renderCatalogAllProductsListNow();
+};
+
 /* Neutral skeleton placeholder used while the first REST response is in flight.
    It prevents the widgets from flashing an empty-state message or a "(0)" badge
    before real data arrives, which reads as broken/dummy data to employees. */
@@ -2672,6 +2702,7 @@ window.openCatalogAllProductsMerchant = (encodedName, event) => {
     window._catalogMerchantNavLock = now;
 
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
+    window._catalogMerchantRenderLimit = CATALOG_MERCHANT_GRID_PAGE;
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -3090,7 +3121,13 @@ const renderCatalogAllProductsListNow = () => {
             </div>`;
         }
         list.className = 'catalog-card-grid catalog-product-grid';
-        list.innerHTML = selectedGroup.products.map(renderCatalogAllProductCard).join('');
+        const gridLimit = Math.max(CATALOG_MERCHANT_GRID_PAGE, Number(window._catalogMerchantRenderLimit) || CATALOG_MERCHANT_GRID_PAGE);
+        const shownProducts = selectedGroup.products.slice(0, gridLimit);
+        const remainingProducts = selectedGroup.products.length - shownProducts.length;
+        list.innerHTML = shownProducts.map(renderCatalogAllProductCard).join('')
+            + (remainingProducts > 0
+                ? `<div class="col-span-full text-center py-4"><button type="button" onclick="showMoreCatalogMerchantProducts()" class="bg-[#230535] text-[#FFD700] px-5 py-3 rounded-xl text-xs font-black hover:opacity-90 transition inline-flex items-center gap-2"><i class="fa-solid fa-chevron-down"></i> عرض المزيد (${remainingProducts} متبقي)</button></div>`
+                : '');
         return;
     }
     window._catalogAllProductsSelectedMerchant = '';
@@ -3217,7 +3254,7 @@ const renderCatalogDeleteRequestCard = (p) => {
     const requestedBy = catalogEscapeHtml(p.deleteRequestedBy || p.createdBy || '');
     const thumb = catalogEscapeHtml(catalogProductThumbUrl(p));
     const thumbHtml = thumb
-        ? `<img src="${thumb}" alt="" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
+        ? `<img src="${thumb}" alt="" loading="lazy" decoding="async" class="w-16 h-16 rounded-xl object-cover border border-[#230535]/15 shrink-0" onerror="this.style.display='none'">`
         : `<div class="w-16 h-16 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image"></i></div>`;
     return `<div class="bg-white border border-red-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
         ${thumbHtml}
@@ -3829,7 +3866,7 @@ const renderCatalogProductCard = (p, mode) => {
             actionHtml = uploadBtn;
         }
         const thumbHtml = thumb
-            ? `<img src="${thumb}" alt="" class="w-14 h-14 rounded-lg object-cover border ${hasEnhanced ? 'catalog-enhanced-thumb' : 'border-[#FFD700]/40'} shrink-0" onerror="this.style.display='none'">`
+            ? `<img src="${thumb}" alt="" loading="lazy" decoding="async" class="w-14 h-14 rounded-lg object-cover border ${hasEnhanced ? 'catalog-enhanced-thumb' : 'border-[#FFD700]/40'} shrink-0" onerror="this.style.display='none'">`
             : `<div class="w-14 h-14 rounded-lg grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 shrink-0"><i class="fa-regular fa-image text-lg"></i></div>`;
         const downloadBtn = u
             ? `<button type="button" onclick="downloadCatalogRawImage('${id}', ${i})" class="bg-white border border-[#230535]/15 text-[#230535] px-2.5 py-1.5 rounded-lg text-[10px] font-black hover:bg-[#230535]/5 transition flex items-center justify-center gap-1">
@@ -3951,6 +3988,12 @@ window.viewCatalogEnhancedImage = (productId, imageIndex) => {
 
 window.loadDoneCatalogProducts = async () => {
     if (!window.isCatalogContentUser()) return;
+    /* Strict cache-first: the "done" set is already in memory (from the content
+       "done" tab, the export dropdown, or a prior export) — reuse it instead of
+       issuing another one-read-per-document query. */
+    if (window._catalogDoneLoaded && Array.isArray(window.doneCatalogProductsCache) && window.doneCatalogProductsCache.length) {
+        return window.doneCatalogProductsCache;
+    }
     try {
         let items = null;
         if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
@@ -4066,6 +4109,13 @@ const fetchDoneCatalogProducts = async () => {
        the "done" set locally instead of issuing another server query. */
     if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
         return window.allCatalogProductsCache.filter((p) => p && p.status === 'done');
+    }
+    /* Stable done-cache guard: once the done set has been fetched (by this
+       function, the content "done" tab, or the all-products load) reuse it so
+       repeated callers — the export dropdown's onfocus in particular — cost
+       ZERO Firestore reads instead of re-reading every done document. */
+    if (window._catalogDoneLoaded && Array.isArray(window.doneCatalogProductsCache) && window.doneCatalogProductsCache.length) {
+        return window.doneCatalogProductsCache;
     }
     /* REST-first (CORS-enabled, survives a blocked SDK transport). The result is
        cached so a second export in the same session is free, and the SDK
@@ -5668,6 +5718,16 @@ window.exportDoneCatalogProducts = async () => {
 };
 
 const fetchAllCatalogProducts = async () => {
+    /* REST-first with the shared compact field mask so this mass read never
+       pulls oversized blobs (description/image/base64) that its callers do not
+       use. The SDK getDocs (no field mask) remains the last-resort fallback. */
+    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            return (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS })) || [];
+        } catch (err) {
+            console.warn('[catalog] full REST fetch failed; trying SDK:', err);
+        }
+    }
     const snap = await window.getDocs(window.collection(window.db, CATALOG_COLLECTION));
     const items = [];
     snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
