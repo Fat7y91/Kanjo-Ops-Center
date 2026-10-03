@@ -2874,6 +2874,25 @@ const catalogUniqueCategories = (products) => {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ar'));
 };
 
+/* Root-level vendor types only (taxonomy fix).
+   `window.categories` (constants.js) is the canonical Kanjo vendor-type list.
+   Product documents carry their vendor's activity label in `category`, but a
+   minority also store product-level sub-categories (e.g. "مشروبات ساخنة",
+   "سلطات", "أدوية"). The UI filter must surface ONLY root vendor types, so the
+   option list is intersected with the canonical root list and returned in that
+   canonical order — never a product-level sub-category. Degrades to the full
+   distinct set only if the constant is unavailable. */
+const catalogRootVendorCategories = (products) => {
+    const root = Array.isArray(window.categories) ? window.categories : [];
+    const present = new Set();
+    (products || []).forEach((p) => {
+        const cat = String((p && p.category) || '').trim();
+        if (cat) present.add(cat);
+    });
+    if (!root.length) return catalogUniqueCategories(products);
+    return root.filter((cat) => present.has(cat));
+};
+
 /* Category is stored per product (`category`, e.g. "🍔 مطاعم وكافيهات"). The
    default "الكل" is the empty string and is a pass-through. */
 const catalogFilterProductsByCategory = (products, category) => {
@@ -2912,6 +2931,99 @@ const catalogSortMerchantGroups = (groups, sortMode) => {
     return groups;
 };
 
+/* ─── Merchant-card status filters (client-side, zero reads) ───
+   Each merchant card is triaged from its OWN product counts, then the selected
+   status narrows the already-loaded folder grid. Nothing here touches Firestore. */
+
+/* Buckets a merchant group from its product counts:
+     empty        — the merchant has no products at all
+     full_done    — every product is completed (and there is at least one)
+     full_pending — every product is still pending (and there is at least one)
+     partial      — a mix of completed and pending products */
+const catalogMerchantStatusKey = (group) => {
+    const counts = catalogProductStatusCounts(group && group.products);
+    if (counts.total === 0) return 'empty';
+    if (counts.pending === 0) return 'full_done';
+    if (counts.approved === 0) return 'full_pending';
+    return 'partial';
+};
+
+const CATALOG_STATUS_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/* A merchant is "recent" when its newest product was added within the last 7
+   days, and "has delete requests" when any of its products is flagged. */
+const catalogMerchantIsRecent = (group) => {
+    const newest = catalogGroupNewestMillis(group);
+    return newest > 0 && (Date.now() - newest) <= CATALOG_STATUS_RECENT_MS;
+};
+const catalogMerchantHasDeleteRequest = (group) => (group && group.products || [])
+    .some((p) => !!(p && (p.deleteRequested || p.deleteRequestedBy)));
+
+const catalogMerchantStatusFilters = [
+    { key: '', label: 'الكل', icon: 'fa-layer-group' },
+    { key: 'full_done', label: 'مكتمل بالكامل', icon: 'fa-circle-check' },
+    { key: 'full_pending', label: 'قيد المعالجة بالكامل', icon: 'fa-hourglass-half' },
+    { key: 'partial', label: 'مكتمل جزئي', icon: 'fa-circle-half-stroke' },
+    { key: 'empty', label: 'بدون منتجات', icon: 'fa-box-open' },
+    { key: 'recent', label: 'نشاط حديث', icon: 'fa-bolt' },
+    { key: 'delete', label: 'طلبات حذف', icon: 'fa-trash-can' }
+];
+
+const catalogMerchantGroupsByStatus = (groups, status) => {
+    const key = String(status || '');
+    if (!key) return groups || [];
+    if (key === 'recent') return (groups || []).filter(catalogMerchantIsRecent);
+    if (key === 'delete') return (groups || []).filter(catalogMerchantHasDeleteRequest);
+    return (groups || []).filter((g) => catalogMerchantStatusKey(g) === key);
+};
+
+const catalogMerchantStatusCounts = (groups) => {
+    const counts = { '': (groups || []).length, full_done: 0, full_pending: 0, partial: 0, empty: 0, recent: 0, delete: 0 };
+    (groups || []).forEach((g) => {
+        const key = catalogMerchantStatusKey(g);
+        counts[key] = (counts[key] || 0) + 1;
+        if (catalogMerchantIsRecent(g)) counts.recent += 1;
+        if (catalogMerchantHasDeleteRequest(g)) counts.delete += 1;
+    });
+    return counts;
+};
+
+const renderCatalogStatusFilterBar = (groups) => {
+    const bar = document.getElementById('catalogStatusFilterBar');
+    if (!bar) return;
+    const counts = catalogMerchantStatusCounts(groups);
+    const active = String(window._catalogStatusFilter || '');
+    bar.innerHTML = catalogMerchantStatusFilters.map((f) => {
+        const on = f.key === active;
+        return `<button type="button" onclick="onCatalogStatusFilterChange('${f.key}')" class="catalog-status-chip${on ? ' is-active' : ''}" aria-pressed="${on ? 'true' : 'false'}">
+            <i class="fa-solid ${f.icon}"></i>
+            <span>${f.label}</span>
+            <span class="catalog-status-chip-count">${counts[f.key] || 0}</span>
+        </button>`;
+    }).join('');
+};
+
+window.onCatalogStatusFilterChange = (key) => {
+    window._catalogStatusFilter = String(key || '');
+    /* A merchant detail view would hide the filtered folders, so snap back to
+       the folder grid while a status filter is active. */
+    window._catalogAllProductsSelectedMerchant = '';
+    renderCatalogAllProductsListNow();
+};
+
+const catalogStatusNoResultsHtml = (status) => {
+    const filter = catalogMerchantStatusFilters.find((f) => f.key === String(status || ''));
+    const label = filter ? filter.label : '';
+    return `<div class="col-span-full text-center py-10 text-slate-400 font-bold">
+        <i class="fa-solid fa-filter-circle-xmark text-3xl text-[#230535]/30 mb-3"></i>
+        <div class="text-base text-[#230535] font-black mb-1">لا يوجد تجار بهذه الحالة</div>
+        <div class="text-xs">الحالة المحددة: <span class="text-[#E57723]">${catalogEscapeHtml(label)}</span></div>
+        <button type="button" onclick="onCatalogStatusFilterChange('')" class="mt-4 bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition inline-flex items-center gap-2">
+            <i class="fa-solid fa-xmark"></i> كل الحالات
+        </button>
+    </div>`;
+};
+
 /* Keep the two <select> controls in sync with the loaded data. Options are
    rebuilt only when the category list actually changes, so the native popup
    is not reset (and the current choice is preserved) on every keystroke. */
@@ -2919,7 +3031,8 @@ let _catalogCategoryOptionsSig = null;
 const syncCatalogFilterControls = (baseProducts) => {
     const categorySelect = document.getElementById('catalogCategoryFilter');
     if (categorySelect) {
-        const categories = catalogUniqueCategories(baseProducts);
+        /* Root vendor types ONLY — never product-level sub-categories. */
+        const categories = catalogRootVendorCategories(baseProducts);
         const sig = categories.join('\u0001');
         if (_catalogCategoryOptionsSig !== sig) {
             _catalogCategoryOptionsSig = sig;
@@ -3100,7 +3213,17 @@ const renderCatalogAllProductsListNow = () => {
             : (categoryFilter ? catalogCategoryNoResultsHtml(categoryFilter) : catalogAllProductsEmptyHtml);
         return;
     }
-    const groups = catalogSortMerchantGroups(groupCatalogProductsByMerchant(products), sortMode);
+    const allGroups = catalogSortMerchantGroups(groupCatalogProductsByMerchant(products), sortMode);
+    /* Status chips reflect the current (rep/category/search-scoped) merchant
+       set, then the active status narrows the folder grid. Pure in-memory. */
+    renderCatalogStatusFilterBar(allGroups);
+    const statusFilter = String(window._catalogStatusFilter || '');
+    const groups = catalogMerchantGroupsByStatus(allGroups, statusFilter);
+    if (!groups.length && statusFilter && list) {
+        list.className = 'catalog-card-grid';
+        list.innerHTML = catalogStatusNoResultsHtml(statusFilter);
+        return;
+    }
     const selected = String(window._catalogAllProductsSelectedMerchant || '');
     const selectedGroup = selected ? groups.find((g) => g.merchantName === selected) : null;
     if (selected && selectedGroup) {
@@ -5983,9 +6106,10 @@ window.startCatalogListeners = () => {
     window._catalogAllProductsLoaded = false;
     window._catalogDeleteRequestsLoaded = false;
     /* Client-side view state for the "all products" folder grid: a category
-       filter (empty = الكل) and a sort mode. Reset per session so a previous
-       user's selection can never leak into the next one. */
+       filter (empty = الكل), a merchant-status filter and a sort mode. Reset per
+       session so a previous user's selection can never leak into the next one. */
     window._catalogCategoryFilter = '';
+    window._catalogStatusFilter = '';
     window._catalogSortMode = 'newest';
     _catalogCategoryOptionsSig = null;
     /* Result-size signatures behind the cheap count probes; `null` means "no
