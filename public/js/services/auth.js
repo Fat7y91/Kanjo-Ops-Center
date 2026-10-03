@@ -350,6 +350,15 @@ function applyThemeAndShowDashboard() {
             authorizationView.removeAttribute('data-built');
         }
 
+        /* Data-Entry menu importer (PIN 2468). Hidden from every other role and
+           force-closed on a non-authorized session, same as the letter view. */
+        const canImportMenu = (typeof window.isMenuImportUser === 'function') ? window.isMenuImportUser() : false;
+        if (typeof window.renderMenuImportNav === 'function') {
+            window.renderMenuImportNav();
+        }
+        const menuImportModal = document.getElementById('menuImportModal');
+        if (menuImportModal && !canImportMenu) menuImportModal.classList.add('hidden');
+
         if (typeof window.kpiStartActiveTracker === 'function') {
             window.kpiStartActiveTracker();
         }

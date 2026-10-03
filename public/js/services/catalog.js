@@ -5081,6 +5081,10 @@ const mapVariantToKanjo = (rawName, rawValue) => {
         };
     });
 };
+/* Exposed for the Data-Entry menu importer so a raw size cell (e.g. "وسط") is
+   translated to its standard Dashboard Template value (ID:2 | ATTR:1 | وسط)
+   at import time, using the exact same alias dictionary the export uses. */
+window.kanjoMapVariantToKanjo = mapVariantToKanjo;
 
 /* Sentinel + flat option list used by the variant conflict modal so the admin
    can pick any valid Kanjo attribute (or delete an invalid variant). */

@@ -1130,6 +1130,20 @@
 
 
 
+                <div id="menuImportNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openMenuImportModal()" class="relative text-slate-600 hover:text-kanjo-primary transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-file-import text-kanjo-dark"></i>
+
+                        <span>استيراد منيو (Excel)</span>
+
+                    </button>
+
+                </div>
+
+
+
 
                 <div id="notificationsWrapper" class="hidden relative mr-2">
 
@@ -2724,6 +2738,66 @@
         <!-- ═══════════ AUTHORIZATION ISSUANCE — DATA-ENTRY OPERATOR ONLY ═══════════ -->
 
         <div id="authorizationView" class="hidden"></div>
+
+        <!-- ═══════════ MENU EXCEL IMPORTER — DATA-ENTRY OPERATOR ONLY (PIN 2468) ═══════════ -->
+
+        <div id="menuImportModal" onclick="if(event.target===this)closeMenuImportModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]">
+
+            <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+
+                <div class="flex justify-between items-center mb-4">
+
+                    <h3 class="font-black text-lg sm:text-xl text-kanjo-dark"><i class="fa-solid fa-file-import ml-2"></i>استيراد منيو (Excel)</h3>
+
+                    <button type="button" onclick="closeMenuImportModal()" class="text-slate-400 hover:text-red-500 p-1" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+                </div>
+
+                <div class="space-y-4">
+
+                    <div>
+
+                        <label class="block font-black text-sm text-kanjo-dark mb-1.5">التاجر المستهدف</label>
+
+                        <select id="menuImportMerchant" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                            <option value="">اختر التاجر...</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <label for="menuImportFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[64px] px-4 py-4 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
+
+                            <i class="fa-solid fa-file-excel text-2xl text-[#230535]"></i>
+
+                            <span id="menuImportFileName" class="text-[11px] font-bold text-slate-500">اختر ملف المنيو (xlsx / xls / csv)</span>
+
+                        </label>
+
+                        <input type="file" id="menuImportFile" accept=".xlsx,.xls,.csv" class="sr-only" onchange="onMenuImportFileChange(event)">
+
+                    </div>
+
+                    <div id="menuImportSummary" class="hidden text-xs font-bold text-slate-600 bg-kanjo-light border border-purple-100 rounded-xl p-3 space-y-1"></div>
+
+                    <div id="menuImportStatus" class="text-xs font-bold text-slate-600"></div>
+
+                    <button type="button" id="menuImportRunBtn" onclick="runMenuImport()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-file-import"></i> استيراد المنتجات
+
+                    </button>
+
+                    <p class="text-[11px] font-bold text-slate-400 leading-relaxed">العناوين المطلوبة: القسم، الصنف، المكونات، والحجم/السعر ١ إلى ٣. تُحوَّل الأحجام تلقائياً إلى معرّفات القالب القياسية، وتُرفع المنتجات إلى قائمة المراجعة بحالة قيد المراجعة.</p>
+
+                </div>
+
+            </div>
+
+        </div>
 
         <!-- ═══════════ KPI — FIX FAKE DESCRIPTIONS MODAL (manager preview) ═══════════ -->
 
