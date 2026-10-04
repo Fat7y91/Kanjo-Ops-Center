@@ -2,6 +2,11 @@
 
 const CATALOG_COLLECTION = 'merchant_products';
 const CATALOG_GAS_URL = 'https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec';
+/* Previous active deployment of the SAME Apps Script project. A republished or
+   temporarily-unpublished deployment answers uploads with a hard HTTP 404, so
+   this is kept as an automatic failover: one dead endpoint must never block a
+   founder/rep image upload. It shares the same Drive root and payload schema. */
+const CATALOG_GAS_URL_LEGACY = 'https://script.google.com/macros/s/AKfycbzWid4xw-1Vo4y3gNwUPSs9SYYYVEZMVCZyeilNiNyRCkgfLWSjj9s3WmpvX1G4Octv/exec';
 const CATALOG_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
 
@@ -137,7 +142,20 @@ window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role 
 
 window.canUseStagingCatalog = () => !!window.isDataEntryUser();
 
-const catalogScriptUrl = () => (window.KANJO_CATALOG_SCRIPT_URL || CATALOG_GAS_URL || '').trim();
+/* Ordered, de-duplicated, syntactically-valid Apps Script endpoints the upload
+   pipeline may use. `window.KANJO_CATALOG_SCRIPT_URL` (runtime config) wins,
+   then the current deployment, then the legacy one as an automatic failover. */
+const catalogGasEndpoints = () => {
+    const seen = new Set();
+    return [window.KANJO_CATALOG_SCRIPT_URL, CATALOG_GAS_URL, CATALOG_GAS_URL_LEGACY]
+        .map((u) => String(u || '').trim())
+        .filter((u) => {
+            if (!u || seen.has(u)) return false;
+            if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u)) return false;
+            seen.add(u);
+            return true;
+        });
+};
 
 const catalogDriveFileId = (value) => {
     const s = String(value || '');
@@ -306,8 +324,69 @@ const catalogGasResponseError = (ok, status, result) => {
     return err;
 };
 
+/* Run one Apps Script endpoint through the retry/backoff envelope. On success
+   `opts.mapResult(result)` yields the caller's value (a Drive URL); a success
+   body without a usable URL is treated as transient contention, exactly as
+   before. Hard routing failures (404/410/401/403) propagate so the caller can
+   fail over to the backup deployment. */
+const catalogGasPostToEndpoint = async (url, payload, opts) => {
+    let lastError = null;
+    for (let attempt = 1; attempt <= CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS; attempt++) {
+        try {
+            const { ok, status, result } = await catalogUploadAttempt(url, payload);
+            if (ok && result && result.status === 'success') {
+                const mapped = opts.mapResult(result);
+                if (mapped) return mapped;
+            }
+            /* A 200 without a usable URL is still transient GAS contention. */
+            throw catalogGasResponseError(ok, status, result)
+                || Object.assign(new Error((result && result.message) || 'GAS API Error'), { retryable: true, contention: true });
+        } catch (error) {
+            lastError = error;
+            const maxAttempts = error.contention ? CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS : CATALOG_UPLOAD_MAX_ATTEMPTS;
+            const canRetry = !!error.retryable && attempt < maxAttempts;
+            if (!canRetry) {
+                /* Tag with the attempt so the failover layer logs the exact
+                   "GAS Upload Failed (attempt N)" line only once, for the final
+                   endpoint that actually fails. */
+                error.attempt = attempt;
+                throw error;
+            }
+            const wait = catalogUploadRetryDelay(attempt, !!error.contention);
+            console.warn('[catalog] ' + opts.retryLog + ' attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
+            await catalogUploadSleep(wait);
+        }
+    }
+    throw lastError || new Error('UPLOAD_FAILED');
+};
+
+/* Post to the first live Apps Script endpoint. A dead/unpublished deployment
+   answers with a hard 404 (the founder-upload failure), so routing errors
+   automatically retry the request against the next candidate endpoint. */
+const catalogGasPostWithFailover = async (payload, opts) => {
+    const endpoints = catalogGasEndpoints();
+    if (!endpoints.length) throw new Error('NO_GAS_URL');
+    let lastError = null;
+    for (let i = 0; i < endpoints.length; i++) {
+        try {
+            return await catalogGasPostToEndpoint(endpoints[i], payload, opts);
+        } catch (error) {
+            lastError = error;
+            const routing = /^GAS_HTTP_(404|410|401|403)$/.test(String((error && error.message) || ''));
+            if (routing && i < endpoints.length - 1) {
+                console.warn('[catalog] ' + opts.retryLog + ' endpoint unavailable (' + error.message + '); failing over to the backup GAS deployment');
+                continue;
+            }
+            console.error(opts.tag + ' Failed (attempt ' + (error.attempt || 1) + '):', error);
+            throw error;
+        }
+    }
+    throw lastError || new Error('UPLOAD_FAILED');
+};
+
+const catalogDriveResultUrl = (result) => catalogDriveViewUrl(result && (result.id || result.url));
+
 async function uploadCatalogImageToGas(base64Data, fileName, merchantName, imageType) {
-    const GAS_URL = catalogScriptUrl() || CATALOG_GAS_URL;
     const raw = String(base64Data || '');
     const base64Content = raw.includes(',') ? raw.split(',')[1] : raw;
     const mimeMatch = raw.match(/data:(.*?);/);
@@ -319,32 +398,11 @@ async function uploadCatalogImageToGas(base64Data, fileName, merchantName, image
         fileContent: base64Content,
         mimeType: mimeType
     });
-
-    let lastError = null;
-    for (let attempt = 1; attempt <= CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS; attempt++) {
-        try {
-            const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
-            if (ok && result && result.status === 'success') {
-                const directUrl = catalogDriveViewUrl(result.id || result.url);
-                if (directUrl) return directUrl;
-            }
-            /* A 200 without a usable URL is still transient GAS contention. */
-            throw catalogGasResponseError(ok, status, result)
-                || Object.assign(new Error((result && result.message) || 'GAS API Error'), { retryable: true, contention: true });
-        } catch (error) {
-            lastError = error;
-            const maxAttempts = error.contention ? CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS : CATALOG_UPLOAD_MAX_ATTEMPTS;
-            const canRetry = !!error.retryable && attempt < maxAttempts;
-            if (!canRetry) {
-                console.error('GAS Upload Failed (attempt ' + attempt + '):', error);
-                throw error;
-            }
-            const wait = catalogUploadRetryDelay(attempt, !!error.contention);
-            console.warn('[catalog] upload attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
-            await catalogUploadSleep(wait);
-        }
-    }
-    throw lastError || new Error('UPLOAD_FAILED');
+    return catalogGasPostWithFailover(payload, {
+        tag: 'GAS Upload',
+        retryLog: 'upload',
+        mapResult: catalogDriveResultUrl
+    });
 }
 
 /* Shared raw-image upload used by the manager KPI preview's "missing image"
@@ -364,10 +422,9 @@ window.uploadCatalogRawImage = async (file, merchantName) => {
    into the selected pharmacy's Drive folder (imageType: 'copy_from_url') and
    return the NEW Drive view URL. Used by the Pharmacy Inventory Intake engine so
    the pharmacy owns its own copy instead of hot-linking the master catalog.
-   Reuses the same timeout/retry/backoff envelope as `uploadCatalogImageToGas`. */
+   Reuses the same timeout/retry/backoff envelope and endpoint failover as
+   `uploadCatalogImageToGas`. */
 window.copyCatalogImageFromUrl = async (sourceUrl, fileName, merchantName) => {
-    const GAS_URL = catalogScriptUrl() || CATALOG_GAS_URL;
-    if (!GAS_URL) throw new Error('NO_GAS_URL');
     const url = String(sourceUrl || '').trim();
     if (!url) throw new Error('NO_SOURCE_URL');
     const payload = JSON.stringify({
@@ -376,28 +433,11 @@ window.copyCatalogImageFromUrl = async (sourceUrl, fileName, merchantName) => {
         sourceUrl: url,
         fileName: fileName || 'image.jpg'
     });
-
-    let lastError = null;
-    for (let attempt = 1; attempt <= CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS; attempt++) {
-        try {
-            const { ok, status, result } = await catalogUploadAttempt(GAS_URL, payload);
-            if (ok && result && result.status === 'success') {
-                const directUrl = catalogDriveViewUrl(result.id || result.url);
-                if (directUrl) return directUrl;
-            }
-            throw catalogGasResponseError(ok, status, result)
-                || Object.assign(new Error((result && result.message) || 'GAS API Error'), { retryable: true, contention: true });
-        } catch (error) {
-            lastError = error;
-            const maxAttempts = error.contention ? CATALOG_UPLOAD_CONTENTION_MAX_ATTEMPTS : CATALOG_UPLOAD_MAX_ATTEMPTS;
-            const canRetry = !!error.retryable && attempt < maxAttempts;
-            if (!canRetry) throw error;
-            const wait = catalogUploadRetryDelay(attempt, !!error.contention);
-            console.warn('[catalog] image copy attempt ' + attempt + ' failed (' + (error.message || error) + '); retrying in ' + wait + 'ms');
-            await catalogUploadSleep(wait);
-        }
-    }
-    throw lastError || new Error('COPY_FAILED');
+    return catalogGasPostWithFailover(payload, {
+        tag: 'GAS Copy',
+        retryLog: 'image copy',
+        mapResult: catalogDriveResultUrl
+    });
 };
 
 const listFinalizedMerchants = () => {
@@ -2673,6 +2713,7 @@ const catalogMerchantLogoUrl = (merchantName) => {
     });
     return logoTask && logoTask.merchantLogo ? String(logoTask.merchantLogo) : '';
 };
+window.catalogMerchantLogoUrl = catalogMerchantLogoUrl;
 
 const catalogProductStatusCounts = (products) => {
     let approved = 0;
@@ -3879,9 +3920,11 @@ const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
     }
     /* A completion changes the editor's global processed total and the imported
-       pool, so drop only those bounded, separate caches (never the full list). */
-    if (patch.status === 'done' && typeof window.kpiInvalidateImportCaches === 'function') {
-        window.kpiInvalidateImportCaches();
+       pool. Merge the row in place (zero reads) instead of dropping the global
+       completed set, which forced a full multi-thousand-doc re-read per
+       completion (`completions × N_done`). */
+    if (patch.status === 'done' && typeof window.kpiApplyLocalProductChange === 'function') {
+        window.kpiApplyLocalProductChange(productId, patch);
     }
     return patch;
 };

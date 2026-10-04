@@ -1,5 +1,42 @@
 /* Kanjo Ops — Advanced Modal Interactions */
 
+/* Direct download of the merchant logo stored on the task (`merchantLogo`,
+   usually a Base64 data-URI). Admins only — the button that calls this is
+   gated in openMerchantProfile. */
+window.downloadMerchantLogo = async () => {
+    const src = String(window._mpMerchantLogo || '').trim();
+    if (!src) {
+        if (window.showToast) window.showToast('لا يوجد لوجو محفوظ لهذا التاجر', false);
+        return;
+    }
+    const base = String((typeof activeMerchantBaseName !== 'undefined' && activeMerchantBaseName) || 'merchant').trim();
+    const safe = base.replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_') || 'merchant';
+    const mimeMatch = src.match(/^data:(image\/[a-zA-Z0-9.+-]+)[;,]/);
+    const ext = mimeMatch
+        ? (mimeMatch[1].split('/')[1] || 'png').replace('jpeg', 'jpg').replace('svg+xml', 'svg')
+        : 'png';
+    const filename = 'logo_' + safe + '.' + ext;
+    const trigger = (href, revoke) => {
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        if (revoke) setTimeout(() => URL.revokeObjectURL(href), 4000);
+    };
+    try {
+        if (src.startsWith('data:')) { trigger(src, false); return; }
+        const res = await fetch(src);
+        if (!res.ok) throw new Error('HTTP_' + res.status);
+        trigger(URL.createObjectURL(await res.blob()), true);
+    } catch (e) {
+        if (window.showToast) window.showToast('تعذر تحميل اللوجو', false);
+        console.error('[merchant] logo download failed:', e);
+    }
+};
+
 window.openMerchantProfile = (merchantBaseName) => {
 
     activeMerchantBaseName = merchantBaseName;
@@ -171,6 +208,33 @@ window.openMerchantProfile = (merchantBaseName) => {
     });
 
 
+
+    /* Merchant logo: display the stored logo for everyone, but only expose the
+       "تحميل اللوجو" (download) action to management. */
+    let merchantLogo = '';
+    try {
+        merchantLogo = window.catalogMerchantLogoUrl ? window.catalogMerchantLogoUrl(merchantBaseName) : '';
+    } catch (_) { merchantLogo = ''; }
+    window._mpMerchantLogo = merchantLogo || '';
+    const mpLogoRow = document.getElementById('mpLogoRow');
+    const mpLogoImg = document.getElementById('mpMerchantLogo');
+    const mpDownloadLogoBtn = document.getElementById('mpDownloadLogoBtn');
+    if (mpLogoImg && mpLogoRow) {
+        if (merchantLogo) {
+            mpLogoImg.src = merchantLogo;
+            mpLogoRow.classList.remove('hidden');
+            mpLogoRow.classList.add('flex');
+        } else {
+            mpLogoImg.removeAttribute('src');
+            mpLogoRow.classList.add('hidden');
+            mpLogoRow.classList.remove('flex');
+        }
+    }
+    if (mpDownloadLogoBtn) {
+        const canDownloadLogo = (window.canManageContracts ? window.canManageContracts() : false) && !!merchantLogo;
+        mpDownloadLogoBtn.classList.toggle('hidden', !canDownloadLogo);
+        mpDownloadLogoBtn.classList.toggle('inline-flex', canDownloadLogo);
+    }
 
     document.getElementById('mpMerchantCat').innerText = `الفئة: ${cat}`;
 

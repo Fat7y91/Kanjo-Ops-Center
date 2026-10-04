@@ -134,6 +134,49 @@ const kpiMediaWeight = (withImage, maxImages) => (
 );
 window.kpiMediaWeight = kpiMediaWeight;
 
+/* Single source of truth for the Kanjo weighted score. The manager board and
+   the rep's own live screen MUST both call this with the SAME team baselines,
+   otherwise a rep normalized only against themselves always reads ~100% while
+   the manager sees the true competitive score. */
+const kpiKanjoBreakdown = (r, baselines) => {
+    const b = baselines || {};
+    const maxProducts = Math.max(0, Number(b.maxProducts) || 0);
+    const maxTime = Math.max(0, Number(b.maxTime) || 0);
+    const maxImages = Math.max(0, Number(b.maxImages) || 0);
+    const volumeWeight = maxProducts > 0 ? (Math.max(0, Number(r.totalProducts) || 0) / maxProducts) * KPI_VOLUME_MAX : 0;
+    const lengthWeight = Math.min(1, (Number(r.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
+    const effortWeight = maxTime > 0 ? (Math.max(0, Number(r.totalSeconds) || 0) / maxTime) * KPI_EFFORT_MAX : 0;
+    const textWeight = Math.max(0, Number(r.validRatio != null ? r.validRatio : r.validRatioRaw) || 0) * KPI_TEXT_MAX;
+    const mediaWeight = kpiMediaWeight(r.withImage, maxImages);
+    return {
+        volumeWeight,
+        lengthWeight,
+        effortWeight,
+        textWeight,
+        mediaWeight,
+        score: volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight
+    };
+};
+
+/* Team-wide normalization baselines derived from the published, non-sensitive
+   rep summaries (`totalProducts`/`totalSeconds`/`withImage` already mapped by
+   the leaderboard reader) — never from merchant_products. This lets a rep
+   compute the exact same maxima as the manager with zero extra product reads. */
+const kpiTeamBaselines = (list) => {
+    const field = (list || []).filter((r) => r && !r.isEditor && (Number(r.totalProducts) || 0) > 0);
+    let maxProducts = 0;
+    let maxTime = 0;
+    let maxImages = 0;
+    field.forEach((r) => {
+        maxProducts = Math.max(maxProducts, Number(r.totalProducts) || 0);
+        maxTime = Math.max(maxTime, Number(r.totalSeconds) || 0);
+        maxImages = Math.max(maxImages, Number(r.withImage) || 0);
+    });
+    return { maxProducts, maxTime, maxImages };
+};
+window.kpiKanjoBreakdown = kpiKanjoBreakdown;
+window.kpiTeamBaselines = kpiTeamBaselines;
+
 const KPI_COLORS = {
     purple: '#230535',
     gold: '#FFD700',
@@ -1097,14 +1140,51 @@ const kpiFetchEditorProcessedUncached = async () => {
 };
 const kpiFetchEditorProcessedProducts = () => kpiCacheGet('kpi:products:editor-processed', kpiFetchEditorProcessedUncached);
 
+/* Update the derived KPI product caches in place after a write instead of
+   dropping them and paying a full re-read. Dropping `editor-processed` after
+   every imported upload / completion re-read the editor's ENTIRE completed set
+   (thousands of docs), which multiplied into the observed reads storm
+   (`writes × N_done`). A raw-image upload does not change the `status=='done'`
+   set at all, and a completion can be merged by id, so the global slice is now
+   patched locally (or refreshed lazily by its 60s TTL) and never force-dropped.
+   Only the small imported pools are eligible for a bounded refresh. */
 const kpiInvalidateImportCaches = () => {
     if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
         window.kanjoCache.invalidatePrefix('kpi:products:imported-missing');
         window.kanjoCache.invalidatePrefix('kpi:products:impupload:');
-        window.kanjoCache.invalidatePrefix('kpi:products:editor-processed');
     }
 };
 window.kpiInvalidateImportCaches = kpiInvalidateImportCaches;
+
+/* In-memory maintenance of the imported pools, so an upload/completion updates
+   the UI instantly at ZERO extra reads (the server is reconciled by the pools'
+   own TTL on the next natural fetch). */
+const kpiDropCachedImportedMissing = (productId) => {
+    if (!productId || !window.kanjoCache || typeof window.kanjoCache.peek !== 'function') return false;
+    const arr = window.kanjoCache.peek('kpi:products:imported-missing');
+    if (!Array.isArray(arr)) return false; // pool not loaded -> nothing to patch
+    const idx = arr.findIndex((p) => p && p.id === productId);
+    if (idx !== -1) arr.splice(idx, 1);
+    return true;
+};
+
+const kpiPushCachedImportedUpload = (repName, product) => {
+    const name = String(repName || '').trim();
+    if (!name || !product || !product.id || !window.kanjoCache || typeof window.kanjoCache.peek !== 'function') return false;
+    const arr = window.kanjoCache.peek('kpi:products:impupload:' + name);
+    if (!Array.isArray(arr)) return false; // not loaded -> the next fetch will include it
+    if (!arr.some((p) => p && p.id === product.id)) arr.push(product);
+    return true;
+};
+
+/* One call for any product write: merge the row into every loaded slice and
+   clear it from the shared imported-missing pool. Zero reads. */
+const kpiApplyLocalProductChange = (productId, patch) => {
+    kpiPatchCachedProducts(productId, patch);
+    kpiDropCachedImportedMissing(productId);
+    return true;
+};
+window.kpiApplyLocalProductChange = kpiApplyLocalProductChange;
 
 /* Reps get a scoped fetch of their own products; managers get the full set
    for the cross-rep audit tools. The media editor additionally receives the
@@ -1432,6 +1512,10 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
             ? (Number(ownRow.avgSecondsPerProduct) || 0)
             : 0
     };
+    /* Same team baselines + formula as the rep's own standing and the manager
+       board, so the "best performance" a rep is measured against is the true
+       globally-normalized top score — not an inflated self-comparison. */
+    const baselines = kpiTeamBaselines(field);
     const best = { score: 0, validRatio: 0, imageRatio: 0, withImage: 0, speedSeconds: 0 };
     let hasSpeed = false;
     let hasBenchmark = false;
@@ -1442,15 +1526,7 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
         const seconds = Number(r.totalSeconds) || 0;
         const valid = Number(r.validRatio) || 0;
         const image = Number(r.imageRatio) || 0;
-        /* Mirror the score a rep sees on their own top card: the live local
-           report normalises volume/effort/media against the rep themselves, so
-           those three blocks (10 + 10 + 35) are effectively full, leaving only
-           the description-length target (10) and the valid-text ratio (35) as
-           variable parts. The image-vs-image card below uses absolute counts. */
-        const avgLen = Number(r.avgDescriptionLength) || 0;
-        const lengthPts = Math.min(1, avgLen / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
-        const selfScore = (seconds > 0 ? KPI_EFFORT_MAX : 0) + KPI_VOLUME_MAX + lengthPts + (valid * KPI_TEXT_MAX) + KPI_MEDIA_MAX;
-        best.score = Math.max(best.score, selfScore);
+        best.score = Math.max(best.score, kpiKanjoBreakdown(r, baselines).score);
         best.validRatio = Math.max(best.validRatio, valid);
         best.imageRatio = Math.max(best.imageRatio, image);
         best.withImage = Math.max(best.withImage, Number(r.withImage) || 0);
@@ -1785,9 +1861,13 @@ const kpiBuildReport = async (monthKey) => {
        normalization, scoring and the ranking loop; he only keeps his personal
        stats card. */
     const fieldRows = rows.filter((r) => !r.isEditor);
-    const maxProducts = fieldRows.reduce((m, r) => Math.max(m, r.totalProducts), 0);
-    const maxTime = fieldRows.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
-    const maxImages = fieldRows.reduce((m, r) => Math.max(m, r.withImage), 0);
+    /* One shared baseline object + one shared formula (kpiKanjoBreakdown) for
+       every score on this screen AND for a rep's own live screen, so the two
+       views can never diverge. */
+    const baselines = kpiTeamBaselines(fieldRows);
+    const maxProducts = baselines.maxProducts;
+    const maxTime = baselines.maxTime;
+    const maxImages = baselines.maxImages;
 
     rows.forEach((row) => {
         if (row.isEditor) {
@@ -1796,19 +1876,21 @@ const kpiBuildReport = async (monthKey) => {
             row.rank = null;
             return;
         }
-        const volumeWeight = maxProducts > 0 ? (row.totalProducts / maxProducts) * KPI_VOLUME_MAX : 0;
-        const lengthWeight = Math.min(1, (Number(row.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
-        const effortWeight = maxTime > 0 ? (row.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0;
-        const textWeight = row.validRatioRaw * KPI_TEXT_MAX;
-        const mediaWeight = kpiMediaWeight(row.withImage, maxImages);
-        row.kanjoBreakdown = { volumeWeight, lengthWeight, effortWeight, textWeight, mediaWeight };
+        const bd = kpiKanjoBreakdown(row, baselines);
+        row.kanjoBreakdown = {
+            volumeWeight: bd.volumeWeight,
+            lengthWeight: bd.lengthWeight,
+            effortWeight: bd.effortWeight,
+            textWeight: bd.textWeight,
+            mediaWeight: bd.mediaWeight
+        };
         /* Keep the normalization baselines on the row so the transparent
            "Score Breakdown" modal can explain the exact math (X / max). */
         row.kanjoMaxProducts = maxProducts;
         row.kanjoMaxTime = maxTime;
         row.kanjoMaxImages = maxImages;
         // RAW 0..100 — rounding happens only at render time.
-        row.kanjoScore = volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight;
+        row.kanjoScore = bd.score;
     });
 
     // Ranking (1st/2nd/3rd…) applies to FIELD REPS ONLY, strictly by Kanjo score.
@@ -2253,13 +2335,15 @@ const kpiPersonalRank = (row, report) => {
     return { rank: row.isEditor ? null : (row.rank || null), total };
 };
 
-/* Exact rank for a rep's OWN screen. A field rep only receives their own row,
-   so peers are taken from the published, non-sensitive rep_kpis summaries and
-   scored with the same Kanjo formula the manager leaderboard uses. Only the
-   resulting rank number and the total are ever exposed — never a peer name,
-   team or identity. Editors are never ranked. */
-const kpiComputePersonalRank = (summaries, ownRow) => {
-    if (!ownRow || ownRow.isEditor) return { rank: null, total: 0 };
+/* Exact standing for a rep's OWN screen. A field rep only receives their own
+   row, so peers are taken from the published, non-sensitive rep_kpis summaries
+   and scored with the same Kanjo formula + team baselines the manager
+   leaderboard uses. This returns not just the rank but the globally-normalized
+   score/breakdown, so the number a rep sees equals the manager's. Only the rank
+   number and total are ever exposed — never a peer name, team or identity.
+   Editors are never ranked. */
+const kpiComputePersonalStanding = (summaries, ownRow) => {
+    if (!ownRow || ownRow.isEditor) return { rank: null, total: 0, score: 0, breakdown: null, baselines: null };
     const peers = (summaries || [])
         .filter((r) => r && !r.isEditor && r.repId !== ownRow.repId && !kpiIsExcludedRepName(r.name))
         .map((r) => ({
@@ -2282,18 +2366,14 @@ const kpiComputePersonalRank = (summaries, ownRow) => {
         withImage: Math.max(0, Number(ownRow.withImage) || 0)
     };
     const active = own.totalProducts > 0 ? peers.concat([own]) : peers;
-    if (!active.length) return { rank: null, total: 0 };
-    const maxProducts = active.reduce((m, r) => Math.max(m, r.totalProducts), 0);
-    const maxTime = active.reduce((m, r) => Math.max(m, r.totalSeconds), 0);
-    const maxImages = active.reduce((m, r) => Math.max(m, r.withImage), 0);
-    const scoreOf = (r) => (maxProducts > 0 ? (r.totalProducts / maxProducts) * KPI_VOLUME_MAX : 0)
-        + Math.min(1, (Number(r.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX
-        + (maxTime > 0 ? (r.totalSeconds / maxTime) * KPI_EFFORT_MAX : 0)
-        + r.validRatio * KPI_TEXT_MAX + kpiMediaWeight(r.withImage, maxImages);
-    if (own.totalProducts <= 0) return { rank: null, total: active.length };
-    own.score = scoreOf(own);
-    return { rank: 1 + peers.filter((r) => scoreOf(r) > own.score).length, total: active.length };
+    if (!active.length) return { rank: null, total: 0, score: 0, breakdown: null, baselines: null };
+    const baselines = kpiTeamBaselines(active);
+    if (own.totalProducts <= 0) return { rank: null, total: active.length, score: 0, breakdown: null, baselines };
+    const ownBreakdown = kpiKanjoBreakdown(own, baselines);
+    const rank = 1 + peers.filter((r) => kpiKanjoBreakdown(r, baselines).score > ownBreakdown.score).length;
+    return { rank, total: active.length, score: ownBreakdown.score, breakdown: ownBreakdown, baselines };
 };
+window.kpiComputePersonalStanding = kpiComputePersonalStanding;
 
 const kpiPersonalSmartTips = (row, report) => {
     if (row.isEditor) {
@@ -2482,8 +2562,13 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                 </span>
             </div>`;
 
-    const imgWarnHtml = missingImages > 0
-        ? `<button type="button" class="kpi-warn-box kpi-warn-box-gold" onclick="openKpiFixImages('${kpiEscape(row.repId)}')">
+    /* The upload modal is ALWAYS reachable for a rep: when their own queue is
+       complete it becomes the entry point to the crowdsourced import pool, so a
+       rep at 100% can keep earning (Ice Square bonus tasks). */
+    const imgWarnHtml = isEditor
+        ? ''
+        : (missingImages > 0
+            ? `<button type="button" class="kpi-warn-box kpi-warn-box-gold" onclick="openKpiFixImages('${kpiEscape(row.repId)}')">
                 <span class="kpi-warn-icon kpi-warn-icon-gold"><i class="fa-solid fa-image"></i></span>
                 <span class="flex-1 text-right min-w-0">
                     <span class="block font-black text-sm">تنبيه: لديك ${missingImages} منتج بدون صور</span>
@@ -2491,7 +2576,14 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                 </span>
                 <span class="kpi-warn-cta"><i class="fa-solid fa-upload"></i> رفع صورة</span>
             </button>`
-        : '';
+            : `<button type="button" class="kpi-warn-box kpi-warn-box-gold" onclick="openKpiFixImages('${kpiEscape(row.repId)}')">
+                <span class="kpi-warn-icon kpi-warn-icon-gold"><i class="fa-solid fa-bolt"></i></span>
+                <span class="flex-1 text-right min-w-0">
+                    <span class="block font-black text-sm">مهام إضافية</span>
+                    <span class="block text-[11px] font-bold opacity-80">أنهيت كل صورك — ساهم في رفع صور المنتجات المستوردة واكسب نقاطاً إضافية</span>
+                </span>
+                <span class="kpi-warn-cta"><i class="fa-solid fa-circle-plus"></i> فتح</span>
+            </button>`);
 
     return `
     <section class="kpi-panel kpi-personal">
@@ -2742,20 +2834,32 @@ window.openKpiFixImages = async (repId) => {
         const myPin = kpiCurrentUserPin();
         const missing = [];
         const seenIds = new Set();
-        const pushMissing = (p) => {
+        let personalMissing = 0;
+        let bonusMissing = 0;
+        const pushMissing = (p, isBonus) => {
             if (!p || seenIds.has(p.id) || !kpiProductNeedsRawImage(p)) return;
             /* Hide rows another rep already holds the lock on (they will win). */
             if (p.image_locked_by && String(p.image_locked_by) !== String(myPin)) return;
             seenIds.add(p.id);
+            if (isBonus) bonusMissing += 1; else personalMissing += 1;
             missing.push(p);
         };
-        all.forEach((p) => { if (kpiProductRepName(p) === repName) pushMissing(p); });
+        all.forEach((p) => { if (kpiProductRepName(p) === repName) pushMissing(p, false); });
         /* Imported products are a shared, global pool — credit the NUMERATOR only. */
-        importedMissing.forEach(pushMissing);
+        importedMissing.forEach((p) => pushMissing(p, true));
         window._kpiFixImageAllowedIds = new Set(missing.map((p) => p.id));
-        if (sub) sub.textContent = repName + ' • ' + missing.length + ' منتج بدون صور';
+        if (sub) {
+            if (personalMissing > 0) {
+                sub.textContent = repName + ' • ' + personalMissing + ' منتج بدون صور'
+                    + (bonusMissing > 0 ? ' • ' + bonusMissing + ' مهمة إضافية' : '');
+            } else if (bonusMissing > 0) {
+                sub.textContent = repName + ' • مهام إضافية — ' + bonusMissing + ' منتج مستورد متاح للرفع';
+            } else {
+                sub.textContent = repName + ' • لا توجد مهام متاحة حالياً';
+            }
+        }
         if (!missing.length) {
-            list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>كل المنتجات لديها صور أو مُحررة بالفعل — لا شيء مطلوب</div></div>';
+            list.innerHTML = '<div class="text-center py-10 text-emerald-600 font-black"><i class="fa-solid fa-circle-check text-3xl mb-2"></i><div>أكملت كل مهامك — لا توجد منتجات إضافية متاحة الآن. تابع لاحقاً للمزيد من المهام</div></div>';
             return;
         }
         list.innerHTML = missing.map(kpiFixImageItemHtml).join('');
@@ -2860,11 +2964,13 @@ window.kpiUploadMissingImage = async (productId, input) => {
         if (window.showToast) window.showToast(isImported
             ? 'تم رفع الصورة واحتسابها في مؤشرك — شكراً لمساهمتك'
             : 'تم رفع الصورة بنجاح — تحسّن مؤشرك', true);
-        /* H7: patch the uploaded row into the in-memory caches instead of
-           invalidating and re-fetching the whole product list. Imported pools
-           are separate caches, so invalidate only those. */
-        kpiPatchCachedProducts(productId, imagePatch);
-        if (isImported) kpiInvalidateImportCaches();
+        /* Update every loaded cache in memory — no full re-fetch. A raw upload
+           never changes the `status=='done'` set, so the editor's global slice
+           is left untouched (that invalidation was the reads storm). */
+        kpiApplyLocalProductChange(productId, imagePatch);
+        if (isImported) {
+            kpiPushCachedImportedUpload(repName, Object.assign({}, product, imagePatch));
+        }
         await window.renderKpiDashboard();
         if (remaining === 0) {
             window.closeKpiFixImages();
@@ -2958,11 +3064,24 @@ window.renderKpiDashboard = async () => {
             const ownId = window.kpiResolvePersonalRepId('');
             const ownReport = kpiScopeReportForRep(report, ownId);
             const ownRow = ownReport.rows[0] || null;
-            /* Published summaries feed the rank and the best-value side; the
-               rep's own side comes from the live local report above. */
+            /* Published summaries feed the rank, the score and the best-value
+               side. A rep's local report only contains their own row, so its
+               self-normalized Kanjo score would always read ~100%. Recompute it
+               against the SAME team baselines the manager board uses and write
+               the result back onto the row, so the rep's displayed score,
+               breakdown modal and rank are all consistent with the admin view. */
             const summaries = await summariesPromise;
+            const standing = kpiComputePersonalStanding(summaries, ownRow);
+            if (ownRow && !ownRow.isEditor && standing.breakdown) {
+                ownRow.kanjoBreakdown = standing.breakdown;
+                ownRow.kanjoScore = standing.score;
+                ownRow.kanjoMaxProducts = standing.baselines.maxProducts;
+                ownRow.kanjoMaxTime = standing.baselines.maxTime;
+                ownRow.kanjoMaxImages = standing.baselines.maxImages;
+                ownRow.rank = standing.rank;
+            }
             const benchmark = kpiComputeBenchmark(summaries, ownRow);
-            const personalRank = kpiComputePersonalRank(summaries, ownRow);
+            const personalRank = { rank: standing.rank, total: standing.total };
             window._kpiLatestReport = ownReport;
             content.innerHTML =
                 `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(ownReport, ownRow, { liveMode: true, personalRank })}</div>` +
