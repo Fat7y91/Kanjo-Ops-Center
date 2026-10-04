@@ -1,0 +1,55 @@
+# One-off data-model cleanup: collapse products that were imported as a
+# "variable" product with EXACTLY ONE variation into proper simple products
+# (base_price = variation price, variations removed, product_type = simple,
+# smart-renamed "ساندوتش <name>" / "وجبة <name>"). Written for Ice Square but
+# works for any merchant. Runs manually from the Actions tab.
+#
+# SAFETY: defaults to a DRY RUN that only prints what it would change. Review the
+# log, then re-run with "Dry run" unchecked to apply. Idempotent — a second run
+# finds nothing because the `variations` field is gone.
+name: Cleanup single-variant products
+
+on:
+  workflow_dispatch:
+    inputs:
+      merchant:
+        description: 'Merchant display name (merchantName)'
+        required: false
+        default: 'Ice Square'
+      merchant_id:
+        description: 'Merchant ID (overrides the name when set, e.g. KJ-5W5G4F)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Dry run (report only, no writes)'
+        type: boolean
+        required: false
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Collapse single-variant products
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          MERCHANT: ${{ github.event.inputs.merchant }}
+          MERCHANT_ID: ${{ github.event.inputs.merchant_id }}
+          DRY_RUN_INPUT: ${{ github.event.inputs.dry_run }}
+        run: |
+          ARGS=()
+          if [ -n "$MERCHANT_ID" ]; then
+            ARGS+=(--merchant-id "$MERCHANT_ID")
+          elif [ -n "$MERCHANT" ]; then
+            ARGS+=(--merchant "$MERCHANT")
+          fi
+          if [ "$DRY_RUN_INPUT" = "false" ]; then
+            ARGS+=(--apply)
+          fi
+          node scripts/cleanup-single-variant-products.mjs "${ARGS[@]}"
