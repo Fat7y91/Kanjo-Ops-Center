@@ -213,6 +213,16 @@ service cloud.firestore {
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 
+    // Learned product→category taxonomy from the interactive pre-export audit.
+    // The catalog admins (admin / founder / Ops Manager محمود) append the manual
+    // name→category rules here via arrayUnion; the same roles may read it. It is
+    // never a dependency of the export (which uses in-memory data), so reads are
+    // optional tooling only.
+    match /category_learning/{docId} {
+      allow read: if isSignedIn();
+      allow write: if legacy() || isPrivileged() || isOpsManager();
+    }
+
     // Pharmacy intake run state (one doc per pharmacy). Records the document ids
     // the last intake run targeted so an interrupted/partial run can be
     // reconciled and re-uploaded without duplicating rows. Data-entry tooling;

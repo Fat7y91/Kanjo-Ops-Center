@@ -4893,6 +4893,81 @@ const kanjoJoinCategorySelection = (selection, fallback) => {
    as "غير مصنف" (Uncategorized) instead. */
 const KANJO_UNCATEGORIZED_LABEL = 'غير مصنف';
 
+/* ===== Manual-categorization learning (ZERO Firestore reads) =====
+   When the admin resolves an uncategorized product in the pre-export audit we
+   (a) persist the chosen categories onto the product document itself and
+   (b) append the name→category rule to a centralized taxonomy document via
+   arrayUnion. The in-session matcher consults the product's persisted categories
+   and a local name→categories index (mirrored to localStorage for the next
+   session), so a decision is never asked twice — without issuing any read. */
+const KANJO_CATEGORY_LEARNING_COLLECTION = 'category_learning';
+const KANJO_CATEGORY_LEARNING_DOC = 'kanjo_product_categories';
+const KANJO_CATEGORY_LEARNED_FIELD = 'kanjo_categories';
+const KANJO_CATEGORY_LEARNED_IDS_FIELD = 'kanjo_category_ids';
+const KANJO_CATEGORY_LEARNING_STORAGE_KEY = 'kanjo_category_learning_v1';
+const KANJO_CATEGORY_BATCH_LIMIT = 450; // Firestore hard limit is 500 ops/batch
+
+const kanjoLearnedCategoryRules = new Map(); // normalized name -> [category value, ...]
+
+const kanjoLearnedRuleKeyFor = (product) => {
+    if (!product) return '';
+    const name = String(product.name_ar || product.name_en || '').trim();
+    return name ? normalizeArabic(name) : '';
+};
+
+const kanjoLoadLearnedCategoryRules = () => {
+    try {
+        const raw = window.localStorage ? window.localStorage.getItem(KANJO_CATEGORY_LEARNING_STORAGE_KEY) : null;
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        Object.keys(parsed || {}).forEach((key) => {
+            const values = parsed[key];
+            if (Array.isArray(values) && values.length) kanjoLearnedCategoryRules.set(key, values.slice());
+        });
+    } catch (_) { /* a corrupt cache must never break the export */ }
+};
+
+const kanjoSaveLearnedCategoryRules = () => {
+    try {
+        const out = {};
+        kanjoLearnedCategoryRules.forEach((values, key) => { out[key] = values; });
+        if (window.localStorage) window.localStorage.setItem(KANJO_CATEGORY_LEARNING_STORAGE_KEY, JSON.stringify(out));
+    } catch (_) { /* storage may be unavailable (private mode) */ }
+};
+
+kanjoLoadLearnedCategoryRules();
+
+/* Categories already persisted on a product (array or comma string). */
+const kanjoStoredCategoryValues = (product) => {
+    const raw = product && product[KANJO_CATEGORY_LEARNED_FIELD];
+    if (Array.isArray(raw)) return raw.map((v) => String(v || '').trim()).filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) return raw.split(',').map((v) => v.trim()).filter(Boolean);
+    return [];
+};
+
+/* Parse "ID:37 | حلويات" -> 37 (0 when unrecognised). */
+const kanjoCategoryIdFromValue = (value) => {
+    const m = String(value || '').match(/^ID:(\d+)/);
+    return m ? Number(m[1]) : 0;
+};
+
+/* Patch an id in every in-memory catalog slice AND the KPI caches (no reads). */
+const kanjoPatchProductCaches = (productId, patch) => {
+    const arrays = [window.allCatalogProductsCache, window.merchantProductsCache, window.doneCatalogProductsCache, window.repCatalogProductsCache];
+    let touched = 0;
+    arrays.forEach((arr) => {
+        if (!Array.isArray(arr)) return;
+        for (let i = 0; i < arr.length; i++) {
+            if (arr[i] && String(arr[i].id) === String(productId)) {
+                arr[i] = Object.assign({}, arr[i], patch);
+                touched += 1;
+            }
+        }
+    });
+    if (typeof window.kpiApplyLocalProductChange === 'function') window.kpiApplyLocalProductChange(productId, patch);
+    return touched;
+};
+
 const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
 const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'attribute_2_name', 'attribute_2_value', 'attribute_3_name', 'attribute_3_value', 'attribute_4_name', 'attribute_4_value', 'branch', 'price', 'stock', 'thumbnail_url', 'status'];
 
@@ -5157,6 +5232,22 @@ const kanjoMatchProductCategory = (product, vendorType) => {
        so a name set would leak every duplicate back into this vendor's matcher. */
     const allowedIds = new Set(allowedCats.map((cat) => cat.id));
     const allowedValues = new Set(allowedCats.map((cat) => kanjoCategoryValue(cat)));
+    /* Manual decisions always win. A product the admin already categorized
+       (persisted on the doc) or a same-named product learned this session is
+       returned BEFORE any keyword rule, so a fixed row is never re-asked and the
+       export reuses the exact same decision. */
+    const storedOfficial = kanjoOfficialCategoryString(kanjoStoredCategoryValues(product).join(', '), allowedValues);
+    if (storedOfficial) {
+        const storedValues = storedOfficial.split(', ').filter(Boolean);
+        return { status: 'matched', category: storedOfficial, categories: storedValues, primary: storedValues[0] || '', options: [] };
+    }
+    const learnedKey = kanjoLearnedRuleKeyFor(product);
+    const learnedValues = learnedKey ? kanjoLearnedCategoryRules.get(learnedKey) : null;
+    const learnedOfficial = learnedValues ? kanjoOfficialCategoryString(learnedValues.join(', '), allowedValues) : '';
+    if (learnedOfficial) {
+        const learnedList = learnedOfficial.split(', ').filter(Boolean);
+        return { status: 'matched', category: learnedOfficial, categories: learnedList, primary: learnedList[0] || '', options: [] };
+    }
     const existing = String((product && product.category) || '').trim();
     const existingOfficial = kanjoOfficialCategoryString(existing, allowedValues);
     const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
@@ -5890,8 +5981,85 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
     if (window.showToast) window.showToast('راجع تصنيف ' + (items || []).length + ' منتج لإكمال التصدير', false);
 };
 
-window.confirmKanjoCategoryAudit = () => {
-    if (!_kanjoAuditState) return;
+/* Persist the admin's manual categorization. One writeBatch updates every
+   affected product document (ids already in memory — zero reads) and the first
+   chunk also appends the learned name→category rules to the centralized
+   taxonomy document via arrayUnion. The in-memory catalog/KPI caches and the
+   local learning index are patched immediately, so the SAME decision is reused
+   for the rest of the session even before the network round-trip resolves. The
+   commit MUST resolve before the caller builds the .xlsx. */
+const kanjoPersistManualCategories = async (items, selections) => {
+    const entries = [];
+    (items || []).forEach((entry) => {
+        const product = entry && entry.product;
+        const id = String((product && product.id) || '');
+        const values = Array.isArray(selections[id])
+            ? selections[id].map((v) => String(v || '').trim()).filter(Boolean)
+            : [];
+        if (!id || !values.length) return;
+        entries.push({ id, product: product || {}, values });
+    });
+    if (!entries.length) return { ok: true, count: 0 };
+
+    const byName = String((window.currentUser && window.currentUser.name) || '');
+    const now = new Date();
+    const rulesToLearn = [];
+    entries.forEach(({ id, product, values }) => {
+        const ids = values.map(kanjoCategoryIdFromValue).filter((n) => n > 0);
+        const patch = {
+            [KANJO_CATEGORY_LEARNED_FIELD]: values,
+            [KANJO_CATEGORY_LEARNED_IDS_FIELD]: ids,
+            kanjo_categorized_at: now,
+            kanjo_categorized_by: byName
+        };
+        kanjoPatchProductCaches(id, patch);
+        const key = kanjoLearnedRuleKeyFor(product);
+        if (key) {
+            kanjoLearnedCategoryRules.set(key, values.slice());
+            rulesToLearn.push({ name: key, categories: values.slice() });
+        }
+    });
+    kanjoSaveLearnedCategoryRules();
+
+    const db = window.db;
+    if (!db || typeof window.writeBatch !== 'function' || typeof window.doc !== 'function') {
+        return { ok: false, count: entries.length, reason: 'NO_BATCH' };
+    }
+    try {
+        for (let start = 0; start < entries.length; start += KANJO_CATEGORY_BATCH_LIMIT) {
+            const chunk = entries.slice(start, start + KANJO_CATEGORY_BATCH_LIMIT);
+            const batch = window.writeBatch(db);
+            chunk.forEach(({ id, values }) => {
+                batch.update(window.doc(db, CATALOG_COLLECTION, id), {
+                    [KANJO_CATEGORY_LEARNED_FIELD]: values,
+                    [KANJO_CATEGORY_LEARNED_IDS_FIELD]: values.map(kanjoCategoryIdFromValue).filter((n) => n > 0),
+                    kanjo_categorized_at: now,
+                    kanjo_categorized_by: byName
+                });
+            });
+            /* Taxonomy write rides the first chunk only. */
+            if (start === 0 && rulesToLearn.length) {
+                const taxonomyRef = window.doc(db, KANJO_CATEGORY_LEARNING_COLLECTION, KANJO_CATEGORY_LEARNING_DOC);
+                const rulesValue = typeof window.arrayUnion === 'function'
+                    ? window.arrayUnion(...rulesToLearn)
+                    : rulesToLearn;
+                batch.set(taxonomyRef, {
+                    rules: rulesValue,
+                    updatedAt: now,
+                    updatedBy: byName
+                }, { merge: true });
+            }
+            await batch.commit();
+        }
+        return { ok: true, count: entries.length };
+    } catch (err) {
+        console.warn('[catalog] manual category persistence failed:', err);
+        return { ok: false, count: entries.length, error: err };
+    }
+};
+
+window.confirmKanjoCategoryAudit = async () => {
+    if (!_kanjoAuditState || _kanjoAuditState.busy) return;
     const selections = {};
     const checked = {};
     document.querySelectorAll('#kanjoCategoryAuditBody .kanjo-audit-cat-check:checked').forEach((box) => {
@@ -5911,7 +6079,26 @@ window.confirmKanjoCategoryAudit = () => {
         if (window.showToast) window.showToast('برجاء تحديد تصنيف واحد على الأقل لكل منتج (' + missing + ' متبقي)', false);
         return;
     }
-    const onConfirm = _kanjoAuditState.onConfirm;
+    const state = _kanjoAuditState;
+    const onConfirm = state.onConfirm;
+    state.busy = true;
+    const btn = document.getElementById('kanjoCategoryAuditConfirmBtn');
+    const originalBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> جاري حفظ التصنيفات...';
+    }
+    /* Save FIRST, then build the workbook, so the persisted knowledge and the
+       exported sheet always agree. A save failure is surfaced but never blocks
+       the admin from getting the file (the export uses the same selections). */
+    const persisted = await kanjoPersistManualCategories(state.items, selections);
+    if (!persisted.ok && window.showToast) {
+        window.showToast('تم التصدير، لكن تعذّر حفظ التصنيفات الجديدة — أعد المحاولة لاحقاً', false);
+    }
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHtml;
+    }
     window.closeKanjoCategoryAuditModal();
     if (typeof onConfirm === 'function') onConfirm(selections);
 };
