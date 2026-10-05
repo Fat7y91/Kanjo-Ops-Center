@@ -4900,6 +4900,160 @@ const kanjoFormatExportCategory = (value) => {
     return parts.length ? parts.join('; ') : '';
 };
 
+/* ===== Qema static-taxonomy enforcement (ZERO reads) =====
+   window.QEMA_TAXONOMY is hardcoded in config/qemaTaxonomy.js. These helpers map
+   a merchant's activity label to its Qema vendor type, filter assigned
+   categories down to that vendor's legal set, and strictly translate variant
+   options. Nothing here reads Firestore. */
+const kanjoQemaTaxonomy = () => (typeof window !== 'undefined' && window.QEMA_TAXONOMY) || null;
+
+const kanjoQemaParseNum = (token, label) => {
+    const m = String(token || '').match(new RegExp(label + ':(\\d+)'));
+    return m ? Number(m[1]) : 0;
+};
+
+/* Merchant activity label -> Qema vendor type (a DASHBOARD_CATEGORIES_TAXONOMY
+   key). Exact alias, then normalized alias/key, then the longest vendor key
+   contained in the label. '' means "not mappable". */
+const kanjoQemaResolveVendorType = (vendorType) => {
+    const t = kanjoQemaTaxonomy();
+    if (!t) return '';
+    const raw = String(vendorType || '').trim();
+    if (!raw) return '';
+    const dict = t.DASHBOARD_CATEGORIES_TAXONOMY || {};
+    const mapping = t.VENDOR_TYPE_MAPPING || {};
+    const aliases = t.APP_VENDOR_TYPE_ALIASES || {};
+    if (aliases[raw]) return mapping[aliases[raw]] || '';
+    const norm = normalizeArabic(raw);
+    const normAlias = Object.keys(aliases).find((k) => normalizeArabic(k) === norm);
+    if (normAlias) return mapping[aliases[normAlias]] || '';
+    const normKey = Object.keys(mapping).find((k) => normalizeArabic(k) === norm);
+    if (normKey) return mapping[normKey] || '';
+    const keys = Object.keys(mapping).slice().sort((a, b) => b.length - a.length);
+    const hit = keys.find((k) => norm.indexOf(normalizeArabic(k)) !== -1);
+    if (hit) return mapping[hit] || '';
+    if (dict[raw]) return raw;
+    const normDict = Object.keys(dict).find((k) => normalizeArabic(k) === norm);
+    return normDict || '';
+};
+
+/* { normalizedName -> { name, id } } for a vendor's legal categories, or null
+   when the taxonomy/vendor type is unavailable (caller then falls back). */
+const kanjoQemaCategoryIndex = (vendorType) => {
+    const t = kanjoQemaTaxonomy();
+    if (!t) return null;
+    const mapped = kanjoQemaResolveVendorType(vendorType);
+    const dict = (t.DASHBOARD_CATEGORIES_TAXONOMY || {})[mapped];
+    if (!dict) return null;
+    const index = new Map();
+    Object.keys(dict).forEach((name) => {
+        index.set(normalizeArabic(name), { name, id: String(dict[name] || '') });
+    });
+    return index;
+};
+
+/* Adapter objects for the audit modal's checkbox builder ({ name, id }). */
+const kanjoQemaAllowedCategoryObjects = (vendorType) => {
+    const index = kanjoQemaCategoryIndex(vendorType);
+    if (!index) return null;
+    return Array.from(index.values()).map((c) => ({ name: c.name, id: kanjoQemaParseNum(c.id, 'ID') }));
+};
+
+const kanjoCategoryNameFromValue = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const idx = raw.lastIndexOf('|');
+    return (idx === -1 ? raw : raw.slice(idx + 1)).trim();
+};
+
+/* Filter an assigned category cell down to the vendor's legal Qema set and
+   re-emit canonical `ID:n | Name` joined by '; '. `available:false` (vendor not
+   mappable) tells the caller to keep the legacy cell; `available:true, cell:''`
+   means every assigned category was illegal and the caller must pause. */
+const kanjoQemaResolveCategory = (vendorType, assigned) => {
+    const index = kanjoQemaCategoryIndex(vendorType);
+    if (!index) return { available: false, cell: '', dropped: [] };
+    const names = String(assigned || '').split(/[;,]/).map(kanjoCategoryNameFromValue).filter(Boolean);
+    const out = [];
+    const seen = new Set();
+    const dropped = [];
+    names.forEach((name) => {
+        const entry = index.get(normalizeArabic(name));
+        if (!entry) { dropped.push(name); return; }
+        const key = normalizeArabic(entry.name);
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push(entry.id + ' | ' + entry.name);
+    });
+    return { available: true, cell: out.join('; '), dropped };
+};
+
+/* Prefer the operator's explicit selection, then the product's persisted manual
+   category, then the matcher output. */
+const kanjoQemaAssignedFor = (product, match, selection) => {
+    if (Array.isArray(selection) && selection.length) {
+        return selection.map((s) => String(s || '').trim()).filter(Boolean).join('; ');
+    }
+    if (typeof selection === 'string' && selection.trim()) return selection.trim();
+    const stored = kanjoStoredCategoryValues(product);
+    if (stored.length) return stored.join('; ');
+    return match && match.status === 'matched' ? String(match.category || '') : '';
+};
+
+/* Strict variant mapping: whole-name first (multi-word options such as
+   "اكس لارج"/"صوص أحمر"/"عيش سوري"), then per-token for compound names such as
+   "صغير إيطالي". Recognised options become assignments; unknown tokens are
+   dropped. Returns [] when nothing matches, or null when the taxonomy is absent
+   (caller keeps the legacy alias path). */
+const kanjoQemaVariantAssignments = (rawName) => {
+    const t = kanjoQemaTaxonomy();
+    if (!t) return null;
+    const tax = t.DASHBOARD_VARIANTS_TAXONOMY || {};
+    const priority = (t.QEMA_VARIANT_GROUP_PRIORITY || []).slice();
+    const ordered = priority.concat(Object.keys(tax).filter((g) => priority.indexOf(g) === -1));
+    const findOption = (token) => {
+        const target = normalizeArabic(token);
+        if (!target) return null;
+        for (let i = 0; i < ordered.length; i++) {
+            const group = tax[ordered[i]];
+            if (!group) continue;
+            const opts = group.options || {};
+            const hit = Object.keys(opts).find((o) => normalizeArabic(o) === target);
+            if (hit) return {
+                groupName: ordered[i],
+                groupId: kanjoQemaParseNum(group.id, 'ID'),
+                valueId: kanjoQemaParseNum(opts[hit], 'ATTR'),
+                label: hit
+            };
+        }
+        return null;
+    };
+    const trimmed = String(rawName || '').trim();
+    if (!trimmed) return [];
+    const whole = findOption(trimmed);
+    if (whole) return [whole];
+    const byGroup = new Map();
+    trimmed.split(/\s+/).filter(Boolean).forEach((token) => {
+        const hit = findOption(token);
+        if (hit && !byGroup.has(hit.groupName)) byGroup.set(hit.groupName, hit);
+    });
+    return Array.from(byGroup.values())
+        .sort((a, b) => ordered.indexOf(a.groupName) - ordered.indexOf(b.groupName))
+        .slice(0, 4);
+};
+
+const kanjoQemaVariantCells = (rawName) => {
+    const assignments = kanjoQemaVariantAssignments(rawName);
+    if (assignments === null) return null;
+    const cells = {};
+    assignments.forEach((a, i) => {
+        const slot = i + 1;
+        cells['attribute_' + slot + '_name'] = 'ID:' + a.groupId + ' | ' + a.groupName;
+        cells['attribute_' + slot + '_value'] = 'ID:' + a.valueId + ' | ATTR:' + a.groupId + ' | ' + a.label;
+    });
+    return { assignments, cells };
+};
+
 /* Silent fallback for products the keyword matcher cannot classify: the export
    must never block on a manual category prompt, so unmatched rows are exported
    as "غير مصنف" (Uncategorized) instead. */
@@ -5615,7 +5769,20 @@ const kanjoBuildProductRow = (p, category) => {
 };
 
 const kanjoBuildVariantRow = (p, v, index) => {
-    const assignments = mapVariantToKanjo(v && v.name, v && v.name);
+    const taxonomy = kanjoQemaVariantCells(v && v.name);
+    let cells;
+    if (taxonomy) {
+        /* Strict taxonomy: an option not present in the template is dropped
+           (the importer rejects unknown attribute/value pairs). */
+        if (!taxonomy.assignments.length) return null;
+        cells = taxonomy.cells;
+    } else {
+        cells = {};
+        mapVariantToKanjo(v && v.name, v && v.name).forEach((a) => {
+            cells['attribute_' + a.attr + '_name'] = a.name;
+            cells['attribute_' + a.attr + '_value'] = a.value;
+        });
+    }
     const row = {
         product_key: (p && p.id) || '',
         variant_sku: String((p && (p.sku || p.id)) || '') + '-V' + (index + 1),
@@ -5635,10 +5802,7 @@ const kanjoBuildVariantRow = (p, v, index) => {
         status: 'active'
     };
     /* Each assignment lands in ITS OWN attribute family. */
-    assignments.forEach((a) => {
-        row['attribute_' + a.attr + '_name'] = a.name;
-        row['attribute_' + a.attr + '_value'] = a.value;
-    });
+    Object.assign(row, cells);
     return row;
 };
 
@@ -5646,7 +5810,9 @@ const kanjoBuildVariantRows = (p) => {
     const variations = Array.isArray(p && p.variations)
         ? p.variations.filter((v) => v && String(v.name || '').trim())
         : [];
-    return variations.map((v, index) => kanjoBuildVariantRow(p, v, index));
+    return variations
+        .map((v, index) => kanjoBuildVariantRow(p, v, index))
+        .filter(Boolean);
 };
 
 /* Flatten every product's variants into audit-friendly entries that carry both
@@ -5661,6 +5827,7 @@ const kanjoCollectVariantEntries = (evaluations) => {
         const nameEn = String((product && product.name_en) || '').trim();
         variations.forEach((v, index) => {
             const row = kanjoBuildVariantRow(product, v, index);
+            if (!row) return;
             entries.push({
                 entryId: String(entries.length),
                 product_key: row.product_key,
@@ -5828,9 +5995,10 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => 
         if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
         const { product, match } = evaluations[i];
         const key = String((product && product.id) || '');
-        const category = kanjoFormatExportCategory(match.status === 'matched'
-            ? match.category
-            : kanjoJoinCategorySelection(selections[key], match.category));
+        const vendorType = String((product && (product.category || product.vendor_type || product.vendorType)) || '');
+        const assigned = kanjoQemaAssignedFor(product, match, (selections || {})[key]);
+        const qema = kanjoQemaResolveCategory(vendorType, assigned);
+        const category = qema.available ? qema.cell : kanjoFormatExportCategory(assigned);
         const row = kanjoBuildProductRow(product, category);
         const extraName = variantNameSuffix.get(key);
         if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
@@ -5986,9 +6154,11 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
         const sub = (nameAr && nameEn && nameAr !== nameEn)
             ? '<div class="text-[10px] text-slate-400 font-bold mt-0.5 break-words">' + catalogEscapeHtml(nameEn) + '</div>'
             : '';
-        /* Only categories valid for THIS product's vendor type are offered. */
+        /* Only categories valid for THIS product's vendor type are offered; the
+           static Qema taxonomy drives the list when available. */
         const vendorType = String(entry.vendorType || p.category || '').trim();
-        const optionsHtml = kanjoCategoryCheckboxesHtml(kanjoVendorAllowedCategories(vendorType), key);
+        const taxonomyOptions = kanjoQemaAllowedCategoryObjects(vendorType);
+        const optionsHtml = kanjoCategoryCheckboxesHtml(taxonomyOptions || kanjoVendorAllowedCategories(vendorType), key);
         const vendorBadge = vendorType
             ? '<span class="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-lg bg-purple-100 text-[#230535] max-w-[45%] truncate" title="' + catalogEscapeHtml(vendorType) + '">' + catalogEscapeHtml(vendorType) + '</span>'
             : '';
@@ -6257,10 +6427,17 @@ window.exportKanjoExcel = async (options) => {
         const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || opts.vendorType || '').trim();
         const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
         const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, opts);
-        /* Intercept: any product the smart matcher cannot classify PAUSES the
+        /* Intercept: any product the smart matcher cannot classify, OR whose
+           matched categories are not legal for its Qema vendor type, PAUSES the
            export behind the interactive audit modal. The operator must pick a
-           valid category (scoped to the vendor type) before the file is built. */
-        const unmapped = evaluations.filter((e) => e.match.status !== 'matched');
+           valid category (scoped to the vendor's static taxonomy) before the
+           file is built. */
+        const needsAudit = (e) => {
+            const assigned = kanjoQemaAssignedFor(e.product, e.match, null);
+            const qema = kanjoQemaResolveCategory(vendorTypeOf(e.product), assigned);
+            return qema.available ? !qema.cell : e.match.status !== 'matched';
+        };
+        const unmapped = evaluations.filter(needsAudit);
         if (unmapped.length) {
             if (window.openKanjoCategoryAuditModal) {
                 window.openKanjoCategoryAuditModal(

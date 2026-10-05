@@ -2,6 +2,7 @@
 import './utils/cache.js';
 import './config/firebase.js';
 import './config/build-info.generated.js';
+import './config/qemaTaxonomy.js';
 import './services/audit.js';
 import './services/authorization.js';
 import { categories } from './config/constants.js';
