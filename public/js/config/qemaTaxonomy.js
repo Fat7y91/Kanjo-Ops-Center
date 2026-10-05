@@ -30,11 +30,11 @@ export const VENDOR_TYPE_MAPPING = {
   "موبايلات": "موبايلات واكسسوارات"
 };
 
-/* Definitive STRICT vendor-type -> category mapping. This is the immutable
-   authority for the export pipeline: for every vendor type listed here the
-   candidate categories are EXACTLY these keys, and the final name -> Qema ID
-   lookup must be an exact hit (catalog.js halts otherwise). Vendor types NOT
-   listed here keep the legacy in-memory taxonomy below. */
+/* The definitive category scopes for the seven highest-volume vendor types,
+   pinned first. They are spread verbatim into DASHBOARD_CATEGORIES_TAXONOMY
+   below, which is the single authority the export pipeline resolves against:
+   every vendor's category NAME is matched ONLY inside its own scope, and a name
+   that is absent there HALTS the export (never a cross-vendor ID). */
 export const STRICT_TAXONOMY_MAP = {
   "الحلو": {
     "أم علي": "ID:175", "بان كيك": "ID:173", "زلابيا": "ID:170", "سينابون": "ID:169",
@@ -76,11 +76,13 @@ export const STRICT_TAXONOMY_MAP = {
   }
 };
 
-/* Qema vendor type -> { categoryName: 'ID:n' }. The seven STRICT vendors are
-   spread verbatim so the two dictionaries can never drift; the remaining
-   verticals keep the existing in-memory definitions. Only the categories listed
-   for a vendor are legal for that vendor. Categories are emitted as
-   `ID:n | Name` and multiples joined with `; `. */
+/* Qema vendor type -> { categoryName: 'ID:n' }. This is the vendor-scoped
+   lookup authority: a category name is resolved ONLY inside the active vendor's
+   object, so the same name under two vendors can never share/collide IDs. The
+   seven pinned vendor scopes are spread verbatim at the top so the two
+   dictionaries can never drift. Only the categories listed for a vendor are
+   legal for that vendor. Categories are emitted as `ID:n | Name` and multiples
+   joined with `; `. */
 export const DASHBOARD_CATEGORIES_TAXONOMY = {
   ...STRICT_TAXONOMY_MAP,
   "صيدلية": {"مسكنات": "ID:18", "مزمنة": "ID:20", "الأطفال": "ID:24", "حفاضات": "ID:155", "المرأة": "ID:27", "الشخصية": "ID:23", "فيتامينات": "ID:25", "البشرة": "ID:21", "الشعر": "ID:22", "مستلزمات": "ID:26", "الأم": "ID:39", "المناعة": "ID:19"},

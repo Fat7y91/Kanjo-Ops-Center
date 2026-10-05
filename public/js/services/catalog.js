@@ -4927,26 +4927,22 @@ const kanjoQemaCategoryAliasKeywords = (canonicalName) => {
     return Object.keys(aliases).filter((k) => normalizeArabic(aliases[k]) === target);
 };
 
-/* STRICT_TAXONOMY_MAP gate (ZERO reads). The seven vendors in the strict map are
-   filtered/mapped EXACTLY: candidate categories are only its keys and the final
-   name -> Qema ID must be an exact hit (SMART_ALIASES.categories may bridge the
-   name first). Every other vendor type keeps the legacy heuristic path. */
-const kanjoQemaStrictMap = () => {
-    const t = kanjoQemaTaxonomy();
-    return (t && t.STRICT_TAXONOMY_MAP) || null;
-};
-const kanjoStrictVendorMap = (vendorType) => {
-    const map = kanjoQemaStrictMap();
-    if (!map) return null;
-    const vendor = kanjoQemaResolveVendorType(vendorType);
-    return (vendor && map[vendor]) ? map[vendor] : null;
-};
-const kanjoStrictCategoryValue = (vendorMap, name) => {
-    if (!vendorMap) return '';
-    const direct = vendorMap[name];
-    if (direct) return direct;
-    const bridged = kanjoQemaCategoryAliasName(name);
-    return bridged ? (vendorMap[bridged] || '') : '';
+/* Vendor-scoped category namespace (ZERO reads). A category NAME is resolved
+   ONLY inside DASHBOARD_CATEGORIES_TAXONOMY[<vendor_type>] (via the scoped index
+   built by kanjoQemaCategoryIndex), so an identical name that exists under a
+   DIFFERENT vendor type can never leak its ID into this vendor's export. The
+   SMART_ALIASES.categories bridge is applied inside the same scope only. */
+const kanjoQemaScopedValue = (index, name) => {
+    if (!index) return '';
+    const raw = kanjoCategoryNameFromValue(name);
+    const norm = normalizeArabic(raw);
+    if (!norm) return '';
+    let entry = index.get(norm);
+    if (!entry) {
+        const bridged = kanjoQemaCategoryAliasName(raw);
+        if (bridged) entry = index.get(normalizeArabic(bridged));
+    }
+    return entry ? entry.id : '';
 };
 
 const kanjoQemaParseNum = (token, label) => {
@@ -5263,29 +5259,36 @@ const kanjoHaltUnmappedVariants = (unmapped) => {
     return message;
 };
 
-/* ===== STRICT_TAXONOMY_MAP enforcement (ZERO reads) =====
-   For the seven strict vendors, an assigned category NAME must be an exact key of
-   that vendor's strict map (after the SMART_ALIASES.categories bridge). A name
-   that cannot be mapped is collected here so the export can HALT with a precise
-   error instead of silently dropping the product into an unmapped bucket. The
-   other eight verticals keep the legacy audit path. */
-const kanjoStrictMappingIssues = (evaluations, vendorTypeOf) => {
-    if (!kanjoQemaStrictMap() || typeof vendorTypeOf !== 'function') return [];
+/* ===== Vendor-scoped strict mapping enforcement (ZERO reads) =====
+   For EVERY product whose vendor_type resolves to a DASHBOARD_CATEGORIES_TAXONOMY
+   entry, each assigned category NAME must exist INSIDE that vendor's scope (the
+   SMART_ALIASES.categories bridge is allowed, but only within the same scope). A
+   name that belongs to another vendor, or to no vendor, is collected here so the
+   export HALTS with a precise error instead of emitting a colliding/blank
+   category. Vendors absent from the dashboard taxonomy keep the legacy
+   passthrough. When `opts.includeUnassigned` is set (non-interactive exports
+   where nothing can be audited) a product with no category at all is also
+   reported, so nothing is silently dropped. */
+const kanjoStrictMappingIssues = (evaluations, vendorTypeOf, assignedFor, opts) => {
+    if (typeof vendorTypeOf !== 'function') return [];
+    const includeUnassigned = !!(opts && opts.includeUnassigned);
     const issues = [];
     (evaluations || []).forEach(({ product, match }) => {
         const vendor = vendorTypeOf(product);
-        const map = kanjoStrictVendorMap(vendor);
-        if (!map) return;
-        const assigned = kanjoQemaAssignedFor(product, match, null);
-        if (!assigned) return;
-        const names = String(assigned).split(/[;,]/).map(kanjoCategoryNameFromValue).filter(Boolean);
-        names.forEach((name) => {
-            if (kanjoStrictCategoryValue(map, name)) return;
-            issues.push({
-                vendor: kanjoQemaResolveVendorType(vendor) || vendor,
-                category: name,
-                product: String((product && (product.name_ar || product.name_en || product.id)) || '').trim()
-            });
+        const index = kanjoQemaCategoryIndex(vendor);
+        if (!index) return;
+        const assigned = (typeof assignedFor === 'function')
+            ? assignedFor(product, match)
+            : kanjoQemaAssignedFor(product, match, null);
+        const label = String((product && (product.name_ar || product.name_en || product.id)) || '').trim();
+        const vendorName = kanjoQemaResolveVendorType(vendor) || vendor;
+        if (!assigned) {
+            if (includeUnassigned) issues.push({ vendor: vendorName, category: KANJO_UNCATEGORIZED_LABEL, product: label });
+            return;
+        }
+        String(assigned).split(/[;,]/).map(kanjoCategoryNameFromValue).filter(Boolean).forEach((name) => {
+            if (kanjoQemaScopedValue(index, name)) return;
+            issues.push({ vendor: vendorName, category: name, product: label });
         });
     });
     return issues;
@@ -5295,11 +5298,12 @@ const kanjoStrictMappingMessage = (issues) => {
     const list = (issues || []).map((i) => i.category)
         .filter((v, idx, arr) => v && arr.indexOf(v) === idx)
         .join('، ');
-    return 'فشل التصدير: التصنيفات التالية غير مدرجة في جدول المطابقة الصارم '
-        + '(STRICT_TAXONOMY_MAP) لنوع التاجر. يرجى تحديث الجدول أولاً: ' + list;
+    return 'فشل التصدير: التصنيفات التالية غير مدرجة في نطاق نوع التاجر '
+        + '(DASHBOARD_CATEGORIES_TAXONOMY) أو خارج نطاقه. يرجى تصحيح التصنيف أولاً: ' + list;
 };
 
-/* HALT: never silently drop a category that the strict map cannot resolve. */
+/* HALT: never silently drop a category that the active vendor scope cannot
+   resolve to an in-scope ID. */
 const kanjoHaltStrictMapping = (issues) => {
     const message = kanjoStrictMappingMessage(issues);
     console.error('[catalog] Export halted — strict-mapping misses:', issues);
@@ -5786,19 +5790,19 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
     const rule = kanjoVendorRuleFor(vendor);
     let allowedCats = kanjoVendorAllowedCategories(vendor);
-    /* STRICT vendors: the candidate set is EXACTLY the strict map's keys. We
-       resolve each key back to its keyword-bearing category object so the
-       matcher can still infer; keys with no heuristic object are simply not
-       auto-inferable (manual selection only). */
-    const strictVendorMap = kanjoStrictVendorMap(vendor);
-    if (strictVendorMap) {
+    /* STRICT vendor scope (ZERO reads): the candidate set is EXACTLY the keys of
+       DASHBOARD_CATEGORIES_TAXONOMY[<vendor_type>]. Each key is resolved back to
+       its keyword-bearing category object so inference still works; a name that
+       only exists under another vendor is never proposed. */
+    const scopedIndex = kanjoQemaCategoryIndex(vendor);
+    if (scopedIndex) {
         const byName = new Map();
         KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
             const key = normalizeArabic(cat.name);
             if (!byName.has(key)) byName.set(key, cat);
         });
-        allowedCats = Object.keys(strictVendorMap)
-            .map((name) => byName.get(normalizeArabic(name)))
+        allowedCats = Array.from(scopedIndex.values())
+            .map((c) => byName.get(normalizeArabic(c.name)))
             .filter(Boolean);
     }
     /* Scope by ID, NOT by name: a name like "حلويات" exists in several verticals,
@@ -6528,14 +6532,28 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
     const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
     if (unmappedVariants.length) throw new Error(kanjoUnmappedVariantsMessage(unmappedVariants));
-    const strictIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf);
-    if (strictIssues.length) throw new Error(kanjoStrictMappingMessage(strictIssues));
+    /* Only vendors outside the dashboard taxonomy fall back to their raw label;
+       a scoped vendor must never fabricate a category and is audited below. */
     const selections = {};
     evaluations.forEach(({ product, match }) => {
         if (match.status === 'matched') return;
+        if (kanjoQemaCategoryIndex(vendorTypeOf(product))) return;
         const fallback = String((product && (product.category || product.vendor_type)) || '').trim();
         if (fallback) selections[String((product && product.id) || '')] = [fallback];
     });
+    /* Non-interactive export: nothing can be audited, so ANY scoped category that
+       is missing/out-of-scope (including a product with no category at all) HALTS
+       the workbook with the exact list instead of silently dropping the cell. */
+    const effectiveAssigned = (product, match) => kanjoQemaAssignedFor(
+        product,
+        match,
+        selections[String((product && product.id) || '')]
+    );
+    const scopedIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf, effectiveAssigned, { includeUnassigned: true });
+    if (scopedIssues.length) {
+        kanjoHaltStrictMapping(scopedIssues);
+        throw new Error(kanjoStrictMappingMessage(scopedIssues));
+    }
     const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, undefined);
     const merchantName = String(o.merchantName || '').trim();
     const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
