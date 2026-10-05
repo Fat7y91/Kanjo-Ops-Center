@@ -6403,8 +6403,11 @@ const kanjoDedupeVariantRows = (rows) => {
 };
 
 /* Builds the Products/Variants rows (no I/O, no download) so both the normal
-   export and the vendor ZIP can share the exact same sheet content. */
-const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => {
+   export and the vendor ZIP can share the exact same sheet content. `options`
+   is optional and additive: `options.categoryResolver(vendorType, assigned,
+   product)` lets an isolated caller (the vendor-template filler) supply its own
+   name -> ID mapping without changing the default export behaviour. */
+const kanjoBuildExportRows = async (evaluations, selections, variantEntries, options) => {
     const productRows = [];
     const uniqueSkuById = new Map();
     const seenSkus = new Set();
@@ -6421,8 +6424,9 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => 
         const key = String((product && product.id) || '');
         const vendorType = String((product && (product.category || product.vendor_type || product.vendorType)) || '');
         const assigned = kanjoQemaAssignedFor(product, match, (selections || {})[key]);
-        const qema = kanjoQemaResolveCategory(vendorType, assigned);
-        const category = qema.available ? qema.cell : kanjoFormatExportCategory(assigned);
+        const category = (options && typeof options.categoryResolver === 'function')
+            ? String(options.categoryResolver(vendorType, assigned, product) || '')
+            : (() => { const qema = kanjoQemaResolveCategory(vendorType, assigned); return qema.available ? qema.cell : kanjoFormatExportCategory(assigned); })();
         const row = kanjoBuildProductRow(product, category);
         const extraName = variantNameSuffix.get(key);
         if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
@@ -8146,3 +8150,16 @@ window.addEventListener('keydown', (ev) => {
         window.requestCloseCatalogProductModal();
     }
 });
+
+/* Read-only integration surface for the isolated vendor-template filler
+   (services/templateExport.js). These are references to existing helpers only —
+   no behaviour changes, no new Firestore reads, no touched export routes. */
+window.KanjoCatalogExportAPI = {
+    buildExportRows: (evaluations, selections, variantEntries, options) => kanjoBuildExportRows(evaluations, selections, variantEntries, options),
+    matchProductCategory: (product, vendorType) => kanjoMatchProductCategory(product, vendorType),
+    withNormalizedText: (product) => kanjoWithNormalizedText(product),
+    fetchAllProducts: () => fetchAllCatalogProductsForExport(),
+    fetchDoneProducts: () => fetchDoneCatalogProducts(),
+    merchantNameOf: (product) => catalogProductMerchantName(product),
+    resolveVendorType: (vendorType) => kanjoQemaResolveVendorType(vendorType)
+};
