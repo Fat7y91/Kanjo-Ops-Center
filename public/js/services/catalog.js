@@ -5281,14 +5281,15 @@ const kanjoStrictMappingIssues = (evaluations, vendorTypeOf, assignedFor, opts) 
             ? assignedFor(product, match)
             : kanjoQemaAssignedFor(product, match, null);
         const label = String((product && (product.name_ar || product.name_en || product.id)) || '').trim();
+        const id = String((product && product.id) || '');
         const vendorName = kanjoQemaResolveVendorType(vendor) || vendor;
         if (!assigned) {
-            if (includeUnassigned) issues.push({ vendor: vendorName, category: KANJO_UNCATEGORIZED_LABEL, product: label });
+            if (includeUnassigned) issues.push({ id, vendor: vendorName, vendorType: vendor, category: KANJO_UNCATEGORIZED_LABEL, product: label });
             return;
         }
         String(assigned).split(/[;,]/).map(kanjoCategoryNameFromValue).filter(Boolean).forEach((name) => {
             if (kanjoQemaScopedValue(index, name)) return;
-            issues.push({ vendor: vendorName, category: name, product: label });
+            issues.push({ id, vendor: vendorName, vendorType: vendor, category: name, product: label });
         });
     });
     return issues;
@@ -5304,8 +5305,10 @@ const kanjoStrictMappingMessage = (issues) => {
 
 /* HALT: never silently drop a category that the active vendor scope cannot
    resolve to an in-scope ID. */
-const kanjoHaltStrictMapping = (issues) => {
-    const message = kanjoStrictMappingMessage(issues);
+const kanjoHaltStrictMapping = (issues, options) => {
+    const o = options || {};
+    const message = o.message || kanjoStrictMappingMessage(issues);
+    const intro = o.intro || 'التصنيفات التالية غير مدرجة في جدول المطابقة الصارم (STRICT_TAXONOMY_MAP). يرجى تحديث الجدول أولاً:';
     console.error('[catalog] Export halted — strict-mapping misses:', issues);
     if (typeof window !== 'undefined' && window.Swal && typeof window.Swal.fire === 'function') {
         const rows = (issues || []).map((item) => {
@@ -5318,7 +5321,7 @@ const kanjoHaltStrictMapping = (issues) => {
             icon: 'error',
             title: 'فشل التصدير',
             html: '<div style="text-align:right;direction:rtl;font-size:13px;line-height:1.7">'
-                + 'التصنيفات التالية غير مدرجة في جدول المطابقة الصارم (STRICT_TAXONOMY_MAP). يرجى تحديث الجدول أولاً:'
+                + catalogEscapeHtml(intro)
                 + '<ul style="text-align:right;margin-top:8px;padding-inline-start:18px">' + rows + '</ul></div>',
             confirmButtonText: 'حسناً',
             confirmButtonColor: '#230535'
@@ -6517,9 +6520,44 @@ const kanjoBuildWorkbookBlob = async (productRows, variantRows, fileName) => {
     return new Blob([buffer], { type: MIME_XLSX });
 };
 
+/* Interactive remediation for the ZIP/batch export. When a scoped vendor has a
+   product the strict gate cannot resolve AND a matching vendor template has been
+   uploaded (session memory), pause, ask the operator to pick a valid category
+   strictly from the template's own `_lookups` sheet, inject the choice in-memory
+   and resume. ZERO Firestore: the override lives only for this workbook. Falls
+   back to the normal PDF/Excel HALT when no matching template is active. */
+const kanjoResolveScopedIssuesInteractive = async (issues) => {
+    const tpl = (typeof window !== 'undefined' && window.KanjoTemplateExport && typeof window.KanjoTemplateExport.getActiveTemplate === 'function')
+        ? window.KanjoTemplateExport.getActiveTemplate()
+        : null;
+    if (!tpl || !Array.isArray(tpl.categories) || !tpl.categories.length) return { ok: false, reason: 'no-template' };
+    if (typeof window.kanjoPickTemplateCategories !== 'function') return { ok: false, reason: 'no-template' };
+    const items = [];
+    for (let i = 0; i < issues.length; i++) {
+        const issue = issues[i];
+        const index = kanjoQemaCategoryIndex(issue.vendorType || issue.vendor);
+        const seen = new Set();
+        const options = [];
+        tpl.categories.forEach((cat) => {
+            /* Only template categories that belong to THIS vendor's scope are
+               offered, so a template can never inject a cross-vendor ID. */
+            if (!kanjoQemaScopedValue(index, cat.name)) return;
+            if (seen.has(cat.token)) return;
+            seen.add(cat.token);
+            options.push({ token: cat.token, label: cat.name });
+        });
+        if (!options.length) return { ok: false, reason: 'no-template' };
+        items.push({ productId: issue.id || issue.product, label: issue.product, vendorName: issue.vendor, options: options });
+    }
+    const picked = await window.kanjoPickTemplateCategories(items);
+    if (!picked) return { ok: false, reason: 'cancelled' };
+    return { ok: true, overrides: picked };
+};
+
 /* Non-interactive vendor workbook builder used by the ZIP export. Unlike the
    modal export it never pauses behind the category audit: products the matcher
-   cannot classify fall back to their own stored category. */
+   cannot classify fall back to their own stored category, and scoped products
+   that remain unresolved trigger the template-backed interactive picker. */
 window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     const o = opts || {};
     const includePending = o.includePending !== false;
@@ -6554,11 +6592,39 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
         selections[String((product && product.id) || '')]
     );
     const scopedIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf, effectiveAssigned, { includeUnassigned: true });
+    const overrides = {};
     if (scopedIssues.length) {
-        kanjoHaltStrictMapping(scopedIssues);
-        throw new Error(kanjoStrictMappingMessage(scopedIssues));
+        const outcome = await kanjoResolveScopedIssuesInteractive(scopedIssues);
+        if (!outcome.ok) {
+            if (outcome.reason === 'no-template') {
+                kanjoHaltStrictMapping(scopedIssues, {
+                    intro: 'لا يوجد قالب تاجر نشط يطابق نطاق نوع التاجر. يرجى رفع القالب الرسمي للتاجر من زر «تعبئة قالب التاجر» أولاً ثم إعادة التصدير:'
+                });
+                throw new Error(kanjoStrictMappingMessage(scopedIssues));
+            }
+            /* Operator deliberately cancelled the picker: abort quietly. */
+            throw new Error('تم إلغاء التصدير: لم يتم اختيار تصنيفات المنتجات غير المعروفة');
+        }
+        Object.assign(overrides, outcome.overrides || {});
+        const remaining = kanjoStrictMappingIssues(
+            evaluations,
+            vendorTypeOf,
+            (product, match) => overrides[String((product && product.id) || '')] || effectiveAssigned(product, match),
+            { includeUnassigned: true }
+        );
+        if (remaining.length) {
+            kanjoHaltStrictMapping(remaining);
+            throw new Error(kanjoStrictMappingMessage(remaining));
+        }
     }
-    const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, undefined);
+    const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, undefined, {
+        categoryResolver: (vendorType, assigned, product) => {
+            const key = String((product && product.id) || '');
+            if (overrides[key]) return overrides[key];
+            const qema = kanjoQemaResolveCategory(vendorType, assigned);
+            return qema.available ? qema.cell : kanjoFormatExportCategory(assigned);
+        }
+    });
     const merchantName = String(o.merchantName || '').trim();
     const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
     const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';

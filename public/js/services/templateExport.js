@@ -259,6 +259,76 @@
         if (typeof window.showToast === 'function') window.showToast(message, ok !== false);
     };
 
+    /* ===== Active template (session memory, ZERO Firestore) =====
+       The most recently parsed vendor template becomes the authority the ZIP
+       export consults when a scoped product cannot be resolved: its `_lookups`
+       category tokens are the ONLY values the operator may pick from. */
+    let activeTemplate = null;
+    const setActiveTemplate = (fileName, lookups) => {
+        const cats = (lookups && lookups.categories) || [];
+        activeTemplate = {
+            fileName: String(fileName || ''),
+            categories: cats.map((c) => ({ token: c.full, name: c.name })),
+            variants: ((lookups && lookups.variants) || []).map((v) => ({ token: v.full, name: v.name, attr: v.attr })),
+            setAt: Date.now()
+        };
+        if (typeof window !== 'undefined') window.kanjoActiveTemplate = activeTemplate;
+        return activeTemplate;
+    };
+    const getActiveTemplate = () => activeTemplate;
+
+    const escapeHtml = (value) => String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    /* Interactive batch picker used by the ZIP export remediation. `items` is
+       [{ productId, label, vendorName, options:[{ token, label }] }]. Resolves to
+       a map of { productId: token } on confirm, or null on cancel/unavailable. */
+    const pickTemplateCategories = async (items) => {
+        const list = Array.isArray(items) ? items : [];
+        if (!list.length) return {};
+        const Swal = (typeof window !== 'undefined') ? window.Swal : null;
+        if (!Swal || typeof Swal.fire !== 'function') return null;
+        const body = list.map((item, i) => {
+            const options = (item.options || []).map((opt) =>
+                '<option value="' + escapeHtml(opt.token) + '">' + escapeHtml(opt.label || opt.name || opt.token) + '</option>'
+            ).join('');
+            const who = item.vendorName ? ' <span style="font-weight:600;color:#64748b">[' + escapeHtml(item.vendorName) + ']</span>' : '';
+            return '<div style="margin:10px 0;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#faf7ff">'
+                + '<div style="font-weight:800;color:#230535;margin-bottom:6px">' + escapeHtml(item.label || item.productId) + who + '</div>'
+                + '<select id="kanjoTplPick' + i + '" style="width:100%;padding:8px;border:1px solid #c4b5fd;border-radius:8px;background:#fff">'
+                + '<option value="">— اختر تصنيفاً —</option>' + options + '</select></div>';
+        }).join('');
+        const result = await Swal.fire({
+            icon: 'question',
+            title: 'تصنيفات غير مطابقة — اختيار يدوي مطلوب',
+            html: '<div style="text-align:right;direction:rtl;font-size:13px;line-height:1.7">'
+                + '<p>تعذّر مطابقة التصنيفات التالية. يرجى اختيار تصنيف صالح من قالب التاجر النشط لكل منتج '
+                + '(من ورقة <b>_lookups</b>):</p>'
+                + '<div style="max-height:60vh;overflow:auto">' + body + '</div></div>',
+            confirmButtonText: 'متابعة التصدير',
+            confirmButtonColor: '#230535',
+            showCancelButton: true,
+            cancelButtonText: 'إلغاء',
+            preConfirm: () => {
+                const out = {};
+                for (let i = 0; i < list.length; i++) {
+                    const select = document.getElementById('kanjoTplPick' + i);
+                    const value = select ? String(select.value || '') : '';
+                    if (!value) {
+                        if (typeof Swal.showValidationMessage === 'function') Swal.showValidationMessage('يرجى تحديد تصنيف لكل المنتجات قبل المتابعة');
+                        return false;
+                    }
+                    out[String(list[i].productId || '')] = value;
+                }
+                return out;
+            }
+        });
+        if (!result || !result.isConfirmed || !result.value) return null;
+        return result.value;
+    };
+    window.kanjoPickTemplateCategories = pickTemplateCategories;
+
     /* Parse a workbook buffer into { workbook, lookups, sheetNames }. Pure
        in-memory; used by the public entry point and by tests. */
     const parseTemplateWorkbook = (XLSX, buffer) => {
@@ -294,6 +364,9 @@
         const buffer = await file.arrayBuffer();
         const parsed = parseTemplateWorkbook(XLSX, buffer);
         const { workbook, lookups, productsSheet, variantsSheet, readAoa } = parsed;
+        /* Remember this template as the session-authoritative source of IDs so
+           the ZIP export can offer its `_lookups` categories for manual fixes. */
+        setActiveTemplate(file.name, lookups);
 
         const source = Array.isArray(o.source)
             ? o.source
@@ -398,6 +471,9 @@
         findSheetName: findSheetName,
         parseTemplateWorkbook: parseTemplateWorkbook,
         writeRowsIntoSheet: writeRowsIntoSheet,
-        templateOutputName: templateOutputName
+        templateOutputName: templateOutputName,
+        pickTemplateCategories: pickTemplateCategories,
+        setActiveTemplate: setActiveTemplate,
+        getActiveTemplate: getActiveTemplate
     };
 })();
