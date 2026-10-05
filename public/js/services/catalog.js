@@ -2200,14 +2200,18 @@ window.submitCatalogProduct = async (event, options) => {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
         return;
     }
-    if (window._catalogEditingProduct) {
-        await updateCatalogProductDirect();
-        return;
-    }
-    const closeAfterSave = !!(options && options.closeAfterSave);
+    /* Strict double-submit guard: flip the lock flag and disable BOTH save
+       buttons synchronously on the very first invocation — before any await or
+       branch — so a rapid second click, Enter key, or programmatic resubmit can
+       never enqueue the same product twice (the split-brain duplicate-SKU bug). */
     window._catalogDraftSaving = true;
-    setCatalogSubmitBusy(true, '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الحفظ في المسودة...');
+    setCatalogSubmitBusy(true, '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري الحفظ...');
     try {
+        if (window._catalogEditingProduct) {
+            await updateCatalogProductDirect();
+            return;
+        }
+        const closeAfterSave = !!(options && options.closeAfterSave);
         const draft = await collectCatalogFormDraft();
         if (!draft) return;
         const drafts = await readCatalogDrafts();
@@ -2324,8 +2328,8 @@ const updateCatalogProductDirect = async () => {
                 nameNeedsTranslation ? translateArToEn(form.nameAr) : Promise.resolve(nameEn),
                 descNeedsTranslation ? translateArToEn(form.descriptionAr) : Promise.resolve(descriptionEn)
             ]);
-            if (nameNeedsTranslation) nameEn = translatedName;
-            if (descNeedsTranslation) descriptionEn = translatedDesc;
+            if (nameNeedsTranslation) nameEn = catalogTranslationOrKeep(translatedName, nameEn);
+            if (descNeedsTranslation) descriptionEn = catalogTranslationOrKeep(translatedDesc, descriptionEn);
         }
         let rawImageUrls = catalogRawImageUrls(editing);
         let rawImageUrl = editing.rawImageUrl || rawImageUrls[0] || '';
@@ -3637,16 +3641,46 @@ const parseGoogleTranslateResponse = (data) => {
     return data[0].map((chunk) => (Array.isArray(chunk) ? String(chunk[0] || '') : '')).join('').trim();
 };
 
+/* Auto-translation is best-effort but must never hang the save/publish path.
+   Each provider call is bounded by an AbortController timeout, retryable
+   failures (HTTP 429/5xx, network abort) are retried across providers with
+   exponential backoff, and identical texts share both an in-flight promise and
+   a successful-result cache so a bulk sync of repeated descriptions does not
+   hammer the free endpoints (the root cause of the silently-empty English
+   fields on ليالي الشرق). */
+const CATALOG_TRANSLATE_TIMEOUT_MS = 9000;
+const CATALOG_TRANSLATE_MAX_ROUNDS = 3;
+const CATALOG_TRANSLATE_CACHE = new Map();
+const CATALOG_TRANSLATE_INFLIGHT = new Map();
+const catalogTranslateSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const catalogFetchWithTimeout = async (url, timeoutMs) => {
+    if (typeof AbortController === 'undefined') return fetch(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+};
+
+const catalogTranslationRetryable = (err) => {
+    const message = String((err && err.message) || err || '');
+    if (/HTTP_(429|5\d\d)/.test(message)) return true;
+    return String((err && err.name) || '') === 'AbortError';
+};
+
 const translateViaGoogle = async (text) => {
     const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=' + encodeURIComponent(text);
-    const response = await fetch(url);
+    const response = await catalogFetchWithTimeout(url, CATALOG_TRANSLATE_TIMEOUT_MS);
     if (!response.ok) throw new Error('GOOGLE_TRANSLATE_HTTP_' + response.status);
     return parseGoogleTranslateResponse(await response.json());
 };
 
 const translateViaMyMemory = async (text) => {
     const url = 'https://api.mymemory.translated.net/get?langpair=ar|en&q=' + encodeURIComponent(text);
-    const response = await fetch(url);
+    const response = await catalogFetchWithTimeout(url, CATALOG_TRANSLATE_TIMEOUT_MS);
     if (!response.ok) throw new Error('MYMEMORY_HTTP_' + response.status);
     const data = await response.json();
     return String((data && data.responseData && data.responseData.translatedText) || '').trim();
@@ -3655,19 +3689,48 @@ const translateViaMyMemory = async (text) => {
 const translateArToEn = async (arabicText) => {
     const text = String(arabicText || '').trim();
     if (!text) return '';
-    const attempts = [translateViaGoogle, translateViaGoogle, translateViaMyMemory];
-    for (let i = 0; i < attempts.length; i++) {
-        try {
-            const translated = String(await attempts[i](text) || '').trim();
-            if (!translated) continue;
-            if (translated === text) continue;
-            if (catalogHasArabicScript(translated)) continue;
-            return translated;
-        } catch (err) {
-            console.error('[catalog] translate attempt failed:', err);
+    if (CATALOG_TRANSLATE_CACHE.has(text)) return CATALOG_TRANSLATE_CACHE.get(text);
+    if (CATALOG_TRANSLATE_INFLIGHT.has(text)) return CATALOG_TRANSLATE_INFLIGHT.get(text);
+    const providers = [translateViaGoogle, translateViaMyMemory];
+    const run = (async () => {
+        for (let round = 0; round < CATALOG_TRANSLATE_MAX_ROUNDS; round++) {
+            let retryable = false;
+            for (let i = 0; i < providers.length; i++) {
+                try {
+                    const translated = String(await providers[i](text) || '').trim();
+                    if (!translated) continue;
+                    if (translated === text) continue;
+                    if (catalogHasArabicScript(translated)) continue;
+                    CATALOG_TRANSLATE_CACHE.set(text, translated);
+                    return translated;
+                } catch (err) {
+                    console.error('[catalog] translate attempt failed:', err);
+                    if (catalogTranslationRetryable(err)) retryable = true;
+                }
+            }
+            /* Only wait before another round when the last round saw a retryable
+               failure; a clean-but-empty response means retrying won't help. */
+            if (round < CATALOG_TRANSLATE_MAX_ROUNDS - 1 && retryable) {
+                await catalogTranslateSleep(400 * Math.pow(2, round));
+            } else if (!retryable) {
+                break;
+            }
         }
+        return '';
+    })();
+    CATALOG_TRANSLATE_INFLIGHT.set(text, run);
+    try {
+        return await run;
+    } finally {
+        CATALOG_TRANSLATE_INFLIGHT.delete(text);
     }
-    return '';
+};
+
+/* Preserve an existing valid English value when a fresh translation came back
+   empty: a failed retry must never blank out a previously-good translation. */
+const catalogTranslationOrKeep = (translated, fallback) => {
+    const fresh = String(translated || '').trim();
+    return fresh || String(fallback || '').trim();
 };
 
 const catalogEnhanceTargetCount = (product) => {
@@ -3820,6 +3883,159 @@ window.syncAllCatalogDrafts = async () => {
            next open reconciles once, count-gated. */
         if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
     }
+};
+
+/* ─── One-off SKU de-duplication (admin) ───
+   Duplicate products sharing a SKU (same merchant + same Arabic name) are the
+   signature of the old split-brain double-submit: one submission produced two
+   docs, and a later image/text edit landed on only one of them. This routine
+   groups the live catalog by `sku + merchantId + normalized name_ar`, keeps the
+   superior twin (most images, then most recently updated/created), and reports
+   the plan. Deletion is DRY-RUN by default and only runs when the caller
+   explicitly passes { dryRun:false, confirm:true } as a founder; every removed
+   doc is written to the Black Box (audit_logs). Same-SKU docs with DIFFERENT
+   merchant names are reported as conflicts, never auto-deleted. */
+const kanjoDedupeImageCount = (p) => catalogRawImageUrls(p).length + catalogEnhancedImageUrls(p).length;
+const kanjoDedupeTime = (value) => {
+    if (!value) return 0;
+    if (value instanceof Date) return value.getTime();
+    if (typeof value === 'object') {
+        if (value._date) return new Date(value._date).getTime();
+        if (value.seconds != null) return value.seconds * 1000;
+        if (typeof value.toDate === 'function') return value.toDate().getTime();
+    }
+    const t = new Date(value).getTime();
+    return Number.isNaN(t) ? 0 : t;
+};
+const kanjoDedupeNormalizedName = (p) => String((p && p.name_ar) || '')
+    .replace(/[\u064B-\u0652\u0640]/g, '')
+    .replace(/[\u0623\u0625\u0622]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/\s+/g, ' ')
+    .trim();
+const kanjoDedupeProductSummary = (p) => ({
+    id: p.id,
+    sku: p.sku || '',
+    merchantId: p.merchantId || '',
+    merchantName: catalogProductMerchantName(p),
+    name_ar: p.name_ar || '',
+    name_en: p.name_en || '',
+    images: kanjoDedupeImageCount(p),
+    status: p.status || '',
+    createdAt: p.createdAt || null,
+    updatedAt: p.updatedAt || null,
+    updatedBy: p.updatedBy || '',
+    hasDescriptionEn: !!String(p.description_en || '').trim()
+});
+/* Keep the doc with images first, then the most recently touched, then the most
+   recently created, then a stable id tiebreak so the "keeper" is deterministic. */
+const kanjoDedupeRank = (a, b) => {
+    const ia = kanjoDedupeImageCount(a);
+    const ib = kanjoDedupeImageCount(b);
+    if (ib !== ia) return ib - ia;
+    const ua = kanjoDedupeTime(a.updatedAt) || kanjoDedupeTime(a.createdAt);
+    const ub = kanjoDedupeTime(b.updatedAt) || kanjoDedupeTime(b.createdAt);
+    if (ub !== ua) return ub - ua;
+    const ca = kanjoDedupeTime(a.createdAt);
+    const cb = kanjoDedupeTime(b.createdAt);
+    if (cb !== ca) return cb - ca;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+};
+
+window.kanjoDedupeDuplicateSkus = async (options) => {
+    const opts = options || {};
+    const execute = opts.dryRun === false && opts.confirm === true;
+    const products = await fetchAllCatalogProductsForExport();
+    const groups = new Map();
+    (products || []).forEach((p) => {
+        const sku = String((p && p.sku) || '').trim();
+        if (!sku) return;
+        if (!groups.has(sku)) groups.set(sku, []);
+        groups.get(sku).push(p);
+    });
+    const plan = [];
+    const conflicts = [];
+    groups.forEach((list, sku) => {
+        if (list.length < 2) return;
+        const byIdentity = new Map();
+        list.forEach((p) => {
+            const key = String(p.merchantId || '') + '\u0000' + kanjoDedupeNormalizedName(p);
+            if (!byIdentity.has(key)) byIdentity.set(key, []);
+            byIdentity.get(key).push(p);
+        });
+        if (byIdentity.size > 1) {
+            conflicts.push({
+                sku,
+                identities: Array.from(byIdentity.values()).map((twins) => twins.map(kanjoDedupeProductSummary))
+            });
+            return;
+        }
+        const twins = list.slice().sort(kanjoDedupeRank);
+        plan.push({
+            sku,
+            keep: kanjoDedupeProductSummary(twins[0]),
+            remove: twins.slice(1).map(kanjoDedupeProductSummary)
+        });
+    });
+    const totalRemove = plan.reduce((n, g) => n + g.remove.length, 0);
+    const result = {
+        dryRun: !execute,
+        skuGroups: plan.length,
+        duplicateDocs: totalRemove,
+        conflicts: conflicts.length,
+        plan,
+        conflictGroups: conflicts
+    };
+    if (!execute) {
+        if (totalRemove) {
+            console.warn('[dedupe] DRY RUN -', totalRemove, 'duplicate doc(s) across', plan.length, 'SKU group(s). Re-run with { dryRun:false, confirm:true } as a founder to delete.');
+        }
+        return result;
+    }
+    const isFounder = typeof window.isFounderAuditUser === 'function'
+        ? window.isFounderAuditUser()
+        : String(((window.currentUser || {}).role) || '') === 'founder';
+    if (!isFounder) {
+        if (window.showToast) window.showToast('تنظيف المنتجات المكررة متاح للمؤسسين فقط', false);
+        return Object.assign({}, result, { executed: false, error: 'FOUNDER_ONLY' });
+    }
+    const deleted = [];
+    const failures = [];
+    for (const group of plan) {
+        for (const doc of group.remove) {
+            try {
+                if (await catalogRestDelete([CATALOG_COLLECTION, doc.id])) {
+                    deleted.push(doc.id);
+                    if (typeof window.kanjoAuditDelete === 'function') {
+                        window.kanjoAuditDelete({
+                            collectionId: CATALOG_COLLECTION,
+                            id: doc.id,
+                            name: doc.name_ar || doc.sku,
+                            description: 'إزالة منتج مكرر (نفس SKU ' + group.sku + ') - أُبقي على ' + group.keep.id
+                        });
+                    }
+                } else if (typeof window.deleteDoc === 'function' && window.doc) {
+                    /* SDK fallback; its delete hook writes the Black Box entry. */
+                    await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, doc.id));
+                    deleted.push(doc.id);
+                } else {
+                    failures.push({ id: doc.id, error: 'NO_DELETE_TRANSPORT' });
+                }
+            } catch (err) {
+                console.error('[dedupe] delete failed:', doc.id, err);
+                failures.push({ id: doc.id, error: String((err && err.message) || err) });
+            }
+        }
+    }
+    if (deleted.length && Array.isArray(window.allCatalogProductsCache)) {
+        const removed = new Set(deleted);
+        window.allCatalogProductsCache = window.allCatalogProductsCache.filter((p) => !removed.has(p.id));
+    }
+    if (typeof window.showToast === 'function') {
+        window.showToast('تمت إزالة ' + deleted.length + ' منتجاً مكرراً' + (failures.length ? '، وفشل ' + failures.length : ''), failures.length === 0);
+    }
+    return Object.assign({}, result, { dryRun: false, executed: true, deleted, failures });
 };
 
 window.downloadCatalogRawImage = (productId, imageIndex) => {
@@ -6188,6 +6404,12 @@ const kanjoBuildProductRow = (p, category) => {
     if (String(row.product_type || '').toLowerCase() === 'variable') row.product_type = 'variant';
     /* Variant products must not carry a base_price — only simple products do. */
     if (row.product_type === 'variant') row.base_price = '';
+    /* Graceful fallback: the Kanjo dashboard requires name_en/description_en.
+       When auto-translation never populated one (network/rate-limit failure on
+       an old product), inject the Arabic source so the exported template never
+       fails target mandatory-field validation. In-memory only. */
+    if (!String(row.name_en || '').trim()) row.name_en = row.name_ar || '';
+    if (!String(row.description_en || '').trim()) row.description_en = row.description_ar || '';
     return row;
 };
 
