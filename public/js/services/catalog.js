@@ -5000,19 +5000,24 @@ const kanjoQemaAssignedFor = (product, match, selection) => {
     return match && match.status === 'matched' ? String(match.category || '') : '';
 };
 
-/* Strict variant mapping: whole-name first (multi-word options such as
-   "اكس لارج"/"صوص أحمر"/"عيش سوري"), then per-token for compound names such as
-   "صغير إيطالي". Recognised options become assignments; unknown tokens are
-   dropped. Returns [] when nothing matches, or null when the taxonomy is absent
-   (caller keeps the legacy alias path). */
-const kanjoQemaVariantAssignments = (rawName) => {
+/* Strict variant mapping. The whole option name is matched first (multi-word
+   options such as "اكس لارج"/"صوص أحمر"/"عيش سوري"); otherwise a greedy
+   longest-phrase scan assigns each recognised phrase to its attribute family and
+   reports every leftover word as `unknown`. The export ABORTS on any unknown
+   option (see kanjoHaltUnmappedVariants) rather than silently dropping it.
+   Returns null when the taxonomy is absent so callers keep the legacy alias
+   path. Assignment order follows QEMA_VARIANT_GROUP_PRIORITY and is capped at
+   the template's four attribute families; any overflow is reported as unknown
+   so it can never be dropped invisibly. */
+const QEMA_VARIANT_PHRASE_MAX = 4;
+const kanjoQemaVariantAnalysis = (rawName) => {
     const t = kanjoQemaTaxonomy();
     if (!t) return null;
     const tax = t.DASHBOARD_VARIANTS_TAXONOMY || {};
     const priority = (t.QEMA_VARIANT_GROUP_PRIORITY || []).slice();
     const ordered = priority.concat(Object.keys(tax).filter((g) => priority.indexOf(g) === -1));
-    const findOption = (token) => {
-        const target = normalizeArabic(token);
+    const findOption = (phrase) => {
+        const target = normalizeArabic(phrase);
         if (!target) return null;
         for (let i = 0; i < ordered.length; i++) {
             const group = tax[ordered[i]];
@@ -5029,29 +5034,110 @@ const kanjoQemaVariantAssignments = (rawName) => {
         return null;
     };
     const trimmed = String(rawName || '').trim();
-    if (!trimmed) return [];
+    if (!trimmed) return { assignments: [], unknown: [] };
     const whole = findOption(trimmed);
-    if (whole) return [whole];
+    if (whole) return { assignments: [whole], unknown: [] };
+    /* Split on whitespace/punctuation only; Unicode letters/digits survive, so
+       "صغير - حار" scans as two options instead of three tokens. */
+    const words = trimmed.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     const byGroup = new Map();
-    trimmed.split(/\s+/).filter(Boolean).forEach((token) => {
-        const hit = findOption(token);
-        if (hit && !byGroup.has(hit.groupName)) byGroup.set(hit.groupName, hit);
-    });
-    return Array.from(byGroup.values())
-        .sort((a, b) => ordered.indexOf(a.groupName) - ordered.indexOf(b.groupName))
-        .slice(0, 4);
+    const unknown = [];
+    let i = 0;
+    while (i < words.length) {
+        let matched = null;
+        const max = Math.min(QEMA_VARIANT_PHRASE_MAX, words.length - i);
+        for (let len = max; len >= 1; len--) {
+            const hit = findOption(words.slice(i, i + len).join(' '));
+            if (hit) { matched = { hit, len }; break; }
+        }
+        if (matched) {
+            if (!byGroup.has(matched.hit.groupName)) byGroup.set(matched.hit.groupName, matched.hit);
+            i += matched.len;
+        } else {
+            if (unknown.indexOf(words[i]) === -1) unknown.push(words[i]);
+            i += 1;
+        }
+    }
+    const sorted = Array.from(byGroup.values())
+        .sort((a, b) => ordered.indexOf(a.groupName) - ordered.indexOf(b.groupName));
+    const assignments = sorted.slice(0, 4);
+    sorted.slice(4).forEach((a) => { if (unknown.indexOf(a.label) === -1) unknown.push(a.label); });
+    return { assignments, unknown };
+};
+
+const kanjoQemaVariantAssignments = (rawName) => {
+    const analysis = kanjoQemaVariantAnalysis(rawName);
+    return analysis === null ? null : analysis.assignments;
 };
 
 const kanjoQemaVariantCells = (rawName) => {
-    const assignments = kanjoQemaVariantAssignments(rawName);
-    if (assignments === null) return null;
+    const analysis = kanjoQemaVariantAnalysis(rawName);
+    if (analysis === null) return null;
     const cells = {};
-    assignments.forEach((a, i) => {
+    analysis.assignments.forEach((a, i) => {
         const slot = i + 1;
         cells['attribute_' + slot + '_name'] = 'ID:' + a.groupId + ' | ' + a.groupName;
         cells['attribute_' + slot + '_value'] = 'ID:' + a.valueId + ' | ATTR:' + a.groupId + ' | ' + a.label;
     });
-    return { assignments, cells };
+    return { assignments: analysis.assignments, cells, unknown: analysis.unknown };
+};
+
+/* Every variant option across the evaluated products that the static dictionary
+   cannot fully map, tagged with the products that carry it. An empty array means
+   the export may proceed. ZERO reads — pure array work. */
+const kanjoQemaUnmappedVariants = (evaluations) => {
+    if (!kanjoQemaTaxonomy()) return [];
+    const found = new Map();
+    (evaluations || []).forEach(({ product }) => {
+        const variations = Array.isArray(product && product.variations)
+            ? product.variations.filter((v) => v && String(v.name || '').trim())
+            : [];
+        const productName = String((product && (product.name_ar || product.name_en || product.id)) || '').trim();
+        variations.forEach((v) => {
+            const analysis = kanjoQemaVariantAnalysis(v.name);
+            if (!analysis || !analysis.unknown.length) return;
+            analysis.unknown.forEach((token) => {
+                if (!found.has(token)) found.set(token, new Set());
+                found.get(token).add(productName);
+            });
+        });
+    });
+    return Array.from(found.entries()).map(([option, products]) => ({
+        option,
+        products: Array.from(products).filter(Boolean)
+    }));
+};
+
+const kanjoUnmappedVariantsMessage = (unmapped) => {
+    const list = (unmapped || []).map((item) => item.option).join('، ');
+    return 'فشل التصدير: المتغيرات التالية غير مسجلة في قاموس لوحة التحكم. يرجى تحديث القاموس أولاً: ' + list;
+};
+
+/* HALT: never silently drop an unmapped option — abort the whole export and tell
+   the operator exactly which options must be added to the dictionary. */
+const kanjoHaltUnmappedVariants = (unmapped) => {
+    const message = kanjoUnmappedVariantsMessage(unmapped);
+    console.error('[catalog] Export halted — unmapped variants:', unmapped);
+    if (typeof window !== 'undefined' && window.Swal && typeof window.Swal.fire === 'function') {
+        const rows = (unmapped || []).map((item) => {
+            const names = item.products.slice(0, 3).join('، ');
+            const more = item.products.length > 3 ? '…' : '';
+            const products = names ? ' <span style="font-weight:600;color:#64748b">(' + catalogEscapeHtml(names + more) + ')</span>' : '';
+            return '<li style="margin:3px 0"><span style="font-weight:900;color:#230535">' + catalogEscapeHtml(item.option) + '</span>' + products + '</li>';
+        }).join('');
+        window.Swal.fire({
+            icon: 'error',
+            title: 'فشل التصدير',
+            html: '<div style="text-align:right;direction:rtl;font-size:13px;line-height:1.7">'
+                + 'المتغيرات التالية غير مسجلة في قاموس لوحة التحكم. يرجى تحديث القاموس أولاً:'
+                + '<ul style="text-align:right;margin-top:8px;padding-inline-start:18px">' + rows + '</ul></div>',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#230535'
+        });
+        return message;
+    }
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(message);
+    return message;
 };
 
 /* Silent fallback for products the keyword matcher cannot classify: the export
@@ -5903,6 +5989,10 @@ const kanjoApplyVariantDecisions = (kept, conflicts, decisions) => {
    carry DIFFERENT prices are all kept (one row per distinct price) so no pricing
    information is lost — the admin resolves any remainder inside the sheet. */
 const kanjoStartVariantPhase = (evaluations, selections, opts) => {
+    /* Safety gate: an option outside the static dictionary must never be
+       silently dropped — abort the whole export and list it. */
+    const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
+    if (unmappedVariants.length) { kanjoHaltUnmappedVariants(unmappedVariants); return; }
     const entries = kanjoCollectVariantEntries(evaluations);
     const groups = kanjoGroupVariantEntries(entries);
     const kept = [];
@@ -6041,7 +6131,16 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => 
         variantSeq.set(uniqueSku, n);
         row.variant_sku = uniqueSku + '-V' + n;
     });
-    return { productRows, variantRows };
+    /* Step 4 — orphaned product cleanup: a product exported as `variant` with
+       zero final variants (empty/missing variations) would be rejected as an
+       orphaned parent, so drop it from the Products sheet. Its (non-existent)
+       variants are never exported either. Simple products are always kept. */
+    const parentsWithVariants = new Set(variantRows.map((row) => String(row.product_key || '')));
+    const cleanedProductRows = productRows.filter((row) => (
+        String(row.product_type || '').toLowerCase() !== 'variant'
+        || parentsWithVariants.has(String(row.product_key || ''))
+    ));
+    return { productRows: cleanedProductRows, variantRows };
 };
 
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
@@ -6097,6 +6196,8 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     filtered = filtered.map((p) => kanjoWithNormalizedText(p));
     const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || o.vendorType || '').trim();
     const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+    const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
+    if (unmappedVariants.length) throw new Error(kanjoUnmappedVariantsMessage(unmappedVariants));
     const selections = {};
     evaluations.forEach(({ product, match }) => {
         if (match.status === 'matched') return;
@@ -6426,6 +6527,10 @@ window.exportKanjoExcel = async (options) => {
            positives (a restaurant landing in "فراخ"/"لحوم") are impossible. */
         const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || opts.vendorType || '').trim();
         const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+        /* Variant safety gate runs BEFORE any category prompt so an unmapped
+           option aborts the export immediately. */
+        const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
+        if (unmappedVariants.length) { kanjoHaltUnmappedVariants(unmappedVariants); return; }
         const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, opts);
         /* Intercept: any product the smart matcher cannot classify, OR whose
            matched categories are not legal for its Qema vendor type, PAUSES the

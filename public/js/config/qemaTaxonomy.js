@@ -50,10 +50,7 @@ export const DASHBOARD_CATEGORIES_TAXONOMY = {
 };
 
 /* Qema variant attribute groups -> { id, options: { optionName: 'ATTR:<valueId>' } }.
-   The first four groups came from the Ops spec verbatim; groups 5-9 (and the
-   الصوص options) were reconstructed from the canonical template IDs already
-   hardcoded in catalog.js (KANJO_VARIANT_NAME_BY_ATTR + the alias dictionary),
-   which the supplied fragment matched 1:1. The exported cells are:
+   Dictionaries are the dashboard spec verbatim. The exported cells are:
      attribute name  = `ID:<groupId> | <groupName>`
      attribute value = `ID:<valueId> | ATTR:<groupId> | <optionName>` */
 export const DASHBOARD_VARIANTS_TAXONOMY = {
@@ -63,8 +60,8 @@ export const DASHBOARD_VARIANTS_TAXONOMY = {
   "الصوص": {"id": "ID:4", "options": {"صوص أحمر": "ATTR:11","صوص أبيض": "ATTR:12"}},
   "تحويجة القهوة": {"id": "ID:5", "options": {"سادة": "ATTR:13","محوج": "ATTR:14","فاتح": "ATTR:15","غامق": "ATTR:16","مشكل": "ATTR:17","تركي": "ATTR:18","كويتي": "ATTR:19","العميد": "ATTR:20","ديل": "ATTR:21","بندق": "ATTR:22"}},
   "الوزن": {"id": "ID:6", "options": {"جرام": "ATTR:23","ثمن كيلو": "ATTR:24","ربع كيلو": "ATTR:25","نص كيلو": "ATTR:26","750 جرام": "ATTR:27","كيلو": "ATTR:28"}},
-  "حجم العبوة": {"id": "ID:7", "options": {"30 ملل": "ATTR:31","50 ملل": "ATTR:33","100 ملل": "ATTR:38"}},
-  "العدد": {"id": "ID:8", "options": {"قطعتين": "ATTR:39","3 قطع": "ATTR:40","5 قطع": "ATTR:42","بوكس 6 قطع": "ATTR:43"}},
+  "حجم العبوة": {"id": "ID:7", "options": {"10 ملل": "ATTR:29","20 ملل": "ATTR:30","30 ملل": "ATTR:31","40 ملل": "ATTR:32","50 ملل": "ATTR:33","60 ملل": "ATTR:34","70 ملل": "ATTR:35","80 ملل": "ATTR:36","90 ملل": "ATTR:37","100 ملل": "ATTR:38"}},
+  "العدد": {"id": "ID:8", "options": {"قطعتين": "ATTR:39","3 قطع": "ATTR:40","4 قطع": "ATTR:41","5 قطع": "ATTR:42","بوكس 6 قطع": "ATTR:43","8 قطع": "ATTR:57","10 قطع": "ATTR:58","12 قطعة": "ATTR:59","14 قطعة": "ATTR:60","15 قطعة": "ATTR:61","16 قطعة": "ATTR:62","18 قطعة": "ATTR:63","20 قطعة": "ATTR:64","25 قطعة": "ATTR:65","30 قطعة": "ATTR:66","35 قطعة": "ATTR:67"}},
   "نوع العجينة": {"id": "ID:9", "options": {"شرقي": "ATTR:52","إيطالي": "ATTR:53","عادي": "ATTR:54","ملفوف": "ATTR:55"}}
 };
 
