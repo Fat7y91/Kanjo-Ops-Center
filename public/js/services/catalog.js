@@ -5010,9 +5010,7 @@ const kanjoQemaAssignedFor = (product, match, selection) => {
    that STILL fails to match triggers the unmapped-variant halt. ZERO reads. */
 const kanjoQemaMergedAliasOptions = (t) => {
     const merged = {};
-    const variant = (t && t.VARIANT_ALIASES && t.VARIANT_ALIASES.options) || {};
-    const smart = (t && t.SMART_ALIASES) || {};
-    Object.keys(variant).forEach((k) => { merged[String(k).trim().toLowerCase()] = variant[k]; });
+    const smart = (t && t.SMART_ALIASES && t.SMART_ALIASES.options) || {};
     Object.keys(smart).forEach((k) => { merged[String(k).trim().toLowerCase()] = smart[k]; });
     return merged;
 };
@@ -5031,7 +5029,7 @@ const kanjoQemaApplyVariantAliases = (rawName) => {
     const t = kanjoQemaTaxonomy();
     const raw = String(rawName || '').trim();
     if (!t || !raw) return raw;
-    const names = (t.VARIANT_ALIASES && t.VARIANT_ALIASES.names) || {};
+    const names = (t.SMART_ALIASES && t.SMART_ALIASES.names) || {};
     const options = kanjoQemaMergedAliasOptions(t);
     const whole = raw.toLowerCase();
     if (options[whole]) return options[whole];
@@ -5061,7 +5059,7 @@ const kanjoQemaVariantAnalysis = (rawName) => {
        never be dropped silently. */
     const labelSet = new Set();
     Object.keys(tax).forEach((g) => labelSet.add(normalizeArabic(g)));
-    const aliasNames = (t.VARIANT_ALIASES && t.VARIANT_ALIASES.names) || {};
+    const aliasNames = (t.SMART_ALIASES && t.SMART_ALIASES.names) || {};
     Object.keys(aliasNames).forEach((k) => labelSet.add(normalizeArabic(k)));
     Object.values(aliasNames).forEach((v) => labelSet.add(normalizeArabic(v)));
     const aliasOptions = kanjoQemaMergedAliasOptions(t);
