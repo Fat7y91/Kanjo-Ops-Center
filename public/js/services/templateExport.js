@@ -25,6 +25,7 @@
     const SHEET_ALIASES = {
         products: ['products', 'product', 'المنتجات', 'منتجات'],
         variants: ['variants', 'variant', 'المتغيرات', 'متغيرات'],
+        additions: ['additions', 'addition', 'add_ons', 'addons', 'الإضافات', 'الاضافات', 'إضافات', 'اضافات'],
         lookups: ['_lookups', 'lookups', 'lookup', '_lookup', 'القوائم', 'قوائم', 'قائمة']
     };
 
@@ -193,6 +194,38 @@
         return 0;
     };
 
+    /* Header detection for an arbitrary secondary sheet (e.g. Additions) whose
+       columns we do not model: the first row with at least two non-empty cells
+       is treated as the header, so a single title cell above it is preserved. */
+    const findGenericHeaderRow = (aoa) => {
+        const limit = Math.min(aoa.length, 20);
+        for (let i = 0; i < limit; i++) {
+            const cells = (aoa[i] || []).filter((v) => String(v == null ? '' : v).trim() !== '');
+            if (cells.length >= 2) return i;
+        }
+        return 0;
+    };
+
+    /* Truncate a worksheet to its header row only: every cell BELOW the header
+       (placeholder/example rows such as simple-example / variant-example) is
+       removed, the sheet object and header formatting/notes are preserved, and
+       `!ref` is reset to header-only. Used when a secondary sheet receives no
+       real data for the vendor, so strict validation never sees a product_key
+       that references a row we did not write. */
+    const purgeDataRows = (XLSX, worksheet, headerRowIndex) => {
+        if (!worksheet) return worksheet;
+        const header = Math.max(0, headerRowIndex || 0);
+        let maxCol = 0;
+        Object.keys(worksheet).forEach((addr) => {
+            if (addr.charAt(0) === '!') return;
+            const cell = XLSX.utils.decode_cell(addr);
+            if (cell.r > header) { delete worksheet[addr]; return; }
+            maxCol = Math.max(maxCol, cell.c);
+        });
+        worksheet['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: header, c: maxCol } });
+        return worksheet;
+    };
+
     const findSheetName = (workbook, kind) => {
         const names = (workbook && workbook.SheetNames) || [];
         const aliases = SHEET_ALIASES[kind] || [];
@@ -335,6 +368,7 @@
         const workbook = XLSX.read(buffer, { type: 'array', cellStyles: true, cellDates: true });
         const productsSheet = findSheetName(workbook, 'products');
         const variantsSheet = findSheetName(workbook, 'variants');
+        const additionsSheet = findSheetName(workbook, 'additions');
         const lookupsSheet = findSheetName(workbook, 'lookups');
         if (!productsSheet) throw new Error('لم يتم العثور على ورقة Products في القالب');
         if (!variantsSheet) throw new Error('لم يتم العثور على ورقة Variants في القالب');
@@ -342,7 +376,7 @@
         const readAoa = (name) => XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, blankrows: false, raw: false }) || [];
         const lookups = extractLookups(readAoa(lookupsSheet));
         if (!lookups.all.length) throw new Error('ورقة _lookups لا تحتوي على أي معرّفات صالحة (ID:n | Name)');
-        return { workbook, lookups, productsSheet, variantsSheet, lookupsSheet, readAoa };
+        return { workbook, lookups, productsSheet, variantsSheet, additionsSheet, lookupsSheet, readAoa };
     };
 
     /* Public entry point. opts = { file, merchantId, merchantName, vendorType,
@@ -363,7 +397,7 @@
 
         const buffer = await file.arrayBuffer();
         const parsed = parseTemplateWorkbook(XLSX, buffer);
-        const { workbook, lookups, productsSheet, variantsSheet, readAoa } = parsed;
+        const { workbook, lookups, productsSheet, variantsSheet, additionsSheet, readAoa } = parsed;
         /* Remember this template as the session-authoritative source of IDs so
            the ZIP export can offer its `_lookups` categories for manual fixes. */
         setActiveTemplate(file.name, lookups);
@@ -409,6 +443,18 @@
 
         writeRowsIntoSheet(XLSX, workbook.Sheets[productsSheet], productsHeader, productsMap, built.productRows);
         writeRowsIntoSheet(XLSX, workbook.Sheets[variantsSheet], variantsHeader, variantsMap, built.variantRows);
+
+        /* Purge template placeholder/example rows from secondary sheets that
+           received no real data for this vendor (ZERO reads; in-memory only), so
+           strict validation never reports "product_key must reference a product
+           row" against a dummy example we did not write. */
+        if (!(built.variantRows || []).length) {
+            purgeDataRows(XLSX, workbook.Sheets[variantsSheet], variantsHeader);
+        }
+        if (additionsSheet) {
+            const additionsHeader = findGenericHeaderRow(readAoa(additionsSheet));
+            purgeDataRows(XLSX, workbook.Sheets[additionsSheet], additionsHeader);
+        }
 
         const out = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
         const blob = new Blob([out], { type: MIME_XLSX });
@@ -468,7 +514,9 @@
         remapVariantCell: remapVariantCell,
         buildColumnMap: buildColumnMap,
         findHeaderRow: findHeaderRow,
+        findGenericHeaderRow: findGenericHeaderRow,
         findSheetName: findSheetName,
+        purgeDataRows: purgeDataRows,
         parseTemplateWorkbook: parseTemplateWorkbook,
         writeRowsIntoSheet: writeRowsIntoSheet,
         templateOutputName: templateOutputName,
