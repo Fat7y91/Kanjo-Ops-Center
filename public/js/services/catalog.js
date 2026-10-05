@@ -5219,6 +5219,120 @@ const kanjoHaltUnmappedVariants = (unmapped) => {
     return message;
 };
 
+/* ===== Global taxonomy exports (ZERO reads) =====
+   Mirror the Qema dashboard "التصنيفات الحالية" / "المتغيرات الحالية" CSV files
+   column-for-column straight from the in-memory dictionaries. Fields the static
+   taxonomy does not carry (slugs, English names, scope, path, counts) are
+   emitted empty rather than guessed; sort_order preserves dictionary order and
+   active defaults to 1. The exports never read Firestore. */
+const QEMA_CATEGORY_EXPORT_COLUMNS = [
+    'id', 'parent_id', 'slug', 'name_ar', 'name_en', 'scope', 'vendor_type',
+    'vendor', 'depth', 'path', 'sort_order', 'active', 'products_count'
+];
+const QEMA_VARIANT_EXPORT_COLUMNS = [
+    'variant_id', 'variant_slug', 'variant_name_ar', 'variant_name_en',
+    'variant_sort_order', 'variant_active', 'variant_required', 'option_id',
+    'option_name_ar', 'option_name_en', 'option_value', 'option_sort_order',
+    'option_active'
+];
+
+const kanjoTaxonomyCategoryRows = () => {
+    const t = kanjoQemaTaxonomy();
+    const dict = (t && t.DASHBOARD_CATEGORIES_TAXONOMY) || {};
+    const rows = [];
+    Object.keys(dict).forEach((vendorType) => {
+        const cats = dict[vendorType] || {};
+        let sort = 0;
+        Object.keys(cats).forEach((name) => {
+            sort += 1;
+            rows.push({
+                id: kanjoQemaParseNum(cats[name], 'ID'),
+                parent_id: '', slug: '', name_ar: name, name_en: '', scope: '',
+                vendor_type: vendorType, vendor: '', depth: '',
+                path: '', sort_order: sort, active: 1, products_count: ''
+            });
+        });
+    });
+    return rows;
+};
+
+const kanjoTaxonomyVariantRows = () => {
+    const t = kanjoQemaTaxonomy();
+    const tax = (t && t.DASHBOARD_VARIANTS_TAXONOMY) || {};
+    const rows = [];
+    let variantSort = 0;
+    Object.keys(tax).forEach((groupName) => {
+        const group = tax[groupName] || {};
+        variantSort += 1;
+        const opts = group.options || {};
+        let optionSort = 0;
+        Object.keys(opts).forEach((optionName) => {
+            optionSort += 1;
+            rows.push({
+                variant_id: kanjoQemaParseNum(group.id, 'ID'),
+                variant_slug: '', variant_name_ar: groupName, variant_name_en: '',
+                variant_sort_order: variantSort, variant_active: 1, variant_required: 0,
+                option_id: kanjoQemaParseNum(opts[optionName], 'ATTR'),
+                option_name_ar: optionName, option_name_en: '', option_value: '',
+                option_sort_order: optionSort, option_active: 1
+            });
+        });
+    });
+    return rows;
+};
+
+/* Comma-delimited CSV (the reference files) with the same UTF-8 BOM/escaping
+   used elsewhere, kept separate from the locale ';' helper on purpose. */
+const formatQemaCsvRow = (values) => values.map((v) => {
+    const s = String(v === undefined || v === null ? '' : v).replace(/[\r\n]+/g, ' ').replace(/"/g, '""');
+    return /[",]/.test(s) ? '"' + s + '"' : s;
+}).join(',');
+
+const downloadQemaTaxonomyCsv = (headers, rows, fileName) => {
+    const body = [formatQemaCsvRow(headers)]
+        .concat(rows.map((row) => formatQemaCsvRow(headers.map((col) => row[col]))))
+        .join('\r\n');
+    const blob = new Blob(['\uFEFF', body], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const kanjoTaxonomyExportFileName = (kind) => 'qema-' + kind + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+
+window.exportQemaTaxonomyCategories = () => {
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('تصدير التصنيفات متاح للإدارة فقط', false);
+        return;
+    }
+    const rows = kanjoTaxonomyCategoryRows();
+    if (!rows.length) {
+        if (window.showToast) window.showToast('لا توجد تصنيفات للتصدير', false);
+        return;
+    }
+    downloadQemaTaxonomyCsv(QEMA_CATEGORY_EXPORT_COLUMNS, rows, kanjoTaxonomyExportFileName('categories'));
+    if (window.showToast) window.showToast('تم تصدير جميع التصنيفات (' + rows.length + ' تصنيف)');
+};
+
+window.exportQemaTaxonomyVariants = () => {
+    if (!window.isCatalogAdminUser()) {
+        if (window.showToast) window.showToast('تصدير المتغيرات متاح للإدارة فقط', false);
+        return;
+    }
+    const rows = kanjoTaxonomyVariantRows();
+    if (!rows.length) {
+        if (window.showToast) window.showToast('لا توجد متغيرات للتصدير', false);
+        return;
+    }
+    downloadQemaTaxonomyCsv(QEMA_VARIANT_EXPORT_COLUMNS, rows, kanjoTaxonomyExportFileName('variants'));
+    if (window.showToast) window.showToast('تم تصدير جميع المتغيرات (' + rows.length + ' خيار)');
+};
+
 /* Silent fallback for products the keyword matcher cannot classify: the export
    must never block on a manual category prompt, so unmatched rows are exported
    as "غير مصنف" (Uncategorized) instead. */
