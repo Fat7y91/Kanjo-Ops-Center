@@ -123,6 +123,21 @@ export const VARIANT_ALIASES = {
   }
 };
 
+/* Additional data-entry shorthands resolved as an exact OR substring match
+   before strict validation (e.g. "سوري" -> "عيش سوري"). Merged with
+   VARIANT_ALIASES.options at runtime; exact matches win, then the longest key
+   found as a substring of the token. Never fetched from the DB. */
+export const SMART_ALIASES = {
+  "m": "وسط", "medium": "وسط", "و": "وسط",
+  "l": "كبير", "large": "كبير", "ك": "كبير",
+  "s": "صغير", "small": "صغير", "ص": "صغير",
+  "xl": "اكس لارج",
+  "سوري": "عيش سوري",
+  "فينو": "عيش فينو",
+  "وش": "وش بيتزا",
+  "بيتزا": "وش بيتزا"
+};
+
 if (typeof window !== 'undefined') {
   window.QEMA_TAXONOMY = {
     VENDOR_TYPE_MAPPING,
@@ -130,6 +145,7 @@ if (typeof window !== 'undefined') {
     DASHBOARD_VARIANTS_TAXONOMY,
     APP_VENDOR_TYPE_ALIASES,
     QEMA_VARIANT_GROUP_PRIORITY,
-    VARIANT_ALIASES
+    VARIANT_ALIASES,
+    SMART_ALIASES
   };
 }

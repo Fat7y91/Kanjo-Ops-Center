@@ -5000,32 +5000,43 @@ const kanjoQemaAssignedFor = (product, match, selection) => {
     return match && match.status === 'matched' ? String(match.category || '') : '';
 };
 
-/* In-memory auto-translation interceptor. Data entry often uses Latin shorthand
-   ("M"/"L"/"XL") or an attribute label ("size"/"مقاس") instead of the official
-   Arabic option. Translation is a pure string swap (trim + lowercase lookup)
-   applied BEFORE strict validation; a value that resolves to a valid dictionary
-   entry exports normally, and only a value that STILL fails to match triggers
-   the unmapped-variant halt. ZERO reads. */
+/* In-memory auto-translation ("Smart Match"). An option written entirely as a
+   Latin abbreviation ("M"/"L"/"XL", "x-large") or as an attribute label
+   ("size"/"مقاس") is swapped for its official Arabic value BEFORE strict
+   validation. Per-token shorthands and fragments ("سوري" -> "عيش سوري") are
+   resolved inside the greedy dictionary scan (kanjoQemaVariantAnalysis), where
+   multi-word official options take precedence so the swap can never corrupt them.
+   A value that resolves to a valid dictionary entry exports normally; only one
+   that STILL fails to match triggers the unmapped-variant halt. ZERO reads. */
+const kanjoQemaMergedAliasOptions = (t) => {
+    const merged = {};
+    const variant = (t && t.VARIANT_ALIASES && t.VARIANT_ALIASES.options) || {};
+    const smart = (t && t.SMART_ALIASES) || {};
+    Object.keys(variant).forEach((k) => { merged[String(k).trim().toLowerCase()] = variant[k]; });
+    Object.keys(smart).forEach((k) => { merged[String(k).trim().toLowerCase()] = smart[k]; });
+    return merged;
+};
+
+const kanjoQemaOfficialOptions = (t) => {
+    const tax = (t && t.DASHBOARD_VARIANTS_TAXONOMY) || {};
+    const list = [];
+    Object.keys(tax).forEach((group) => {
+        const opts = (tax[group] && tax[group].options) || {};
+        Object.keys(opts).forEach((name) => { list.push({ name, norm: normalizeArabic(name) }); });
+    });
+    return list;
+};
+
 const kanjoQemaApplyVariantAliases = (rawName) => {
     const t = kanjoQemaTaxonomy();
-    const aliases = (t && t.VARIANT_ALIASES) || null;
     const raw = String(rawName || '').trim();
-    if (!aliases || !raw) return raw;
-    const names = aliases.names || {};
-    const options = aliases.options || {};
-    const lookup = (token) => {
-        const k = String(token || '').trim().toLowerCase();
-        if (!k) return token;
-        if (options[k]) return options[k];
-        if (names[k]) return names[k];
-        return token;
-    };
+    if (!t || !raw) return raw;
+    const names = (t.VARIANT_ALIASES && t.VARIANT_ALIASES.names) || {};
+    const options = kanjoQemaMergedAliasOptions(t);
     const whole = raw.toLowerCase();
     if (options[whole]) return options[whole];
     if (names[whole]) return names[whole];
-    /* Replace each Unicode letter/digit run, preserving punctuation/spacing so
-       multi-word options ("صوص أحمر") still scan correctly afterwards. */
-    return raw.replace(/[\p{L}\p{N}]+/gu, (word) => lookup(word));
+    return raw;
 };
 
 /* Strict variant mapping. The whole option name is matched first (multi-word
@@ -5053,6 +5064,9 @@ const kanjoQemaVariantAnalysis = (rawName) => {
     const aliasNames = (t.VARIANT_ALIASES && t.VARIANT_ALIASES.names) || {};
     Object.keys(aliasNames).forEach((k) => labelSet.add(normalizeArabic(k)));
     Object.values(aliasNames).forEach((v) => labelSet.add(normalizeArabic(v)));
+    const aliasOptions = kanjoQemaMergedAliasOptions(t);
+    const official = kanjoQemaOfficialOptions(t);
+    const officialSet = new Set(official.map((o) => o.norm));
     const findOption = (phrase) => {
         const target = normalizeArabic(phrase);
         if (!target) return null;
@@ -5068,6 +5082,24 @@ const kanjoQemaVariantAnalysis = (rawName) => {
                 label: hit
             };
         }
+        return null;
+    };
+    /* Exact shorthand ("m" -> "وسط") then unique dictionary fragment
+       ("سوري" -> "عيش سوري") for a single word that no phrase matched. */
+    const aliasKey = (token) => String(token || '').trim().toLowerCase();
+    const findAliasOption = (token) => {
+        const mapped = aliasOptions[aliasKey(token)];
+        return mapped ? findOption(mapped) : null;
+    };
+    const findFragmentOption = (token) => {
+        const norm = normalizeArabic(token);
+        if (!norm || officialSet.has(norm)) return null;
+        if (norm.length >= 3) {
+            const supers = official.filter((o) => o.norm.indexOf(norm) !== -1);
+            if (new Set(supers.map((o) => o.norm)).size === 1) return findOption(supers[0].name);
+        }
+        const subs = official.filter((o) => o.norm !== norm && norm.indexOf(o.norm) !== -1);
+        if (new Set(subs.map((o) => o.norm)).size === 1) return findOption(subs[0].name);
         return null;
     };
     const translated = kanjoQemaApplyVariantAliases(rawName);
@@ -5092,7 +5124,12 @@ const kanjoQemaVariantAnalysis = (rawName) => {
             if (!byGroup.has(matched.hit.groupName)) byGroup.set(matched.hit.groupName, matched.hit);
             i += matched.len;
         } else {
-            if (unknown.indexOf(words[i]) === -1) unknown.push(words[i]);
+            const fallback = findAliasOption(words[i]) || findFragmentOption(words[i]);
+            if (fallback) {
+                if (!byGroup.has(fallback.groupName)) byGroup.set(fallback.groupName, fallback);
+            } else if (unknown.indexOf(words[i]) === -1) {
+                unknown.push(words[i]);
+            }
             i += 1;
         }
     }
