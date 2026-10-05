@@ -4907,6 +4907,26 @@ const kanjoFormatExportCategory = (value) => {
    options. Nothing here reads Firestore. */
 const kanjoQemaTaxonomy = () => (typeof window !== 'undefined' && window.QEMA_TAXONOMY) || null;
 
+/* SMART_ALIASES.categories bridge (ZERO reads): alternative/brand spellings
+   ("ميرندا", "پيبسي", "رضعات"...) -> canonical dashboard category NAME
+   ("صودا", "كوكتيل"...). Consumed in two places: the keyword matcher treats the
+   alias keys as extra keywords for the canonical category, and
+   kanjoQemaResolveCategory bridges a stored/manual cell whose name is an alias. */
+const kanjoQemaCategoryAliases = (t) => (t && t.SMART_ALIASES && t.SMART_ALIASES.categories) || {};
+const kanjoQemaCategoryAliasName = (rawName) => {
+    const aliases = kanjoQemaCategoryAliases(kanjoQemaTaxonomy());
+    const norm = normalizeArabic(rawName);
+    if (!norm) return '';
+    const key = Object.keys(aliases).find((k) => normalizeArabic(k) === norm);
+    return key ? aliases[key] : '';
+};
+const kanjoQemaCategoryAliasKeywords = (canonicalName) => {
+    const aliases = kanjoQemaCategoryAliases(kanjoQemaTaxonomy());
+    const target = normalizeArabic(canonicalName);
+    if (!target) return [];
+    return Object.keys(aliases).filter((k) => normalizeArabic(aliases[k]) === target);
+};
+
 const kanjoQemaParseNum = (token, label) => {
     const m = String(token || '').match(new RegExp(label + ':(\\d+)'));
     return m ? Number(m[1]) : 0;
@@ -4978,7 +4998,11 @@ const kanjoQemaResolveCategory = (vendorType, assigned) => {
     const seen = new Set();
     const dropped = [];
     names.forEach((name) => {
-        const entry = index.get(normalizeArabic(name));
+        let entry = index.get(normalizeArabic(name));
+        if (!entry) {
+            const bridged = kanjoQemaCategoryAliasName(name);
+            if (bridged) entry = index.get(normalizeArabic(bridged));
+        }
         if (!entry) { dropped.push(name); return; }
         const key = normalizeArabic(entry.name);
         if (seen.has(key)) return;
@@ -5447,13 +5471,14 @@ const kanjoCategoryKeywordHit = (keyword, haystack) => {
    category NAME length (`nameLen`). The matcher orders by these so a word-boundary
    hit beats a substring hit, and the longer (more specific) category name wins at
    equal positions — exactly the requested "boundaries + longer names first". */
-const kanjoCategoryMatchInfo = (cat, haystack) => {
+const kanjoCategoryMatchInfo = (cat, haystack, extraKeywords) => {
     const nameNorm = normalizeArabic(cat.name);
     let best = -1;
     let defining = false;
     let boundary = false;
     let specificity = 0;
-    cat.keywords.forEach((keyword) => {
+    const terms = (extraKeywords && extraKeywords.length) ? cat.keywords.concat(extraKeywords) : cat.keywords;
+    terms.forEach((keyword) => {
         if (!kanjoCategoryKeywordHit(keyword, haystack)) return;
         const kw = normalizeArabic(keyword);
         if (!kw) return;
@@ -5534,8 +5559,10 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['عصائر', 'عصير', 'juice'],
-        allow: ['مشروبات', 'سموزي', 'كوكتيل', 'فريش', 'باردة'],
-        /* Juice bar drinks = 34 (NOT restaurant drinks = 17). */
+        allow: ['مشروبات', 'سموزي', 'كوكتيل', 'فريش', 'باردة', 'ميلك شيك', 'صودا'],
+        /* Juice bar drinks = 34 (NOT restaurant drinks = 17). "ميلك شيك"/"صودا"
+           now live under the قهوة وعصاير taxonomy (186/187); the matcher emits
+           the heuristic IDs and kanjoQemaResolveCategory remaps them by NAME. */
         pins: { 'مشروبات': [34] }
     },
     {
@@ -5714,7 +5741,7 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         const matches = [];
         KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
             if (!allowedIds.has(cat.id)) return;
-            const info = kanjoCategoryMatchInfo(cat, haystack);
+            const info = kanjoCategoryMatchInfo(cat, haystack, kanjoQemaCategoryAliasKeywords(cat.name));
             if (info) matches.push({
                 cat,
                 canonical,
