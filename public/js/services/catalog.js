@@ -5000,6 +5000,34 @@ const kanjoQemaAssignedFor = (product, match, selection) => {
     return match && match.status === 'matched' ? String(match.category || '') : '';
 };
 
+/* In-memory auto-translation interceptor. Data entry often uses Latin shorthand
+   ("M"/"L"/"XL") or an attribute label ("size"/"مقاس") instead of the official
+   Arabic option. Translation is a pure string swap (trim + lowercase lookup)
+   applied BEFORE strict validation; a value that resolves to a valid dictionary
+   entry exports normally, and only a value that STILL fails to match triggers
+   the unmapped-variant halt. ZERO reads. */
+const kanjoQemaApplyVariantAliases = (rawName) => {
+    const t = kanjoQemaTaxonomy();
+    const aliases = (t && t.VARIANT_ALIASES) || null;
+    const raw = String(rawName || '').trim();
+    if (!aliases || !raw) return raw;
+    const names = aliases.names || {};
+    const options = aliases.options || {};
+    const lookup = (token) => {
+        const k = String(token || '').trim().toLowerCase();
+        if (!k) return token;
+        if (options[k]) return options[k];
+        if (names[k]) return names[k];
+        return token;
+    };
+    const whole = raw.toLowerCase();
+    if (options[whole]) return options[whole];
+    if (names[whole]) return names[whole];
+    /* Replace each Unicode letter/digit run, preserving punctuation/spacing so
+       multi-word options ("صوص أحمر") still scan correctly afterwards. */
+    return raw.replace(/[\p{L}\p{N}]+/gu, (word) => lookup(word));
+};
+
 /* Strict variant mapping. The whole option name is matched first (multi-word
    options such as "اكس لارج"/"صوص أحمر"/"عيش سوري"); otherwise a greedy
    longest-phrase scan assigns each recognised phrase to its attribute family and
@@ -5016,6 +5044,15 @@ const kanjoQemaVariantAnalysis = (rawName) => {
     const tax = t.DASHBOARD_VARIANTS_TAXONOMY || {};
     const priority = (t.QEMA_VARIANT_GROUP_PRIORITY || []).slice();
     const ordered = priority.concat(Object.keys(tax).filter((g) => priority.indexOf(g) === -1));
+    /* Attribute LABELS ("الحجم"/"size"/"مقاس") annotate a variant, they are not
+       option values. They are ignored once at least one real option is
+       recognised; a variant carrying only a label keeps it as unmapped so it can
+       never be dropped silently. */
+    const labelSet = new Set();
+    Object.keys(tax).forEach((g) => labelSet.add(normalizeArabic(g)));
+    const aliasNames = (t.VARIANT_ALIASES && t.VARIANT_ALIASES.names) || {};
+    Object.keys(aliasNames).forEach((k) => labelSet.add(normalizeArabic(k)));
+    Object.values(aliasNames).forEach((v) => labelSet.add(normalizeArabic(v)));
     const findOption = (phrase) => {
         const target = normalizeArabic(phrase);
         if (!target) return null;
@@ -5033,7 +5070,8 @@ const kanjoQemaVariantAnalysis = (rawName) => {
         }
         return null;
     };
-    const trimmed = String(rawName || '').trim();
+    const translated = kanjoQemaApplyVariantAliases(rawName);
+    const trimmed = String(translated || '').trim();
     if (!trimmed) return { assignments: [], unknown: [] };
     const whole = findOption(trimmed);
     if (whole) return { assignments: [whole], unknown: [] };
@@ -5062,7 +5100,11 @@ const kanjoQemaVariantAnalysis = (rawName) => {
         .sort((a, b) => ordered.indexOf(a.groupName) - ordered.indexOf(b.groupName));
     const assignments = sorted.slice(0, 4);
     sorted.slice(4).forEach((a) => { if (unknown.indexOf(a.label) === -1) unknown.push(a.label); });
-    return { assignments, unknown };
+    /* Drop pure label tokens only when a real option was resolved. */
+    const filteredUnknown = assignments.length
+        ? unknown.filter((w) => !labelSet.has(normalizeArabic(w)))
+        : unknown;
+    return { assignments, unknown: filteredUnknown };
 };
 
 const kanjoQemaVariantAssignments = (rawName) => {

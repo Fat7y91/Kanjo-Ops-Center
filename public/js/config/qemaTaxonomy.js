@@ -107,12 +107,29 @@ export const QEMA_VARIANT_GROUP_PRIORITY = [
   "الحجم"
 ];
 
+/* In-memory auto-translation for data-entry shorthand. Before strict validation
+   the export swaps common English/Latin abbreviations and attribute labels for
+   their official Arabic values, so "M"/"L"/"XL" pass as وسط/كبير/اكس لارج
+   instead of triggering the unmapped-variant halt. Never fetched from the DB. */
+export const VARIANT_ALIASES = {
+  names: {
+    "size": "الحجم", "مقاس": "الحجم", "الحجم": "الحجم"
+  },
+  options: {
+    "s": "صغير", "small": "صغير", "ص": "صغير",
+    "m": "وسط", "medium": "وسط", "و": "وسط",
+    "l": "كبير", "large": "كبير", "ك": "كبير",
+    "xl": "اكس لارج", "x-large": "اكس لارج"
+  }
+};
+
 if (typeof window !== 'undefined') {
   window.QEMA_TAXONOMY = {
     VENDOR_TYPE_MAPPING,
     DASHBOARD_CATEGORIES_TAXONOMY,
     DASHBOARD_VARIANTS_TAXONOMY,
     APP_VENDOR_TYPE_ALIASES,
-    QEMA_VARIANT_GROUP_PRIORITY
+    QEMA_VARIANT_GROUP_PRIORITY,
+    VARIANT_ALIASES
   };
 }
