@@ -4877,15 +4877,27 @@ const kanjoOfficialCategoryString = (value, allowedValues) => {
 };
 
 /* Join a manual audit selection (array from the multi-select modal, or a legacy
-   single string) into the comma-separated cell the Kanjo importer expects. */
+   single string) into the semicolon-separated cell the Kanjo importer requires
+   (commas are rejected, e.g. "ID:51 | حلويات; ID:174 | كيك"). */
 const kanjoJoinCategorySelection = (selection, fallback) => {
     if (Array.isArray(selection)) {
         const values = selection.map((s) => String(s || '').trim()).filter(Boolean);
-        if (values.length) return values.join(', ');
+        if (values.length) return values.join('; ');
     } else if (typeof selection === 'string' && selection.trim()) {
         return selection.trim();
     }
     return fallback || KANJO_UNCATEGORIZED_LABEL;
+};
+
+/* Final-export normaliser: the target importer accepts MULTIPLE categories only
+   when they are semicolon-delimited, so any internally comma-joined cell is
+   re-joined with "; " right before it reaches the workbook. Single values pass
+   through untouched. Pure in-memory string work — issues no reads. */
+const kanjoFormatExportCategory = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const parts = raw.split(/[;,]/).map((p) => p.trim()).filter(Boolean);
+    return parts.length ? parts.join('; ') : '';
 };
 
 /* Silent fallback for products the keyword matcher cannot classify: the export
@@ -5781,6 +5793,24 @@ const kanjoReportExportError = (err) => {
     }
 };
 
+/* The importer rejects a repeated attribute combination for the same product
+   ("attribute combination already exists"), so the FINAL variant rows are
+   filtered in memory to one row per (product_key + full attribute signature).
+   The first occurrence is kept; later twins (even at a different price) are
+   dropped. Pure array work — issues no reads and mutates no source document. */
+const kanjoVariantRowSignature = (row) => [1, 2, 3, 4]
+    .map((n) => String((row && row['attribute_' + n + '_value']) || ''))
+    .join('\u0002');
+const kanjoDedupeVariantRows = (rows) => {
+    const seen = new Set();
+    return (rows || []).filter((row) => {
+        const key = String((row && row.product_key) || '') + '\u0001' + kanjoVariantRowSignature(row);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+};
+
 /* Builds the Products/Variants rows (no I/O, no download) so both the normal
    export and the vendor ZIP can share the exact same sheet content. */
 const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => {
@@ -5798,9 +5828,9 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => 
         if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
         const { product, match } = evaluations[i];
         const key = String((product && product.id) || '');
-        const category = match.status === 'matched'
+        const category = kanjoFormatExportCategory(match.status === 'matched'
             ? match.category
-            : kanjoJoinCategorySelection(selections[key], match.category);
+            : kanjoJoinCategorySelection(selections[key], match.category));
         const row = kanjoBuildProductRow(product, category);
         const extraName = variantNameSuffix.get(key);
         if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
@@ -5828,11 +5858,11 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries) => 
         variantRows = [];
         evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
     }
+    variantRows = kanjoDedupeVariantRows(variantRows);
     /* Re-point each variant at its parent's deduped sku and renumber
-       variant_sku per parent. Distinct raw options can still resolve to the
-       same attribute signature when their words are not in the alias
-       dictionary; those rows stay separate (one per distinct price) and the
-       unrecognised words are preserved on the product name rather than
+       variant_sku per parent. kanjoDedupeVariantRows already collapsed any
+       repeated attribute combination for a product (the importer rejects it),
+       and unrecognised words are preserved on the product name rather than
        becoming an invalid synthetic ID. */
     const variantSeq = new Map();
     variantRows.forEach((row) => {
