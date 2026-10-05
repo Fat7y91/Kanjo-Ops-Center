@@ -4927,6 +4927,28 @@ const kanjoQemaCategoryAliasKeywords = (canonicalName) => {
     return Object.keys(aliases).filter((k) => normalizeArabic(aliases[k]) === target);
 };
 
+/* STRICT_TAXONOMY_MAP gate (ZERO reads). The seven vendors in the strict map are
+   filtered/mapped EXACTLY: candidate categories are only its keys and the final
+   name -> Qema ID must be an exact hit (SMART_ALIASES.categories may bridge the
+   name first). Every other vendor type keeps the legacy heuristic path. */
+const kanjoQemaStrictMap = () => {
+    const t = kanjoQemaTaxonomy();
+    return (t && t.STRICT_TAXONOMY_MAP) || null;
+};
+const kanjoStrictVendorMap = (vendorType) => {
+    const map = kanjoQemaStrictMap();
+    if (!map) return null;
+    const vendor = kanjoQemaResolveVendorType(vendorType);
+    return (vendor && map[vendor]) ? map[vendor] : null;
+};
+const kanjoStrictCategoryValue = (vendorMap, name) => {
+    if (!vendorMap) return '';
+    const direct = vendorMap[name];
+    if (direct) return direct;
+    const bridged = kanjoQemaCategoryAliasName(name);
+    return bridged ? (vendorMap[bridged] || '') : '';
+};
+
 const kanjoQemaParseNum = (token, label) => {
     const m = String(token || '').match(new RegExp(label + ':(\\d+)'));
     return m ? Number(m[1]) : 0;
@@ -5231,6 +5253,68 @@ const kanjoHaltUnmappedVariants = (unmapped) => {
             title: 'فشل التصدير',
             html: '<div style="text-align:right;direction:rtl;font-size:13px;line-height:1.7">'
                 + 'المتغيرات التالية غير مسجلة في قاموس لوحة التحكم. يرجى تحديث القاموس أولاً:'
+                + '<ul style="text-align:right;margin-top:8px;padding-inline-start:18px">' + rows + '</ul></div>',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#230535'
+        });
+        return message;
+    }
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') window.alert(message);
+    return message;
+};
+
+/* ===== STRICT_TAXONOMY_MAP enforcement (ZERO reads) =====
+   For the seven strict vendors, an assigned category NAME must be an exact key of
+   that vendor's strict map (after the SMART_ALIASES.categories bridge). A name
+   that cannot be mapped is collected here so the export can HALT with a precise
+   error instead of silently dropping the product into an unmapped bucket. The
+   other eight verticals keep the legacy audit path. */
+const kanjoStrictMappingIssues = (evaluations, vendorTypeOf) => {
+    if (!kanjoQemaStrictMap() || typeof vendorTypeOf !== 'function') return [];
+    const issues = [];
+    (evaluations || []).forEach(({ product, match }) => {
+        const vendor = vendorTypeOf(product);
+        const map = kanjoStrictVendorMap(vendor);
+        if (!map) return;
+        const assigned = kanjoQemaAssignedFor(product, match, null);
+        if (!assigned) return;
+        const names = String(assigned).split(/[;,]/).map(kanjoCategoryNameFromValue).filter(Boolean);
+        names.forEach((name) => {
+            if (kanjoStrictCategoryValue(map, name)) return;
+            issues.push({
+                vendor: kanjoQemaResolveVendorType(vendor) || vendor,
+                category: name,
+                product: String((product && (product.name_ar || product.name_en || product.id)) || '').trim()
+            });
+        });
+    });
+    return issues;
+};
+
+const kanjoStrictMappingMessage = (issues) => {
+    const list = (issues || []).map((i) => i.category)
+        .filter((v, idx, arr) => v && arr.indexOf(v) === idx)
+        .join('، ');
+    return 'فشل التصدير: التصنيفات التالية غير مدرجة في جدول المطابقة الصارم '
+        + '(STRICT_TAXONOMY_MAP) لنوع التاجر. يرجى تحديث الجدول أولاً: ' + list;
+};
+
+/* HALT: never silently drop a category that the strict map cannot resolve. */
+const kanjoHaltStrictMapping = (issues) => {
+    const message = kanjoStrictMappingMessage(issues);
+    console.error('[catalog] Export halted — strict-mapping misses:', issues);
+    if (typeof window !== 'undefined' && window.Swal && typeof window.Swal.fire === 'function') {
+        const rows = (issues || []).map((item) => {
+            const product = item.product ? ' <span style="font-weight:600;color:#64748b">(' + catalogEscapeHtml(item.product) + ')</span>' : '';
+            return '<li style="margin:3px 0"><span style="font-weight:900;color:#230535">'
+                + catalogEscapeHtml(item.category) + '</span>'
+                + ' <span style="color:#64748b">[' + catalogEscapeHtml(item.vendor) + ']</span>' + product + '</li>';
+        }).join('');
+        window.Swal.fire({
+            icon: 'error',
+            title: 'فشل التصدير',
+            html: '<div style="text-align:right;direction:rtl;font-size:13px;line-height:1.7">'
+                + 'التصنيفات التالية غير مدرجة في جدول المطابقة الصارم (STRICT_TAXONOMY_MAP). يرجى تحديث الجدول أولاً:'
                 + '<ul style="text-align:right;margin-top:8px;padding-inline-start:18px">' + rows + '</ul></div>',
             confirmButtonText: 'حسناً',
             confirmButtonColor: '#230535'
@@ -5701,7 +5785,22 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         ? vendorType
         : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
     const rule = kanjoVendorRuleFor(vendor);
-    const allowedCats = kanjoVendorAllowedCategories(vendor);
+    let allowedCats = kanjoVendorAllowedCategories(vendor);
+    /* STRICT vendors: the candidate set is EXACTLY the strict map's keys. We
+       resolve each key back to its keyword-bearing category object so the
+       matcher can still infer; keys with no heuristic object are simply not
+       auto-inferable (manual selection only). */
+    const strictVendorMap = kanjoStrictVendorMap(vendor);
+    if (strictVendorMap) {
+        const byName = new Map();
+        KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
+            const key = normalizeArabic(cat.name);
+            if (!byName.has(key)) byName.set(key, cat);
+        });
+        allowedCats = Object.keys(strictVendorMap)
+            .map((name) => byName.get(normalizeArabic(name)))
+            .filter(Boolean);
+    }
     /* Scope by ID, NOT by name: a name like "حلويات" exists in several verticals,
        so a name set would leak every duplicate back into this vendor's matcher. */
     const allowedIds = new Set(allowedCats.map((cat) => cat.id));
@@ -6429,6 +6528,8 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
     const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
     if (unmappedVariants.length) throw new Error(kanjoUnmappedVariantsMessage(unmappedVariants));
+    const strictIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf);
+    if (strictIssues.length) throw new Error(kanjoStrictMappingMessage(strictIssues));
     const selections = {};
     evaluations.forEach(({ product, match }) => {
         if (match.status === 'matched') return;
@@ -6762,6 +6863,11 @@ window.exportKanjoExcel = async (options) => {
            option aborts the export immediately. */
         const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
         if (unmappedVariants.length) { kanjoHaltUnmappedVariants(unmappedVariants); return; }
+        /* STRICT_TAXONOMY_MAP gate: a stored/learned category that is not an
+           exact key of the vendor's strict map HALTS the export with a precise
+           error (the seven strict vendors only; others keep the audit modal). */
+        const strictIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf);
+        if (strictIssues.length) { kanjoHaltStrictMapping(strictIssues); return; }
         const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, opts);
         /* Intercept: any product the smart matcher cannot classify, OR whose
            matched categories are not legal for its Qema vendor type, PAUSES the
