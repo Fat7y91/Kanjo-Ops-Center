@@ -5657,12 +5657,16 @@ const kanjoVendorAllowedCategories = (vendorType) => {
 };
 
 /* Multi-category matcher, scoped to a vendor type. Every allowed category whose
-   keyword (or synonym) appears in the product name is collected, ranked
-   (earliest keyword, owning word, boundary hit, longer name/keyword, canonical
-   ID), de-duplicated by category NAME, and the additive semantic tags
-   (اللمة / فراخ) are appended. The result is the comma-separated cell the Kanjo
-   importer expects, e.g. "ID:9 | مشويات, ID:164 | فراخ". Only products with
-   neither a keyword nor a semantic hit are `unmapped`. Returns:
+   keyword (or synonym) appears in the product name OR description is collected,
+   ranked (earliest keyword, owning word, boundary hit, longer name/keyword,
+   canonical ID), de-duplicated by category NAME, and the additive semantic tags
+   (اللمة / فراخ) are appended. Scanning descriptions too lets abstract names
+   (e.g. "سبايدر مان") auto-tag from the descriptive text instead of forcing the
+   manual modal. The name is concatenated BEFORE the description so a name hit
+   always ranks ahead of a description-only hit at equal specificity. The result
+   is the comma-separated cell the Kanjo importer expects, e.g.
+   "ID:9 | مشويات, ID:164 | فراخ". Only products with neither a keyword nor a
+   semantic hit are `unmapped`. Returns:
    - { status: 'matched',  category, categories, primary, options }
    - { status: 'unmapped', category: '', categories: [], options: [] } */
 const kanjoMatchProductCategory = (product, vendorType) => {
@@ -5693,7 +5697,16 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     }
     const existing = String((product && product.category) || '').trim();
     const existingOfficial = kanjoOfficialCategoryString(existing, allowedValues);
-    const haystack = normalizeArabic([product && product.name_ar, product && product.name_en].filter(Boolean).join(' '))
+    /* Heuristic haystack = name + description (name first so it outranks a
+       description-only hit). Descriptions let abstract-named products
+       (e.g. "سبايدر مان") auto-tag without opening the manual modal. Zero reads
+       — both fields already live on the in-memory product doc. */
+    const haystack = normalizeArabic([
+        product && product.name_ar,
+        product && product.name_en,
+        product && product.description_ar,
+        product && product.description_en
+    ].filter(Boolean).join(' '))
         .replace(/\s+/g, ' ')
         .trim();
     const ranked = [];
