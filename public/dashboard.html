@@ -889,6 +889,8 @@
 
                     <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
 
+                    <button id="catalogResolveDuplicatesBtn" type="button" onclick="openCatalogDuplicatesModal()" class="w-full bg-white text-[#230535] border-2 border-[#FFD700] py-3.5 rounded-xl font-black hover:bg-[#FFD700]/10 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-clone"></i> معالجة التكرارات <span id="catalogDuplicatesBadge" class="hidden bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span></button>
+
                     <div class="pt-1 mt-1 border-t border-purple-100">
                         <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">تصدير قاموس لوحة التحكم (Qema)</p>
                         <div class="grid grid-cols-1 gap-2">
@@ -903,6 +905,23 @@
 
         </div>
 
+    </div>
+
+    <!-- ═══════════ DUPLICATE SKU RESOLUTION DASHBOARD ═══════════ -->
+    <div id="catalogDuplicatesModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[200]" onclick="if(event.target===this)closeCatalogDuplicatesModal()">
+        <div class="bg-white rounded-3xl w-full max-w-6xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center p-4 sm:p-5 border-b border-purple-100">
+                <h3 class="font-black text-lg sm:text-xl text-[#230535]"><i class="fa-solid fa-clone ml-2"></i>معالجة التكرارات (Split-Brain)</h3>
+                <button type="button" onclick="closeCatalogDuplicatesModal()" class="text-slate-400 hover:text-red-500 p-1" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+            </div>
+            <div class="p-3 sm:p-4 bg-kanjo-light border-b border-purple-100 flex flex-col sm:flex-row gap-2 sm:items-center">
+                <select id="catalogDuplicatesMerchantFilter" class="flex-1 min-w-0 p-3 bg-white border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]"><option value="">كل التجار</option></select>
+                <button type="button" data-dup-toolbar="refresh" class="bg-white text-[#230535] border-2 border-[#230535] px-4 py-3 rounded-xl font-black text-xs hover:bg-[#230535]/5 transition"><i class="fa-solid fa-rotate ml-1"></i> إعادة الفحص</button>
+                <button type="button" data-dup-toolbar="auto-merge-all" class="bg-[#FFD700] text-[#230535] px-4 py-3 rounded-xl font-black text-xs hover:opacity-90 transition shadow-sm"><i class="fa-solid fa-wand-magic-sparkles ml-1"></i> الدمج الذكي للكل</button>
+            </div>
+            <div id="catalogDuplicatesSummary" class="px-4 py-2 text-[11px] font-black text-slate-500 bg-white border-b border-purple-100"></div>
+            <div id="catalogDuplicatesList" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 bg-kanjo-light"></div>
+        </div>
     </div>
 
     <div id="deleteModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">

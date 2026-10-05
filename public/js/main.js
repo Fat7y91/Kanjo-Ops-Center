@@ -16,6 +16,7 @@ import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
 import './services/firestore.js';
 import './services/catalog.js';
+import './services/catalogDuplicates.js';
 import './services/templateExport.js';
 import './services/menuImport.js';
 import './services/vendorExport.js';

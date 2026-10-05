@@ -3943,53 +3943,117 @@ const kanjoDedupeRank = (a, b) => {
     return String(b.id || '').localeCompare(String(a.id || ''));
 };
 
-window.kanjoDedupeDuplicateSkus = async (options) => {
+/* Identity key: a shared SKU only counts as the SAME product when the merchant
+   and the normalized Arabic name also match. Documents that merely collide on a
+   SKU across different products are surfaced as conflicts, never merged. */
+const kanjoDedupeGroupKey = (p) => String(p.merchantId || '') + '\u0000' + kanjoDedupeNormalizedName(p);
+
+/* Raw scan shared by the console helper and the interactive resolution UI.
+   Returns identity-scoped duplicate groups WITH the full product docs (so the
+   dashboard can render side-by-side comparisons) plus any cross-identity SKU
+   conflicts, which are surfaced read-only. */
+const kanjoDedupeScan = async (options) => {
     const opts = options || {};
-    const execute = opts.dryRun === false && opts.confirm === true;
+    const merchantName = String(opts.merchantName || '').trim();
     const products = await fetchAllCatalogProductsForExport();
     const groups = new Map();
     (products || []).forEach((p) => {
         const sku = String((p && p.sku) || '').trim();
         if (!sku) return;
+        if (merchantName && catalogProductMerchantName(p) !== merchantName) return;
         if (!groups.has(sku)) groups.set(sku, []);
         groups.get(sku).push(p);
     });
-    const plan = [];
+    const duplicateGroups = [];
     const conflicts = [];
     groups.forEach((list, sku) => {
         if (list.length < 2) return;
         const byIdentity = new Map();
         list.forEach((p) => {
-            const key = String(p.merchantId || '') + '\u0000' + kanjoDedupeNormalizedName(p);
+            const key = kanjoDedupeGroupKey(p);
             if (!byIdentity.has(key)) byIdentity.set(key, []);
             byIdentity.get(key).push(p);
         });
         if (byIdentity.size > 1) {
-            conflicts.push({
-                sku,
-                identities: Array.from(byIdentity.values()).map((twins) => twins.map(kanjoDedupeProductSummary))
-            });
+            conflicts.push({ sku, merchantName: catalogProductMerchantName(list[0]), products: list });
             return;
         }
         const twins = list.slice().sort(kanjoDedupeRank);
-        plan.push({
+        duplicateGroups.push({
             sku,
-            keep: kanjoDedupeProductSummary(twins[0]),
-            remove: twins.slice(1).map(kanjoDedupeProductSummary)
+            merchantName: catalogProductMerchantName(twins[0]),
+            suggestedKeepId: twins[0].id,
+            products: twins
         });
     });
-    const totalRemove = plan.reduce((n, g) => n + g.remove.length, 0);
+    return {
+        duplicateGroups,
+        conflicts,
+        totalGroups: duplicateGroups.length,
+        totalDuplicateDocs: duplicateGroups.reduce((n, g) => n + g.products.length - 1, 0),
+        conflictsCount: conflicts.length
+    };
+};
+
+/* Delete one duplicate document via the REST-first path (SDK fallback) and
+   write its Black Box entry. Only ever deletes the exact id it is given. */
+const kanjoDedupeRemove = async (id, meta) => {
+    const docId = String(id || '').trim();
+    if (!docId) return false;
+    let removed = false;
+    if (await catalogRestDelete([CATALOG_COLLECTION, docId])) {
+        removed = true;
+        if (typeof window.kanjoAuditDelete === 'function') {
+            window.kanjoAuditDelete({
+                collectionId: CATALOG_COLLECTION,
+                id: docId,
+                name: (meta && (meta.name || meta.sku)) || '',
+                description: (meta && meta.description) || 'إزالة منتج مكرر'
+            });
+        }
+    } else if (typeof window.deleteDoc === 'function' && window.doc) {
+        /* SDK fallback; its delete hook writes the Black Box entry. */
+        await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, docId));
+        removed = true;
+    }
+    if (removed && Array.isArray(window.allCatalogProductsCache)) {
+        window.allCatalogProductsCache = window.allCatalogProductsCache.filter((p) => p.id !== docId);
+    }
+    return removed;
+};
+
+/* Public, read-only surface for the interactive duplicate-resolution dashboard. */
+window.KanjoCatalogDedupeAPI = {
+    scan: (options) => kanjoDedupeScan(options),
+    remove: (id, meta) => kanjoDedupeRemove(id, meta),
+    imageUrl: (p) => catalogEnhancedImageUrls(p)[0] || catalogRawImageUrls(p)[0] || '',
+    imageCount: (p) => kanjoDedupeImageCount(p),
+    time: (value) => kanjoDedupeTime(value),
+    identityKey: (p) => kanjoDedupeGroupKey(p),
+    productSummary: (p) => kanjoDedupeProductSummary(p),
+    isAdmin: () => (typeof window.isCatalogAdminUser === 'function' ? window.isCatalogAdminUser() : false)
+};
+
+window.kanjoDedupeDuplicateSkus = async (options) => {
+    const opts = options || {};
+    const execute = opts.dryRun === false && opts.confirm === true;
+    const scan = await kanjoDedupeScan(opts);
+    const plan = scan.duplicateGroups.map((group) => ({
+        sku: group.sku,
+        keep: kanjoDedupeProductSummary(group.products.find((p) => p.id === group.suggestedKeepId) || group.products[0]),
+        remove: group.products.filter((p) => p.id !== group.suggestedKeepId).map(kanjoDedupeProductSummary)
+    }));
     const result = {
         dryRun: !execute,
-        skuGroups: plan.length,
-        duplicateDocs: totalRemove,
-        conflicts: conflicts.length,
+        skuGroups: scan.totalGroups,
+        duplicateDocs: scan.totalDuplicateDocs,
+        conflicts: scan.conflictsCount,
         plan,
-        conflictGroups: conflicts
+        conflictGroups: scan.conflicts.map((c) => ({ sku: c.sku, products: c.products.map(kanjoDedupeProductSummary) }))
     };
     if (!execute) {
-        if (totalRemove) {
-            console.warn('[dedupe] DRY RUN -', totalRemove, 'duplicate doc(s) across', plan.length, 'SKU group(s). Re-run with { dryRun:false, confirm:true } as a founder to delete.');
+        if (result.duplicateDocs) {
+            console.warn('[dedupe] DRY RUN -', result.duplicateDocs, 'duplicate doc(s) across', result.skuGroups, 'SKU group(s). Re-run with { dryRun:false, confirm:true } as a founder to delete.');
         }
         return result;
     }
@@ -4002,22 +4066,15 @@ window.kanjoDedupeDuplicateSkus = async (options) => {
     }
     const deleted = [];
     const failures = [];
-    for (const group of plan) {
-        for (const doc of group.remove) {
+    for (const group of scan.duplicateGroups) {
+        for (const doc of group.products) {
+            if (doc.id === group.suggestedKeepId) continue;
             try {
-                if (await catalogRestDelete([CATALOG_COLLECTION, doc.id])) {
-                    deleted.push(doc.id);
-                    if (typeof window.kanjoAuditDelete === 'function') {
-                        window.kanjoAuditDelete({
-                            collectionId: CATALOG_COLLECTION,
-                            id: doc.id,
-                            name: doc.name_ar || doc.sku,
-                            description: 'إزالة منتج مكرر (نفس SKU ' + group.sku + ') - أُبقي على ' + group.keep.id
-                        });
-                    }
-                } else if (typeof window.deleteDoc === 'function' && window.doc) {
-                    /* SDK fallback; its delete hook writes the Black Box entry. */
-                    await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, doc.id));
+                if (await kanjoDedupeRemove(doc.id, {
+                    name: doc.name_ar || doc.sku,
+                    sku: group.sku,
+                    description: 'إزالة منتج مكرر (نفس SKU ' + group.sku + ') - أُبقي على ' + group.suggestedKeepId
+                })) {
                     deleted.push(doc.id);
                 } else {
                     failures.push({ id: doc.id, error: 'NO_DELETE_TRANSPORT' });
@@ -4027,10 +4084,6 @@ window.kanjoDedupeDuplicateSkus = async (options) => {
                 failures.push({ id: doc.id, error: String((err && err.message) || err) });
             }
         }
-    }
-    if (deleted.length && Array.isArray(window.allCatalogProductsCache)) {
-        const removed = new Set(deleted);
-        window.allCatalogProductsCache = window.allCatalogProductsCache.filter((p) => !removed.has(p.id));
     }
     if (typeof window.showToast === 'function') {
         window.showToast('تمت إزالة ' + deleted.length + ' منتجاً مكرراً' + (failures.length ? '، وفشل ' + failures.length : ''), failures.length === 0);
@@ -4647,6 +4700,8 @@ window.renderCatalogWidgets = () => {
     if (exportBtn) exportBtn.classList.toggle('hidden', !isAdmin);
     const fixBtn = document.getElementById('catalogFixTranslationsBtn');
     if (fixBtn) fixBtn.classList.toggle('hidden', !isAdmin);
+    const dupBtn = document.getElementById('catalogResolveDuplicatesBtn');
+    if (dupBtn) dupBtn.classList.toggle('hidden', !isAdmin);
     if (isAdmin) populateMerchantExportFilter();
 
     const mpExportBtn = document.getElementById('mpCatalogExportBtn');
@@ -4721,6 +4776,7 @@ const fetchAllCatalogProductsForExport = async () => {
             const items = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS })) || [];
             window.allCatalogProductsCache = items;
             window._catalogAllProductsLoaded = true;
+            if (typeof window.refreshCatalogDuplicatesBadge === 'function') window.refreshCatalogDuplicatesBadge();
             return items;
         } catch (err) {
             console.warn('[catalog] full REST fetch failed; trying SDK:', err);
@@ -4729,6 +4785,7 @@ const fetchAllCatalogProductsForExport = async () => {
     const items = await fetchAllCatalogProducts();
     window.allCatalogProductsCache = items;
     window._catalogAllProductsLoaded = true;
+    if (typeof window.refreshCatalogDuplicatesBadge === 'function') window.refreshCatalogDuplicatesBadge();
     return items;
 };
 
