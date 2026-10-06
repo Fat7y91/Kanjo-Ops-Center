@@ -55,6 +55,14 @@
         "destination": "/terms-conditions.html"
       },
       {
+        "source": "/privacy",
+        "destination": "/privacy-policy.html"
+      },
+      {
+        "source": "/terms",
+        "destination": "/terms-conditions.html"
+      },
+      {
         "source": "**",
         "destination": "/dashboard.html"
       }

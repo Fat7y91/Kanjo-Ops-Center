@@ -39,13 +39,31 @@
     }
   }
 
+  /* Canonical routes plus accepted aliases, so the active state survives
+     "/privacy" vs "/privacy-policy" (and "/terms" vs "/terms-conditions"),
+     trailing slashes, the ".html" suffix, and query/hash fragments. */
+  var ROUTES = {
+    '/privacy': 'privacy',
+    '/privacy-policy': 'privacy',
+    '/terms': 'terms',
+    '/terms-conditions': 'terms'
+  };
+
+  /* Resolve a URL path to its logical page key ("privacy" / "terms"), or null. */
+  function routeKey(path) {
+    var p = String(path || '').toLowerCase().replace(/[?#].*$/, '').replace(/\.html$/, '');
+    if (p.length > 1) p = p.replace(/\/+$/, '');
+    if (Object.prototype.hasOwnProperty.call(ROUTES, p)) return ROUTES[p];
+    var slug = p.split('/').pop();
+    return Object.prototype.hasOwnProperty.call(ROUTES, '/' + slug) ? ROUTES['/' + slug] : null;
+  }
+
   /* Highlight the nav link that matches the current route. */
   function markActiveRoute() {
-    var path = (window.location.pathname || '').replace(/\.html$/, '');
+    var current = routeKey(window.location.pathname);
     var links = document.querySelectorAll('.legal-nav a[href]');
     for (var i = 0; i < links.length; i++) {
-      var href = (links[i].getAttribute('href') || '').replace(/\.html$/, '');
-      var isActive = !!href && href !== '/' && path.indexOf(href) === 0;
+      var isActive = !!current && routeKey(links[i].getAttribute('href')) === current;
       links[i].classList.toggle('active', isActive);
       if (isActive) links[i].setAttribute('aria-current', 'page');
       else links[i].removeAttribute('aria-current');
