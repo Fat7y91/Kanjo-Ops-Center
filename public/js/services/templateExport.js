@@ -322,15 +322,34 @@
         if (!list.length) return {};
         const Swal = (typeof window !== 'undefined') ? window.Swal : null;
         if (!Swal || typeof Swal.fire !== 'function') return null;
+        /* Fuzzy SUGGESTION only: never auto-commits. When a product's unresolved
+           category is a close typo of a template `_lookups` option we pre-select
+           that option and flag it "مقترح"; the operator still reviews every row
+           and clicks Submit. Exact logic upstream is untouched. */
+        const fuzzyBest = (typeof window !== 'undefined' && typeof window.kanjoFuzzyBest === 'function')
+            ? window.kanjoFuzzyBest
+            : null;
         const body = list.map((item, i) => {
-            const options = (item.options || []).map((opt) =>
-                '<option value="' + escapeHtml(opt.token) + '">' + escapeHtml(opt.label || opt.name || opt.token) + '</option>'
-            ).join('');
+            const options = Array.isArray(item.options) ? item.options : [];
+            const suggestion = (fuzzyBest && item.category && options.length)
+                ? fuzzyBest(item.category, options, { minScore: 0.8 })
+                : null;
+            const optionsHtml = options.map((opt) => {
+                const token = escapeHtml(opt.token);
+                const label = escapeHtml(opt.label || opt.name || opt.token);
+                const isSuggestion = !!(suggestion && String(suggestion.token) === String(opt.token));
+                return '<option value="' + token + '"' + (isSuggestion ? ' selected' : '') + '>'
+                    + label + (isSuggestion ? ' — مقترح' : '') + '</option>';
+            }).join('');
             const who = item.vendorName ? ' <span style="font-weight:600;color:#64748b">[' + escapeHtml(item.vendorName) + ']</span>' : '';
+            const hint = suggestion
+                ? '<div style="margin-top:6px;font-size:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:6px 8px">'
+                    + 'اقتراح تلقائي: <b>' + escapeHtml(item.category) + '</b> ← <b>' + escapeHtml(suggestion.name) + '</b> — يرجى المراجعة</div>'
+                : '';
             return '<div style="margin:10px 0;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:#faf7ff">'
                 + '<div style="font-weight:800;color:#230535;margin-bottom:6px">' + escapeHtml(item.label || item.productId) + who + '</div>'
                 + '<select id="kanjoTplPick' + i + '" style="width:100%;padding:8px;border:1px solid #c4b5fd;border-radius:8px;background:#fff">'
-                + '<option value="">— اختر تصنيفاً —</option>' + options + '</select></div>';
+                + '<option value="">— اختر تصنيفاً —</option>' + optionsHtml + '</select>' + hint + '</div>';
         }).join('');
         const result = await Swal.fire({
             icon: 'question',

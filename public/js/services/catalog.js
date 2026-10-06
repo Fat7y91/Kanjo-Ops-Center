@@ -5570,6 +5570,199 @@ const kanjoHaltUnmappedVariants = (unmapped) => {
     return message;
 };
 
+/* ===== In-memory fuzzy suggestion engine (ZERO reads/writes) =====
+   A tiny Levenshtein-based similarity used ONLY to PROPOSE candidates to the
+   operator. It never overrides an exact match and never edits the dictionary or
+   Firestore; a fuzzy guess becomes real only after the admin confirms it. */
+const kanjoFuzzyLevenshtein = (a, b) => {
+    const s = String(a == null ? '' : a);
+    const t = String(b == null ? '' : b);
+    const n = s.length;
+    const m = t.length;
+    if (!n) return m;
+    if (!m) return n;
+    let prev = new Array(m + 1);
+    let curr = new Array(m + 1);
+    for (let j = 0; j <= m; j++) prev[j] = j;
+    for (let i = 1; i <= n; i++) {
+        curr[0] = i;
+        const si = s.charCodeAt(i - 1);
+        for (let j = 1; j <= m; j++) {
+            const cost = si === t.charCodeAt(j - 1) ? 0 : 1;
+            const del = prev[j] + 1;
+            const ins = curr[j - 1] + 1;
+            const sub = prev[j - 1] + cost;
+            curr[j] = del < ins ? (del < sub ? del : sub) : (ins < sub ? ins : sub);
+        }
+        const swap = prev; prev = curr; curr = swap;
+    }
+    return prev[m];
+};
+
+/* Normalized similarity in [0,1]; 1 = identical after Arabic normalization. */
+const kanjoFuzzySimilarity = (a, b) => {
+    const na = normalizeArabic(a);
+    const nb = normalizeArabic(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    const dist = kanjoFuzzyLevenshtein(na, nb);
+    const maxLen = Math.max(na.length, nb.length) || 1;
+    return 1 - (dist / maxLen);
+};
+
+/* "High confidence" = a single-character typo on a >=3 char token, or a
+   >=0.8 similarity within two edits. Short tokens stay exact-only so the engine
+   never \"corrects\" a legitimate 2-letter option into another one. */
+const kanjoFuzzyHighConfidence = (a, b) => {
+    const na = normalizeArabic(a);
+    const nb = normalizeArabic(b);
+    if (!na || !nb || na === nb) return false;
+    if (Math.min(na.length, nb.length) < 3) return false;
+    const dist = kanjoFuzzyLevenshtein(na, nb);
+    if (dist === 1) return true;
+    return dist <= 2 && kanjoFuzzySimilarity(na, nb) >= 0.8;
+};
+
+/* Best confident candidate for `query` among [{name|label, token}] (or plain
+   strings). Returns { name, token, score, distance } or null when nothing is
+   confidently close, or when the top two candidates tie (ambiguous -> we never
+   guess). */
+const kanjoFuzzyBest = (query, candidates, opts) => {
+    const o = opts || {};
+    const minScore = (typeof o.minScore === 'number') ? o.minScore : 0.8;
+    const q = normalizeArabic(query);
+    if (!q) return null;
+    const seenNorm = new Set();
+    const list = (candidates || []).map((c) => (
+        (c && typeof c === 'object')
+            ? { name: String(c.name || c.label || ''), token: c.token, ref: c }
+            : { name: String(c == null ? '' : c), token: c, ref: c }
+    )).filter((c) => {
+        const n = normalizeArabic(c.name);
+        if (!n || n === q || seenNorm.has(n)) return false;
+        seenNorm.add(n);
+        return true;
+    });
+    let best = null;
+    let second = null;
+    list.forEach((c) => {
+        const row = {
+            name: c.name,
+            token: c.token,
+            score: kanjoFuzzySimilarity(query, c.name),
+            distance: kanjoFuzzyLevenshtein(q, normalizeArabic(c.name)),
+            ref: c.ref
+        };
+        if (!best || row.score > best.score) { second = best; best = row; }
+        else if (!second || row.score > second.score) { second = row; }
+    });
+    if (!best) return null;
+    if (!kanjoFuzzyHighConfidence(query, best.name) && best.score < minScore) return null;
+    if (second && (best.score - second.score) < 0.0001) return null;
+    return best;
+};
+
+window.kanjoFuzzyLevenshtein = kanjoFuzzyLevenshtein;
+window.kanjoFuzzySimilarity = kanjoFuzzySimilarity;
+window.kanjoFuzzyBest = kanjoFuzzyBest;
+
+/* ===== Fuzzy variant typo interruption (human-in-the-loop) =====
+   Runs ONLY on tokens the exact dictionary left unmapped. Each token is scored
+   against the official variant options; a confident near-match is offered to the
+   operator as an Accept / Ignore confirmation. Accepting injects the canonical
+   option into the in-memory variation names for THIS run (no Firestore, no
+   dictionary edits); ignoring leaves the token unmapped so the existing HALT
+   still protects it. */
+const kanjoFuzzyMatchVariants = (unmapped) => {
+    const t = kanjoQemaTaxonomy();
+    const suggestions = [];
+    const unresolved = [];
+    const options = t ? kanjoQemaOfficialOptions(t).map((o) => ({ name: o.name, token: o.name })) : [];
+    (unmapped || []).forEach((item) => {
+        const best = options.length ? kanjoFuzzyBest(item.option, options, { minScore: 0.8 }) : null;
+        if (best) suggestions.push({ option: item.option, products: item.products || [], suggestion: best.name });
+        else unresolved.push(item);
+    });
+    return { suggestions, unresolved };
+};
+
+const kanjoResolveFuzzyVariantIssues = async (unmapped) => {
+    const normalized = (unmapped || []).filter((i) => i && String(i.option || '').trim());
+    const { suggestions, unresolved } = kanjoFuzzyMatchVariants(normalized);
+    const injections = new Map();
+    if (!suggestions.length) return { injections, remaining: unresolved };
+    const Swal = (typeof window !== 'undefined') ? window.Swal : null;
+    if (!Swal || typeof Swal.fire !== 'function') return { injections, remaining: normalized };
+    for (let i = 0; i < suggestions.length; i++) {
+        const s = suggestions[i];
+        const names = (s.products || []).slice(0, 3).join('، ');
+        const more = s.products.length > 3 ? '…' : '';
+        const who = names
+            ? '<div style="margin-top:6px;font-size:12px;color:#64748b;font-weight:600">(' + catalogEscapeHtml(names + more) + ')</div>'
+            : '';
+        const res = await Swal.fire({
+            icon: 'warning',
+            title: 'تم العثور على خطأ إملائي',
+            html: '<div style="text-align:right;direction:rtl;font-size:14px;line-height:1.9">'
+                + 'تم العثور على خطأ إملائي: <b style="color:#230535">' + catalogEscapeHtml(s.option) + '</b>.<br>'
+                + 'هل تقصد <b style="color:#166534">' + catalogEscapeHtml(s.suggestion) + '</b>؟'
+                + who
+                + '<div style="margin-top:8px;font-size:12px;color:#94a3b8">سيُطبَّق التصحيح على هذا التصدير فقط دون تعديل القاموس.</div></div>',
+            confirmButtonText: 'نعم، استخدم التصحيح',
+            confirmButtonColor: '#230535',
+            showCancelButton: true,
+            cancelButtonText: 'تجاهل',
+            focusConfirm: true
+        });
+        if (res && res.isConfirmed) injections.set(normalizeArabic(s.option), s.suggestion);
+        else unresolved.push({ option: s.option, products: s.products });
+    }
+    return { injections, remaining: unresolved };
+};
+
+/* Rebuild the in-memory evaluations with confirmed typos replaced by their
+   canonical option name (word-level, Arabic-normalized). Copies only — the
+   source product documents are never mutated. */
+const kanjoInjectVariantFixes = (evaluations, injections) => {
+    if (!injections || !injections.size) return evaluations;
+    return (evaluations || []).map((ev) => {
+        const product = ev && ev.product;
+        const variations = Array.isArray(product && product.variations) ? product.variations : null;
+        if (!variations || !variations.length) return ev;
+        let changed = false;
+        const next = variations.map((v) => {
+            const raw = String((v && v.name) || '');
+            if (!raw) return v;
+            let touched = false;
+            const rebuilt = raw.split(/([^\p{L}\p{N}]+)/u).map((w) => {
+                const key = normalizeArabic(w);
+                if (key && injections.has(key)) { touched = true; return injections.get(key); }
+                return w;
+            }).join('');
+            if (!touched) return v;
+            changed = true;
+            return Object.assign({}, v, { name: rebuilt });
+        });
+        if (!changed) return ev;
+        return Object.assign({}, ev, { product: Object.assign({}, product, { variations: next }) });
+    });
+};
+
+/* One-shot helper used by the export gates: offer fuzzy fixes, inject the
+   confirmed ones, then return the still-unmapped set (empty = safe to proceed).
+   `onInject(updatedEvaluations)` lets the caller keep its own reference in sync. */
+const kanjoSettleUnmappedVariants = async (evaluations, onInject) => {
+    let current = evaluations;
+    let unmapped = kanjoQemaUnmappedVariants(current);
+    if (!unmapped.length) return { evaluations: current, remaining: [] };
+    const outcome = await kanjoResolveFuzzyVariantIssues(unmapped);
+    if (outcome.injections.size) {
+        current = kanjoInjectVariantFixes(current, outcome.injections);
+        if (typeof onInject === 'function') onInject(current);
+    }
+    return { evaluations: current, remaining: kanjoQemaUnmappedVariants(current) };
+};
+
 /* ===== Vendor-scoped strict mapping enforcement (ZERO reads) =====
    For EVERY product whose vendor_type resolves to a DASHBOARD_CATEGORIES_TAXONOMY
    entry, each assigned category NAME must exist INSIDE that vendor's scope (the
@@ -6864,7 +7057,7 @@ const kanjoResolveScopedIssuesInteractive = async (issues) => {
             options.push({ token: cat.token, label: cat.name });
         });
         if (!options.length) return { ok: false, reason: 'no-template' };
-        items.push({ productId: issue.id || issue.product, label: issue.product, vendorName: issue.vendor, options: options });
+        items.push({ productId: issue.id || issue.product, label: issue.product, vendorName: issue.vendor, category: issue.category, options: options });
     }
     const picked = await window.kanjoPickTemplateCategories(items);
     if (!picked) return { ok: false, reason: 'cancelled' };
@@ -6888,9 +7081,13 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     if (!filtered.length) return { blob: null, fileName: '', productCount: 0, variantCount: 0 };
     filtered = filtered.map((p) => kanjoWithNormalizedText(p));
     const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || o.vendorType || '').trim();
-    const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
-    const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
-    if (unmappedVariants.length) throw new Error(kanjoUnmappedVariantsMessage(unmappedVariants));
+    let evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+    /* Variant safety gate: an option outside the static dictionary must never be
+       silently dropped. Before halting, offer a confident typo correction to the
+       operator (Accept injects it in-memory for this run; Ignore keeps the HALT). */
+    const settledVariants = await kanjoSettleUnmappedVariants(evaluations);
+    evaluations = settledVariants.evaluations;
+    if (settledVariants.remaining.length) throw new Error(kanjoUnmappedVariantsMessage(settledVariants.remaining));
     /* Only vendors outside the dashboard taxonomy fall back to their raw label;
        a scoped vendor must never fabricate a category and is audited below. */
     const selections = {};
@@ -7263,11 +7460,13 @@ window.exportKanjoExcel = async (options) => {
            ONLY its own vendor's category allow-list, so cross-vertical false
            positives (a restaurant landing in "فراخ"/"لحوم") are impossible. */
         const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || opts.vendorType || '').trim();
-        const evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
+        let evaluations = filtered.map((p) => ({ product: p, match: kanjoMatchProductCategory(p, vendorTypeOf(p)) }));
         /* Variant safety gate runs BEFORE any category prompt so an unmapped
-           option aborts the export immediately. */
-        const unmappedVariants = kanjoQemaUnmappedVariants(evaluations);
-        if (unmappedVariants.length) { kanjoHaltUnmappedVariants(unmappedVariants); return; }
+           option aborts the export immediately. A confident typo is first offered
+           to the operator (Accept injects in-memory for this run; Ignore halts). */
+        const settledVariants = await kanjoSettleUnmappedVariants(evaluations);
+        evaluations = settledVariants.evaluations;
+        if (settledVariants.remaining.length) { kanjoHaltUnmappedVariants(settledVariants.remaining); return; }
         /* STRICT_TAXONOMY_MAP gate: a stored/learned category that is not an
            exact key of the vendor's strict map HALTS the export with a precise
            error (the seven strict vendors only; others keep the audit modal). */
@@ -8537,12 +8736,20 @@ window.addEventListener('keydown', (ev) => {
 /* Read-only integration surface for the isolated vendor-template filler
    (services/templateExport.js). These are references to existing helpers only —
    no behaviour changes, no new Firestore reads, no touched export routes. */
-window.KanjoCatalogExportAPI = {
+ window.KanjoCatalogExportAPI = {
     buildExportRows: (evaluations, selections, variantEntries, options) => kanjoBuildExportRows(evaluations, selections, variantEntries, options),
     matchProductCategory: (product, vendorType) => kanjoMatchProductCategory(product, vendorType),
     withNormalizedText: (product) => kanjoWithNormalizedText(product),
     fetchAllProducts: () => fetchAllCatalogProductsForExport(),
     fetchDoneProducts: () => fetchDoneCatalogProducts(),
     merchantNameOf: (product) => catalogProductMerchantName(product),
-    resolveVendorType: (vendorType) => kanjoQemaResolveVendorType(vendorType)
+    resolveVendorType: (vendorType) => kanjoQemaResolveVendorType(vendorType),
+    fuzzyLevenshtein: (a, b) => kanjoFuzzyLevenshtein(a, b),
+    fuzzySimilarity: (a, b) => kanjoFuzzySimilarity(a, b),
+    fuzzyBest: (query, candidates, opts) => kanjoFuzzyBest(query, candidates, opts),
+    fuzzyMatchVariants: (unmapped) => kanjoFuzzyMatchVariants(unmapped),
+    resolveFuzzyVariantIssues: (unmapped) => kanjoResolveFuzzyVariantIssues(unmapped),
+    injectVariantFixes: (evaluations, injections) => kanjoInjectVariantFixes(evaluations, injections),
+    settleUnmappedVariants: (evaluations) => kanjoSettleUnmappedVariants(evaluations),
+    unmappedVariants: (evaluations) => kanjoQemaUnmappedVariants(evaluations)
 };
