@@ -38,19 +38,55 @@
       },
     };
   </script>
-  <style type="text/tailwindcss">
+    <style type="text/tailwindcss">
     @layer base {
       body { @apply font-arabic text-brand-ink bg-brand-cream antialiased; }
       ::selection { @apply bg-brand-gold text-white; }
     }
-    /* RTL list indentation for the typography plugin */
+
+    /* -- Legal document typography ----------------------------------------
+       One shared system for both legal pages so Arabic and English render
+       with an identical hierarchy: a consistent heading scale/weight, relaxed
+       body leading, and RTL/LTR-aware list indentation. Utilities live here
+       (not inline) so every article stays visually identical. */
+    .legal-prose h1 {
+      @apply text-2xl sm:text-3xl font-extrabold text-brand-purple mt-0 mb-6 leading-snug;
+    }
+    .legal-prose h2 {
+      @apply text-xl sm:text-2xl font-bold text-brand-purple mt-10 mb-3 leading-snug scroll-mt-24;
+    }
+    .legal-prose p {
+      @apply my-4 leading-relaxed text-gray-800;
+    }
+    .legal-prose ul {
+      @apply my-4 list-disc space-y-1.5 marker:text-brand-gold;
+    }
+    .legal-prose li {
+      @apply leading-relaxed text-gray-800;
+    }
+    /* Structural emphasis only - never for arbitrary inline words. */
+    .legal-prose strong {
+      @apply font-bold text-brand-purple;
+    }
+    .legal-prose a {
+      @apply text-brand-gold hover:underline;
+    }
+    /* RTL/LTR-aware list padding + text alignment */
     [dir="rtl"] .legal-prose ul { padding-right: 1.5rem; padding-left: 0; }
-    [dir="rtl"] .legal-prose h1, [dir="rtl"] .legal-prose h2, [dir="rtl"] .legal-prose p, [dir="rtl"] .legal-prose li { text-align: right; }
+    [dir="rtl"] .legal-prose h1, [dir="rtl"] .legal-prose h2,
+    [dir="rtl"] .legal-prose p, [dir="rtl"] .legal-prose li { text-align: right; }
     [dir="ltr"] .legal-prose ul { padding-left: 1.5rem; padding-right: 0; }
-    .legal-prose h2 { @apply mt-10 mb-3 text-brand-purple; }
-    .legal-prose h1 { @apply text-brand-purple; }
-    .legal-prose strong { @apply text-brand-purple; }
-    .legal-prose a { @apply text-brand-gold hover:underline; }
+    [dir="ltr"] .legal-prose h1, [dir="ltr"] .legal-prose h2,
+    [dir="ltr"] .legal-prose p, [dir="ltr"] .legal-prose li { text-align: left; }
+
+    /* -- Legal top navigation ---------------------------------------------
+       The active route is Kanjo gold with a solid gold underline so the
+       current page is instantly obvious against the purple header. */
+    .legal-nav a.active {
+      @apply text-brand-gold-light;
+      border-bottom: 2px solid #FFD700;
+      padding-bottom: 0.125rem;
+    }
   </style>
 </head>
 <body>
@@ -65,364 +101,226 @@
           <span class="text-brand-gold-light text-[10px] font-extrabold tracking-widest uppercase">Legal</span>
         </span>
       </a>
-      <nav class="flex items-center gap-2 sm:gap-3 text-sm font-bold">
-        <a href="/privacy-policy" class="hidden sm:inline px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors">الخصوصية</a>
-        <a href="/terms-conditions" class="hidden sm:inline px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors">الشروط</a>
+      <nav class="legal-nav flex items-center gap-2 sm:gap-3 text-sm font-bold" aria-label="Legal">
+        <a href="/privacy-policy" data-i18n="nav.privacy" class="hidden sm:inline px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors">الخصوصية</a>
+        <a href="/terms-conditions" data-i18n="nav.terms" class="hidden sm:inline px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors">الشروط</a>
         <button type="button" id="langToggle" aria-pressed="false" class="px-3 py-1.5 rounded-lg border border-brand-gold-light/50 text-brand-gold-light hover:bg-white/10 transition-colors">English</button>
       </nav>
     </div>
   </header>
 
   <main id="legal-main" class="max-w-3xl mx-auto px-5 sm:px-8 py-8 sm:py-12">
-    <article id="doc-ar" dir="rtl" lang="ar" class="legal-prose prose prose-lg max-w-none prose-headings:font-extrabold prose-p:leading-loose prose-li:leading-loose">
+    <article id="doc-ar" dir="rtl" lang="ar" class="legal-prose prose prose-lg max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed">
 <h1>وثيقة الشروط والأحكام لاستخدام منصة وتطبيق كانجو (Kanjo)</h1>
 <p>تمهيد قانوني وإقرار ملزم بالموافقة مرحباً بكم في منصة وتطبيق كانجو. تُدار هذه المنصة وتعود ملكيتها القانونية والفكرية والتشغيلية بالكامل لشركة "كاند جوو لخدمات التوصيل والتجارة الإلكترونية"، وهي شركة ذات مسؤولية محدودة، تأسست وتعمل بشكل قانوني ورسمي بموجب القوانين والتشريعات السارية في جمهورية مصر العربية. يُعد قيامك بتحميل التطبيق، أو الوصول إلى المنصة، أو تصفحها، أو إنشاء حساب مستخدم فيها، أو استخدام أي من خدماتها وتطبيقاتها اللوجستية، بمثابة إقرار إلكتروني صريح، وموافقة قانونية نهائية لا رجعة فيها على جميع أحكام هذه الاتفاقية بكافة بنودها، وشروطها، وسياساتها الملحقة بها. تتمتع هذه الموافقة بالحجية القانونية الكاملة المقررة للكتابة والمحررات الرسمية وفقاً لأحكام قانون تنظيم التوقيع الإلكتروني المصري رقم 15 لسنة 2004. إذا كنت لا توافق بشكل قاطع على أي بند أو شرط من هذه الشروط، فإنه يُحظر عليك تماماً استخدام المنصة، ويتوجب عليك التوقف فوراً عن تصفحها أو الاستفادة من خدماتها.</p>
 <h2 id="المادة-1-التعريفات-والمصطلحات-القانونية">المادة 1: التعريفات والمصطلحات القانونية</h2>
 <ul>
 <li>المنصة أو التطبيق أو الشركة: يُقصد بها تطبيق كانجو للهواتف الذكية الداعم لأنظمة التشغيل المختلفة، والموقع الإلكتروني الرسمي، وكافة واجهات برمجة التطبيقات، والبرمجيات، والخدمات الرقمية المرتبطة بالعلامة التجارية كانجو.</li>
-</ul>
-<ul>
 <li>المستخدم أو العميل: أي شخص طبيعي أو كيان اعتباري يقوم بإنشاء حساب مسجل، أو يتصفح المنصة بغرض طلب الخدمات، أو السلع، أو الوجبات، أو المنتجات المعروضة.</li>
-</ul>
-<ul>
 <li>التاجر أو المورد أو الشريك: الكيانات التجارية المستقلة تماماً عن كانجو، والتي تشمل على سبيل المثال لا الحصر المطاعم، المتاجر، الصيدليات المرخصة، محلات البقالة، والأسواق التجارية، التي تستخدم المنصة لعرض وبيع منتجاتها مباشرة للمستخدمين.</li>
-</ul>
-<ul>
 <li>المندوب أو مزود الخدمة اللوجستية: مزود خدمة التوصيل المستقل، سواء كان فرداً يعمل كطرف مستقل (Freelancer) أو تابعاً لشركة لوجستية خارجية، والذي يتولى مهمة استلام الطلب من مقر التاجر وتوصيله مادياً إلى العنوان الذي حدده المستخدم.</li>
-</ul>
-<ul>
 <li>الطلب: السلع، أو الوجبات، أو المنتجات، أو الخدمات التي يحددها المستخدم ويتعاقد على شرائها من التاجر عبر الواجهة التقنية للمنصة.</li>
 </ul>
 <h2 id="المادة-2-النطاق-القانوني-لعمل-المنصة-وحدود-المسؤولية">المادة 2: النطاق القانوني لعمل المنصة وحدود المسؤولية</h2>
 <ul>
 <li>الوساطة التقنية المستقلة: تعمل شركة كانجو حصرياً بصفتها سوقاً إلكترونياً ومنصة تقنية وسيطة. ينحصر دورها التشغيلي في توفير البنية التحتية التكنولوجية التي تُسهل عرض المنتجات، وتربط المستخدمين بالتجار، وتُحيل الطلبات إلى المندوبين المستقلين لمعالجتها وتوصيلها.</li>
-</ul>
-<ul>
 <li>استقلالية التجار التامة: لا تتدخل منصة كانجو، بأي شكل مباشر أو غير مباشر، في عمليات الإنتاج، أو التصنيع، أو الطهي، أو الإعداد، أو التعبئة، أو التغليف، أو التسعير لأي سلعة أو وجبة تُعرض عبر المنصة.</li>
-</ul>
-<ul>
 <li>المسؤولية الحصرية عن المنتجات: تقع المسؤولية القانونية، والمدنية، والتجارية، والجنائية الكاملة المتعلقة بجودة المنتجات، وسلامتها الصحية، ونظافتها، ومطابقتها للمواصفات القياسية المصرية، وصحة البيانات المدونة عليها (بما في ذلك المكونات، وتواريخ الإنتاج والصلاحية، والمنشأ) على عاتق التاجر وحده، وذلك إعمالاً وتطبيقاً صارماً لأحكام قانون حماية المستهلك المصري رقم 181 لسنة 2018.</li>
-</ul>
-<ul>
 <li>الحساسية والقيود الغذائية: لا تضمن المنصة ولا تتعهد بخلو أي أطعمة من مسببات الحساسية، كما لا تتحقق من دقة الإدعاءات الصحية والغذائية التي يكتبها التاجر (مثل: خالي من الجلوتين، أكل عضوي، خالي من السكر، حلال). يتحمل المستخدم وحده المسؤولية الكاملة عن التواصل المباشر مع التاجر قبل إتمام عملية الدفع للتحقق من أي قيود أو متطلبات غذائية أو صحية خاصة به.</li>
 </ul>
-<p><strong>المادة 3:</strong> السياسات الصارمة للخدمات اللوجستية للمنتجات الصيدلانية والرعاية الصحية</p>
+<h2>المادة 3: السياسات الصارمة للخدمات اللوجستية للمنتجات الصيدلانية والرعاية الصحية</h2>
 <ul>
 <li>وساطة لوجستية بحتة لا غير: يقر المستخدم وتُقر كافة الصيدليات الشريكة إقراراً نافياً للجهالة بأن دور منصة كانجو يقتصر بشكل قاطع وحصري على توفير خدمات النقل والتوصيل اللوجستي للمنتجات الصيدلانية. لا يُعد التطبيق بأي حال من الأحوال جهة بيع طبية، أو مزوداً للاستشارات الصحية، أو منفذاً مرخصاً لتوزيع وبيع الأدوية.</li>
-</ul>
-<ul>
 <li>المسؤولية الطبية والمهنية المطلقة: تقع المسؤولية القانونية، والجنائية، والمهنية الكاملة عن فحص الوصفات الطبية (الروشتات)، والتحقق من صحتها، وتحديد شرعية وقانونية صرف الأدوية وملاءمتها للحالة الصحية للمريض، ومراجعة الجرعات الطبية، والتأكد من تواريخ الصلاحية وظروف التخزين المثلى داخل المنشأة، على عاتق الصيدلية المرخصة والصيدلي المدير المسؤول حصراً، وذلك امتثالاً تاماً لقانون مزاولة مهنة الصيدلة المصري واللوائح الصادرة عن هيئة الدواء المصرية ووزارة الصحة.</li>
-</ul>
-<ul>
 <li>الحصانة القانونية التامة للمنصة والمندوبين: تلتزم الصيدلية بتسليم الطلبات الدوائية إلى مندوب التوصيل في عبوات طبية مغلقة، ومختومة، ومحكمة الغلق، وغير شفافة. لا يمتلك مندوب التوصيل أي صفة طبية، أو علمية، أو حق قانوني لفتح، أو فحص، أو تقييم محتوى الشحنات الطبية. وبناءً عليه، تُعفى منصة كانجو وجميع مندوبيها وموظفيها إعفاءً قانونياً تاماً ونهائياً من أي التزام أو مسؤولية أو مطالبة بالتعويض ناشئة عن طبيعة المواد الطبية المرسلة، أو أضرارها الجانبية، أو سوء استخدامها من قبل العميل، أو صرفها بطريق الخطأ من قبل الصيدلية.</li>
 </ul>
 <h2 id="المادة-4-إنشاء-الحسابات-شروط-الأهلية-وأمن-المعلومات">المادة 4: إنشاء الحسابات، شروط الأهلية، وأمن المعلومات</h2>
 <ul>
 <li>الأهلية القانونية للتعاقد: يجب أن يكون المستخدم بالغاً لسن الرشد القانوني (ثمانية عشر عاماً ميلادياً فأكثر) ليتمتع بالأهلية الكاملة لإبرام العقود المالية الملزمة. في حال كان المستخدم قاصراً، فإن مجرد استخدامه للمنصة يُعتبر إقراراً قاطعاً بوجود إشراف مباشر وموافقة صريحة من الولي الشرعي أو الوصي القانوني، والذي يتحمل بالتبعية كافة الالتزامات المالية والقانونية الناتجة عن هذا الاستخدام.</li>
-</ul>
-<ul>
 <li>دقة وصحة البيانات: يلتزم المستخدم بتقديم معلومات شخصية دقيقة، وكاملة، وصحيحة، وحديثة عند التسجيل، بما في ذلك الاسم الحقيقي، ورقم هاتف فعال، وعنوان تسليم دقيق. يُحظر تماماً إنشاء أو امتلاك أكثر من حساب شخصي واحد لنفس المستخدم. في حال اكتشاف وجود حسابات متعددة لنفس الشخص، يحق للمنصة دمجها، أو تعليقها، أو إغلاقها فوراً وإلغاء أي عروض ترويجية مرتبطة بها دون إشعار مسبق.</li>
-</ul>
-<ul>
 <li>مسؤولية أمن الحساب: يتحمل المستخدم المسؤولية الكاملة والحصرية عن الحفاظ على سرية بيانات الدخول وكلمات المرور الخاصة بحسابه. يُعتبر المستخدم مسؤولاً قانونياً ومالياً عن أي نشاط، أو معاملة، أو طلب يتم إجراؤه عبر حسابه، حتى وإن تم ذلك بواسطة طرف ثالث استخدم الحساب بعلم أو بدون علم المستخدم. في حال الشك في اختراق الحساب، يجب على العميل إبلاغ إدارة المنصة فوراً.</li>
 </ul>
 <h2 id="المادة-5-الاستخدام-المقبول-وحظر-السلوكيات-غير-القانونية">المادة 5: الاستخدام المقبول وحظر السلوكيات غير القانونية</h2>
 <ul>
 <li>الاستخدام المشروع: تُمنح رخصة استخدام المنصة للأغراض الشخصية غير التجارية فقط. يلتزم المستخدم باستخدام الخدمات بما يتوافق مع القوانين والآداب العامة المعمول بها في جمهورية مصر العربية.</li>
-</ul>
-<ul>
 <li>حظر الجرائم الإلكترونية والتقنية: يُحظر تماماً على المستخدم أو أي طرف ثالث محاولة اختراق البنية التحتية للمنصة، أو تعطيل خوادمها، أو استخدام برمجيات التتبع الآلي أو استخراج البيانات (Web Scraping, Spiders, Bots)، أو إدخال فيروسات وبرمجيات خبيثة، أو التلاعب بأسعار وعروض المنصة، أو إنشاء حسابات وهمية بقصد الاحتيال. تحتفظ المنصة بحقها المطلق في الملاحقة الجنائية والمدنية للمخالفين بموجب قانون مكافحة جرائم تقنية المعلومات المصري رقم 175 لسنة 2018 والمطالبة بتعويضات رادعة عن كافة الخسائر.</li>
-</ul>
-<ul>
 <li>حظر السلوك المسيء: يُمنع العميل منعاً باتاً من استخدام المنصة لطلب، أو نقل، أو تداول سلع غير قانونية أو محظورة. كما يُحظر بشكل قاطع توجيه أي إساءة لفظية، أو مضايقة، أو تهديد جسدي، أو ممارسة أي شكل من أشكال التمييز العنصري أو الديني تجاه مندوبي التوصيل، أو شركاء المنصة من التجار، أو طاقم الدعم الفني لخدمة العملاء. يحق للمنصة إنهاء الحساب فوراً وإحالة الواقعة للجهات الأمنية في هذه الحالات.</li>
 </ul>
 <h2 id="المادة-6-آلية-عمل-الطلبات-التوصيل-والتنفيذ-الفعلي">المادة 6: آلية عمل الطلبات، التوصيل، والتنفيذ الفعلي</h2>
 <ul>
 <li>إبرام وعقد الطلب: بمجرد تأكيد المستخدم للطلب عبر واجهة المنصة والنقر على زر إتمام الطلب، يتم إرسال إشعار للتاجر. يُصبح العقد التجاري ملزماً ونهائياً ولا رجعة فيه بين المستخدم والتاجر في اللحظة التي يقوم فيها التاجر بقبول الطلب والبدء الفعلي في تجهيزه.</li>
-</ul>
-<ul>
 <li>أوقات التوصيل التقديرية: جميع الأوقات الزمنية المعروضة للتوصيل على المنصة هي أوقات تقديرية واستدلالية فقط، وتخضع للتغير بناءً على عوامل متغيرة ومعقدة تشمل سرعة تجهيز التاجر، حالة الاختناقات المرورية، الظروف الجوية، وتوفر المندوبين. لا تضمن منصة كانجو بأي حال وصول الطلب في الدقيقة المحددة، ولا تتحمل أي مسؤولية قانونية أو مادية عن التأخيرات الخارجة عن إرادتها المعقولة.</li>
-</ul>
-<ul>
 <li>فشل التسليم بسبب خطأ أو تقصير العميل: يلتزم العميل بالتواجد الفعلي في عنوان التوصيل المحدد مسبقاً، واستقبال اتصالات المندوب الهاتفية لتسهيل التسليم. في حال وصول المندوب إلى العنوان وتعذر التواصل مع العميل لفترة مستمرة تتجاوز 10 دقائق، أو امتناع العميل عن فتح الباب أو استلام الطلب دون مبرر قانوني قاهر، يُعتبر الطلب مُلغى تلقائياً نتيجة تعنت العميل. في هذه الحالة، يتحمل العميل كامل الخسارة المادية، ولا يحق له استرداد قيمة الطلب أو رسوم التوصيل بأي شكل، ويحق للمنصة خصم القيمة الإجمالية من محفظته الإلكترونية أو بطاقته البنكية المربوطة بالحساب.</li>
-</ul>
-<ul>
 <li>سياسة تعديل أو تغيير العنوان: يتحمل العميل المسؤولية الحصرية عن دقة وإحداثيات عنوان التوصيل المُدخل. أي طلب لتعديل العنوان بعد إتمام عملية الطلب وقبوله من التاجر يخضع للتقييم، وقد يُرفض تماماً إذا كان العنوان الجديد يقع خارج النطاق الجغرافي لتوصيل التاجر، أو قد تترتب عليه رسوم توصيل إضافية يُلزم العميل بدفعها نقداً أو إلكترونياً.</li>
 </ul>
 <h2 id="المادة-7-التسعير-الرسوم-الإضافية-والمدفوعات-الإلكترونية">المادة 7: التسعير، الرسوم الإضافية، والمدفوعات الإلكترونية</h2>
 <ul>
 <li>التسعير النهائي والديناميكي: جميع الأسعار المعروضة على المنصة تحدد من قبل التجار وتكون قابلة للتغيير والتحديث في أي وقت. يوافق المستخدم مُسبقاً وبشكل صريح على السعر الإجمالي النهائي المعروض في سلة المشتريات قبل تأكيد الدفع، والذي يشمل بشفافية ثمن السلع الأساسي، ضريبة القيمة المضافة المقررة قانوناً، رسوم التوصيل المتغيرة حسب المسافة، ورسوم خدمة المنصة.</li>
-</ul>
-<ul>
 <li>وسائل الدفع المعتمدة: تدعم المنصة طرق الدفع النقدي عند الاستلام والدفع الإلكتروني الآمن عبر البطاقات الائتمانية والبنكية، وتلتزم بالضوابط الأمنية والتنظيمية الواردة في القوانين المصرية المنظمة لاستخدام وسائل الدفع غير النقدي رقم 18 لسنة 2019.</li>
-</ul>
-<ul>
 <li>رسوم الخدمة والتشغيل: تحتفظ منصة كانجو بالحق المطلق في فرض، أو تعديل، أو مراجعة رسوم خدمة أو رسوم للطلبات الصغيرة على أي طلب، وذلك لضمان استمرارية تحديث المنصة وتطوير جودة التشغيل. هذه الرسوم التشغيلية غير قابلة للاسترداد كلياً أو جزئياً تحت أي ظرف، باستثناء الحالات النادرة التي تفشل فيها المنصة كلياً في إيصال الطلب للعميل بسبب عطل تقني.</li>
-</ul>
-<ul>
 <li>الإكراميات والمكافآت للمندوبين (البقشيش): توفر المنصة ميزة اختيارية تتيح للمستخدم دفع إكرامية مالية للمندوب تقديراً لجهده. يتم تحويل قيمة الإكرامية بالكامل للمندوب. يقر العميل بأن الإكراميات تُدفع طواعية، ولا يمكن التراجع عنها، أو استردادها، أو المطالبة بها بأي حال من الأحوال بعد إتمام التسليم الفعلي للطلب.</li>
 </ul>
 <h2 id="المادة-8-المحفظة-الإلكترونية-لكانجو-kanjo-wallet">المادة 8: المحفظة الإلكترونية لكانجو (Kanjo Wallet)</h2>
 <ul>
 <li>طبيعة الرصيد الافتراضي: المحفظة الإلكترونية المتوفرة على حساب المستخدم تحتوي على رصيد افتراضي داخلي، مُخصص ومُقيد للاستخدام الحصري ضمن النظام البيئي لمنصة كانجو لدفع أو خصم قيمة الطلبات المستقبلية فقط.</li>
-</ul>
-<ul>
 <li>الحظر التام للسحب النقدي: يُحظر قانوناً وتجارياً المطالبة بسحب رصيد المحفظة نقداً (كاش) أو محاولة تحويل هذا الرصيد الافتراضي إلى حسابات بنكية خارجية، أو بطاقات ائتمانية، أو محافظ إلكترونية تابعة لشركات اتصالات أو جهات أخرى، ما لم ينص القانون المصري صراحة وفي حالات ضيقة ومثبتة قضاءً بضرورة رد المبالغ الناتجة عن عمليات احتيال بنكية.</li>
-</ul>
-<ul>
 <li>حظر التحويل المباشر بين المستخدمين: لا يُسمح بتحويل رصيد المحفظة، أو إهدائه، أو نقله من حساب مستخدم إلى حساب مستخدم آخر داخل المنصة، إلا في حال إطلاق هذه الميزة رسمياً من قِبل المنصة وفق ضوابط أمنية، ومالية، وتنظيمية صارمة لمكافحة غسيل الأموال تحددها الإدارة العليا للشركة.</li>
 </ul>
 <h2 id="المادة-9-السياسة-الصارمة-للإلغاء-الاسترجاع-والتعويض-المالي">المادة 9: السياسة الصارمة للإلغاء، الاسترجاع، والتعويض المالي</h2>
 <ul>
 <li>ضوابط إلغاء الطلبات من قبل العميل: يحتفظ المستخدم بحق إلغاء الطلب عبر المنصة واسترداد المبلغ المدفوع بالكامل فقط وحصرياً في الفترة الزمنية القصيرة التي تسبق قيام التاجر بقبول الطلب. بمجرد أن يضغط التاجر على زر القبول ويبدأ فعلياً في استهلاك موارده وتجهيز الطلب، يسقط حق العميل في الإلغاء تماماً وبشكل نهائي.</li>
-</ul>
-<ul>
 <li>الاسترجاع والاستبدال ومطابقته للقانون: التزاماً بأحكام ومواد قانون حماية المستهلك المصري، يحق للمستهلك بشكل عام استبدال أو إرجاع السلع القياسية خلال 14 يوماً من تاريخ الاستلام. ومع ذلك، وبموجب اللوائح التنفيذية للقانون ذاته، يُستثنى من ذلك قطعياً الحالات التالية التي يمتنع فيها الاسترجاع نهائياً:</li>
-</ul>
-<ul>
 <li>أولاً: السلع الاستهلاكية القابلة للتلف السريع، والتي تفسد بمرور الوقت القصير، مثل الوجبات الغذائية الساخنة، المخبوزات، الخضروات، الفواكه، واللحوم الطازجة.</li>
-</ul>
-<ul>
 <li>ثانياً: السلع التي صُنعت، أو طُهيت، أو تم تحضيرها ودمج مكوناتها خصيصاً بناءً على طلب، واختيار، ومواصفات المستهلك الدقيقة.</li>
-</ul>
-<ul>
 <li>ثالثاً: الأدوية، المكملات الغذائية، الفيتامينات، ومنتجات العناية الشخصية والتجميلية التي تم فتح عبواتها، أو التي تتطلب ظروف حفظ بيئية وحرارية دقيقة لا يمكن للمورد أو المنصة ضمانها بعد خروجها من المنشأة الطبية.</li>
-</ul>
-<ul>
 <li>رابعاً: الكتب، المطبوعات، البرامج، والمنتجات الرقمية والوسائط التي أزال المستهلك غلافها البلاستيكي الواقي أو بدأ في استخدامها.</li>
-</ul>
-<ul>
 <li>معالجة الطلبات الخاطئة أو التالفة: في حالة استثنائية تمثلت في استلام العميل لطلب خاطئ تماماً، أو ينقصه عناصر أساسية مدفوعة، أو تعرض لتلف فيزيائي جسيم أثناء النقل، يجب على العميل التواصل فوراً مع مركز خدمة العملاء في غضون فترة زمنية صارمة لا تتجاوز 24 إلى 48 ساعة كحد أقصى، مع التزامه بتقديم إثبات مصور قاطع (صور واضحة وعالية الدقة للمنتج التالف ولإيصال الطلب). بعد التحقيق الداخلي، ستقوم المنصة بتعويض العميل المتضرر تعويضاً عادلاً يتمثل في استرداد جزئي أو كلي للمبلغ، ويتم إيداع التعويض في المحفظة الإلكترونية أو رده إلى طريقة الدفع الأصلية.</li>
 </ul>
 <h2 id="المادة-10-العروض-الترويجية-قسائم-الخصم-promo-codes-وبرامج-ال">المادة 10: العروض الترويجية، قسائم الخصم (Promo Codes)، وبرامج الولاء</h2>
 <ul>
 <li>الطبيعة التقديرية للعروض: تُصنف أي قسائم خصم، أكواد ترويجية، نقاط مكافآت، توصيل مجاني، أو باقات توفير تقدمها منصة كانجو على أنها ميزات تشجيعية مجانية وحملات تسويقية تخضع بالكامل للتقدير المطلق والسياسة الداخلية لإدارة المنصة، ولا تُعتبر بأي حال من الأحوال حقاً مالياً مكتسباً أو دائماً للمستخدم.</li>
-</ul>
-<ul>
 <li>القيود وشروط الاستخدام: قسائم الخصم صالحة للاستخدام لمرة واحدة فقط لكل مستخدم فريد، ولها تاريخ ووقت صلاحية محدد مسبقاً، ولا يمكن دمجها أو جمعها مع عروض أو خصومات أخرى نشطة في ذات الوقت ما لم يُنص على خلاف ذلك في شروط الحملة. القسائم لا تحمل أي قيمة نقدية فعلية وهي غير قابلة للاستبدال النقدي.</li>
-</ul>
-<ul>
 <li>حق التعديل والإلغاء الأحادي: تحتفظ المنصة بالحق المطلق وغير القابل للطعن في إلغاء، أو تعديل، أو تعليق، أو سحب أي قسيمة خصم، أو رصيد نقاط ولاء، أو حملة ترويجية في أي وقت تراه مناسباً، دون أي إلزام بتوجيه إشعار مسبق، ودون تحمل أي مسؤولية لتعويض المستخدمين، وذلك لأسباب تشغيلية، أو تنظيمية، أو مالية.</li>
-</ul>
-<ul>
 <li>مكافحة الاحتيال التسويقي والجزاءات: يُعتبر تعمد إنشاء حسابات متعددة وهمية لنفس الشخص الطبيعي، أو استغلال الثغرات التقنية بشكل منهجي للحصول المتكرر وغير العادل على العروض الترويجية المخصصة حصرياً للعملاء الجدد، عملاً احتيالياً مجرماً وانتهاكاً صارخاً لسياساتنا الأساسية. تحتفظ المنصة بكامل حقوقها في مصادرة جميع الأرصدة المكتسبة، إلغاء كافة الطلبات المعلقة، الحظر النهائي والفوري لجميع الحسابات المرتبطة والمتورطة، والمطالبة القانونية بالتعويض المادي عن الخسائر التجارية الناتجة عن هذا الاحتيال.</li>
 </ul>
 <h2 id="المادة-11-التقييمات-والمحتوى-الذي-ينشئه-المستخدم-ugc">المادة 11: التقييمات والمحتوى الذي ينشئه المستخدم (UGC)</h2>
 <ul>
 <li>الملكية الفكرية الحصرية للمحتوى: أي نصوص، أو تعليقات، أو تقييمات بالنجوم، أو صور فوتوغرافية، أو ملاحظات يرفعها، أو يكتبها، أو يرسلها المستخدم على بيئة المنصة تصبح تلقائياً ملكية حصرية، ودائمة، وغير قابلة للإلغاء لمنصة كانجو. تتنازل بموجب هذا عن أي حقوق متعلقة بها، ويحق للمنصة استخدامها، أو تعديلها، أو دمجها، أو عرضها علناً، أو نشرها لأي غرض تجاري أو إعلاني أو ترويجي دون الحاجة إلى الحصول على إذن إضافي أو دفع أي مقابل مادي أو معنوي للمستخدم المُساهم.</li>
-</ul>
-<ul>
 <li>معايير القبول الصارمة للمراجعات: يلتزم المستخدم قانوناً بأن تكون جميع التقييمات والمراجعات نابعة عن تجربة استهلاكية حقيقية، وموثقة، ومباشرة مع التاجر المعني. تحتفظ المنصة بالحق النشط في مراقبة، ورفض، وإخفاء، أو الحذف النهائي لأي تعليق يحتوي على: إساءة شخصية، ألفاظ نابية أو خادشة للحياء، تمييز عنصري أو طائفي، اتهامات خطيرة بانتهاكات صحية أو تسمم دون إرفاق دليل طبي أو حكومي رسمي، أو التعليقات الكيدية الوهمية الموجهة من قبل تجار منافسين بقصد الإضرار المتعمد بسمعة الآخرين.</li>
 </ul>
 <h2 id="المادة-12-حماية-حقوق-الملكية-الفكرية-والعلامات-التجارية">المادة 12: حماية حقوق الملكية الفكرية والعلامات التجارية</h2>
 <ul>
 <li>الحقوق الحصرية والمطلقة: كافة حقوق الملكية الفكرية، وحقوق النشر، وبراءات الاختراع، والعلامات التجارية المتعلقة بالمنصة ككل، بما في ذلك على سبيل المثال لا الحصر: العلامة التجارية والاسم التجاري كانجو، الشعارات البصرية، تصاميم واجهة المستخدم (UI/UX)، النصوص المكتوبة، الأكواد البرمجية للواجهة والخوادم، الخوارزميات، قواعد البيانات، الخرائط التفاعلية، والصور الحصرية، هي ملكية خالصة وحصرية لشركة كاند جوو أو مرخصة لها قانونياً من قبل أطراف ثالثة.</li>
-</ul>
-<ul>
 <li>الحظر القاطع للاستنساخ والاستخراج: يُحظر تماماً وبشكل قاطع استنساخ، أو تعديل، أو توزيع، أو إعادة نشر، أو محاولة الهندسة العكسية، أو تفكيك البرمجيات، أو استخدام أدوات استخراج البيانات الآلية (Data Mining/Web Scraping) على أي جزء أو مكون من البنية التحتية للمنصة دون الحصول المسبق على إذن كتابي ورسمي وموقع من الإدارة العليا للشركة. سيتم اتخاذ أقصى الإجراءات القانونية والملاحقة الجنائية والمدنية العاجلة ضد أي فرد، أو مبرمج، أو كيان تجاري ينتهك، أو يتعدى، أو يهدد هذه الحقوق الفكرية المحمية.</li>
 </ul>
 <h2 id="المادة-13-حماية-البيانات-الشخصية-الخصوصية-والسرية">المادة 13: حماية البيانات الشخصية، الخصوصية، والسرية</h2>
 <ul>
 <li>الإطار القانوني والتنظيمي: تخضع كافة بيانات المستخدمين، ومقاييس الخصوصية، والمعلومات الشخصية التي يتم جمعها لأحكام وضوابط قانون حماية البيانات الشخصية المصري المعمول به واللوائح المكملة له.</li>
-</ul>
-<ul>
 <li>الموافقة الصريحة على المعالجة: بمجرد قيام المستخدم بإنشاء حساب مسجل نشط، فإنه يمنح كانجو موافقته الصريحة، والمستنيرة، والواضحة لجمع، وتخزين بأمان، ومعالجة بياناته الشخصية والتعريفية (مثل الاسم الكامل، العنوان السكني، الموقع الجغرافي الدقيق عبر GPS، ورقم الهاتف النشط) ومشاركتها حصرياً وفي أضيق الحدود الضرورية مع التاجر المعني ومندوب التوصيل المكلف، بالقدر اللازم فقط لإتمام وتنفيذ الخدمة المطلوبة بنجاح ودقة.</li>
-</ul>
-<ul>
 <li>أمن البيانات والمشاركة المصرح بها: تتعهد المنصة وتبذل قصارى جهدها التجاري والتقني لاتخاذ كافة التدابير الأمنية، والتشفيرية، والتنظيمية لحماية بيانات المستخدمين من الاختراق، أو الوصول غير المصرح به، أو التسريب. تلتزم المنصة التزاماً صارماً بعدم بيع أو مشاركة البيانات الخاصة مع أطراف خارجية لأغراض التسويق المباشر العشوائي إلا بموافقة صريحة واختيارية من المستخدم. وعلاوة على ذلك، تلتزم المنصة قانوناً بالاستجابة الفورية لأي أوامر أو مذكرات قضائية رسمية تطلب الإفصاح عن بيانات محددة للجهات الأمنية، أو الشرطية، أو القضائية المصرية المختصة متى طلب منها ذلك وفقاً للقانون.</li>
 </ul>
 <h2 id="المادة-14-التعويض-الشامل-وحدود-المسؤولية-القانونية">المادة 14: التعويض الشامل وحدود المسؤولية القانونية</h2>
 <ul>
 <li>التعويض والحماية: يوافق المستخدم موافقة شاملة على الدفاع عن، وتعويض، وإبراء ذمة منصة كانجو والشركة المالكة لها، وشركاتها التابعة، والمؤسسين، والمديرين التنفيذيين، والموظفين، والوكلاء المعتمدين، وحمايتهم من وضد أي وكافة المطالبات، أو الدعاوى القانونية، أو الالتزامات، أو الخسائر المالية، أو الأضرار، أو النفقات التشغيلية (بما في ذلك أتعاب المحاماة المعقولة والمصاريف القضائية) التي تنشأ بشكل مباشر، أو غير مباشر، أو تبعي عن تعمده أو إهماله في إساءة استخدام المنصة، أو انتهاكه المباشر لهذه الشروط التفصيلية، أو تعديه على حقوق أي طرف ثالث مشارك في العملية (سواء كانوا تجاراً، أو مندوبين، أو مستهلكين آخرين).</li>
-</ul>
-<ul>
 <li>إخلاء المسؤولية التقنية والتشغيلية: تقدم المنصة خدماتها الرقمية واللوجستية على أساس "كما هي" (As Is) و"كما هي متاحة" (As Available) دون أي ضمانات من أي نوع، سواء كانت صريحة أو ضمنية. إلى أقصى حد مطلق يسمح به القانون المعمول به، تُخلي كانجو مسؤوليتها صراحة وتحد منها تجاه أي أضرار غير مباشرة، أو عرضية، أو تبعية، أو خاصة، أو عقابية، وكذلك عن أي خسائر تجارية جسيمة، أو فقدان للإيرادات، أو فوات للأرباح المتوقعة، الناتجة بشكل مباشر أو غير مباشر عن استخدام أو عدم القدرة على استخدام المنصة، أو الأعطال التقنية المفاجئة في الخوادم، أو الفيروسات الرقمية، أو الأفعال المستقلة، والحوادث، والأخطاء البشرية التي يرتكبها مندوبو التوصيل المستقلون والتجار.</li>
 </ul>
-<p><strong>المادة 15:</strong> القوة القاهرة والظروف الطارئة الخارجة عن الإرادة لا تُعد منصة كانجو، أو إدارتها، أو شركاؤها التشغيليون (التجار والمندوبون) بأي حال من الأحوال في حالة إخلال قانوني بالتزاماتهم التعاقدية، ولا يتحملون أي تبعات أو مطالبات بالتعويضات المالية أو استرداد الأموال، إذا كان الفشل، أو التعطيل، أو التأخير في تقديم خدمة التوصيل ناتجاً بشكل مباشر عن أحداث قوة قاهرة كارثية أو ظروف طارئة تخرج تماماً عن نطاق سيطرتهم المعقولة والمنطقية. تشمل هذه الأحداث على سبيل المثال لا الحصر: الكوارث الطبيعية المدمرة، الحروب المعلنة أو غير المعلنة، الإضرابات العمالية واسعة النطاق، القرارات والتوجهات السيادية الحكومية، حظر التجول الصارم، إغلاق الطرق الرئيسية، الانقطاع الشامل والمتكرر لشبكات الاتصالات والإنترنت، أو تفشي الأوبئة والجوائح البيولوجية التي تعوق الحركة والعمل.</p>
+<h2>المادة 15: القوة القاهرة والظروف الطارئة الخارجة عن الإرادة</h2>
+<p>لا تُعد منصة كانجو، أو إدارتها، أو شركاؤها التشغيليون (التجار والمندوبون) بأي حال من الأحوال في حالة إخلال قانوني بالتزاماتهم التعاقدية، ولا يتحملون أي تبعات أو مطالبات بالتعويضات المالية أو استرداد الأموال، إذا كان الفشل، أو التعطيل، أو التأخير في تقديم خدمة التوصيل ناتجاً بشكل مباشر عن أحداث قوة قاهرة كارثية أو ظروف طارئة تخرج تماماً عن نطاق سيطرتهم المعقولة والمنطقية. تشمل هذه الأحداث على سبيل المثال لا الحصر: الكوارث الطبيعية المدمرة، الحروب المعلنة أو غير المعلنة، الإضرابات العمالية واسعة النطاق، القرارات والتوجهات السيادية الحكومية، حظر التجول الصارم، إغلاق الطرق الرئيسية، الانقطاع الشامل والمتكرر لشبكات الاتصالات والإنترنت، أو تفشي الأوبئة والجوائح البيولوجية التي تعوق الحركة والعمل.</p>
 <h2 id="المادة-16-إنهاء-الخدمة-التعليق-والتعديل-الأحادي-للاتفاقية">المادة 16: إنهاء الخدمة، التعليق، والتعديل الأحادي للاتفاقية</h2>
 <ul>
 <li>إنهاء الحسابات من طرف واحد: تحتفظ منصة كانجو بالحق المطلق والصارم في إنهاء، أو تعليق دائم، أو تقييد حساب أي مستخدم، أو حظر عنوان بروتوكول الإنترنت (IP) الخاص به ومنعه من الوصول للمنصة في أي وقت وبدون الحاجة إلى توجيه أي إشعار، أو إنذار، أو تقديم مبرر مسبق؛ إذا رأت إدارة المنصة، وفقاً لتقديرها المطلق وغير القابل للطعن، أن المستخدم ينتهك بنشاط هذه الشروط، أو يسيء استخدام الخدمة المقدمة بطريقة احتيالية، أو يشكل خطراً قانونياً، أو أمنياً، أو يهدد سمعة المنصة، أو موظفيها، أو شركائها اللوجستيين.</li>
-</ul>
-<ul>
 <li>تعديل وتطوير الشروط: تحتفظ المنصة بالحق المطلق وغير القابل للتفاوض في تعديل، أو تحديث، أو إضافة بنود، أو تغيير هذه الشروط والأحكام من وقت لآخر لتعكس نماذج العمل الجديدة أو المتطلبات القانونية. تُصبح هذه التعديلات سارية المفعول وملزمة قانوناً وفورية بمجرد نشرها وتحديثها على الصفحة المخصصة للشروط في المنصة. إن استمرار المستخدم في تصفح المنصة، أو تسجيل الدخول، أو استخدامها بعد هذا النشر يُعد إقراراً رسمياً وموافقة صريحة وملزمة منه بالالتزام التام بالشروط المعدلة والجديدة.</li>
 </ul>
-<p><strong>المادة 17:</strong> استقلالية النصوص (قابلية الفصل) واستمرار سريان البنود في حال قضت أي محكمة مختصة، أو هيئة قضائية، أو جهة قانونية معترف بها، ببطلان، أو عدم قانونية، أو عدم قابلية أي مادة، أو بند، أو فقرة من هذه الشروط للتنفيذ بموجب الفقه القانوني الحالي، فإن هذا البطلان المحدد لا يؤثر بأي شكل من الأشكال، ولا يُبطل، ولا يُضعف من صحة، وقابلية تنفيذ، والوضع القانوني لباقي المواد والبنود والفقرات الأخرى في هذه الوثيقة، والتي يجب أن تظل سارية المفعول بكامل قوتها وتأثيرها القانوني، وتبقى ملزمة تماماً لجميع الأطراف المعنية.</p>
-<p><strong>المادة 18:</strong> القانون الحاكم، تسوية النزاعات، والاختصاص القضائي الحصري تخضع هذه الشروط والأحكام المطولة، وكافة النزاعات، أو الخلافات، أو المطالبات (سواء كانت تعاقدية أو غير تعاقدية بطبيعتها) الناشئة عنها أو المرتبطة ارتباطاً مباشراً بها، وتُفسر، وتُطبق حصرياً وكلياً وفقاً للقوانين، والتشريعات، والأنظمة السارية والمعمول بها حالياً في جمهورية مصر العربية. ينعقد الاختصاص القضائي الحصري والمطلق للمحاكم المصرية المختصة (مع التركيز بشكل أساسي وخاص على المحاكم الاقتصادية المصرية بالنظر إلى اختصاصها في حل وفصل منازعات تقنية المعلومات المتقدمة، وصراعات التجارة الإلكترونية، والخلافات التجارية المعقدة) للفصل نهائياً، وبشكل قاطع، وملزم في أي نزاع يتعلق باستخدام، أو تشغيل، أو المعاملات التي تتم داخل منصة وتطبيق كانجو.</p>
+<h2>المادة 17: استقلالية النصوص (قابلية الفصل) واستمرار سريان البنود</h2>
+<p>في حال قضت أي محكمة مختصة، أو هيئة قضائية، أو جهة قانونية معترف بها، ببطلان، أو عدم قانونية، أو عدم قابلية أي مادة، أو بند، أو فقرة من هذه الشروط للتنفيذ بموجب الفقه القانوني الحالي، فإن هذا البطلان المحدد لا يؤثر بأي شكل من الأشكال، ولا يُبطل، ولا يُضعف من صحة، وقابلية تنفيذ، والوضع القانوني لباقي المواد والبنود والفقرات الأخرى في هذه الوثيقة، والتي يجب أن تظل سارية المفعول بكامل قوتها وتأثيرها القانوني، وتبقى ملزمة تماماً لجميع الأطراف المعنية.</p>
+<h2>المادة 18: القانون الحاكم، تسوية النزاعات، والاختصاص القضائي الحصري</h2>
+<p>تخضع هذه الشروط والأحكام المطولة، وكافة النزاعات، أو الخلافات، أو المطالبات (سواء كانت تعاقدية أو غير تعاقدية بطبيعتها) الناشئة عنها أو المرتبطة ارتباطاً مباشراً بها، وتُفسر، وتُطبق حصرياً وكلياً وفقاً للقوانين، والتشريعات، والأنظمة السارية والمعمول بها حالياً في جمهورية مصر العربية. ينعقد الاختصاص القضائي الحصري والمطلق للمحاكم المصرية المختصة (مع التركيز بشكل أساسي وخاص على المحاكم الاقتصادية المصرية بالنظر إلى اختصاصها في حل وفصل منازعات تقنية المعلومات المتقدمة، وصراعات التجارة الإلكترونية، والخلافات التجارية المعقدة) للفصل نهائياً، وبشكل قاطع، وملزم في أي نزاع يتعلق باستخدام، أو تشغيل، أو المعاملات التي تتم داخل منصة وتطبيق كانجو.</p>
     </article>
-    <article id="doc-en" dir="ltr" lang="en" class="legal-prose prose prose-lg max-w-none prose-headings:font-extrabold prose-p:leading-relaxed prose-li:leading-relaxed" hidden>
+    <article id="doc-en" dir="ltr" lang="en" class="legal-prose prose prose-lg max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed" hidden>
 <h1>Terms and Conditions Agreement for the Kanjo Platform and Application</h1>
 <p>Legal Preamble &amp; Explicit Declaration of Consent Welcome to the Kanjo platform and application. This digital platform, encompassing all its associated services, is exclusively managed, operated, and legally and intellectually owned in its entirety by "Kanjo Delivery and E-commerce Services Company", a corporate entity formally incorporated, duly organized, and validly existing under the applicable laws and regulations of the Arab Republic of Egypt. By downloading, accessing, browsing, creating a registered account on, or otherwise utilizing the platform and any of its ancillary services, you are constituting a direct, explicit electronic declaration and an unconditionally binding legal consent from your side to adhere to all the provisions, clauses, stipulations, and details outlined within this comprehensive agreement. This consent, manifested through your active use of our digital properties, holds full and unchallengeable legal validity equivalent to manually signed, written, and official documents, strictly pursuant to the provisions of the Egyptian E-Signature Law No. 15 of 2004. If you do not agree entirely and without reservation to any clause, condition, or covenant of these terms, you must immediately cease all access to and usage of the platform.</p>
 <h2 id="article-1-comprehensive-definitions">Article 1: Comprehensive Definitions</h2>
 <ul>
 <li>Platform/App/Application: Refers directly and expansively to the Kanjo smartphone applications developed for operating systems including, but not limited to, iOS and Android, the official desktop and mobile website, and all related application programming interfaces, software frameworks, sub-domains, and digital services associated with the brand.</li>
-</ul>
-<ul>
 <li>User (You/Your): Represents any natural human individual or legally recognized corporate entity who successfully creates an active account, browses the digital platform, or otherwise interacts with the interface to request, view, or procure services, products, or goods.</li>
-</ul>
-<ul>
 <li>Merchant/Supplier/Vendor: Denotes independent third-party restaurants, retail stores, licensed pharmacies, grocery shops, supermarkets, or any other autonomous commercial entities displaying, marketing, and offering their respective products, meals, and services for sale directly to the User via the platform infrastructure.</li>
-</ul>
-<ul>
 <li>Courier/Rider/Delivery Partner: Signifies the independent delivery service provider, whether formally affiliated with a third-party logistics company or operating solely as an independent freelance contractor, who physically picks up the requested order from the Merchant premises and undertakes the task of transporting and delivering it to the User designated address.</li>
-</ul>
-<ul>
 <li>Order: Constitutes the specific selection of goods, products, meals, or services requested, contracted, and paid for by the User from a specific Merchant via the technological facilitation of the platform.</li>
 </ul>
-<p><strong>Article 2:</strong> Legal Scope of Platform Operation (Intermediary Tech Platform)</p>
+<h2>Article 2: Legal Scope of Platform Operation (Intermediary Tech Platform)</h2>
 <ul>
 <li>Technical Independence and Intermediation: The Kanjo entity operates strictly and exclusively as an independent electronic marketplace and a third-party technical intermediary platform. Its core mission and operational scope are strictly limited to technologically facilitating the digital display of available products, connecting prospective Users with active Merchants and independent Couriers, and electronically facilitating the completion, routing, and processing of digital orders.</li>
-</ul>
-<ul>
 <li>Merchant Autonomy and Independence: The Kanjo platform explicitly disclaims any and all interference in the daily operations of the Merchants. The platform does not participate in any shape or form in the production, manufacturing, preparation, cooking, packaging, handling, or pricing of any commodity, meal, or product displayed and sold via the platform.</li>
-</ul>
-<ul>
 <li>Strict Quality and Product Conformity Liability: Full legal, commercial, civil, and criminal liability regarding product quality, health and safety standards, compliance with Egyptian standard specifications, hygiene, and the absolute accuracy of labeled data, including but not limited to nutritional ingredients, allergens, and expiry dates, rests solely, entirely, and exclusively with the respective Merchant, in strict adherence to the Egyptian Consumer Protection Law No. 181 of 2018.</li>
-</ul>
-<ul>
 <li>Allergies and Specific Dietary Restrictions: The platform cannot and does not guarantee or warrant that any foods or products are entirely free of allergens, nor does it verify the accuracy of any specific health or dietary claims made by the Merchant, such as gluten-free, organic, vegan, or halal. The User bears the sole, absolute responsibility of communicating directly with the Merchant prior to completing any order to verify ingredients, dietary restrictions, or specific health-related requirements.</li>
 </ul>
-<p><strong>Article 3:</strong> Governing Policies for Logistics Services of Pharmaceutical Products</p>
+<h2>Article 3: Governing Policies for Logistics Services of Pharmaceutical Products</h2>
 <ul>
 <li>Purely Logistics Intermediation Scope: The User and our partner Pharmacies formally acknowledge and agree that the role of the Kanjo platform is strictly, unequivocally, and exclusively limited to providing third-party logistics, transport, and delivery services for pharmaceutical and healthcare products. The application is, under no circumstances, to be deemed a seller, a medical consultancy provider, a healthcare practitioner, or a licensed drug distribution outlet.</li>
-</ul>
-<ul>
 <li>Medical, Professional, and Ethical Liability: The full legal, criminal, ethical, and professional responsibility for examining and validating medical prescriptions, determining the legal permissibility and medical suitability of dispensing specific medications to the patient, reviewing correct dosages, and ensuring expiration dates and optimal storage conditions prior to dispatch, falls exclusively and unconditionally on the Licensed Pharmacy and its legally Responsible Pharmacist Manager, in strict accordance with the Egyptian Pharmacy Practice Law and the binding decrees of the Egyptian Drug Authority and the Ministry of Health.</li>
-</ul>
-<ul>
 <li>Absolute Immunity of the Platform and Couriers: Pharmaceutical orders are securely handed over from the pharmacy premises to the delivery courier in completely sealed, officially stamped, and airtight tamper-evident packages. The delivery courier possesses absolutely no medical capacity, authority, training, or legal right whatsoever to open, inspect, evaluate, or tamper with the content of medical shipments. Consequently, the Kanjo platform, its directors, and its independent couriers are legally, completely, and finally indemnified and exempted from any obligation, lawsuit, claim, or liability arising from the nature of the dispatched pharmaceutical materials, their potential medical side effects, or their misuse, intentional or otherwise, by the receiving customer.</li>
 </ul>
 <h2 id="article-4-account-creation-eligibility-and-information-secur">Article 4: Account Creation, Eligibility, and Information Security</h2>
 <ul>
 <li>Legal Eligibility and Capacity: The User must be of the recognized legal age of majority, being 18 chronological years of age and above, to validly enter into legally binding contracts and financial obligations. If the User is a minor, their access to and use of the platform is definitively deemed as a formal declaration of direct, continuous supervision and explicit, unrevoked consent from their legal guardian or parent, who thereby assumes all legal and financial obligations on their behalf.</li>
-</ul>
-<ul>
 <li>Data Accuracy and Integrity: The User is strictly obligated to provide accurate, truthful, complete, and up-to-date information upon initial registration, including Full Name, valid Phone Number, and precise Delivery Address. Registering multiple, overlapping accounts for the same individual person is strictly prohibited, and violating this core policy will lead to the immediate, irreversible closure of all concerned accounts and the definitive cancellation of any associated promotional offers or wallet balances without prior notice.</li>
-</ul>
-<ul>
 <li>Strict Account Security: The User is fully, personally, and exclusively responsible for maintaining the strict confidentiality of their personal login credentials, passwords, and One Time Passwords. Any digital activity, transaction, or order placed securely through the User authenticated account is legally deemed as being issued directly by them and remains fully binding for financial payment, even if performed by a third party with or without the User's knowledge.</li>
 </ul>
 <h2 id="article-5-acceptable-use-and-prohibition-of-unlawful-conduct">Article 5: Acceptable Use and Prohibition of Unlawful Conduct</h2>
 <ul>
 <li>Lawful Use: The license to use the platform is granted strictly for personal, non-commercial purposes. The User is obligated to utilize the services in full compliance with the applicable laws and public morals in the Arab Republic of Egypt.</li>
-</ul>
-<ul>
 <li>Absolute Prohibition of Cybercrimes: Attempting to maliciously hack the platform infrastructure, disrupt its server systems, deploy automated tracking or scraping software (Web Scraping, Spiders, Bots), introduce digital viruses or malware, manipulate pricing, or create fake, misleading accounts for fraudulent purposes is strictly and unconditionally prohibited. The platform reserves the absolute, non-negotiable right to criminally and civilly prosecute all such violators to the fullest extent permitted under the Egyptian Anti-Cyber and Information Technology Crimes Law No. 175 of 2018.</li>
-</ul>
-<ul>
 <li>Prohibited and Unlawful Conduct: The customer is strictly prohibited from utilizing the platform to request, transport, or deliver illegal, illicit, or banned goods. Furthermore, directing verbal abuse, harassment, discrimination, or physical threats at delivery couriers, merchants, or technical support staff is a severe violation. The platform retains the unilateral right to terminate the offending account immediately and refer the incident to security authorities in such documented cases.</li>
 </ul>
 <h2 id="article-6-order-processing-delivery-execution-and-fulfillmen">Article 6: Order Processing, Delivery Execution, and Fulfillment</h2>
 <ul>
 <li>Order Conclusion and Binding Nature: Once the User finally confirms the order via the application interface, it is electronically routed to the chosen Merchant. The commercial contract becomes legally binding, final, and irrevocable between the User and the Merchant the exact moment the Merchant officially accepts the order and commences preparation.</li>
-</ul>
-<ul>
 <li>Estimated Delivery Timeframes: The delivery times dynamically displayed within the application are strictly estimated times and are highly dependent on variable, fluctuating factors such as the Merchant current preparation speed, active traffic conditions, severe weather, and courier availability. The platform cannot and does not guarantee the exact minute of arrival of the order at the estimated time and affirmatively assumes no liability whatsoever for reasonable logistical delays or delays extending from circumstances beyond reasonable control.</li>
-</ul>
-<ul>
 <li>Delivery Failure due to Customer Direct Fault: The customer is strictly obligated to be physically present at the specified delivery address and to promptly answer the courier phone calls or in-app messages to facilitate delivery. If the courier successfully arrives at the destination and is unable to establish contact with the customer for a continuous period exceeding 10 minutes, or if the customer arbitrarily refuses to receive the prepared order without a valid, documented legal justification, the order is officially considered canceled by the customer fault. In this specific scenario, the customer bears the entire financial loss, is absolutely not entitled to any refund of the order value or delivery fees, and the platform reserves the right to deduct the full value directly from their wallet or linked card.</li>
-</ul>
-<ul>
 <li>Address Modification Requests: The customer bears the ultimate responsibility for the exact precision and accuracy of the pinned delivery address. Any subsequent request to modify or alter the destination address after completing the order processing may be outright rejected if it falls geographically outside the Merchant designated delivery zone, or it may incur substantial additional delivery fees that the customer is unconditionally obliged to pay.</li>
 </ul>
-<p><strong>Article 7:</strong> Comprehensive Pricing, Fees, and Electronic Payment Structures</p>
+<h2>Article 7: Comprehensive Pricing, Fees, and Electronic Payment Structures</h2>
 <ul>
 <li>Final and Binding Pricing: All prices displayed on the platform menus are subject to modification, alteration, and change according to real-time Merchant updates. The User agrees comprehensively and in advance to the Final Total Price clearly displayed in the digital shopping cart immediately prior to payment, which explicitly encompasses the base price of goods, legally prescribed governmental taxes, calculated delivery fees based on distance, and platform service fees.</li>
-</ul>
-<ul>
 <li>Authorized Payment Methods: The platform technologically supports both physical cash-on-delivery and secured electronic payment methods via credit and bank cards, strictly adhering to the rigorous controls, protocols, and mandates set forth in the Egyptian laws regulating and governing non-cash electronic payments No. 18 of 2019.</li>
-</ul>
-<ul>
 <li>Service and Operational Fees: The Kanjo platform firmly reserves the unilateral right to impose, modify, and adjust a standard Service Fee or a Small Order Fee to ensure the continuous enhancement and maintenance of operational quality and server stability. These specific fees are strictly non-refundable in whole or in part, except exclusively in the rare event of the platform total failure to execute and route the order due to a technical malfunction.</li>
-</ul>
-<ul>
 <li>Courier Tips and Gratuities: The User may voluntarily opt to pay a monetary tip to the delivery courier via the app digital tipping feature. The designated tip is transferred entirely and without deduction to the courier. The User acknowledges that tips are paid voluntarily and cannot, under any circumstances or pretexts, be refunded or reversed after the physical delivery of the order has concluded.</li>
 </ul>
 <h2 id="article-8-the-electronic-digital-wallet-kanjo-wallet">Article 8: The Electronic Digital Wallet (Kanjo Wallet)</h2>
 <ul>
 <li>Virtual Internal Balance: The monetary balance displayed within the digital wallet is strictly a virtual, internal balance allocated exclusively and solely for internal usage within the closed ecosystem of the Kanjo platform to seamlessly pay for future food or goods orders.</li>
-</ul>
-<ul>
 <li>Strict Prohibition of Cash Withdrawals: It is strictly, legally, and contractually prohibited to claim a physical cash withdrawal of the wallet balance or to attempt to transfer these virtual funds to external bank accounts, third-party electronic wallets, or credit cards, unless the Egyptian law explicitly and unavoidably stipulates the platform mandatory obligation to refund specific amounts in proven, documented cases of financial fraud.</li>
-</ul>
-<ul>
 <li>Prohibition of Direct Peer-to-Peer Transfers: Wallet balances cannot be digitally transferred, wired, or gifted from one registered user to another unless this specific Peer-to-Peer feature is officially, technically activated by the platform under strict, rigorous security controls and anti-money laundering protocols set by the executive management.</li>
 </ul>
-<p><strong>Article 9:</strong> Rigorous Cancellation, Return, and Financial Compensation Policy</p>
+<h2>Article 9: Rigorous Cancellation, Return, and Financial Compensation Policy</h2>
 <ul>
 <li>Lawful Order Cancellation: The User strictly retains the right to cancel the order via the platform interface and receive a full, unpenalized refund only and exclusively during the window before the targeted Merchant accepts the order. Once the Merchant accepts the order and transitions into the preparation phase, the customer right to cancel is entirely, definitively, and unconditionally forfeited.</li>
-</ul>
-<ul>
 <li>Return and Exchange Controls: In full, unwavering compliance with Egyptian Consumer Protection laws, the consumer generally retains the right to exchange or return standard goods within 14 days of receipt. However, based on the executive regulations of the same law, the following specific categories of goods are categorically, legally excluded, and any returns for them are strictly and absolutely prohibited:</li>
-</ul>
-<ul>
 <li>First: Rapidly perishable consumer goods and items subject to rapid deterioration, such as hot prepared meals, baked goods, fresh agricultural products, and meat.</li>
-</ul>
-<ul>
 <li>Second: Custom-made goods manufactured, prepared, or customized specifically based on the consumer explicit request and unique specifications.</li>
-</ul>
-<ul>
 <li>Third: Medical medications, vitamins, dietary supplements, and personal care cosmetics that have been unsealed or opened, or that require highly specific environmental, hygienic, and thermal storage conditions that absolutely cannot be guaranteed or verified once they leave the medical facility.</li>
-</ul>
-<ul>
 <li>Fourth: Books, publications, software, and digital media products whose protective packaging has been removed or used by the consumer.</li>
-</ul>
-<ul>
 <li>Incorrect, Defective, or Damaged Orders: If an incorrect, fundamentally incomplete, or physically damaged order is received, the customer must urgently contact customer service immediately within a maximum strict window of 24 to 48 hours and provide conclusive photographic proof (clear, high-resolution photos of the damaged product and the receipt). Upon thorough internal investigation, the platform will compensate the affected customer with a fair partial or full refund processed via the internal wallet or routed back to the original payment method utilized.</li>
 </ul>
 <h2 id="article-10-promotional-offers-vouchers-and-loyalty-programs">Article 10: Promotional Offers, Vouchers, and Loyalty Programs</h2>
 <ul>
 <li>Discretionary Nature of Offers: Any promotional discount vouchers, digital reward points, free delivery codes, or savings packages generously provided by the Kanjo platform are classified strictly as free, discretionary promotional features fully subject to the absolute, unquestionable discretion of the platform management, and are never to be considered a vested, permanent, or acquired financial right for any user.</li>
-</ul>
-<ul>
 <li>Restrictive Terms of Use: Promotional vouchers are strictly valid for a single, one-time use per unique user, possess a specific, hard-coded expiration date and time, and absolutely cannot be combined, stacked, or merged with other ongoing offers, discounts, or promotions unless explicitly stated otherwise in the campaign terms. Vouchers hold absolutely zero cash value and are non-exchangeable for physical currency.</li>
-</ul>
-<ul>
 <li>Right to Modification and Cancellation: The platform reserves the absolute, unchallengeable right to unilaterally cancel, modify, suspend, or permanently withdraw any active voucher, loyalty points balance, or promotional marketing campaign at any given time, without any prior notice, warning, or obligation for financial compensation, for any operational, technical, or regulatory reasons.</li>
-</ul>
-<ul>
 <li>Severe Penalties for Marketing Fraud: Deliberately creating multiple, deceptive accounts for the same natural person, or aggressively exploiting technical loopholes to repeatedly and unfairly obtain promotional offers explicitly designated for New Customers, is formally considered an illegal fraudulent act and a flagrant, malicious violation of our core policies. The platform reserves the absolute right to confiscate all wallet balances, cancel all pending orders, immediately and permanently ban all involved and linked accounts, and actively claim financial compensation for the resulting commercial losses.</li>
 </ul>
 <h2 id="article-11-user-ratings-and-user-generated-content-ugc">Article 11: User Ratings and User-Generated Content (UGC)</h2>
 <ul>
 <li>Exclusive Content Ownership: Any textual comments, star ratings, photographic images, or feedback reviews uploaded, written, or submitted by the User onto the platform ecosystem become the exclusive, perpetual, and irrevocable intellectual property of the Kanjo platform. You hereby waive any rights related to them, and the platform unequivocally retains the global right to use, modify, adapt, publicly display, or publish this generated content for any commercial, marketing, or promotional purpose without the need to pay any material or moral compensation to the contributing User.</li>
-</ul>
-<ul>
 <li>Strict Acceptance Criteria for Reviews: The User is legally obligated to ensure that all submitted ratings and reviews stem from a genuine, verified, and direct transactional experience. The platform actively reserves the right to monitor, reject, hide, or permanently delete any comment or review containing: verbal abuse, extreme profanity, racial or sectarian discrimination, severe accusations of health or hygiene violations without providing official, documented governmental proof, or malicious fake comments orchestrated by competing merchants intended to cause reputational harm.</li>
 </ul>
 <h2 id="article-12-comprehensive-protection-of-intellectual-property">Article 12: Comprehensive Protection of Intellectual Property</h2>
 <ul>
 <li>Exclusive and Absolute Rights: All intellectual property rights, copyrights, and trademarks related to the platform in its entirety, including but not limited to the overarching brand name and trademark Kanjo, all visual logos, user interface designs (UI/UX), written texts, backend and frontend software codes, algorithms, interactive databases, maps, and proprietary images, are exclusively owned by Kandjoo Company or legally, officially licensed to it by relevant third parties.</li>
-</ul>
-<ul>
 <li>Absolute Prohibition of Reproduction and Scraping: Copying, modifying, illegally distributing, republishing, attempting reverse engineering, decompiling, or executing unauthorized data extraction (Data Mining/Web Scraping) on any integral part of the platform infrastructure without acquiring prior, explicitly written, and officially signed permission from executive management is strictly and aggressively prohibited. Immediate, uncompromising legal action and criminal prosecution will be proactively taken against any individual, hacker, or commercial entity that violates, infringes upon, or jeopardizes these protected intellectual rights.</li>
 </ul>
 <h2 id="article-13-personal-data-protection-and-strict-privacy-compl">Article 13: Personal Data Protection and Strict Privacy Compliance</h2>
 <ul>
 <li>Governing Legal Framework: All User data, privacy metrics, and personal information collected are strictly subject to and compliant with the stringent provisions, mandates, and guidelines of the applicable Egyptian Personal Data Protection Law and its executive regulations.</li>
-</ul>
-<ul>
 <li>Explicit Processing Consent: By actively creating a registered account, the User provides their explicit, informed, and unambiguous consent to Kanjo to legally collect, securely store, and technologically process their personal, identifying data (such as Full Name, Residential Address, precise GPS Location, and active Phone Number) and to share it exclusively, on a need-to-know basis, with the designated Merchant and the assigned Delivery Courier to the exact extent necessary to successfully, accurately, and safely complete the requested delivery service.</li>
-</ul>
-<ul>
 <li>Advanced Data Security and Authorized Sharing: The platform pledges and commits to taking all advanced, industry-standard technical, encrypted, and organizational measures to fiercely protect all user data from unauthorized hacking, breaches, or malicious leaks. The platform absolutely does not sell or share private data with external, unauthorized third parties for direct marketing purposes except with the explicit, opt-in consent of the User. Furthermore, the platform remains legally committed and obliged to respond to any official, documented judicial orders or warrants requesting the formal disclosure of specific data to the competent Egyptian security, police, or judicial authorities when requested according to the law.</li>
 </ul>
 <h2 id="article-14-broad-indemnification-and-strict-limitation-of-li">Article 14: Broad Indemnification and Strict Limitation of Liability</h2>
 <ul>
 <li>Complete Indemnification: The User agrees comprehensively to defend, indemnify, protect, and hold harmless the Kanjo platform, its parent companies, its affiliates, founders, managing directors, executive employees, and authorized agents from and against any and all potential claims, legal lawsuits, liabilities, financial losses, catastrophic damages, or operational expenses (including reasonable attorney fees) arising directly, indirectly, or consequentially from their intentional or unintentional misuse of the platform, their direct violation of these detailed Terms, or their infringement of the inherent rights of any third party involved in the transaction (whether merchants, couriers, or other consumers).</li>
-</ul>
-<ul>
 <li>Technical and Operational Disclaimer of Liability: The platform provides its digital and logistical services strictly on an "As Is" and "As Available" basis without any warranties of any kind. To the maximum, absolute extent permitted by applicable law, Kanjo explicitly disclaims and limits its liability for any indirect, incidental, consequential, special, or punitive damages, as well as any severe commercial losses, loss of revenue, or lost projected profits resulting directly or indirectly from the use or inability to use the platform, unexpected technical server failures, malicious digital viruses, or the autonomous, independent actions, accidents, and human errors committed by independent freelance Couriers and third-party Merchants.</li>
 </ul>
-<p><strong>Article 15:</strong> Force Majeure and Unforeseeable Circumstances The Kanjo platform, its management, or its operational partners (Merchants and Couriers) shall absolutely not be deemed in legal breach of their contractual obligations, nor shall they bear or be liable for any financial compensations, refunds, or penalties, if the failure, disruption, or delay in providing the delivery service is directly caused by catastrophic force majeure events or circumstances completely beyond their reasonable and logical control, which explicitly include but are not strictly limited to: devastating natural disasters, declared or undeclared wars, widespread labor strikes, sovereign governmental decisions or mandates, strict curfews, severe road closures, massive telecommunications and internet network global outages, or uncontrollable biological epidemics and pandemics.</p>
+<h2>Article 15: Force Majeure and Unforeseeable Circumstances</h2>
+<p>The Kanjo platform, its management, or its operational partners (Merchants and Couriers) shall absolutely not be deemed in legal breach of their contractual obligations, nor shall they bear or be liable for any financial compensations, refunds, or penalties, if the failure, disruption, or delay in providing the delivery service is directly caused by catastrophic force majeure events or circumstances completely beyond their reasonable and logical control, which explicitly include but are not strictly limited to: devastating natural disasters, declared or undeclared wars, widespread labor strikes, sovereign governmental decisions or mandates, strict curfews, severe road closures, massive telecommunications and internet network global outages, or uncontrollable biological epidemics and pandemics.</p>
 <h2 id="article-16-service-termination-suspension-and-unilateral-mod">Article 16: Service Termination, Suspension, and Unilateral Modification</h2>
 <ul>
 <li>Unilateral Account Termination: The Kanjo platform heavily reserves the right to immediately terminate, permanently suspend, or restrict any User account, or completely block their IP address and access to the platform at any given time and without any prior notice, warning, or justification; if the platform administration deems, in its absolute, unquestionable discretion, that the User is actively violating these Terms, maliciously misusing the provided service, or posing a severe legal, reputational, or cyber-security risk to the platform, its employees, or its logistical partners.</li>
-</ul>
-<ul>
 <li>Modification and Evolution of Terms: The platform reserves the absolute, non-negotiable right to unilaterally modify, update, append, or change these Terms and Conditions from time to time to reflect new business models or legal requirements. Such amendments become completely effective, legally binding, and immediate upon being published and updated on the platform dedicated terms page. The User continued browsing, logging in, or use of the platform after such publication formally constitutes an unreserved declaration and an explicit, legally binding consent from them to fully adhere to the newly amended Terms.</li>
 </ul>
-<p><strong>Article 17:</strong> Severability and Survival of Clauses If any competent court of law, judicial body, or recognized legal tribunal rules or dictates that any specific article, clause, paragraph, or sentence of these Terms is legally invalid, illegal, or completely unenforceable under current jurisprudence, such specific invalidity shall in no way, shape, or form affect, diminish, or compromise the validity, enforceability, and legal standing of the remaining articles, clauses, and provisions, which shall firmly remain in full force, effect, and remain legally binding upon all involved parties.</p>
-<p><strong>Article 18:</strong> Governing Law, Dispute Resolution, and Exclusive Jurisdiction These extensive Terms and Conditions, and all arising disputes, controversies, or claims arising out of or directly related to them (whether contractual or non-contractual in nature), shall be governed by, interpreted, and construed exclusively and entirely in accordance with the laws, statutes, and legislation currently in force in the Arab Republic of Egypt. Exclusive, absolute jurisdiction is definitively vested in the competent Egyptian Courts (primarily and specifically focusing on the Egyptian Economic Courts for considering and resolving advanced information technology disputes, e-commerce conflicts, and complex commercial disagreements) to finally, conclusively, and bindingly adjudicate any dispute relating to the usage, operation, or transactions conducted within the Kanjo platform.</p>
+<h2>Article 17: Severability and Survival of Clauses</h2>
+<p>If any competent court of law, judicial body, or recognized legal tribunal rules or dictates that any specific article, clause, paragraph, or sentence of these Terms is legally invalid, illegal, or completely unenforceable under current jurisprudence, such specific invalidity shall in no way, shape, or form affect, diminish, or compromise the validity, enforceability, and legal standing of the remaining articles, clauses, and provisions, which shall firmly remain in full force, effect, and remain legally binding upon all involved parties.</p>
+<h2>Article 18: Governing Law, Dispute Resolution, and Exclusive Jurisdiction</h2>
+<p>These extensive Terms and Conditions, and all arising disputes, controversies, or claims arising out of or directly related to them (whether contractual or non-contractual in nature), shall be governed by, interpreted, and construed exclusively and entirely in accordance with the laws, statutes, and legislation currently in force in the Arab Republic of Egypt. Exclusive, absolute jurisdiction is definitively vested in the competent Egyptian Courts (primarily and specifically focusing on the Egyptian Economic Courts for considering and resolving advanced information technology disputes, e-commerce conflicts, and complex commercial disagreements) to finally, conclusively, and bindingly adjudicate any dispute relating to the usage, operation, or transactions conducted within the Kanjo platform.</p>
     </article>
   </main>
 
@@ -447,8 +345,8 @@
       <div class="border-t border-white/10 mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
         <span>© 2026 كانجو Kanjo. جميع الحقوق محفوظة.</span>
         <span class="flex gap-4 font-bold">
-          <a href="/privacy-policy" class="hover:text-brand-gold-light">سياسة الخصوصية</a>
-          <a href="/terms-conditions" class="hover:text-brand-gold-light">الشروط والأحكام</a>
+          <a href="/privacy-policy" data-i18n="nav.privacyFull" class="hover:text-brand-gold-light">سياسة الخصوصية</a>
+          <a href="/terms-conditions" data-i18n="nav.termsFull" class="hover:text-brand-gold-light">الشروط والأحكام</a>
         </span>
       </div>
     </div>
