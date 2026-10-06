@@ -690,11 +690,18 @@ const collectCatalogVariations = () => {
     rows.forEach((row) => {
         const name = String((row.querySelector('.catalog-variation-name') || {}).value || '').trim();
         const priceRaw = String((row.querySelector('.catalog-variation-price') || {}).value || '').trim();
+        /* Read the attached file straight off the input element as the
+           authoritative source. `row._variantImageFile` is only a cache set by
+           the change handler; if that handler is ever missed (e.g. a
+           pre-rendered row whose binding was lost), the file would otherwise be
+           silently dropped while the rest of the product still saves. */
+        const imageInput = row.querySelector('.catalog-variation-image-input');
+        const inputImageFile = (imageInput && imageInput.files && imageInput.files[0]) || null;
         items.push({
             name,
             priceRaw,
             price: Number(priceRaw),
-            imageFile: row._variantImageFile || null,
+            imageFile: inputImageFile || row._variantImageFile || null,
             existingImageUrl: String(row.dataset.existingImageUrl || '')
         });
     });
@@ -2098,7 +2105,17 @@ const collectCatalogFormDraft = async () => {
     const nameAr = String((document.getElementById('catalogNameAr') || {}).value || '').trim();
     const descriptionAr = String((document.getElementById('catalogDescriptionAr') || {}).value || '').trim();
     let sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
-    const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
+    /* A <select> reports '' when the stored field has no matching option (e.g. a
+       legacy/odd product_type). Falling straight back to 'simple' would skip
+       variant collection and let the update wipe existing variants + images.
+       Resolve to the product's stored type first, then 'simple' as last resort. */
+    const catalogTypeIds = ['simple', 'variable', 'bundle'];
+    const rawProductType = String((document.getElementById('catalogProductType') || {}).value || '').trim().toLowerCase();
+    let productType = rawProductType;
+    if (!catalogTypeIds.includes(productType)) {
+        const storedType = String((window._catalogEditingProduct && window._catalogEditingProduct.product_type) || '').trim().toLowerCase();
+        productType = catalogTypeIds.includes(storedType) ? storedType : 'simple';
+    }
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = resolveMerchantCategory(merchant);
     const files = productImagesState.map((item) => item.file).filter(Boolean);
@@ -2239,7 +2256,17 @@ const collectCatalogFormPayload = () => {
     const nameAr = String((document.getElementById('catalogNameAr') || {}).value || '').trim();
     const descriptionAr = String((document.getElementById('catalogDescriptionAr') || {}).value || '').trim();
     let sku = String((document.getElementById('catalogSku') || {}).value || '').trim();
-    const productType = String((document.getElementById('catalogProductType') || {}).value || 'simple').trim() || 'simple';
+    /* A <select> reports '' when the stored field has no matching option (e.g. a
+       legacy/odd product_type). Falling straight back to 'simple' would skip
+       variant collection and let the update wipe existing variants + images.
+       Resolve to the product's stored type first, then 'simple' as last resort. */
+    const catalogTypeIds = ['simple', 'variable', 'bundle'];
+    const rawProductType = String((document.getElementById('catalogProductType') || {}).value || '').trim().toLowerCase();
+    let productType = rawProductType;
+    if (!catalogTypeIds.includes(productType)) {
+        const storedType = String((window._catalogEditingProduct && window._catalogEditingProduct.product_type) || '').trim().toLowerCase();
+        productType = catalogTypeIds.includes(storedType) ? storedType : 'simple';
+    }
     const priceRaw = String((document.getElementById('catalogBasePrice') || {}).value || '').trim();
     const category = resolveMerchantCategory(merchant);
     const files = productImagesState.map((item) => item.file).filter(Boolean);
@@ -2348,6 +2375,17 @@ const updateCatalogProductDirect = async () => {
             }
             rawImageUrl = rawImageUrls[0] || '';
         }
+        /* Product-type safety net: an update must never silently wipe an existing
+           product's variants (and their uploaded images) just because the form
+           value arrived empty/desynced/unknown. Only accept the three known
+           types; otherwise fall back to what the product is already stored as
+           (and only as a last resort to 'simple'). */
+        const catalogKnownTypes = ['simple', 'variable', 'bundle'];
+        const normalizedFormType = String(form.productType || '').trim().toLowerCase();
+        const storedType = String(editing.product_type || '').trim().toLowerCase();
+        const effectiveProductType = catalogKnownTypes.includes(normalizedFormType)
+            ? normalizedFormType
+            : (catalogKnownTypes.includes(storedType) ? storedType : 'simple');
         const payload = {
             merchantId: form.merchant.merchantId,
             merchantName: form.merchant.merchantName,
@@ -2356,7 +2394,7 @@ const updateCatalogProductDirect = async () => {
             description_ar: form.descriptionAr,
             description_en: descriptionEn,
             sku: form.sku,
-            product_type: form.productType,
+            product_type: effectiveProductType,
             base_price: form.basePrice,
             category: form.category,
             rawImageUrl,
@@ -2364,7 +2402,7 @@ const updateCatalogProductDirect = async () => {
             updatedAt: new Date(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
         };
-        if (form.productType === 'variable') {
+        if (effectiveProductType === 'variable') {
             const variantPayload = [];
             for (const v of form.variations) {
                 let variantImageUrl = '';
