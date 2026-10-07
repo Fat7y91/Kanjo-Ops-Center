@@ -63,6 +63,14 @@
         "destination": "/terms-conditions.html"
       },
       {
+        "source": "/marketing",
+        "destination": "/marketing.html"
+      },
+      {
+        "source": "/marketing/",
+        "destination": "/marketing.html"
+      },
+      {
         "source": "**",
         "destination": "/dashboard.html"
       }

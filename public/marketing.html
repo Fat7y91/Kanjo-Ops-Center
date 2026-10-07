@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Kanjo | Marketing Portal</title>
+
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <link rel="shortcut icon" href="favicon.ico">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@300;400;700;800&family=Cairo:wght@300;400;700;900&display=swap" rel="stylesheet">
+
+    <script>
+
+        tailwind.config = { theme: { extend: { colors: { brand: { purple: '#230535', deep: '#14021d', soft: '#331047', gold: '#FFD700', goldDark: '#F59E0B', cream: '#FBF7F0', ink: '#1b0f26' } } } } }
+
+    </script>
+
+    <style>
+
+        body { font-family: 'Cairo', 'Almarai', sans-serif; background: #14021d; }
+
+        .mp-input { -webkit-appearance: none; }
+
+        #marketingTable::-webkit-scrollbar { height: 8px; width: 8px; display: block; }
+
+        #marketingTable::-webkit-scrollbar-thumb { background-color: #4B0082; border-radius: 10px; }
+
+    </style>
+
+</head>
+
+<body class="min-h-screen text-brand-ink">
+
+    <!-- ─── Login gate (shown only when there is no valid marketing/founder session) ─── -->
+
+    <div id="marketingLogin" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-b from-brand-purple to-brand-deep">
+
+        <div class="w-full max-w-md bg-white p-6 sm:p-10 rounded-3xl shadow-2xl text-center">
+
+            <img src="logo.png" alt="Kanjo" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6">
+
+            <h1 class="text-xl sm:text-2xl font-black mb-1 text-brand-purple">بوابة التسويق</h1>
+
+            <p class="text-xs text-slate-500 font-bold mb-6">تسجيل الدخول للوصول إلى بيانات الحملات</p>
+
+            <input type="password" id="marketingPin" placeholder="كود الدخول" autocomplete="current-password" class="mp-input w-full text-base sm:text-lg p-4 bg-white border border-purple-200 rounded-2xl mb-6 font-bold text-brand-purple outline-none focus:border-brand-purple focus:ring-2 focus:ring-brand-gold transition-all text-center tracking-widest">
+
+            <button id="marketingLoginBtn" type="button" class="w-full bg-brand-purple text-brand-gold py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg hover:bg-brand-soft transition">دخول البوابة</button>
+
+            <p id="marketingLoginError" class="hidden mt-4 text-sm font-bold text-rose-600"></p>
+
+        </div>
+
+    </div>
+
+    <!-- ─── Portal (no operational sidebar — fully standalone) ─── -->
+
+    <div id="marketingApp" class="hidden min-h-screen">
+
+        <header class="sticky top-0 z-20 bg-brand-purple text-white shadow-lg">
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+
+                <div class="flex items-center gap-3">
+
+                    <img src="logo.png" alt="Kanjo" class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 p-1">
+
+                    <div>
+
+                        <h1 class="text-lg sm:text-2xl font-black leading-tight">بوابة التسويق <span class="text-brand-gold">Marketing</span></h1>
+
+                        <p class="text-[11px] sm:text-xs font-bold text-brand-gold/80">بيانات عملاء الحملات الإعلانية</p>
+
+                    </div>
+
+                </div>
+
+                <div class="flex items-center gap-2">
+
+                    <span id="marketingUser" class="hidden sm:inline text-xs font-bold text-white/80"></span>
+
+                    <button id="marketingLogout" type="button" class="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-xl text-xs font-bold transition"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+
+                </div>
+
+            </div>
+
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100">
+
+                    <p class="text-xs font-bold text-slate-500 mb-1"><i class="fa-solid fa-address-book text-brand-purple"></i> إجمالي العملاء المحمّلين</p>
+
+                    <p id="marketingCount" class="text-3xl font-black text-brand-purple">0</p>
+
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100">
+
+                    <p class="text-xs font-bold text-slate-500 mb-1"><i class="fa-solid fa-percent text-brand-purple"></i> بطاقات الفوز</p>
+
+                    <p id="marketingWins" class="text-3xl font-black text-brand-purple">0</p>
+
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100 flex flex-col justify-center">
+
+                    <button id="marketingExport" type="button" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition"><i class="fa-solid fa-file-excel"></i> تصدير Excel</button>
+
+                </div>
+
+            </div>
+
+            <div class="bg-white rounded-3xl shadow-sm border border-purple-100 overflow-hidden">
+
+                <div class="px-5 py-4 border-b border-purple-100 flex items-center justify-between gap-3">
+
+                    <h2 class="text-base sm:text-lg font-black text-brand-purple"><i class="fa-solid fa-list text-brand-gold"></i> سجل الحملات</h2>
+
+                    <button id="marketingRefresh" type="button" class="bg-brand-cream text-brand-purple border border-purple-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-50 transition"><i class="fa-solid fa-rotate"></i> تحديث</button>
+
+                </div>
+
+                <div id="marketingTable" class="overflow-auto max-h-[65vh]">
+
+                    <table class="w-full text-sm text-right">
+
+                        <thead id="marketingHead" class="bg-brand-purple text-brand-gold sticky top-0 z-10"></thead>
+
+                        <tbody id="marketingBody" class="divide-y divide-purple-50"></tbody>
+
+                    </table>
+
+                    <div id="marketingEmpty" class="hidden py-16 text-center text-slate-400 font-bold"><i class="fa-regular fa-folder-open text-3xl mb-2"></i><br>لا توجد بيانات حملات بعد</div>
+
+                    <div id="marketingLoading" class="py-16 text-center text-brand-purple font-bold"><i class="fa-solid fa-spinner fa-spin text-2xl"></i><br>جاري تحميل البيانات...</div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+    </div>
+
+    <script type="module" src="js/services/marketing.js"></script>
+
+</body>
+
+</html>

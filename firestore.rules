@@ -139,6 +139,19 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // Marketing campaign leads (`campaign_leads`). Captured by the external
+    // Spinwheel campaign and reviewed by the dedicated Marketing Portal
+    // (marketing.html), which signs in anonymously + PIN exactly like the ops
+    // dashboard. READ: the marketing office / managers. During the RBAC
+    // migration window (enforceRbac is not true) the PIN session carries no
+    // kanjoRole claim, so legacy() keeps the portal working — mirrors every
+    // other sensitive collection. WRITE: reserved for privileged operators; the
+    // external campaign ingests through a service account that bypasses rules.
+    match /campaign_leads/{docId} {
+      allow read: if legacy() || isPrivileged();
+      allow write: if isPrivileged();
+    }
+
     // ─── Notifications ───────────────────────────────────────────────
     // Reps raise event notifications (report/visit/contract) and accounting
     // raises financial ones, but only the manager/accounting roles actually

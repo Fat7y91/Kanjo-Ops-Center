@@ -42,9 +42,16 @@ const users = {
 
     '7591': { name: 'يوسف', role: 'rep', team: 'Power Team' },
 
-    '2468': { name: 'يوزر إدخال البيانات', role: 'data_entry' }
+    '2468': { name: 'يوزر إدخال البيانات', role: 'data_entry' },
+
+    '8899': { name: 'مكتب التسويق', role: 'marketing' }
 
 };
+
+/* PIN that unlocks the standalone marketing portal (marketing.html). Kept as a
+   named constant so the routing guard in auth.js and the portal's own auth gate
+   share a single source of truth instead of comparing a magic literal. */
+const MARKETING_PIN = '8899';
 
 const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحمد جمعه، يوسف' };
 
@@ -74,9 +81,10 @@ window.teamImageMap = teamImageMap;
 window.categories = categories;
 window.users = users;
 window.teamMembers = teamMembers;
+window.MARKETING_PIN = MARKETING_PIN;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
 window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
 window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
 window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec";
 
-export { userImageMap, teamImageMap, categories, users, teamMembers, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
+export { userImageMap, teamImageMap, categories, users, teamMembers, MARKETING_PIN, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };

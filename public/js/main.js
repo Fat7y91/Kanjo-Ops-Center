@@ -58,6 +58,12 @@ authReadyWithTimeout.then(() => {
         return;
     }
     if (!restoredUser || typeof restoredUser !== 'object') return;
+    /* A marketing session must never restore the operations dashboard: send it
+       to the isolated marketing portal, which re-validates the same session. */
+    if (String(restoredUser.role || '') === 'marketing') {
+        window.location.replace('marketing.html');
+        return;
+    }
     window.currentUser = restoredUser;
     if (typeof window.showDashboardLoading === 'function') {
         window.showDashboardLoading();

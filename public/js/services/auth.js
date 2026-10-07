@@ -164,6 +164,16 @@ window.syncAuthClaims = async () => {
 async function login(pinOverride = null) {
     if (window.authReady) { try { await window.authReady; } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
+    /* The marketing portal is a fully isolated, sidebar-free page. A marketing
+       PIN must never paint the operations dashboard, so persist the session and
+       hand off to marketing.html before any dashboard section is shown. */
+    if (users[pin] && users[pin].role === 'marketing') {
+        const marketingUser = Object.assign({}, users[pin], { pin: String(pin) });
+        window.currentUser = marketingUser;
+        window.saveSession(marketingUser);
+        window.location.href = 'marketing.html';
+        return;
+    }
     if(users[pin]) {
         /* Keep the PIN on the session identity (without mutating the shared
            constants entry) so PIN-scoped screens such as the authorization
