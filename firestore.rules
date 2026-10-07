@@ -7,7 +7,7 @@ service cloud.firestore {
     //
     // Identity is sourced from Firebase Auth custom claims provisioned by
     // scripts/set-auth-claims.mjs:
-    //     kanjoRole   : admin | founder | accounting | rep | data_entry
+    //     kanjoRole   : admin | founder | accounting | rep | data_entry | marketing | product_audit
     //     kanjoTeam   : 'Fox Team' | 'Power Team' | ''
     //     kanjoName   : the Arabic display name (matches PIN identity)
     //     kanjoRepId  : kpiRepId(kanjoName)
@@ -44,6 +44,10 @@ service cloud.firestore {
     function isAccounting() { return claimRole() == 'accounting'; }
     function isRep() { return claimRole() == 'rep'; }
     function isDataEntry() { return claimRole() == 'data_entry'; }
+    function isMarketing() { return claimRole() == 'marketing'; }
+    // Product review & audit (مراجعة وتدقيق المنتجات): read + UPDATE across all
+    // product catalogs, but never create or delete.
+    function isProductAudit() { return claimRole() == 'product_audit'; }
 
     function isPrivileged() { return isAdmin() || isFounder(); }
     function isOpsManager() { return isSignedIn() && tok().get('kanjoOps', false) == true; }
@@ -145,11 +149,17 @@ service cloud.firestore {
     // dashboard. READ: the marketing office / managers. During the RBAC
     // migration window (enforceRbac is not true) the PIN session carries no
     // kanjoRole claim, so legacy() keeps the portal working — mirrors every
-    // other sensitive collection. WRITE: reserved for privileged operators; the
-    // external campaign ingests through a service account that bypasses rules.
+    // other sensitive collection. DELETE: the marketing office may wipe an
+    // entry (and its phone number) so a customer can spin again from scratch;
+    // the wipe UI lives only on the isolated marketing page. CREATE/UPDATE stay
+    // reserved for privileged operators / the external campaign's service
+    // account (which bypasses rules). legacy() is included on delete so the
+    // feature works before the marketing device is provisioned claims, exactly
+    // like the other collections' migration-window escape hatch.
     match /campaign_leads/{docId} {
-      allow read: if legacy() || isPrivileged();
-      allow write: if isPrivileged();
+      allow read: if legacy() || isPrivileged() || isMarketing();
+      allow create, update: if isPrivileged();
+      allow delete: if legacy() || isPrivileged() || isMarketing();
     }
 
     // ─── Notifications ───────────────────────────────────────────────
@@ -213,16 +223,17 @@ service cloud.firestore {
     // Product catalog pipeline (`merchant_products`).
     // Auth is anonymous + PIN; reps and data-entry create/edit catalog rows and
     // KPI managers read the full set. Reads stay open to any signed-in session so
-    // the catalog reference pickers keep working, but writes are now limited to
-    // the catalog roles: accounting (never edits the catalog) and unclaimed
-    // sessions in enforcement mode are rejected. Deletion is reserved for the
-    // managers/data-entry that own the purge tools.
+    // the catalog reference pickers keep working. Creating/editing is limited to
+    // the catalog roles plus the product-audit team, which may UPDATE any item
+    // (names, typos, variants, prices, descriptions, images) but is deliberately
+    // absent from the delete rule below: read + update only, never delete.
     match /merchant_products/{docId} {
       function canWriteCatalog() {
         return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
       }
       allow read: if isSignedIn();
-      allow create, update: if legacy() || canWriteCatalog();
+      allow create: if legacy() || canWriteCatalog();
+      allow update: if legacy() || canWriteCatalog() || isProductAudit();
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 

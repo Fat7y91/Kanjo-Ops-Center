@@ -131,12 +131,24 @@ window.isMahmoudUser = () => {
 
 window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.role === 'founder');
 
+/* Product review & audit role (مراجعة وتدقيق المنتجات): may read and UPDATE
+   every product across all catalogs, but never create or delete. This helper is
+   the single client-side switch for the audit capability; the product editor
+   grants them the same form the field reps use, backed by a server rule that
+   allows update only. */
+window.isProductAuditUser = () => !!(window.currentUser && window.currentUser.role === 'product_audit');
+
+/* Who may open the product editor: field reps (their own drafts/list) and the
+   audit team (any product). Adding a product is a rep-only action and is gated
+   separately, so extending this to the audit role never grants create rights. */
+window.canEditCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser();
+
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
     return !!window.isMahmoudUser();
 };
 
-window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager());
+window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager() || window.isProductAuditUser());
 
 window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
 
@@ -2213,8 +2225,15 @@ const collectCatalogFormDraft = async () => {
 window.submitCatalogProduct = async (event, options) => {
     if (event) event.preventDefault();
     if (window._catalogDraftSaving) return;
-    if (!window.isCatalogRepUser()) {
-        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
+    if (!window.canEditCatalogProducts()) {
+        if (window.showToast) window.showToast('هذه الشاشة غير متاحة لحسابك', false);
+        return;
+    }
+    /* The audit role is read + UPDATE only: it may never mint a new product
+       (that would be a create). The add-product entry point is rep-only, so this
+       is a defensive guard for the shared submit handler. */
+    if (window.isProductAuditUser() && !window._catalogEditingProduct) {
+        if (window.showToast) window.showToast('مراجعة وتدقيق المنتجات: التعديل فقط بدون إضافة', false);
         return;
     }
     /* Strict double-submit guard: flip the lock flag and disable BOTH save
@@ -2450,6 +2469,15 @@ const updateCatalogProductDirect = async () => {
         if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
         window._catalogMyProductsSignature = '';
         if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+        /* Audit edits live in the manager "all products" grid, which is a
+           different cache than the rep list patched above, so fold the change
+           into that cache and repaint too — still zero extra reads. */
+        if (window.isProductAuditUser()) {
+            const all = window.allCatalogProductsCache || [];
+            const auditIdx = all.findIndex((p) => p.id === editing.id);
+            if (auditIdx !== -1) { all[auditIdx] = { ...all[auditIdx], ...payload }; window.allCatalogProductsCache = all; }
+            if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+        }
         window.showToast('تم حفظ تعديلات المنتج');
         window.closeCatalogProductModal();
     } catch (err) {
@@ -2463,12 +2491,13 @@ const updateCatalogProductDirect = async () => {
 };
 
 window.openCatalogProductEditor = (productId) => {
-    if (!window.isCatalogRepUser()) {
-        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
+    if (!window.canEditCatalogProducts()) {
+        if (window.showToast) window.showToast('هذه الشاشة غير متاحة لحسابك', false);
         return;
     }
     const product = (window.repCatalogProductsCache || []).find((p) => p.id === productId)
-        || (window.merchantProductsCache || []).find((p) => p.id === productId);
+        || (window.merchantProductsCache || []).find((p) => p.id === productId)
+        || (window.allCatalogProductsCache || []).find((p) => p.id === productId);
     if (!product) {
         if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
         return;
@@ -2798,6 +2827,11 @@ const renderCatalogAllProductCard = (p) => {
         imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100 transition-opacity duration-200 hover:opacity-75',
         boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer transition-opacity duration-200 hover:opacity-75'
     });
+    /* The audit team refines any imported product before launch. Read + update
+       only, so this card exposes a single "تعديل" action and NO delete control. */
+    const auditEdit = window.isProductAuditUser()
+        ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="w-full bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
+        : '';
     return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
         ${thumbHtml}
         <button type="button" onclick="openCatalogProductDetails('${pid}')" title="عرض التفاصيل الكاملة" class="block w-full text-right font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem] cursor-pointer transition-colors hover:text-[#E57723] hover:underline decoration-[#FFD700] underline-offset-2">${name}</button>
@@ -2806,6 +2840,7 @@ const renderCatalogAllProductCard = (p) => {
             <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
             ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full truncate max-w-full">${repName}</span>` : ''}
         </div>
+        ${auditEdit}
     </div>`;
 };
 
@@ -7814,8 +7849,11 @@ window.startCatalogListeners = () => {
             const canViewAll = window.canViewAllCatalogProducts();
             /* The global pending set only feeds the content editor / manager
                views; a plain rep renders its own products from
-               `loadMyCatalogProducts` and must not pay for it. */
-            const canViewPending = canViewAll || window.isCatalogContentUser();
+               `loadMyCatalogProducts` and must not pay for it. The audit team
+               loads the full collection on demand via the "all products"
+               widget, so it is deliberately excluded from the boot/periodic
+               pending read to keep its idle cost at zero reads. */
+            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.isCatalogContentUser();
             const isMahmoud = window.isMahmoudUser();
             /* The full-collection read is by far the most expensive one (one
                read per document — 4,000+ today). It is therefore NEVER issued by

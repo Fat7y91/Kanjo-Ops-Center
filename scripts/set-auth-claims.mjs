@@ -6,7 +6,7 @@
  * PIN identity by writing custom claims that firestore.rules can enforce.
  *
  * Claims written:
- *   kanjoRole    admin | founder | accounting | rep | data_entry
+ *   kanjoRole    admin | founder | accounting | rep | data_entry | marketing | product_audit
  *   kanjoTeam    'Fox Team' | 'Power Team' | ''
  *   kanjoName    the Arabic display name (must match the PIN identity)
  *   kanjoRepId   kpiRepId(kanjoName) — mirrors public/js/services/kpi.js
@@ -46,7 +46,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 
-const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry'];
+const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry', 'marketing', 'product_audit'];
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 const args = process.argv.slice(2);

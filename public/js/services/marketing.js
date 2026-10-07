@@ -161,6 +161,10 @@ const renderTable = () => {
         th.textContent = labelFor(key);
         headRow.appendChild(th);
     });
+    const actionTh = document.createElement('th');
+    actionTh.className = 'px-4 py-3 text-xs font-black whitespace-nowrap text-center';
+    actionTh.textContent = 'حذف';
+    headRow.appendChild(actionTh);
     head.appendChild(headRow);
 
     const rowsHtml = currentLeads.map((doc) => {
@@ -170,7 +174,12 @@ const renderTable = () => {
             const cls = 'px-4 py-3 whitespace-nowrap border-b border-purple-50' + (isDate ? ' text-slate-500' : ' font-bold text-brand-purple');
             return '<td class="' + cls + '">' + escapeHtml(formatCell(raw)) + '</td>';
         }).join('');
-        return '<tr class="hover:bg-brand-cream/60 transition">' + cells + '</tr>';
+        /* Per-row wipe: permanently removes the entry (and its phone number) so
+           the customer can spin again from scratch. Read + delete only. */
+        const actionCell = '<td class="px-4 py-3 whitespace-nowrap border-b border-purple-50 text-center">'
+            + '<button type="button" class="marketing-lead-delete text-rose-600 hover:text-rose-800 hover:bg-rose-50 w-9 h-9 rounded-lg transition" data-lead-id="' + escapeHtml(doc.id) + '" aria-label="حذف السجل" title="حذف السجل ورقم الهاتف نهائياً"><i class="fa-solid fa-trash-can"></i></button>'
+            + '</td>';
+        return '<tr class="hover:bg-brand-cream/60 transition">' + cells + actionCell + '</tr>';
     }).join('');
     body.innerHTML = rowsHtml;
 
@@ -221,6 +230,52 @@ const loadLeads = async () => {
                 confirmButtonColor: '#230535'
             });
         }
+    }
+};
+
+/* ─── Delete one lead (permanent wipe) ───
+   Removes the document (and therefore the phone number) straight over the
+   signed-in REST transport, so the same phone can be cleared for a fresh spin.
+   In-memory only afterwards: no re-read of the collection. */
+const deleteLead = async (docId) => {
+    const id = String(docId || '');
+    if (!id) return;
+    const lead = currentLeads.find((doc) => doc.id === id) || {};
+    const phone = lead.phone_number || lead.phone || lead.mobile || '';
+    let confirmed = false;
+    if (window.Swal) {
+        const result = await window.Swal.fire({
+            icon: 'warning',
+            title: 'تأكيد الحذف',
+            html: 'سيتم حذف السجل'
+                + (phone ? ' ورقم الهاتف <b dir="ltr">' + escapeHtml(String(phone)) + '</b>' : '')
+                + ' نهائياً من قاعدة البيانات، ويمكن للعميل إعادة المحاولة من جديد.',
+            showCancelButton: true,
+            confirmButtonText: 'حذف نهائي',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#dc2626',
+            cancelButtonColor: '#230535'
+        });
+        confirmed = !!(result && result.isConfirmed);
+    } else {
+        confirmed = window.confirm('تأكيد حذف السجل ورقم الهاتف نهائياً؟');
+    }
+    if (!confirmed) return;
+
+    const remove = window.kanjoRest && window.kanjoRest.remove;
+    if (typeof remove !== 'function') {
+        if (window.Swal) window.Swal.fire({ icon: 'error', title: 'تعذر الحذف', text: 'خدمة الحذف غير متاحة حالياً.', confirmButtonColor: '#230535' });
+        return;
+    }
+    try {
+        await remove([CAMPAIGN_LEADS, id]);
+        currentLeads = currentLeads.filter((doc) => doc.id !== id);
+        currentColumns = buildColumns(currentLeads);
+        renderTable();
+        if (window.Swal) window.Swal.fire({ icon: 'success', title: 'تم حذف السجل', timer: 1400, showConfirmButton: false });
+    } catch (err) {
+        console.error('[marketing] delete failed:', err);
+        if (window.Swal) window.Swal.fire({ icon: 'error', title: 'تعذر حذف السجل', text: 'تأكد من الاتصال ثم أعد المحاولة.', confirmButtonColor: '#230535' });
     }
 };
 
@@ -302,6 +357,21 @@ const init = () => {
     if (refreshBtn) refreshBtn.addEventListener('click', loadLeads);
     const logoutBtn = el('marketingLogout');
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
+
+    /* Delegated delete: works for every dynamically-built row without rebinding
+       after each render. */
+    const tableBody = el('marketingBody');
+    if (tableBody) {
+        tableBody.addEventListener('click', (event) => {
+            const target = event.target;
+            const btn = target && typeof target.closest === 'function'
+                ? target.closest('.marketing-lead-delete')
+                : null;
+            if (!btn) return;
+            event.preventDefault();
+            deleteLead(btn.getAttribute('data-lead-id'));
+        });
+    }
 
     const session = readSession();
     if (sessionHasAccess(session)) showApp(session);

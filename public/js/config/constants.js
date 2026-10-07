@@ -44,9 +44,20 @@ const users = {
 
     '2468': { name: 'يوزر إدخال البيانات', role: 'data_entry' },
 
-    '8899': { name: 'مكتب التسويق', role: 'marketing' }
+    '8899': { name: 'مكتب التسويق', role: 'marketing' },
+
+    /* Product review & audit team (مراجعة وتدقيق المنتجات). Read + update
+       across every merchant/vendor catalog so typos, variants, prices,
+       descriptions and images can be refined before launch, but NEVER delete.
+       Enforced client-side (no delete controls) and server-side
+       (firestore.rules grants update only). */
+    '3141': { name: 'مراجعة وتدقيق المنتجات', role: 'product_audit' }
 
 };
+
+/* PIN that unlocks the product-audit account, kept as a named constant so any
+   future guard can share a single source of truth. */
+const PRODUCT_AUDIT_PIN = '3141';
 
 /* PIN that unlocks the standalone marketing portal (marketing.html). Kept as a
    named constant so the routing guard in auth.js and the portal's own auth gate
@@ -82,9 +93,10 @@ window.categories = categories;
 window.users = users;
 window.teamMembers = teamMembers;
 window.MARKETING_PIN = MARKETING_PIN;
+window.PRODUCT_AUDIT_PIN = PRODUCT_AUDIT_PIN;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
 window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
 window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
 window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec";
 
-export { userImageMap, teamImageMap, categories, users, teamMembers, MARKETING_PIN, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
+export { userImageMap, teamImageMap, categories, users, teamMembers, MARKETING_PIN, PRODUCT_AUDIT_PIN, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
