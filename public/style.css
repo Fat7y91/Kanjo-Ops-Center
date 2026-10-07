@@ -1573,6 +1573,95 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 .kpi-fix-item-image { border-right-color: #E57723; }
 
+/* ─── Missing-image card: clickable title + description snippet ─── */
+.kpi-fix-name-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    text-align: right;
+    font-weight: 900;
+    font-size: 0.8rem;
+    color: #230535;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.kpi-fix-name-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kpi-fix-name-btn i { font-size: 0.6rem; color: #6D28D9; opacity: 0.65; flex-shrink: 0; transition: opacity 0.15s ease, transform 0.15s ease; }
+.kpi-fix-name-btn:hover { color: #6D28D9; }
+.kpi-fix-name-btn:hover i { opacity: 1; transform: translateX(-2px); }
+.kpi-fix-name-btn:focus-visible { outline: 2px solid #6D28D9; outline-offset: 2px; border-radius: 0.35rem; }
+
+.kpi-fix-desc {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #64748b;
+    line-height: 1.55;
+    margin-top: 0.3rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+}
+.kpi-fix-desc-empty { color: #94a3b8; font-style: italic; }
+
+.kpi-fix-details-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(109, 40, 217, 0.08);
+    color: #230535;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    transition: background 0.15s ease;
+}
+.kpi-fix-details-btn:hover { background: rgba(109, 40, 217, 0.16); }
+
+/* ─── Missing-image product details modal body ─── */
+.kpi-detail-section-title {
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #230535;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.4rem;
+}
+.kpi-detail-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+.kpi-detail-meta-row {
+    background: #f8fafc;
+    border: 1px solid rgba(35, 5, 53, 0.08);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.6rem;
+    min-width: 0;
+}
+.kpi-detail-meta-label {
+    font-size: 0.6rem;
+    font-weight: 900;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.kpi-detail-meta-value {
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: #230535;
+    margin-top: 0.1rem;
+    word-break: break-word;
+}
+@media (max-width: 480px) { .kpi-detail-meta { grid-template-columns: 1fr; } }
+
 /* ─────────── Kanjo weighted score & rank gamification ─────────── */
 .kpi-rank-pill {
     display: inline-flex;

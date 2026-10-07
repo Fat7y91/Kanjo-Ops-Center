@@ -38,6 +38,7 @@ const KPI_PRODUCT_FIELDS = [
     'merchantName', 'merchant', 'merchant_name',
     'name', 'name_ar', 'name_en',
     'description', 'description_ar', 'description_en',
+    'base_price', 'price', 'category', 'subCategory', 'sub_category', 'sku', 'barcode', 'currency',
     'variations',
     'enhancedImageUrls', 'rawImageUrls', 'images',
     'enhancedImageUrl', 'rawImageUrl', 'image_url', 'image', 'rawImage',
@@ -2785,23 +2786,40 @@ window.kpiSaveFixedDescription = async (productId) => {
      b) no original image (rawImageUrl/rawImageUrls/image_url…), AND
      c) not edited by the media editor (no enhanced image, status not image_done). */
 
+/* First ~120 characters of the product's description, so an agent can identify
+   the item (and find the matching photo) without opening the details view. */
+const kpiDescriptionSnippet = (p, max = 120) => {
+    const text = String((p && (p.description_ar || p.description_en || p.description)) || '')
+        .replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    return text.length > max ? text.slice(0, max).trimEnd() + '…' : text;
+};
+
 const kpiFixImageItemHtml = (p) => {
     const name = p.name_ar || p.name_en || p.name || p.id;
     const merchant = p.merchantName || p.merchant || p.merchant_name || '—';
+    const snippet = kpiDescriptionSnippet(p, 120);
     const pid = kpiEscape(p.id);
     return `
     <div class="kpi-fix-item kpi-fix-item-image" data-fix-img-id="${pid}">
         <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-                <div class="font-black text-[13px] text-[#230535]">${kpiEscape(name)}</div>
+            <div class="min-w-0 flex-1">
+                <button type="button" class="kpi-fix-name-btn" onclick="openKpiProductDetails('${pid}')" title="عرض كل تفاصيل المنتج">
+                    <span>${kpiEscape(name)}</span>
+                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                </button>
                 <div class="kpi-fix-merchant"><i class="fa-solid fa-store"></i> ${kpiEscape(merchant)}</div>
+                <div class="kpi-fix-desc${snippet ? '' : ' kpi-fix-desc-empty'}">${snippet ? kpiEscape(snippet) : 'لا يوجد وصف لهذا المنتج'}</div>
             </div>
             <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-image"></i> بدون صورة</span>
         </div>
         ${kpiIsImportedProduct(p) ? '<div class="mt-1"><span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-file-import"></i> منتج مُستورد — سبق الرفع يفيد مؤشرك</span></div>' : ''}
-        <div class="flex justify-end mt-2">
-            <input type="file" id="kpiImgInput_${pid}" accept="image/*" class="hidden" onchange="kpiUploadMissingImage('${pid}', this)">
-            <button type="button" id="kpiImgUpload_${pid}" onclick="document.getElementById('kpiImgInput_${pid}').click()" class="kpi-fix-save"><i class="fa-solid fa-upload"></i> رفع صورة</button>
+        <div class="flex items-center justify-between gap-2 mt-2">
+            <button type="button" onclick="openKpiProductDetails('${pid}')" class="kpi-fix-details-btn"><i class="fa-solid fa-circle-info"></i> كل التفاصيل</button>
+            <div class="flex items-center">
+                <input type="file" id="kpiImgInput_${pid}" accept="image/*" class="hidden" onchange="kpiUploadMissingImage('${pid}', this)">
+                <button type="button" id="kpiImgUpload_${pid}" onclick="document.getElementById('kpiImgInput_${pid}').click()" class="kpi-fix-save"><i class="fa-solid fa-upload"></i> رفع صورة</button>
+            </div>
         </div>
     </div>`;
 };
@@ -2848,6 +2866,9 @@ window.openKpiFixImages = async (repId) => {
         /* Imported products are a shared, global pool — credit the NUMERATOR only. */
         importedMissing.forEach((p) => pushMissing(p, true));
         window._kpiFixImageAllowedIds = new Set(missing.map((p) => p.id));
+        /* Cache the full rows so the details view needs no extra reads. */
+        kpiProductDetailsById.clear();
+        missing.forEach((p) => { if (p && p.id) kpiProductDetailsById.set(String(p.id), p); });
         if (sub) {
             if (personalMissing > 0) {
                 sub.textContent = repName + ' • ' + personalMissing + ' منتج بدون صور'
@@ -2873,6 +2894,171 @@ window.closeKpiFixImages = () => {
     const modal = document.getElementById('kpiFixImagesModal');
     if (modal) modal.classList.add('hidden');
 };
+
+/* ─────────── Product details (missing-image helper) ───────────
+   The agent can identify the exact item before uploading, so the list card's
+   title/CTA opens this read-only view with the full description, options and
+   every attribute/metadata field. The product objects are cached from the same
+   scoped fetch that built the list — opening the view costs ZERO extra reads. */
+const kpiProductDetailsById = new Map();
+
+const kpiStatusLabel = (status) => {
+    const raw = String(status || '').trim();
+    if (!raw) return '—';
+    const map = {
+        pending: 'بانتظار المعالجة',
+        done: 'مكتمل',
+        image_done: 'تمّت معالجة الصور',
+        approved: 'معتمد',
+        rejected: 'مرفوض'
+    };
+    return map[raw.toLowerCase()] || raw;
+};
+
+const kpiImageStatusLabel = (p) => {
+    if (kpiProductHasEnhancedImage(p)) return 'صورة محسّنة متوفرة';
+    if (kpiProductHasRawImage(p)) return 'صورة أصلية مرفوعة';
+    return 'بدون صورة';
+};
+
+const kpiFormatStamp = (value) => {
+    const ms = kpiToMillis(value);
+    if (!ms) return '—';
+    try {
+        return new Date(ms).toLocaleString('ar-EG', {
+            year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        });
+    } catch (_) {
+        return new Date(ms).toISOString();
+    }
+};
+
+const kpiProductDetailsHtml = (p) => {
+    const name = p.name_ar || p.name_en || p.name || 'بدون اسم';
+    const nameEn = String(p.name_en || '').trim();
+    const merchant = String((p.merchantName || p.merchant || p.merchant_name) || '').trim();
+    const desc = String(p.description_ar || p.description_en || p.description || '').trim();
+    const descHtml = desc
+        ? `<div class="whitespace-pre-wrap break-words">${kpiEscape(desc)}</div>`
+        : '<span class="text-slate-400 font-bold">لا يوجد وصف لهذا المنتج</span>';
+    const variations = kpiProductVariations(p);
+    const varsHtml = variations.length
+        ? `<div class="overflow-x-auto rounded-xl border border-[#230535]/10">
+                <table class="w-full text-right text-[12px] border-collapse">
+                    <thead class="bg-[#230535] text-[#FFD700]">
+                        <tr>
+                            <th class="px-3 py-2 font-black">#</th>
+                            <th class="px-3 py-2 font-black">اسم الخيار</th>
+                            <th class="px-3 py-2 font-black">السعر</th>
+                            <th class="px-3 py-2 font-black">الباركود</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white">
+                        ${variations.map((v, i) => {
+                            const vname = kpiEscape(v.name);
+                            const vprice = v.price == null || v.price === '' ? '—' : kpiEscape(v.price);
+                            const vbarcode = kpiEscape(v.barcode || v.sku || '—');
+                            return `<tr class="${i % 2 ? 'bg-purple-50/50' : ''} border-t border-[#230535]/5">
+                                <td class="px-3 py-2 font-bold text-slate-400">${i + 1}</td>
+                                <td class="px-3 py-2 font-black text-[#230535]">${vname}</td>
+                                <td class="px-3 py-2 font-black text-[#E57723] whitespace-nowrap">${vprice} ج.م</td>
+                                <td class="px-3 py-2 font-bold text-slate-500">${vbarcode}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`
+        : '<div class="text-slate-400 font-bold text-[12px] bg-slate-50 border border-dashed border-[#230535]/15 rounded-xl px-3 py-3">منتج بسيط بدون خيارات</div>';
+
+    const price = (p.base_price == null || p.base_price === '')
+        ? (p.price == null || p.price === '' ? '' : p.price)
+        : p.base_price;
+    const subCat = p.subCategory || p.sub_category || '';
+    const sku = p.sku || p.barcode || '';
+    const created = kpiFormatStamp(p.createdAt || p.created_at);
+    const updated = kpiFormatStamp(p.updatedAt || p.updated_at);
+    const uploadedAt = p.image_uploaded_at ? kpiFormatStamp(p.image_uploaded_at) : '';
+
+    const metaCells = [];
+    const addMeta = (icon, label, value, ltr) => {
+        if (value == null || value === '') return;
+        metaCells.push(`<div class="kpi-detail-meta-row">
+            <div class="kpi-detail-meta-label"><i class="fa-solid ${icon}"></i> ${kpiEscape(label)}</div>
+            <div class="kpi-detail-meta-value"${ltr ? ' dir="ltr"' : ''}>${value}</div>
+        </div>`);
+    };
+    addMeta('fa-fingerprint', 'المعرّف', kpiEscape(p.id), true);
+    addMeta('fa-store', 'المتجر', merchant ? kpiEscape(merchant) : '');
+    addMeta('fa-user-pen', 'أضافه', kpiEscape(kpiProductRepName(p)));
+    addMeta('fa-layer-group', 'القسم', p.category ? kpiEscape(p.category) : '');
+    addMeta('fa-diagram-project', 'القسم الفرعي', subCat ? kpiEscape(subCat) : '');
+    addMeta('fa-barcode', 'SKU / الباركود', sku ? kpiEscape(sku) : '', true);
+    addMeta('fa-money-bill-wave', 'السعر الأساسي', price === '' ? '' : (kpiEscape(price) + ' ج.م'));
+    addMeta('fa-circle-half-stroke', 'حالة المنتج', kpiEscape(kpiStatusLabel(p.status)));
+    addMeta('fa-image', 'حالة الصورة', kpiEscape(kpiImageStatusLabel(p)));
+    if (kpiIsImportedProduct(p)) addMeta('fa-file-import', 'المصدر', kpiEscape(p.importSource || p.intakeSource || ''));
+    addMeta('fa-calendar-plus', 'تاريخ الإضافة', created === '—' ? '' : kpiEscape(created));
+    addMeta('fa-clock-rotate-left', 'آخر تحديث', updated === '—' ? '' : kpiEscape(updated));
+    addMeta('fa-upload', 'رفع الصورة', p.image_uploaded_by ? kpiEscape(p.image_uploaded_by) : '');
+    addMeta('fa-calendar-check', 'تاريخ رفع الصورة', uploadedAt === '—' ? '' : kpiEscape(uploadedAt));
+
+    return `
+    <div class="rounded-2xl border border-[#230535]/10 bg-slate-50 p-3">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <div class="font-black text-base text-[#230535] break-words">${kpiEscape(name)}</div>
+                ${nameEn ? `<div class="text-[11px] font-bold text-slate-400 mt-0.5" dir="ltr">${kpiEscape(nameEn)}</div>` : ''}
+            </div>
+            <span class="kpi-chip kpi-chip-red shrink-0"><i class="fa-solid fa-image"></i> بدون صورة</span>
+        </div>
+    </div>
+
+    <div class="rounded-2xl border-2 border-[#FFD700]/70 bg-[#FFD700]/10 p-3">
+        <div class="kpi-detail-section-title"><i class="fa-solid fa-align-right"></i> الوصف الكامل</div>
+        <div class="text-[12px] font-bold text-[#230535] leading-relaxed">${descHtml}</div>
+    </div>
+
+    <div>
+        <div class="kpi-detail-section-title"><i class="fa-solid fa-list"></i> الخيارات (${variations.length})</div>
+        ${varsHtml}
+    </div>
+
+    <div>
+        <div class="kpi-detail-section-title"><i class="fa-solid fa-circle-info"></i> البيانات والخصائص</div>
+        <div class="kpi-detail-meta">${metaCells.join('')}</div>
+    </div>`;
+};
+
+window.openKpiProductDetails = (productId) => {
+    const product = kpiProductDetailsById.get(String(productId));
+    if (!product) {
+        if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
+        return;
+    }
+    const modal = document.getElementById('kpiProductDetailsModal');
+    const card = document.getElementById('kpiProductDetailsCard');
+    const body = document.getElementById('kpiProductDetailsBody');
+    if (!modal || !card || !body) return;
+    if (window._kpiDetailsHideTimer) { clearTimeout(window._kpiDetailsHideTimer); window._kpiDetailsHideTimer = null; }
+    body.innerHTML = kpiProductDetailsHtml(product);
+    card.scrollTop = 0;
+    modal.classList.remove('hidden');
+    requestAnimationFrame(() => card.classList.remove('opacity-0', 'scale-95'));
+};
+
+window.closeKpiProductDetails = () => {
+    const modal = document.getElementById('kpiProductDetailsModal');
+    const card = document.getElementById('kpiProductDetailsCard');
+    if (!modal) return;
+    if (card) card.classList.add('opacity-0', 'scale-95');
+    window._kpiDetailsHideTimer = setTimeout(() => modal.classList.add('hidden'), 150);
+};
+
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modal = document.getElementById('kpiProductDetailsModal');
+    if (modal && !modal.classList.contains('hidden')) window.closeKpiProductDetails();
+});
 
 window.kpiUploadMissingImage = async (productId, input) => {
     if (!window.canViewPersonalKpi()) return;

@@ -2902,6 +2902,38 @@
 
         </div>
 
+        <!-- ═══════════ KPI — PRODUCT DETAILS MODAL (missing-image helper) ═══════════ -->
+
+        <div id="kpiProductDetailsModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 z-[175]" onclick="if(event.target===this)closeKpiProductDetails()">
+
+            <div id="kpiProductDetailsCard" class="bg-white rounded-3xl w-full max-w-2xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden transition duration-150 opacity-0 scale-95">
+
+                <div class="bg-gradient-to-l from-[#230535] to-[#4C1D95] text-white p-4 flex items-center justify-between gap-3 shrink-0">
+
+                    <div class="flex items-center gap-2.5 min-w-0">
+
+                        <span class="bg-[#FFD700] text-[#230535] p-2 rounded-xl"><i class="fa-solid fa-circle-info"></i></span>
+
+                        <div class="min-w-0">
+
+                            <h3 class="font-black text-sm sm:text-base truncate">تفاصيل المنتج</h3>
+
+                            <p class="text-[10px] font-bold text-white/70">كل الخصائص والخيارات والوصف في مكان واحد</p>
+
+                        </div>
+
+                    </div>
+
+                    <button type="button" onclick="closeKpiProductDetails()" class="bg-white/10 hover:bg-white/20 w-8 h-8 rounded-lg transition" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+
+                </div>
+
+                <div id="kpiProductDetailsBody" class="p-4 space-y-3 overflow-y-auto hide-scrollbar"></div>
+
+            </div>
+
+        </div>
+
         <!-- ═══════════ KPI — KANJO SCORE BREAKDOWN MODAL ═══════════ -->
 
         <div id="kpiScoreBreakdownModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 z-[180]" onclick="if(event.target===this)closeKpiScoreBreakdown()">
