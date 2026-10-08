@@ -986,7 +986,13 @@ const auditPopulateUserFilter = (entries) => {
     const select = document.getElementById('blackBoxUserFilter');
     if (!select) return;
     const current = select.value;
-    const names = Array.from(new Set(entries.map((e) => String(e.userName || '')).filter(Boolean))).sort();
+    /* Static baseline: every authorized user from the global PIN directory, so
+       users with no recent activity are still selectable. Merged with the names
+       found in the fetched logs (legacy/deleted users keep appearing). Pure
+       in-memory work — issues no Firebase reads. */
+    const staticNames = Object.keys(window.users || {})
+        .map((pin) => String(((window.users || {})[pin] || {}).name || '')).filter(Boolean);
+    const names = Array.from(new Set(staticNames.concat(entries.map((e) => String(e.userName || '')).filter(Boolean)))).sort();
     const sig = names.join('\u0000');
     if (sig === auditUserFilterSig && select.options.length) {
         if (names.includes(current)) select.value = current;
