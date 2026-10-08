@@ -138,15 +138,22 @@ window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.
    allows update only. */
 window.isProductAuditUser = () => !!(window.currentUser && window.currentUser.role === 'product_audit');
 
-/* Who may open the product editor: field reps (their own drafts/list) and the
-   audit team (any product). Adding a product is gated separately below so
-   extending this to the audit role never granted create rights. */
-window.canEditCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser();
+/* The single admin account (PIN 8492 / أ/ محمود). Kept deliberately narrow so
+   product add/edit can be granted to this account alone; it is NOT a broad
+   "admin-like" check (that is isCatalogAdminUser, which also folds in the
+   founder and contract managers). */
+window.isKanjoAdminAccount = () => !!(window.currentUser && window.currentUser.role === 'admin');
 
-/* Who may ADD a brand-new product. The product-audit team may add products for
-   any merchant (to cover items the delivery agents missed) and edit them +
-   their variants, but never delete. Field reps keep their existing create flow. */
-window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser();
+/* Who may open the product editor: field reps (their own drafts/list), the
+   audit team (any product) and the admin account 8492 (any product). Adding a
+   product is gated separately below. */
+window.canEditCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+
+/* Who may ADD a brand-new product. Field reps keep their existing create flow;
+   the product-audit team and the admin account 8492 may add products for any
+   merchant (to cover items the delivery agents missed) and edit them + their
+   variants, but never delete. */
+window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
 
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
@@ -2841,9 +2848,11 @@ const renderCatalogAllProductCard = (p) => {
         imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100 transition-opacity duration-200 hover:opacity-75',
         boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer transition-opacity duration-200 hover:opacity-75'
     });
-    /* The audit team refines any imported product before launch. Read + update
-       only, so this card exposes a single "تعديل" action and NO delete control. */
-    const auditEdit = window.isProductAuditUser()
+    /* Everybody who can edit the catalog (reps, the audit team, and the admin
+       account 8492) gets a single "تعديل" action here — and NEVER a delete
+       control. Deletion stays on the separate agent-request → Mahmoud-approval
+       workflow. */
+    const catalogEdit = window.canEditCatalogProducts()
         ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="w-full bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
         : '';
     return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
@@ -2854,7 +2863,7 @@ const renderCatalogAllProductCard = (p) => {
             <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
             ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full truncate max-w-full">${repName}</span>` : ''}
         </div>
-        ${auditEdit}
+        ${catalogEdit}
     </div>`;
 };
 
