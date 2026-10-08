@@ -97,12 +97,28 @@ window.findMerchantIdForBase = (baseName) => {
 const MERCHANTS_CACHE_KEY = 'merchants:all';
 const MERCHANTS_CACHE_TTL = 5 * 60 * 1000;
 
+/* Field mask for the shared merchant directory read. This is the union of every
+   field any consumer reads off a merchant record (identity, category/type,
+   contact, the Drive folder binding and the `documents` audit map), so the
+   projection never removes anything the UI displays. It keeps future oversized
+   blobs (e.g. an embedded logo) out of the payload while the document id is
+   always returned by the REST list. Only the REST path applies it; the SDK
+   getDocs fallback still returns the full document. */
+const MERCHANTS_LIST_FIELDS = [
+    'merchantId', 'merchant_id', 'merchantName',
+    'name', 'category', 'cat', 'type', 'merchantType',
+    'phone', 'contact', 'address',
+    'documents', 'docsUpdatedAt', 'docsUpdatedBy',
+    'driveFolderId', 'driveFolderLink',
+    'archived', 'vipPreContract', 'createdAt'
+];
+
 window.loadMerchantsCache = async ({ force = false } = {}) => {
     const loader = async () => {
         /* Prefer the REST mirror: documented pages, no SDK channel. Falls back
            to the SDK only if the REST layer is unavailable. */
         if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
-            const rows = await window.kanjoRest.list(['merchants'], { pageSize: 300, maxPages: 20 });
+            const rows = await window.kanjoRest.list(['merchants'], { pageSize: 300, maxPages: 20, select: MERCHANTS_LIST_FIELDS });
             if (Array.isArray(rows)) return rows;
         }
         const snap = await getDocs(collection(db, 'merchants'));

@@ -676,12 +676,27 @@ window.kanjoAuditLogView = (entry) => {
 const AUDIT_RECON_CACHE_KEY = 'audit:reconstructed';
 const AUDIT_RECON_CACHE_TTL = 5 * 60 * 1000;
 
+/* Field mask for the retrospective scan: the builder below only reads the
+   product identity and the created/updated stamps, so the heavy
+   merchant_products blobs (Base64 images, variations, descriptions) are never
+   downloaded. The document id is always returned by the REST list regardless of
+   the mask. Every field referenced below is present here. */
+const AUDIT_RECON_PRODUCT_FIELDS = [
+    'name', 'name_ar', 'name_en',
+    'createdAt', 'created_at', 'createdBy',
+    'updatedAt', 'updated_at', 'updatedBy'
+];
+
 /* Building the retrospective trail scans merchant_products, so the result is
    memoized for a short window (see auditCollectReconstructed) to keep repeated
    Black Box opens / re-renders cheap. */
 const auditFetchReconstructed = async () => {
     const out = [];
-    const products = await window.kanjoRest.list(['merchant_products'], { pageSize: 300, maxPages: 20 });
+    const products = await window.kanjoRest.list(['merchant_products'], {
+        pageSize: 300,
+        maxPages: 20,
+        select: AUDIT_RECON_PRODUCT_FIELDS
+    });
     (products || []).forEach((p) => {
         if (!p || !p.id) return;
         const name = p.name_ar || p.name_en || p.name || p.id;
@@ -1058,6 +1073,16 @@ const AUDIT_ENTRIES_CACHE_TTL = 60 * 1000;
    both cheaper and more useful than paging the entire collection. */
 const AUDIT_ENTRIES_LIMIT = 300;
 
+/* Field mask for the Black Box log rows: exactly the fields the viewer,
+   filters and entity-preview links read (see auditRenderBlackBox /
+   auditMergeEntries). Keeps any future oversized blob on an audit_logs entry
+   out of the payload. The document id is always returned regardless of mask. */
+const AUDIT_ENTRY_FIELDS = [
+    'timestamp', 'ts', 'userId', 'userName', 'userRole', 'actionType',
+    'targetEntity', 'targetId', 'targetName', 'entityKind',
+    'description', 'collection', 'source'
+];
+
 const auditLoadEntries = async (force) => {
     if (!window.kanjoRest) return [];
     /* Preferred path: ordered (timestamp DESC) + limited query. Falls back to a
@@ -1068,10 +1093,13 @@ const auditLoadEntries = async (force) => {
             AUDIT_COLLECTION,
             [],
             AUDIT_ENTRIES_LIMIT,
-            { orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }] }
+            {
+                orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }],
+                select: AUDIT_ENTRY_FIELDS
+            }
         );
     } else if (typeof window.kanjoRest.list === 'function') {
-        loader = () => window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: AUDIT_ENTRIES_LIMIT, maxPages: 1 });
+        loader = () => window.kanjoRest.list([AUDIT_COLLECTION], { pageSize: AUDIT_ENTRIES_LIMIT, maxPages: 1, select: AUDIT_ENTRY_FIELDS });
     }
     if (!loader) return [];
     return window.kanjoCache.get(AUDIT_ENTRIES_CACHE_KEY, AUDIT_ENTRIES_CACHE_TTL, loader, !!force);
