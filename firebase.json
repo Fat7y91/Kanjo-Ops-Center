@@ -64,11 +64,11 @@
       },
       {
         "source": "/marketing",
-        "destination": "/marketing.html"
+        "destination": "/dashboard.html"
       },
       {
         "source": "/marketing/",
-        "destination": "/marketing.html"
+        "destination": "/dashboard.html"
       },
       {
         "source": "**",

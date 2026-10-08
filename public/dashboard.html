@@ -1181,6 +1181,34 @@
 
 
 
+                <div id="marketingNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-bullhorn text-[#230535]"></i>
+
+                        <span>بوابة التسويق</span>
+
+                    </button>
+
+                </div>
+
+
+
+                <div id="catalogAuditNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openCatalogAudit()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-clipboard-check text-[#230535]"></i>
+
+                        <span>مراجعة المنتجات</span>
+
+                    </button>
+
+                </div>
+
+
+
 
                 <div id="notificationsWrapper" class="hidden relative mr-2">
 
@@ -1579,6 +1607,102 @@
                     </table>
                 </div>
             </div>
+        </div>
+
+
+
+        <!-- ═══════════ MARKETING — CAMPAIGN LEADS (integrated view) ═══════════ -->
+
+        <div id="marketingSection" class="hidden space-y-6">
+
+            <div class="bg-gradient-to-l from-[#230535] to-[#4C1D95] rounded-3xl shadow-lg text-white p-4 sm:p-6 flex flex-wrap justify-between items-center gap-3">
+
+                <div class="flex items-center gap-3 min-w-0">
+
+                    <div class="bg-[#FFD700] text-[#230535] p-3 rounded-2xl text-xl shrink-0"><i class="fa-solid fa-bullhorn"></i></div>
+
+                    <div class="min-w-0">
+
+                        <h2 class="font-black text-lg sm:text-2xl">بوابة التسويق <span class="text-[#FFD700]">Marketing</span></h2>
+
+                        <p class="text-[11px] sm:text-xs font-bold text-white/80">بيانات عملاء الحملات الإعلانية — اضغط أيقونة الحذف لإزالة سجل الاختبار ورقم الهاتف نهائياً</p>
+
+                    </div>
+
+                </div>
+
+                <button id="marketingBack" type="button" onclick="closeMarketingDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2">
+
+                    <i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية
+
+                </button>
+
+            </div>
+
+
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100">
+
+                    <p class="text-xs font-bold text-slate-500 mb-1"><i class="fa-solid fa-address-book text-brand-purple"></i> إجمالي العملاء المحمّلين</p>
+
+                    <p id="marketingCount" class="text-3xl font-black text-brand-purple">0</p>
+
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100">
+
+                    <p class="text-xs font-bold text-slate-500 mb-1"><i class="fa-solid fa-percent text-brand-purple"></i> بطاقات الفوز</p>
+
+                    <p id="marketingWins" class="text-3xl font-black text-brand-purple">0</p>
+
+                </div>
+
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-purple-100 flex flex-col justify-center">
+
+                    <button id="marketingExport" type="button" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition"><i class="fa-solid fa-file-excel"></i> تصدير Excel</button>
+
+                </div>
+
+            </div>
+
+
+
+            <div class="bg-white rounded-3xl shadow-sm border border-purple-100 overflow-hidden">
+
+                <div class="px-5 py-4 border-b border-purple-100 flex items-center justify-between gap-3">
+
+                    <div class="min-w-0">
+
+                        <h2 class="text-base sm:text-lg font-black text-brand-purple"><i class="fa-solid fa-list text-brand-gold"></i> سجل الحملات</h2>
+
+                        <p class="text-[11px] text-slate-500 font-bold">اضغط أيقونة الحذف لإزالة السجل ورقم الهاتف نهائياً ليتمكن العميل من إعادة المحاولة</p>
+
+                    </div>
+
+                    <button id="marketingRefresh" type="button" class="bg-kanjo-light text-brand-purple border border-purple-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-purple-50 transition"><i class="fa-solid fa-rotate"></i> تحديث</button>
+
+                </div>
+
+                <div class="overflow-auto max-h-[65vh]">
+
+                    <table class="w-full text-sm text-right">
+
+                        <thead id="marketingHead" class="bg-[#230535] text-[#FFD700] sticky top-0 z-10"></thead>
+
+                        <tbody id="marketingBody" class="divide-y divide-purple-50"></tbody>
+
+                    </table>
+
+                    <div id="marketingEmpty" class="hidden py-16 text-center text-slate-400 font-bold"><i class="fa-regular fa-folder-open text-3xl mb-2"></i><br>لا توجد بيانات حملات بعد</div>
+
+                    <div id="marketingLoading" class="py-16 text-center text-brand-purple font-bold"><i class="fa-solid fa-spinner fa-spin text-2xl"></i><br>جاري تحميل البيانات...</div>
+
+                </div>
+
+            </div>
+
         </div>
 
 

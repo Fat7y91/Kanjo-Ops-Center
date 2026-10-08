@@ -3335,7 +3335,9 @@ window.openKpiDashboard = async () => {
     }
     const view = document.getElementById('kpiAnalyticsView');
     const dashboard = document.getElementById('dashboardSection');
+    const marketingView = document.getElementById('marketingSection');
     if (dashboard) dashboard.classList.add('hidden');
+    if (marketingView) marketingView.classList.add('hidden');
     if (view) view.classList.remove('hidden');
     try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
     await window.renderKpiDashboard();

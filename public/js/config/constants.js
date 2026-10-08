@@ -59,9 +59,9 @@ const users = {
    future guard can share a single source of truth. */
 const PRODUCT_AUDIT_PIN = '3141';
 
-/* PIN that unlocks the standalone marketing portal (marketing.html). Kept as a
-   named constant so the routing guard in auth.js and the portal's own auth gate
-   share a single source of truth instead of comparing a magic literal. */
+/* PIN that unlocks the integrated marketing view inside the main dashboard
+   (بوابة التسويق). Kept as a named constant so the login routing and the
+   marketing section's access helper share a single source of truth. */
 const MARKETING_PIN = '8899';
 
 const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحمد جمعه، يوسف' };

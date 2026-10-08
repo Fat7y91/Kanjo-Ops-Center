@@ -2772,6 +2772,22 @@ window.toggleCatalogAllProductsWidget = () => {
     }
 };
 
+/* One-tap entry for the product-audit team: open the all-products grid (which
+   loads the full catalog on demand) and scroll it into view. */
+window.openCatalogAudit = () => {
+    if (!window.canViewAllCatalogProducts() || window.isDataEntryUser()) return;
+    const body = document.getElementById('catalogAllProductsBody');
+    if (body && body.classList.contains('hidden')) {
+        window.toggleCatalogAllProductsWidget();
+    } else if (typeof window.renderCatalogAllProductsList === 'function') {
+        window.renderCatalogAllProductsList();
+    }
+    const widget = document.getElementById('catalogAllProductsWidget');
+    if (widget && typeof widget.scrollIntoView === 'function') {
+        try { widget.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+    }
+};
+
 const catalogMerchantLogoUrl = (merchantName) => {
     const name = String(merchantName || '').trim();
     if (!name || !Array.isArray(window.allTasksCache)) return '';

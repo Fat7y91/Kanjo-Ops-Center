@@ -27,6 +27,7 @@ import './ui/accounting.js';
 import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
+import './services/marketing.js';
 
 /* Populate category dropdowns (build the option list once instead of
    re-serialising the whole select on every iteration). */
@@ -58,12 +59,6 @@ authReadyWithTimeout.then(() => {
         return;
     }
     if (!restoredUser || typeof restoredUser !== 'object') return;
-    /* A marketing session must never restore the operations dashboard: send it
-       to the isolated marketing portal, which re-validates the same session. */
-    if (String(restoredUser.role || '') === 'marketing') {
-        window.location.replace('marketing.html');
-        return;
-    }
     window.currentUser = restoredUser;
     if (typeof window.showDashboardLoading === 'function') {
         window.showDashboardLoading();

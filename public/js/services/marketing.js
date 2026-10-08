@@ -1,14 +1,12 @@
-/* Kanjo Ops — Standalone Marketing Portal
-   Isolated, sidebar-free page that lets the marketing office (or a founder)
-   sign in with a PIN and review the campaign leads captured by the external
-   Spinwheel campaign. It shares ONLY the auth/session contract (the same
-   `kanjo_session_user` localStorage key) with the operations dashboard; it does
-   not import any operational UI, so the ops sidebar/modals can never leak here. */
-import '../config/firebase.js';
-import { users } from '../config/constants.js';
+/* Kanjo Ops — Marketing Dashboard (integrated view)
+   Renders the campaign leads captured by the external Spinwheel campaign inside
+   the main operations dashboard. There is no standalone page, login gate or
+   sidebar: the marketing office signs in through the standard PIN gate and the
+   app routes them straight to this section, while founders/admins can open it
+   from the header nav. It reuses the dashboard's Firebase session and the
+   signed-in REST transport, so the table is read + delete only (delete wipes a
+   test entry so the same phone can spin again). */
 
-const SESSION_KEY = 'kanjo_session_user';
-const ALLOWED_ROLES = ['marketing', 'founder'];
 const CAMPAIGN_LEADS = 'campaign_leads';
 const MAX_ROWS = 500;
 
@@ -39,49 +37,20 @@ const PREFERRED_ORDER = [
 
 const el = (id) => document.getElementById(id);
 
-let currentSession = null;
 let currentLeads = [];
 let currentColumns = [];
+let _bound = false;
+let _loaded = false;
 
-/* ─── Session helpers (mirror services/auth.js) ─── */
-const readSession = () => {
-    try {
-        const raw = localStorage.getItem(SESSION_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        return (parsed && typeof parsed === 'object') ? parsed : null;
-    } catch (_) {
-        return null;
-    }
-};
+/* ─── Access (mirrors firestore.rules campaign_leads) ───
+   Marketing is the owning role; founders/admins may open the same section from
+   the header nav for oversight. */
+window.marketingIsHome = () =>
+    String((window.currentUser && window.currentUser.role) || '') === 'marketing';
 
-const sessionHasAccess = (session) =>
-    !!session && ALLOWED_ROLES.includes(String(session.role || ''));
-
-const showLogin = (message) => {
-    el('marketingApp').classList.add('hidden');
-    el('marketingLogin').classList.remove('hidden');
-    const err = el('marketingLoginError');
-    if (message) {
-        err.textContent = message;
-        err.classList.remove('hidden');
-    } else {
-        err.classList.add('hidden');
-    }
-    const input = el('marketingPin');
-    if (input) {
-        input.value = '';
-        setTimeout(() => input.focus(), 50);
-    }
-};
-
-const showApp = (session) => {
-    currentSession = session;
-    el('marketingLogin').classList.add('hidden');
-    el('marketingApp').classList.remove('hidden');
-    const userLabel = el('marketingUser');
-    if (userLabel) userLabel.textContent = session.name || '';
-    loadLeads();
+window.marketingCanView = () => {
+    const role = String((window.currentUser && window.currentUser.role) || '');
+    return role === 'marketing' || role === 'founder' || role === 'admin';
 };
 
 /* ─── Formatting ─── */
@@ -143,16 +112,21 @@ const renderTable = () => {
     const body = el('marketingBody');
     const empty = el('marketingEmpty');
     const loading = el('marketingLoading');
+    if (!head || !body) return;
 
     if (loading) loading.classList.add('hidden');
     head.innerHTML = '';
     body.innerHTML = '';
 
+    const countEl = el('marketingCount');
     if (!currentLeads.length) {
-        empty.classList.remove('hidden');
+        if (empty) empty.classList.remove('hidden');
+        if (countEl) countEl.textContent = '0';
+        const winsEl = el('marketingWins');
+        if (winsEl) winsEl.textContent = '0';
         return;
     }
-    empty.classList.add('hidden');
+    if (empty) empty.classList.add('hidden');
 
     const headRow = document.createElement('tr');
     currentColumns.forEach((key) => {
@@ -183,12 +157,13 @@ const renderTable = () => {
     }).join('');
     body.innerHTML = rowsHtml;
 
-    el('marketingCount').textContent = String(currentLeads.length);
+    if (countEl) countEl.textContent = String(currentLeads.length);
     const wins = currentLeads.filter((doc) => {
         const promo = doc.promo_code || doc.coupon;
         return promo !== undefined && promo !== null && promo !== '';
     }).length;
-    el('marketingWins').textContent = String(wins);
+    const winsEl = el('marketingWins');
+    if (winsEl) winsEl.textContent = String(wins);
 };
 
 const setLoading = () => {
@@ -196,8 +171,10 @@ const setLoading = () => {
     const empty = el('marketingEmpty');
     if (loading) loading.classList.remove('hidden');
     if (empty) empty.classList.add('hidden');
-    el('marketingHead').innerHTML = '';
-    el('marketingBody').innerHTML = '';
+    const head = el('marketingHead');
+    const body = el('marketingBody');
+    if (head) head.innerHTML = '';
+    if (body) body.innerHTML = '';
 };
 
 /* ─── Data load (firestore REST, newest 500, no real-time listeners) ─── */
@@ -219,9 +196,12 @@ const loadLeads = async () => {
         currentColumns = [];
         const loading = el('marketingLoading');
         if (loading) loading.classList.add('hidden');
-        el('marketingEmpty').classList.remove('hidden');
-        el('marketingCount').textContent = '0';
-        el('marketingWins').textContent = '0';
+        const empty = el('marketingEmpty');
+        if (empty) empty.classList.remove('hidden');
+        const countEl = el('marketingCount');
+        if (countEl) countEl.textContent = '0';
+        const winsEl = el('marketingWins');
+        if (winsEl) winsEl.textContent = '0';
         if (window.Swal) {
             window.Swal.fire({
                 icon: 'error',
@@ -322,41 +302,21 @@ const exportExcel = () => {
     }
 };
 
-/* ─── Login / logout wiring ─── */
-const attemptLogin = () => {
-    const input = el('marketingPin');
-    const pin = input ? String(input.value || '').trim() : '';
-    const identity = users[pin];
-    if (identity && ALLOWED_ROLES.includes(String(identity.role || ''))) {
-        const session = Object.assign({}, identity, { pin });
-        try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch (_) {}
-        window.currentUser = session;
-        showApp(session);
-        return;
-    }
-    showLogin('كود الدخول غير صحيح أو غير مصرح لهذه البوابة');
+/* ─── Integrated view navigation ─── */
+const smoothTop = () => {
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    catch (_) { try { window.scrollTo(0, 0); } catch (__) {} }
 };
 
-const logout = () => {
-    try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
-    window.location.reload();
-};
-
-const init = () => {
-    const loginBtn = el('marketingLoginBtn');
-    if (loginBtn) loginBtn.addEventListener('click', attemptLogin);
-    const pinInput = el('marketingPin');
-    if (pinInput) {
-        pinInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') attemptLogin();
-        });
-    }
+const bind = () => {
+    if (_bound) return;
+    _bound = true;
     const exportBtn = el('marketingExport');
     if (exportBtn) exportBtn.addEventListener('click', exportExcel);
     const refreshBtn = el('marketingRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadLeads);
-    const logoutBtn = el('marketingLogout');
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    const backBtn = el('marketingBack');
+    if (backBtn) backBtn.addEventListener('click', () => window.closeMarketingDashboard());
 
     /* Delegated delete: works for every dynamically-built row without rebinding
        after each render. */
@@ -372,14 +332,63 @@ const init = () => {
             deleteLead(btn.getAttribute('data-lead-id'));
         });
     }
-
-    const session = readSession();
-    if (sessionHasAccess(session)) showApp(session);
-    else showLogin();
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+/* Make this section the visible view. Marketing uses it as home (no back
+   button); founders/admins open it over the operations dashboard. */
+window.openMarketingDashboard = () => {
+    if (!window.marketingCanView()) {
+        if (window.showToast) window.showToast('بوابة التسويق غير متاحة لحسابك', false);
+        return;
+    }
+    const accounting = el('accountingSection');
+    const dashboard = el('dashboardSection');
+    const kpiView = el('kpiAnalyticsView');
+    const view = el('marketingSection');
+    if (accounting) accounting.classList.add('hidden');
+    if (dashboard) dashboard.classList.add('hidden');
+    if (kpiView) kpiView.classList.add('hidden');
+    if (view) view.classList.remove('hidden');
+    smoothTop();
+    window.initMarketingDashboard();
+};
+
+window.closeMarketingDashboard = () => {
+    /* Marketing lands here as its home view, so it can never close it. */
+    if (window.marketingIsHome()) return;
+    const view = el('marketingSection');
+    if (view) view.classList.add('hidden');
+    const dashboard = el('dashboardSection');
+    if (dashboard) dashboard.classList.remove('hidden');
+    smoothTop();
+};
+
+window.initMarketingDashboard = () => {
+    if (!window.marketingCanView()) return;
+    bind();
+    const backBtn = el('marketingBack');
+    if (backBtn) backBtn.classList.toggle('hidden', window.marketingIsHome());
+    if (!_loaded) {
+        _loaded = true;
+        loadLeads();
+    } else {
+        renderTable();
+    }
+};
+
+/* Clear everything on logout / role switch so one identity's campaign data can
+   never leak into the next session on a shared device. */
+window.resetMarketingDashboard = () => {
+    _bound = false;
+    _loaded = false;
+    currentLeads = [];
+    currentColumns = [];
+    const body = el('marketingBody');
+    if (body) body.innerHTML = '';
+    const head = el('marketingHead');
+    if (head) head.innerHTML = '';
+    const countEl = el('marketingCount');
+    if (countEl) countEl.textContent = '0';
+    const winsEl = el('marketingWins');
+    if (winsEl) winsEl.textContent = '0';
+};

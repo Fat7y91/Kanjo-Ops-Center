@@ -164,16 +164,6 @@ window.syncAuthClaims = async () => {
 async function login(pinOverride = null) {
     if (window.authReady) { try { await window.authReady; } catch (e) {} }
     const pin = pinOverride || document.getElementById('pinInput').value;
-    /* The marketing portal is a fully isolated, sidebar-free page. A marketing
-       PIN must never paint the operations dashboard, so persist the session and
-       hand off to marketing.html before any dashboard section is shown. */
-    if (users[pin] && users[pin].role === 'marketing') {
-        const marketingUser = Object.assign({}, users[pin], { pin: String(pin) });
-        window.currentUser = marketingUser;
-        window.saveSession(marketingUser);
-        window.location.href = 'marketing.html';
-        return;
-    }
     if(users[pin]) {
         /* Keep the PIN on the session identity (without mutating the shared
            constants entry) so PIN-scoped screens such as the authorization
@@ -222,6 +212,8 @@ function applyThemeAndShowDashboard() {
 
     const isAccounting = (currentUser.role === 'accounting');
     const isFounder = (currentUser.role === 'founder');
+    const isMarketing = (currentUser.role === 'marketing');
+    const isProductAudit = (currentUser.role === 'product_audit');
     
     if (isAccounting) {
         document.getElementById('accountingSection').classList.remove('hidden');
@@ -232,6 +224,16 @@ function applyThemeAndShowDashboard() {
             financialAccountingSection.classList.remove('hidden');
             afterAuthReady().then(() => { if(window.loadFinancialProfilesForAccounting) window.loadFinancialProfilesForAccounting(); });
         }
+    } else if (isMarketing) {
+        /* Marketing is a first-class dashboard role now: it lands on the
+           integrated marketing section instead of a separate page. */
+        document.getElementById('accountingSection').classList.add('hidden');
+        document.getElementById('dashboardSection').classList.add('hidden');
+        const financialAccountingSection = document.getElementById('financialAccountingSection');
+        if (financialAccountingSection) financialAccountingSection.classList.add('hidden');
+        const marketingSection = document.getElementById('marketingSection');
+        if (marketingSection) marketingSection.classList.remove('hidden');
+        afterAuthReady().then(() => { if (typeof window.initMarketingDashboard === 'function') window.initMarketingDashboard(); });
     } else {
         document.getElementById('accountingSection').classList.add('hidden');
         document.getElementById('dashboardSection').classList.remove('hidden');
@@ -239,6 +241,8 @@ function applyThemeAndShowDashboard() {
         if (financialAccountingSection) {
             financialAccountingSection.classList.add('hidden');
         }
+        const marketingSection = document.getElementById('marketingSection');
+        if (marketingSection) marketingSection.classList.add('hidden');
     }
 
     document.getElementById('userInfo').classList.remove('hidden'); 
@@ -259,7 +263,7 @@ function applyThemeAndShowDashboard() {
     const isDataEntry = (currentUser.role === 'data_entry');
     const canViewLive = !isDataEntry && (isMahmoud || isFounder);
     
-    if (!isAccounting) {
+    if (!isAccounting && !isMarketing) {
         document.getElementById('advancedDashboard').classList.toggle('hidden', !canViewLive);
         /* Compact action buttons; the bulky forms now live inside their modals.
            The assign-task form was only ever usable by admins, so keep the
@@ -269,12 +273,15 @@ function applyThemeAndShowDashboard() {
         const exportProductsBtn = document.getElementById('openExportProductsBtn');
         if (exportProductsBtn) exportProductsBtn.classList.toggle('hidden', !canViewLive);
         document.getElementById('notificationsWrapper').classList.toggle('hidden', !canViewLive);
+        /* Data-entry and the product-audit team are not operations users: hide
+           the day-task board so their screen is focused on the catalog. */
+        const hideTasks = isDataEntry || isProductAudit;
         const searchWrapper = document.getElementById('tasksSearchWrapper');
-        if (searchWrapper) searchWrapper.classList.toggle('hidden', isDataEntry);
+        if (searchWrapper) searchWrapper.classList.toggle('hidden', hideTasks);
         const tasksContainer = document.getElementById('tasksContainer');
-        if (tasksContainer) tasksContainer.classList.toggle('hidden', isDataEntry);
+        if (tasksContainer) tasksContainer.classList.toggle('hidden', hideTasks);
         const tasksDateNav = document.getElementById('tasksDateNav');
-        if (tasksDateNav) tasksDateNav.classList.toggle('hidden', isDataEntry);
+        if (tasksDateNav) tasksDateNav.classList.toggle('hidden', hideTasks);
         
         const founderPayrollSummaryBox = document.getElementById('founderPayrollSummaryBox');
         if (founderPayrollSummaryBox) {
@@ -345,6 +352,19 @@ function applyThemeAndShowDashboard() {
             blackBoxNavBtnWrapper.classList.toggle('hidden', !canBlackBox);
         }
 
+        /* Marketing results are reachable from the header nav for oversight
+           (marketing itself lands on the section, so the button is redundant). */
+        const marketingNavBtnWrapper = document.getElementById('marketingNavBtnWrapper');
+        if (marketingNavBtnWrapper) {
+            marketingNavBtnWrapper.classList.toggle('hidden', !(isAdmin || isFounder));
+        }
+
+        /* Product-audit team: a one-tap jump into the all-products catalog grid. */
+        const catalogAuditNavBtnWrapper = document.getElementById('catalogAuditNavBtnWrapper');
+        if (catalogAuditNavBtnWrapper) {
+            catalogAuditNavBtnWrapper.classList.toggle('hidden', !isProductAudit);
+        }
+
         const canIssueAuthorization = (typeof window.kanjoCanIssueAuthorization === 'function')
             ? window.kanjoCanIssueAuthorization()
             : false;
@@ -390,6 +410,9 @@ function applyThemeAndShowDashboard() {
     
     afterAuthReady().then(() => {
         if (window._appListenersRegistered) return;
+        /* The marketing section only needs campaign_leads, loaded on demand when
+           the section is shown; no operational listeners belong to it. */
+        if (isMarketing) return;
         window._appListenersRegistered = true;
         if (!window._appListenerUnsubscribers) window._appListenerUnsubscribers = [];
 
@@ -503,14 +526,16 @@ function applyThemeAndShowDashboard() {
         }
 
         if (!isDataEntry && typeof window.startCatalogListeners === 'function') window.startCatalogListeners();
-        if (!isDataEntry && typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
-        if (!isDataEntry && typeof listenToTasks !== 'undefined') listenToTasks();
+        /* The audit role edits the catalog only: skip the payroll + day-task
+           listeners, which it has no use for. */
+        if (!isDataEntry && !isProductAudit && typeof loadPayrollSettingsAndCalculateFounderSummary !== 'undefined') loadPayrollSettingsAndCalculateFounderSummary();
+        if (!isDataEntry && !isProductAudit && typeof listenToTasks !== 'undefined') listenToTasks();
         if (isDataEntry && typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
 
-        /* Reps/data-entry skip the heavy task archive, but the catalog's merchant
-           picker still needs the finalized (signed) merchants. Load the tiny,
-           field-masked signed-task set so the dropdown populates on boot. */
-        if ((isRep || isDataEntry) && typeof window.ensureFinalizedMerchantsLoaded === 'function') {
+        /* Reps/data-entry/audit skip the heavy task archive, but the catalog's
+           merchant picker still needs the finalized (signed) merchants. Load the
+           tiny, field-masked signed-task set so the dropdown populates on boot. */
+        if ((isRep || isDataEntry || isProductAudit) && typeof window.ensureFinalizedMerchantsLoaded === 'function') {
             window.ensureFinalizedMerchantsLoaded();
         }
     });
@@ -533,6 +558,7 @@ window.detachAppListeners = () => {
     window._catalogListenerStarted = false;
     window._tasksListenerStarted = false;
     window._financialProfilesListenerStarted = false;
+    if (typeof window.resetMarketingDashboard === 'function') window.resetMarketingDashboard();
 };
 
 window.applyThemeAndShowDashboard = applyThemeAndShowDashboard;
