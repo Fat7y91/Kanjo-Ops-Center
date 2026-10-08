@@ -224,15 +224,16 @@ service cloud.firestore {
     // Auth is anonymous + PIN; reps and data-entry create/edit catalog rows and
     // KPI managers read the full set. Reads stay open to any signed-in session so
     // the catalog reference pickers keep working. Creating/editing is limited to
-    // the catalog roles plus the product-audit team, which may UPDATE any item
-    // (names, typos, variants, prices, descriptions, images) but is deliberately
-    // absent from the delete rule below: read + update only, never delete.
+    // the catalog roles plus the product-audit team: the audit team may ADD new
+    // items (for merchants missed by the agents) and UPDATE any item (names,
+    // typos, variants, prices, descriptions, images), but is deliberately absent
+    // from the delete rule below: create + read + update only, never delete.
     match /merchant_products/{docId} {
       function canWriteCatalog() {
         return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
       }
       allow read: if isSignedIn();
-      allow create: if legacy() || canWriteCatalog();
+      allow create: if legacy() || canWriteCatalog() || isProductAudit();
       allow update: if legacy() || canWriteCatalog() || isProductAudit();
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }

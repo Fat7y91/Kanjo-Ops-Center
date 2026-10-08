@@ -139,9 +139,14 @@ window.isCatalogFounderUser = () => !!(window.currentUser && window.currentUser.
 window.isProductAuditUser = () => !!(window.currentUser && window.currentUser.role === 'product_audit');
 
 /* Who may open the product editor: field reps (their own drafts/list) and the
-   audit team (any product). Adding a product is a rep-only action and is gated
-   separately, so extending this to the audit role never grants create rights. */
+   audit team (any product). Adding a product is gated separately below so
+   extending this to the audit role never granted create rights. */
 window.canEditCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser();
+
+/* Who may ADD a brand-new product. The product-audit team may add products for
+   any merchant (to cover items the delivery agents missed) and edit them +
+   their variants, but never delete. Field reps keep their existing create flow. */
+window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser();
 
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
@@ -1945,7 +1950,7 @@ window.renderCatalogDraftsWidget = async () => {
     const label = document.getElementById('catalogDraftsCountLabel');
     const syncBtn = document.getElementById('catalogSyncAllBtn');
     if (!widget) return;
-    const isRep = window.isCatalogRepUser();
+    const canCreate = window.canCreateCatalogProducts();
     let count = 0;
     try {
         const drafts = await readCatalogDrafts();
@@ -1953,7 +1958,7 @@ window.renderCatalogDraftsWidget = async () => {
     } catch (err) {
         console.error('[catalog] drafts read failed:', err);
     }
-    widget.classList.toggle('hidden', !isRep);
+    widget.classList.toggle('hidden', !canCreate);
     if (label) label.textContent = 'لديك ' + count + ' منتج في المسودة';
     if (syncBtn) {
         syncBtn.disabled = !!window._catalogSyncing || count === 0;
@@ -2066,8 +2071,8 @@ window.startCatalogBarcodeScan = async () => {
 };
 
 window.openCatalogProductModal = () => {
-    if (!window.isCatalogRepUser()) {
-        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
+    if (!window.canCreateCatalogProducts()) {
+        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب وفريق مراجعة المنتجات فقط', false);
         return;
     }
     if (window.kanjoAuditLogView) {
@@ -2227,13 +2232,6 @@ window.submitCatalogProduct = async (event, options) => {
     if (window._catalogDraftSaving) return;
     if (!window.canEditCatalogProducts()) {
         if (window.showToast) window.showToast('هذه الشاشة غير متاحة لحسابك', false);
-        return;
-    }
-    /* The audit role is read + UPDATE only: it may never mint a new product
-       (that would be a create). The add-product entry point is rep-only, so this
-       is a defensive guard for the shared submit handler. */
-    if (window.isProductAuditUser() && !window._catalogEditingProduct) {
-        if (window.showToast) window.showToast('مراجعة وتدقيق المنتجات: التعديل فقط بدون إضافة', false);
         return;
     }
     /* Strict double-submit guard: flip the lock flag and disable BOTH save
@@ -3916,8 +3914,8 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
 
 window.syncAllCatalogDrafts = async () => {
     if (window._catalogSyncing) return;
-    if (!window.isCatalogRepUser()) {
-        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب فقط', false);
+    if (!window.canCreateCatalogProducts()) {
+        if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب وفريق مراجعة المنتجات فقط', false);
         return;
     }
     const drafts = await readCatalogDrafts();
@@ -4773,7 +4771,9 @@ window.renderCatalogWidgets = () => {
         return;
     }
     const repBanner = document.getElementById('catalogRepBanner');
-    if (repBanner) repBanner.classList.toggle('hidden', !window.isCatalogRepUser());
+    /* Reps AND the product-audit team can add products, so both see the
+       "إضافة منتج" banner (the audit team covers items the agents missed). */
+    if (repBanner) repBanner.classList.toggle('hidden', !window.canCreateCatalogProducts());
     if (typeof window.renderCatalogDraftsWidget === 'function') window.renderCatalogDraftsWidget();
     if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
     if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
