@@ -7307,7 +7307,14 @@ const kanjoCategoryCheckboxesHtml = (categories, key) => {
     }).join('');
 };
 
-window.openKanjoCategoryAuditModal = (items, onConfirm) => {
+/* `customCategories` (optional, template flow) is an array of { name, id } read
+   straight from the uploaded merchant template's `_lookups` sheet. When it is
+   supplied it becomes the EXACT choice list for every row (the template is the
+   authority for that merchant, so newly-added IDs the static taxonomy does not
+   know about still appear). When omitted the modal keeps its previous behaviour
+   and falls back to the vendor-scoped static taxonomy — zero change for the
+   normal (non-template) export. */
+window.openKanjoCategoryAuditModal = (items, onConfirm, customCategories) => {
     const modal = document.getElementById('kanjoCategoryAuditModal');
     const body = document.getElementById('kanjoCategoryAuditBody');
     const countEl = document.getElementById('kanjoCategoryAuditCount');
@@ -7315,7 +7322,10 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
         if (typeof onConfirm === 'function') onConfirm({});
         return;
     }
-    _kanjoAuditState = { items: items || [], onConfirm };
+    const custom = Array.isArray(customCategories)
+        ? customCategories.filter((c) => c && c.name && c.id != null && String(c.id) !== '' && Number(c.id) > 0)
+        : null;
+    _kanjoAuditState = { items: items || [], onConfirm, customCategories: custom };
     body.innerHTML = (items || []).map((entry) => {
         const p = entry.product || {};
         const key = String(p.id || '');
@@ -7326,9 +7336,12 @@ window.openKanjoCategoryAuditModal = (items, onConfirm) => {
             ? '<div class="text-[10px] text-slate-400 font-bold mt-0.5 break-words">' + catalogEscapeHtml(nameEn) + '</div>'
             : '';
         /* Only categories valid for THIS product's vendor type are offered; the
-           static Qema taxonomy drives the list when available. */
+           static Qema taxonomy drives the list when available. The template flow
+           overrides this with the uploaded template's own `_lookups` categories. */
         const vendorType = String(entry.vendorType || p.category || '').trim();
-        const taxonomyOptions = kanjoQemaAllowedCategoryObjects(vendorType);
+        const taxonomyOptions = (custom && custom.length)
+            ? custom
+            : kanjoQemaAllowedCategoryObjects(vendorType);
         const optionsHtml = kanjoCategoryCheckboxesHtml(taxonomyOptions || kanjoVendorAllowedCategories(vendorType), key);
         const vendorBadge = vendorType
             ? '<span class="shrink-0 text-[9px] font-bold px-2 py-0.5 rounded-lg bg-purple-100 text-[#230535] max-w-[45%] truncate" title="' + catalogEscapeHtml(vendorType) + '">' + catalogEscapeHtml(vendorType) + '</span>'
@@ -8894,7 +8907,7 @@ window.addEventListener('keydown', (ev) => {
        filler can gate unmapped products through the exact same UI the normal
        export uses (`exportDoneCatalogProducts`) instead of guessing. */
     assignedFor: (product, match, selection) => kanjoQemaAssignedFor(product, match, selection),
-    openCategoryAudit: (items, onConfirm) => window.openKanjoCategoryAuditModal(items, onConfirm),
+    openCategoryAudit: (items, onConfirm, customCategories) => window.openKanjoCategoryAuditModal(items, onConfirm, customCategories),
     fuzzyLevenshtein: (a, b) => kanjoFuzzyLevenshtein(a, b),
     fuzzySimilarity: (a, b) => kanjoFuzzySimilarity(a, b),
     fuzzyBest: (query, candidates, opts) => kanjoFuzzyBest(query, candidates, opts),

@@ -123,6 +123,29 @@
         });
     };
 
+    /* Map this template's `_lookups` category tokens to the { name, id } objects
+       the shared audit modal renders as checkboxes. This is the whole point of
+       the template flow: the workbook's own `_lookups` sheet is the up-to-date
+       authority, so brand-new IDs (e.g. 188-193) appear even when the static
+       qemaTaxonomy.js has never heard of them. Names are de-duplicated exactly
+       like the modal does (first ID wins); the numeric id is parsed back out of
+       the `ID:<n>` token. ZERO Firestore — pure in-memory derivation. */
+    const templateCategoryChoices = (lookups) => {
+        const seen = new Set();
+        const out = [];
+        ((lookups && lookups.categories) || []).forEach((c) => {
+            if (!c || !c.name) return;
+            const idMatch = String(c.id || '').match(/(\d+)/);
+            const id = idMatch ? Number(idMatch[1]) : 0;
+            if (!id) return;
+            const key = normKey(c.name);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            out.push({ name: c.name, id: id });
+        });
+        return out;
+    };
+
     /* Generic -> brand spelling bridge reused from the app's SMART_ALIASES
        (e.g. "ميرندا" -> "صودا"), applied ONLY when the template has no literal
        entry, then resolution falls back to the template's first valid category. */
@@ -569,7 +592,8 @@
                             toast(String((err && err.message) || err), false);
                         }
                     });
-                }
+                },
+                templateCategoryChoices(lookups)
             );
             return { fileName: '', productCount: 0, variantCount: 0, pendingAudit: needingAudit.length, lookups: lookups };
         }
@@ -622,6 +646,7 @@
         parseIdToken: parseIdToken,
         extractLookups: extractLookups,
         applyDynamicLookups: applyDynamicLookups,
+        templateCategoryChoices: templateCategoryChoices,
         resolveCategory: resolveCategory,
         remapVariantCell: remapVariantCell,
         buildColumnMap: buildColumnMap,
