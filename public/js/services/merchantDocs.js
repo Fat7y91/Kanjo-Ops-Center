@@ -99,10 +99,10 @@ const MERCHANTS_CACHE_TTL = 5 * 60 * 1000;
 
 /* Field mask for the shared merchant directory read. This is the union of every
    field any consumer reads off a merchant record (identity, category/type,
-   contact, the Drive folder binding and the `documents` audit map), so the
-   projection never removes anything the UI displays. It keeps future oversized
-   blobs (e.g. an embedded logo) out of the payload while the document id is
-   always returned by the REST list. Only the REST path applies it; the SDK
+   contact, the Drive folder binding, the `documents` audit map), plus the
+   merchant logo so an embedded `merchantLogo` is never masked from the payload
+   the UI could render. It keeps other oversized blobs out while the document id
+   is always returned by the REST list. Only the REST path applies it; the SDK
    getDocs fallback still returns the full document. */
 const MERCHANTS_LIST_FIELDS = [
     'merchantId', 'merchant_id', 'merchantName',
@@ -110,6 +110,7 @@ const MERCHANTS_LIST_FIELDS = [
     'phone', 'contact', 'address',
     'documents', 'docsUpdatedAt', 'docsUpdatedBy',
     'driveFolderId', 'driveFolderLink',
+    'merchantLogo',
     'archived', 'vipPreContract', 'createdAt'
 ];
 

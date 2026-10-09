@@ -544,13 +544,15 @@ const restFetchTasks = async ({ team = null, date = null } = {}) => {
 };
 
 /* Field mask for the heavy `tasks` archive read. Task documents embed a Base64
-   `merchantLogo` which is the ~15MB bulk of the collection. The archive
-   consumers (global search, reports/exports, accounting, merchant cards) only
-   ever read the textual/structural fields below, so the logo and any other
-   oversized blob is deliberately omitted. Day-scoped reads keep the full
-   document (the dashboard cards render the logo). */
+   `merchantLogo` which is the bulk of the collection. The archive consumers
+   (global search, reports/exports, accounting, merchant cards) read only the
+   textual/structural fields below. `merchantLogo` is the one embedded blob we
+   must carry: the all-products catalog resolves each merchant card's logo from
+   this archive (see catalogMerchantLogoUrl), so omitting it forced the fallback
+   `fa-store` placeholder. Any other oversized blob stays masked. Day-scoped
+   reads keep the full document (the dashboard cards render the logo). */
 const TASKS_ARCHIVE_SELECT = [
-    'name', 'merchantId', 'merchant_id', 'cat', 'team', 'time', 'target',
+    'name', 'merchantLogo', 'merchantId', 'merchant_id', 'cat', 'team', 'time', 'target',
     'notes', 'reports', 'attendances', 'isSigned', 'isProvisional', 'achieved',
     'createdAt', 'created_at', 'updatedAt',
     'fbPage', 'fbGroup', 'insta', 'website', 'address',
