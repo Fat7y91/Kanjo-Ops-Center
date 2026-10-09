@@ -6199,6 +6199,20 @@ const KANJO_CATEGORIES_BY_SPECIFICITY = KANJO_PRODUCT_CATEGORIES
     .map((cat, canonical) => ({ cat, canonical }))
     .sort((a, b) => (normalizeArabic(b.cat.name).length - normalizeArabic(a.cat.name).length) || (a.canonical - b.canonical));
 
+/* IDs of the hardcoded catalogue. A category whose id is NOT in here came from
+   the CSV-synced dynamic taxonomy (see services/dynamicTaxonomy.js) and is
+   materialised as a synthetic match candidate at call time. */
+const KANJO_STATIC_CATEGORY_IDS = new Set(KANJO_PRODUCT_CATEGORIES.map((cat) => cat.id));
+
+/* Dynamic (CSV-synced) categories for a vendor as [{ id, name }]. Read at call
+   time from the in-memory provider so a mid-session CSV upload is picked up
+   without a reload. Pure in-memory; ZERO reads. */
+const kanjoDynamicCategoryObjects = (vendorType) => {
+    const provider = (typeof window !== 'undefined' && window.KanjoDynamicCategories) || null;
+    if (!provider || typeof provider.entriesForVendor !== 'function') return [];
+    try { return provider.entriesForVendor(vendorType) || []; } catch (_) { return []; }
+};
+
 /* ── Vendor-scoped category allow-list ──────────────────────────────────────
    The vendor's activity label is stored on every catalog product as `category`
    (e.g. "🍔 مطاعم وكافيهات"). It decides which of the Kanjo product categories
@@ -6416,6 +6430,18 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             .map((c) => byName.get(normalizeArabic(c.name)))
             .filter(Boolean);
     }
+    /* CSV-synced dynamic categories extend the vendor scope in memory. A dynamic
+       name with no static category object is materialised here with its own name
+       as the only keyword, so the matcher can propose it during export. */
+    const dynamicCats = kanjoDynamicCategoryObjects(vendor);
+    if (dynamicCats.length) {
+        const knownIds = new Set(allowedCats.map((cat) => cat.id));
+        dynamicCats.forEach((entry) => {
+            if (!entry || !entry.id || knownIds.has(entry.id)) return;
+            knownIds.add(entry.id);
+            allowedCats = allowedCats.concat([{ id: entry.id, name: entry.name, keywords: [entry.name] }]);
+        });
+    }
     /* Scope by ID, NOT by name: a name like "حلويات" exists in several verticals,
        so a name set would leak every duplicate back into this vendor's matcher. */
     const allowedIds = new Set(allowedCats.map((cat) => cat.id));
@@ -6453,7 +6479,13 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     const ranked = [];
     if (haystack) {
         const matches = [];
-        KANJO_CATEGORIES_BY_SPECIFICITY.forEach(({ cat, canonical }) => {
+        /* Dynamic categories are appended after the static specificity view with
+           a higher canonical index, so an equal-position tie always favours the
+           static catalogue and a dynamic hit only wins on merit. */
+        const dynamicCandidates = allowedCats
+            .filter((cat) => !KANJO_STATIC_CATEGORY_IDS.has(cat.id))
+            .map((cat, i) => ({ cat, canonical: KANJO_PRODUCT_CATEGORIES.length + i }));
+        KANJO_CATEGORIES_BY_SPECIFICITY.concat(dynamicCandidates).forEach(({ cat, canonical }) => {
             if (!allowedIds.has(cat.id)) return;
             const info = kanjoCategoryMatchInfo(cat, haystack, kanjoQemaCategoryAliasKeywords(cat.name));
             if (info) matches.push({
@@ -7532,6 +7564,12 @@ window.exportKanjoExcel = async (options) => {
         return;
     }
     try {
+        /* Ensure the CSV-synced dynamic taxonomy is merged in memory before the
+           matcher runs. Idempotent: the underlying document is read ONCE per
+           session (ZERO reads after boot). */
+        if (window.KanjoDynamicCategories && typeof window.KanjoDynamicCategories.load === 'function') {
+            try { await window.KanjoDynamicCategories.load(); } catch (_) { /* static fallback */ }
+        }
         /* "تصدير جميع المنتجات (شامل قيد المراجعة)" toggle, read from the export
            modal unless a caller overrides it via options. Checking the box itself
            never queries; the source is the in-memory cache (a single REST read is

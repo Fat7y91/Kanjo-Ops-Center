@@ -95,6 +95,34 @@
         return { all, categories, variants, byCategoryName, byVariantName, byVariantNameAttr, firstCategory };
     };
 
+    /* Extend a template's category lookup with the CSV-synced dynamic categories
+       for this vendor. A name already present in the template's `_lookups` always
+       wins; a dynamic entry is only a fallback so a freshly-synced category is
+       recognised without regenerating the workbook. Mutates `lookups` in place. */
+    const applyDynamicLookups = (lookups, vendorType) => {
+        if (!lookups || !lookups.byCategoryName) return;
+        const provider = (typeof window !== 'undefined' && window.KanjoDynamicCategories) || null;
+        if (!provider || typeof provider.entriesForVendor !== 'function') return;
+        let entries = [];
+        try { entries = provider.entriesForVendor(vendorType) || []; } catch (_) { return; }
+        entries.forEach((entry) => {
+            if (!entry || !entry.id || !entry.name) return;
+            const nk = normKey(entry.name);
+            if (!nk || lookups.byCategoryName.has(nk)) return;
+            const parsed = {
+                id: 'ID:' + entry.id,
+                name: entry.name,
+                full: 'ID:' + entry.id + ' | ' + entry.name,
+                attr: 0,
+                isVariant: false,
+                dynamic: true
+            };
+            lookups.byCategoryName.set(nk, parsed);
+            lookups.categories.push(parsed);
+            lookups.all.push(parsed);
+        });
+    };
+
     /* Generic -> brand spelling bridge reused from the app's SMART_ALIASES
        (e.g. "ميرندا" -> "صودا"), applied ONLY when the template has no literal
        entry, then resolution falls back to the template's first valid category. */
@@ -439,7 +467,16 @@
         }
 
         filtered = filtered.map((p) => api.withNormalizedText(p));
+        /* Merge the CSV-synced dynamic taxonomy (read ONCE per session) before
+           matching, then extend this template's category lookup with its entries
+           for the merchant's vendor so a new category resolves without an audit. */
+        if (window.KanjoDynamicCategories && typeof window.KanjoDynamicCategories.load === 'function') {
+            try { await window.KanjoDynamicCategories.load(); } catch (_) { /* static fallback */ }
+        }
         const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || o.vendorType || '').trim();
+        const exportVendorType = String(o.vendorType || vendorTypeOf(filtered[0]) || '').trim();
+        applyDynamicLookups(lookups, exportVendorType);
+        setActiveTemplate(file.name, lookups);
         const evaluations = filtered.map((p) => ({ product: p, match: api.matchProductCategory(p, vendorTypeOf(p)) }));
         /* Assigned category cell per row: explicit audit selection wins, then the
            matcher/stored/learned decision (same precedence as the normal export). */
@@ -584,6 +621,7 @@
     window.KanjoTemplateExport = {
         parseIdToken: parseIdToken,
         extractLookups: extractLookups,
+        applyDynamicLookups: applyDynamicLookups,
         resolveCategory: resolveCategory,
         remapVariantCell: remapVariantCell,
         buildColumnMap: buildColumnMap,
