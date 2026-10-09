@@ -2568,19 +2568,45 @@ window.toggleCatalogMyProductsWidget = () => {
     }
 };
 
-const catalogGroupMerchantKey = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim() || 'تاجر غير معروف';
+/* SSOT resolver: the Merchant Profile Card owns the current display name,
+   stored in the merchant directory (`window.merchantsById`, keyed by the
+   immutable merchantId). Products stamp a `merchantName` that goes stale the
+   moment a merchant is renamed, so display/grouping/export must resolve the
+   LIVE name from the directory instead of trusting the stamped copy. Pure
+   in-memory Map lookup — zero Firestore reads. Falls back to the stamped name
+   when the directory has not loaded or the row predates the merchantId
+   migration. */
+const catalogResolveMerchantName = (p) => {
+    const stamped = String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
+    const merchantId = String((p && (p.merchantId || p.merchant_id)) || '').trim();
+    if (merchantId && window.merchantsById && typeof window.merchantsById.get === 'function') {
+        const rec = window.merchantsById.get(merchantId);
+        const recName = rec && String(rec.name || '').trim();
+        if (recName) return window.getBaseName ? window.getBaseName(recName) : recName;
+    }
+    return stamped;
+};
+
+const catalogGroupMerchantKey = (p) => catalogResolveMerchantName(p) || 'تاجر غير معروف';
 
 const groupCatalogProductsByMerchant = (products) => {
-    const grouped = {};
+    /* Bucket by the immutable merchantId when present so a rename can never
+       split or duplicate a merchant's folder; fall back to the resolved name
+       for legacy rows that predate the merchantId migration. The group's
+       display name is always the live directory name. */
+    const grouped = new Map();
     (products || []).forEach((p) => {
-        const key = catalogGroupMerchantKey(p);
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(p);
+        const merchantId = String((p && (p.merchantId || p.merchant_id)) || '').trim();
+        const merchantName = catalogResolveMerchantName(p) || 'تاجر غير معروف';
+        const key = merchantId ? 'id:' + merchantId : 'name:' + merchantName;
+        let group = grouped.get(key);
+        if (!group) {
+            group = { merchantId, merchantName, products: [] };
+            grouped.set(key, group);
+        }
+        group.products.push(p);
     });
-    return Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar')).map((merchantName) => ({
-        merchantName,
-        products: grouped[merchantName]
-    }));
+    return Array.from(grouped.values()).sort((a, b) => a.merchantName.localeCompare(b.merchantName, 'ar'));
 };
 
 window.toggleCatalogGroupedAccordion = (elId, event) => {
@@ -2793,9 +2819,18 @@ window.openCatalogAudit = () => {
     }
 };
 
-const catalogMerchantLogoUrl = (merchantName) => {
+const catalogMerchantLogoUrl = (merchantName, merchantId) => {
     const name = String(merchantName || '').trim();
-    if (!name || !Array.isArray(window.allTasksCache)) return '';
+    if (!Array.isArray(window.allTasksCache)) return '';
+    /* Prefer the immutable merchantId: tasks rewrite their `name` on every
+       rename but keep their merchantId forever, so an id match survives renames
+       (this is what previously made a renamed merchant's logo vanish). */
+    const mid = String(merchantId || '').trim();
+    if (mid) {
+        const byId = window.allTasksCache.find((t) => t && t.merchantLogo && String(t.merchantId || t.merchant_id || '') === mid);
+        if (byId) return String(byId.merchantLogo);
+    }
+    if (!name) return '';
     const getBase = window.getBaseName;
     const baseName = getBase ? getBase(name) : name;
     const logoTask = window.allTasksCache.find((t) => {
@@ -2821,7 +2856,7 @@ const renderCatalogMerchantFolderCard = (group) => {
     const name = catalogEscapeHtml(group.merchantName);
     const encoded = encodeURIComponent(group.merchantName).replace(/'/g, '%27');
     const counts = catalogProductStatusCounts(group.products);
-    const logo = catalogMerchantLogoUrl(group.merchantName);
+    const logo = catalogMerchantLogoUrl(group.merchantName, group.merchantId);
     const logoHtml = logo
         ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" decoding="async" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
         : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
@@ -4860,7 +4895,10 @@ const fetchDoneCatalogProducts = async () => {
     return items;
 };
 
-const catalogProductMerchantName = (p) => String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
+/* Resolve to the live directory name (SSOT) so a renamed merchant shows its new
+   name everywhere — leaderboard folders, the "Export Products" dropdown and the
+   export filter all share this one resolver. */
+const catalogProductMerchantName = (p) => catalogResolveMerchantName(p) || String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
 
 /* Full-catalog source for the "include pending" export. Cache-first (a checked
    box never queries); one REST read — then the SDK — is only issued on the
