@@ -1059,9 +1059,14 @@ window.blackBoxSetAction = (value) => {
 };
 
 window.blackBoxSetUser = (value) => {
-    auditState.filterUser = String(value || '');
+    const who = String(value || '');
+    auditState.filterUser = who;
     auditState.visibleCount = auditState.pageSize;
-    auditRenderBlackBox();
+    /* A specific user triggers a targeted server-side query (equality + newest
+       first + limit 50) so their older history is not masked by the global
+       page; "all users" reverts to the default global 300 window (cache-first). */
+    auditState.loaded = false;
+    window.openBlackBox(false);
 };
 
 window.blackBoxToggleReconstructed = (checked) => {
@@ -1078,6 +1083,9 @@ const AUDIT_ENTRIES_CACHE_TTL = 60 * 1000;
    time, so fetching the most recent entries with an ordered + limited query is
    both cheaper and more useful than paging the entire collection. */
 const AUDIT_ENTRIES_LIMIT = 300;
+/* Hard cap for a single-user history query. Deliberately small: it only needs
+   the user's most recent activity, so reads stay negligible. */
+const AUDIT_USER_ENTRY_LIMIT = 50;
 
 /* Field mask for the Black Box log rows: exactly the fields the viewer,
    filters and entity-preview links read (see auditRenderBlackBox /
@@ -1089,8 +1097,30 @@ const AUDIT_ENTRY_FIELDS = [
     'description', 'collection', 'source'
 ];
 
-const auditLoadEntries = async (force) => {
+const auditLoadEntries = async (force, user) => {
     if (!window.kanjoRest) return [];
+    const who = String(user || '').trim();
+    /* Targeted, cost-bounded query for one user's history: a server-side
+       equality filter (`userName == who`) + newest-first + a hard limit of 50,
+       with the same field mask, so older activity is not masked by the global
+       page. Falls through to the global window if the query helper (or the
+       required composite index) is unavailable, so the viewer never breaks. */
+    if (who && typeof window.kanjoRest.runQuery === 'function') {
+        const userLoader = () => window.kanjoRest.runQuery(
+            AUDIT_COLLECTION,
+            [['userName', '==', who]],
+            AUDIT_USER_ENTRY_LIMIT,
+            {
+                orderBy: [{ field: 'timestamp', direction: 'DESCENDING' }],
+                select: AUDIT_ENTRY_FIELDS
+            }
+        );
+        try {
+            return await window.kanjoCache.get(AUDIT_ENTRIES_CACHE_KEY + ':user:' + who, AUDIT_ENTRIES_CACHE_TTL, userLoader, !!force);
+        } catch (err) {
+            console.warn('[audit] user-scoped query failed; falling back to the global page:', err);
+        }
+    }
     /* Preferred path: ordered (timestamp DESC) + limited query. Falls back to a
        single bounded page only if the query helper is unavailable. */
     let loader = null;
@@ -1135,7 +1165,7 @@ window.openBlackBox = async (force) => {
     const list = document.getElementById('blackBoxList');
     if (list) list.innerHTML = '<div class="text-center py-12 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><div>جاري تحميل السجل...</div></div>';
     try {
-        const rows = await auditLoadEntries(!!force);
+        const rows = await auditLoadEntries(!!force, auditState.filterUser);
         auditState.entries = (rows || []).sort((a, b) => {
             const da = (auditToDate(a.timestamp) || auditToDate(a.ts) || new Date(0)).getTime();
             const db = (auditToDate(b.timestamp) || auditToDate(b.ts) || new Date(0)).getTime();
@@ -1144,8 +1174,10 @@ window.openBlackBox = async (force) => {
         auditState.loaded = true;
         auditBumpDataVersion();
         /* When the log is empty (fresh collection) fall back to the retrospective
-           view so the Black Box is never a blank screen. */
-        if (!auditState.entries.length) {
+           view so the Black Box is never a blank screen. Skipped while a single
+           user is selected: their empty result must not trigger the heavy
+           merchant_products scan. */
+        if (!auditState.entries.length && !String(auditState.filterUser || '').trim()) {
             try {
                 auditState.reconstructed = await auditCollectReconstructed();
                 auditBumpDataVersion();
