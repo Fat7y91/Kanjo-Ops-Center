@@ -215,6 +215,19 @@ service cloud.firestore {
         && (legacy() || canUsePayrollConfig());
     }
 
+    // System configuration (`system_config`). Currently holds the single
+    // `dynamic_taxonomy` document written by the export modal's CSV sync: the
+    // aggregated category table keyed by vendor_type. READ: any signed-in
+    // session (the export pipeline hydrates its in-memory dictionary from it on
+    // boot; category names are not sensitive). WRITE: the catalog admins who
+    // own the upload UI (admin/founder/Ops Manager), with the same
+    // migration-window escape hatch every other collection above relies on so
+    // deploying this file can never lock the operator out before enrollment.
+    match /system_config/{docId} {
+      allow read: if isSignedIn();
+      allow write: if legacy() || isPrivileged() || isOpsManager();
+    }
+
     // Moderation bin for archived/wrong reports — Operations Manager + admins.
     match /archivedReports/{docId} {
       allow read, write: if legacy() || isManagerViewer();
