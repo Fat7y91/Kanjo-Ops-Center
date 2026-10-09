@@ -107,15 +107,19 @@
         return key ? aliases[key] : '';
     };
 
-    /* Resolve an assigned category cell to the template's permitted IDs:
-       exact name hit first, alias bridge second, first valid category on miss.
-       Multiple categories are always joined with "; " as the importer expects. */
+    /* Resolve an assigned category cell to THIS template's permitted IDs:
+       exact name hit first, alias bridge second. STRICT by design — a name with
+       no entry in the template's `_lookups` resolves to '' (never a silent
+       fallback to `firstCategory`). The caller treats '' as "needs audit" and
+       routes the product through the interactive category modal, so the workbook
+       can never contain a random or guessed category. Multiple categories are
+       always joined with "; " as the importer expects. */
     const resolveCategory = (lookups, assigned) => {
         const names = String(assigned == null ? '' : assigned)
             .split(/[;,]/)
             .map(nameFromValue)
             .filter(Boolean);
-        if (!names.length) return lookups.firstCategory || '';
+        if (!names.length) return '';
         const out = [];
         const seen = new Set();
         names.forEach((name) => {
@@ -124,14 +128,13 @@
                 const bridged = bridgeCategoryName(name);
                 if (bridged) entry = lookups.byCategoryName.get(normKey(bridged));
             }
-            if (!entry && lookups.categories.length) entry = lookups.categories[0];
             if (!entry) return;
             const key = normKey(entry.name);
             if (seen.has(key)) return;
             seen.add(key);
             out.push(entry.full);
         });
-        return out.length ? out.join('; ') : (lookups.firstCategory || '');
+        return out.join('; ');
     };
 
     /* Remap a variant attribute VALUE cell (carries an ATTR:<group> marker) to
@@ -438,50 +441,102 @@
         filtered = filtered.map((p) => api.withNormalizedText(p));
         const vendorTypeOf = (p) => String((p && (p.category || p.vendor_type || p.vendorType)) || o.vendorType || '').trim();
         const evaluations = filtered.map((p) => ({ product: p, match: api.matchProductCategory(p, vendorTypeOf(p)) }));
-        const selections = {};
+        /* Assigned category cell per row: explicit audit selection wins, then the
+           matcher/stored/learned decision (same precedence as the normal export). */
+        const assignedFor = (product, match, selection) => (typeof api.assignedFor === 'function'
+            ? api.assignedFor(product, match, selection)
+            : (match && match.status === 'matched' ? String(match.category || '') : ''));
         const categoryResolver = (vendorType, assigned) => resolveCategory(lookups, assigned);
-        const built = await api.buildExportRows(evaluations, selections, undefined, { categoryResolver });
 
-        (built.variantRows || []).forEach((row) => {
-            for (let i = 1; i <= 4; i++) {
-                const nameKey = 'attribute_' + i + '_name';
-                const valueKey = 'attribute_' + i + '_value';
-                if (row[nameKey]) row[nameKey] = remapVariantCell(lookups, row[nameKey]);
-                if (row[valueKey]) row[valueKey] = remapVariantCell(lookups, row[valueKey]);
+        /* Builds the workbook from a (possibly audit-populated) selection map.
+           STRICT: every row's category MUST resolve to an ID present in this
+           template's `_lookups`. There is no silent fallback to a default/blank
+           category — an unresolvable row aborts with a precise message. */
+        const finish = async (selected) => {
+            const selections = selected || {};
+            const unresolved = evaluations.filter((e) => !categoryResolver(
+                vendorTypeOf(e.product),
+                assignedFor(e.product, e.match, selections[String((e.product && e.product.id) || '')])
+            ));
+            if (unresolved.length) {
+                const labels = unresolved.map((e) => String((e.product && (e.product.name_ar || e.product.name_en)) || (e.product && e.product.id) || '')).filter(Boolean);
+                throw new Error('التصنيفات التالية غير موجودة في ورقة _lookups بقالب التاجر ('
+                    + unresolved.length + ' منتج). أضفها إلى القالب ثم أعد المحاولة: '
+                    + labels.slice(0, 5).join('، ') + (labels.length > 5 ? ' …' : ''));
             }
-        });
+            const built = await api.buildExportRows(evaluations, selections, undefined, { categoryResolver });
 
-        const productsAoa = readAoa(productsSheet);
-        const variantsAoa = readAoa(variantsSheet);
-        const productsHeader = findHeaderRow(productsAoa, ['sku', 'product_key', 'name_ar', 'category', 'product_type']);
-        const variantsHeader = findHeaderRow(variantsAoa, ['variant_sku', 'product_key', 'attribute_1_name', 'price']);
-        const productsMap = buildColumnMap(productsAoa[productsHeader]);
-        const variantsMap = buildColumnMap(variantsAoa[variantsHeader]);
-        if (!Object.keys(productsMap).length) throw new Error('تعذر مطابقة أعمدة ورقة Products مع القالب');
-        if (!Object.keys(variantsMap).length) throw new Error('تعذر مطابقة أعمدة ورقة Variants مع القالب');
+            (built.variantRows || []).forEach((row) => {
+                for (let i = 1; i <= 4; i++) {
+                    const nameKey = 'attribute_' + i + '_name';
+                    const valueKey = 'attribute_' + i + '_value';
+                    if (row[nameKey]) row[nameKey] = remapVariantCell(lookups, row[nameKey]);
+                    if (row[valueKey]) row[valueKey] = remapVariantCell(lookups, row[valueKey]);
+                }
+            });
 
-        writeRowsIntoSheet(XLSX, workbook.Sheets[productsSheet], productsHeader, productsMap, built.productRows);
-        writeRowsIntoSheet(XLSX, workbook.Sheets[variantsSheet], variantsHeader, variantsMap, built.variantRows);
+            const productsAoa = readAoa(productsSheet);
+            const variantsAoa = readAoa(variantsSheet);
+            const productsHeader = findHeaderRow(productsAoa, ['sku', 'product_key', 'name_ar', 'category', 'product_type']);
+            const variantsHeader = findHeaderRow(variantsAoa, ['variant_sku', 'product_key', 'attribute_1_name', 'price']);
+            const productsMap = buildColumnMap(productsAoa[productsHeader]);
+            const variantsMap = buildColumnMap(variantsAoa[variantsHeader]);
+            if (!Object.keys(productsMap).length) throw new Error('تعذر مطابقة أعمدة ورقة Products مع القالب');
+            if (!Object.keys(variantsMap).length) throw new Error('تعذر مطابقة أعمدة ورقة Variants مع القالب');
 
-        /* Purge template placeholder/example rows from secondary sheets that
-           received no real data for this vendor (ZERO reads; in-memory only), so
-           strict validation never reports "product_key must reference a product
-           row" against a dummy example we did not write. */
-        if (!(built.variantRows || []).length) {
-            purgeDataRows(XLSX, workbook.Sheets[variantsSheet], variantsHeader);
+            writeRowsIntoSheet(XLSX, workbook.Sheets[productsSheet], productsHeader, productsMap, built.productRows);
+            writeRowsIntoSheet(XLSX, workbook.Sheets[variantsSheet], variantsHeader, variantsMap, built.variantRows);
+
+            /* Purge template placeholder/example rows from secondary sheets that
+               received no real data for this vendor (ZERO reads; in-memory only), so
+               strict validation never reports "product_key must reference a product
+               row" against a dummy example we did not write. */
+            if (!(built.variantRows || []).length) {
+                purgeDataRows(XLSX, workbook.Sheets[variantsSheet], variantsHeader);
+            }
+            if (additionsSheet) {
+                const additionsHeader = findGenericHeaderRow(readAoa(additionsSheet));
+                purgeDataRows(XLSX, workbook.Sheets[additionsSheet], additionsHeader);
+            }
+
+            const out = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
+            const blob = new Blob([out], { type: MIME_XLSX });
+            const merchantName = String(o.merchantName || (filtered[0] && api.merchantNameOf(filtered[0])) || '').trim();
+            const fileName = templateOutputName(file.name, merchantName);
+            triggerDownload(blob, fileName);
+            toast('تم تعبئة قالب التاجر (' + built.productRows.length + ' منتج / ' + built.variantRows.length + ' متغير)');
+            return { fileName: fileName, productCount: built.productRows.length, variantCount: built.variantRows.length, lookups: lookups };
+        };
+
+        /* STRICT GATE: any row the matcher cannot resolve to a category that
+           exists in THIS template routes through the SAME interactive audit modal
+           the normal export uses, BEFORE any workbook is produced. We never guess
+           and never leave a blank cell. Cancelling the modal simply produces no
+           file (the operator retries). */
+        const needingAudit = evaluations.filter((e) => !categoryResolver(
+            vendorTypeOf(e.product),
+            assignedFor(e.product, e.match, undefined)
+        ));
+        if (needingAudit.length) {
+            if (typeof api.openCategoryAudit !== 'function') {
+                throw new Error('تعذّر فتح نافذة مراجعة التصنيفات. يرجى تصنيف ' + needingAudit.length + ' منتج يدوياً قبل تعبئة القالب.');
+            }
+            api.openCategoryAudit(
+                needingAudit.map((e) => ({ product: e.product, vendorType: vendorTypeOf(e.product) })),
+                (picked) => {
+                    finish(picked || {}).catch((err) => {
+                        console.error('[templateExport] audited build failed:', err);
+                        if (typeof window.Swal === 'object' && window.Swal && typeof window.Swal.fire === 'function') {
+                            window.Swal.fire({ icon: 'error', title: 'فشل تعبئة القالب', html: String((err && err.message) || err), confirmButtonText: 'حسناً', confirmButtonColor: '#230535' });
+                        } else {
+                            toast(String((err && err.message) || err), false);
+                        }
+                    });
+                }
+            );
+            return { fileName: '', productCount: 0, variantCount: 0, pendingAudit: needingAudit.length, lookups: lookups };
         }
-        if (additionsSheet) {
-            const additionsHeader = findGenericHeaderRow(readAoa(additionsSheet));
-            purgeDataRows(XLSX, workbook.Sheets[additionsSheet], additionsHeader);
-        }
-
-        const out = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });
-        const blob = new Blob([out], { type: MIME_XLSX });
-        const merchantName = String(o.merchantName || (filtered[0] && api.merchantNameOf(filtered[0])) || '').trim();
-        const fileName = templateOutputName(file.name, merchantName);
-        triggerDownload(blob, fileName);
-        toast('تم تعبئة قالب التاجر (' + built.productRows.length + ' منتج / ' + built.variantRows.length + ' متغير)');
-        return { fileName: fileName, productCount: built.productRows.length, variantCount: built.variantRows.length, lookups: lookups };
+        return finish({});
     };
 
     /* DOM wiring for the export modal's template button/input. Guarded so the

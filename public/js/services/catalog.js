@@ -5222,6 +5222,12 @@ const KANJO_CATEGORY_SYNONYMS = {
     'مشروبات': ['عصير', 'صاروخ', 'سموزي', 'ميلك شيك', 'بيبسي', 'كانز', 'مياه', 'قهوة', 'شاي'],
     'كرسبي': ['بانيه', 'زنجر', 'كريسبي', 'كرسبي', 'ستربس', 'دجاج مقلي', 'بروست'],
     'طواجن': ['طاجن'],
+    /* Perfume vertical (ID:112 "العطور", cosmetics vendor). The canonical name
+       alone never appears on a real product name, so common Egyptian trade words
+       (عطر/برفان/مسك/بخور/كولونيا/تواليت/بارفام) and the Latin "perfume"/"edp"
+       are added as synonyms. Kept ID-scoped, so they can never leak the perfume
+       category into a non-cosmetics vendor. */
+    'العطور': ['عطر', 'برفان', 'مسك', 'بخور', 'perfume', 'edp', 'بارفام', 'تواليت', 'كولونيا'],
     /* Alias list: every misspelling the reps actually type still routes to the
        ساندوتشات category (ID:4 restaurant / ID:54 other) even before the export
        normalizer rewrites the sheet text. */
@@ -8845,6 +8851,12 @@ window.addEventListener('keydown', (ev) => {
     fetchDoneProducts: () => fetchDoneCatalogProducts(),
     merchantNameOf: (product) => catalogProductMerchantName(product),
     resolveVendorType: (vendorType) => kanjoQemaResolveVendorType(vendorType),
+    /* Assigned category cell for a row (explicit selection > stored/learned >
+       matcher), and the shared interactive audit modal, so the isolated template
+       filler can gate unmapped products through the exact same UI the normal
+       export uses (`exportDoneCatalogProducts`) instead of guessing. */
+    assignedFor: (product, match, selection) => kanjoQemaAssignedFor(product, match, selection),
+    openCategoryAudit: (items, onConfirm) => window.openKanjoCategoryAuditModal(items, onConfirm),
     fuzzyLevenshtein: (a, b) => kanjoFuzzyLevenshtein(a, b),
     fuzzySimilarity: (a, b) => kanjoFuzzySimilarity(a, b),
     fuzzyBest: (query, candidates, opts) => kanjoFuzzyBest(query, candidates, opts),
