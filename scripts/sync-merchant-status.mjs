@@ -13,6 +13,9 @@
    Derived fields written onto `merchants/{id}`:
      contractStatus : 'final' | 'vip' | ''
      productCount   : number of `merchant_products` mapped to the merchant
+     primaryCategory: the vendor's business category (from tasks.cat), e.g.
+                      "🍔 مطاعم وكافيهات"; the portal only strips the emoji for
+                      display. Empty when the source task carries none.
      contractStatusSyncedAt : server write time
 
    Contracted merchants that have no merchant document yet (e.g. fresh VIP
@@ -78,8 +81,9 @@ const main = async () => {
     if (existing) {
       if (status === 'final') existing.status = 'final';
       if (!existing.merchantId && t.merchantId) existing.merchantId = t.merchantId;
+      if (!existing.cat && t.cat) existing.cat = String(t.cat).trim();
     } else {
-      contracted.set(base, { merchantId: t.merchantId || '', name: base, status });
+      contracted.set(base, { merchantId: t.merchantId || '', name: base, status, cat: t.cat ? String(t.cat).trim() : '' });
     }
   });
   const contractedIds = new Set(
@@ -129,8 +133,9 @@ const main = async () => {
       const m = doc.data() || {};
       const mid = String(m.merchantId || doc.id);
       const count = productCount.get(mid) || 0;
-      if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count) {
-        write(doc.ref, { contractStatus: c.status, productCount: count, contractStatusSyncedAt: new Date() });
+      const cat = c.cat || '';
+      if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count || String(m.primaryCategory || '') !== cat) {
+        write(doc.ref, { contractStatus: c.status, productCount: count, primaryCategory: cat, contractStatusSyncedAt: new Date() });
         summary.updated += 1;
         if (opCount >= 480) await flush();
       }
@@ -144,6 +149,7 @@ const main = async () => {
         name: c.name,
         contractStatus: c.status,
         productCount: count,
+        primaryCategory: c.cat || '',
         contractStatusSyncedAt: new Date(),
         createdAt: new Date()
       });

@@ -94,13 +94,24 @@
             background: #fff; border: 1px solid rgba(35,5,53,.12); flex: none;
             -webkit-user-drag: none; user-select: none; pointer-events: none;
         }
+        .vendor-cat {
+            color: rgba(75,0,130,.55); font-size: 11px; font-weight: 700;
+            margin-top: .15rem; line-height: 1.3;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
 
         /* ── Grouped vendor sections ─────────────────────────────────────── */
         .vendor-section-head {
             display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+            width: 100%; text-align: right; font: inherit; cursor: pointer;
             margin-bottom: 1rem; padding: .75rem 1rem; border-radius: 1rem;
             background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+            transition: background .18s ease, border-color .18s ease;
         }
+        .vendor-section-head:hover { background: rgba(255,255,255,.09); }
+        .vendor-section-chevron { color: rgba(226,213,255,.7); font-size: .85rem; transition: transform .25s ease; }
+        .vendor-section.collapsed .vendor-section-chevron { transform: rotate(-90deg); }
+        .vendor-section.collapsed .vendor-grid { display: none; }
         .vendor-section-icon {
             width: 40px; height: 40px; border-radius: .75rem; flex: none;
             display: flex; align-items: center; justify-content: center;

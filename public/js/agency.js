@@ -29,7 +29,7 @@ const PRODUCT_FIELDS = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
     'variations', 'status'
 ];
-const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo', 'contractStatus', 'productCount'];
+const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo', 'contractStatus', 'productCount', 'primaryCategory'];
 
 /* Contracted vendors only — the portal deliberately hides every merchant that
    is not a final agreement ('final') or an under-contract VIP pre-agreement
@@ -150,6 +150,15 @@ const vendorLogoSrc = (v) => {
     return driveThumb(raw, 'w200');
 };
 
+/* Vendor business category subtitle. `primaryCategory` is denormalized from the
+   source task's `cat` field (e.g. "🍔 مطاعم وكافيهات"); we only strip the leading
+   emoji/symbols for a clean muted label. Empty values render nothing. */
+const vendorCategoryLabel = (v) => {
+    const raw = String((v && v.primaryCategory) || '').trim();
+    if (!raw) return '';
+    return raw.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+};
+
 /* ── Session / login ─────────────────────────────────────────────────────── */
 const resetIdleTimer = () => {
     clearTimeout(idleTimer);
@@ -223,6 +232,7 @@ const vendorCardHtml = (v) => {
     const display = v.name || v.id;
     const color = monogramColor(display);
     const initials = escapeHtml(monogram(display));
+    const cat = vendorCategoryLabel(v);
     const src = vendorLogoSrc(v);
     const media = src
         ? `<img class="monogram-logo" src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';var m=this.nextElementSibling;if(m){m.style.display='flex';}"><div class="monogram" style="display:none;background:${color}">${initials}</div>`
@@ -231,6 +241,7 @@ const vendorCardHtml = (v) => {
     <button type="button" class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
         ${media}
         <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.4rem] px-1">${name}</div>
+        ${cat ? `<div class="vendor-cat">${escapeHtml(cat)}</div>` : ''}
         <div class="text-[11px] text-purple-500/80 mt-1 font-semibold">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></div>
     </button>`;
 };
@@ -247,20 +258,29 @@ const renderVendors = () => {
     }
     $('vendorsEmpty').classList.add('hidden');
     grid.innerHTML = VENDOR_SECTIONS.map((section) => {
-        const items = list.filter(section.match);
+        /* Secondary sort: vendors with a usable logo first, then by name (ar). */
+        const items = list.filter(section.match).sort((a, b) => {
+            const la = vendorLogoSrc(a) ? 1 : 0;
+            const lb = vendorLogoSrc(b) ? 1 : 0;
+            if (la !== lb) return lb - la;
+            return String(a.name).localeCompare(String(b.name), 'ar');
+        });
         if (!items.length) return '';
         return `
         <section class="vendor-section" data-section="${section.key}">
-            <div class="vendor-section-head accent-${section.key}">
+            <button type="button" class="vendor-section-head accent-${section.key}" aria-expanded="true">
                 <div class="flex items-center gap-3 min-w-0">
                     <span class="vendor-section-icon"><i class="fa-solid ${section.icon}"></i></span>
-                    <div class="min-w-0">
+                    <div class="min-w-0 text-right">
                         <h3 class="vendor-section-title">${section.title}</h3>
                         <p class="vendor-section-sub">${section.subtitle}</p>
                     </div>
                 </div>
-                <span class="vendor-section-count">${items.length}</span>
-            </div>
+                <div class="flex items-center gap-2 flex-none">
+                    <span class="vendor-section-count">${items.length}</span>
+                    <i class="fa-solid fa-chevron-down vendor-section-chevron"></i>
+                </div>
+            </button>
             <div class="vendor-grid">${items.map(vendorCardHtml).join('')}</div>
         </section>`;
     }).join('');
@@ -353,7 +373,8 @@ const loadVendors = async () => {
                 name: r.name || r.merchantId || r.id,
                 logoUrl: r.logoUrl || r.logo || '',
                 contractStatus: String(r.contractStatus || ''),
-                productCount: Number(r.productCount) || 0
+                productCount: Number(r.productCount) || 0,
+                primaryCategory: String(r.primaryCategory || '').trim()
             }))
             .filter((v) => v.contractStatus === 'final' || v.contractStatus === 'vip')
             .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
@@ -535,6 +556,13 @@ const bind = () => {
     $('lbClose').addEventListener('click', closeLightbox);
     $('agencyLightbox').addEventListener('click', (e) => { if (e.target === $('agencyLightbox')) closeLightbox(); });
     $('vendorsGrid').addEventListener('click', (e) => {
+        const head = e.target.closest('.vendor-section-head');
+        if (head) {
+            const section = head.closest('.vendor-section');
+            const collapsed = section.classList.toggle('collapsed');
+            head.setAttribute('aria-expanded', String(!collapsed));
+            return;
+        }
         const card = e.target.closest('.vendor-card');
         if (card) selectVendor(card.getAttribute('data-vendor-id'), card.getAttribute('data-vendor-name'));
     });
