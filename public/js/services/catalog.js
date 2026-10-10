@@ -5309,7 +5309,7 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 11 — Hair care */
     'الشعر': ['shampoo', 'شامبو', 'balsam', 'بلسم', 'oil', 'زيت', 'hair', 'henna', 'حنة', 'صبغة', 'شعر', 'conditioner', 'keratin', 'cream', 'tresemme', 'clear', 'sunsilk', 'haircode', 'vatika', 'انبوبه 160مل'],
     /* 12 — Skin care */
-    'البشرة': ['cream', 'cr', 'gream', 'gel', 'lotion', 'ointment', 'oint', 'كريم', 'جل', 'مرهم', 'لوشن', 'مرطب', 'sunscreen', 'sunblock', 'واقي', 'صن بلوك', 'skin', 'face', 'cleanser', 'wash', 'غسول', 'panthenol', 'عناية بالبشرة', 'nivea', 'dove', 'eva', 'betaderm', 'quadriderm', 'fucicort', 'fucidin', 'makeup', 'garnier', 'care', 'روج', 'اظافر', 'أظافر', 'جنتيانا', 'kolagra', 'tbas'],
+    'البشرة': ['cream', 'cr', 'gream', 'gel', 'lotion', 'ointment', 'oint', 'كريم', 'جل', 'مرهم', 'لوشن', 'مرطب', 'sunscreen', 'sunblock', 'واقي', 'صن بلوك', 'skin', 'face', 'cleanser', 'wash', 'غسول', 'panthenol', 'عناية بالبشرة', 'nivea', 'dove', 'eva', 'betaderm', 'quadriderm', 'fucicort', 'fucidin', 'makeup', 'garnier', 'care', 'روج', 'اظافر', 'أظافر', 'جنتيانا', 'kolagra', 'tbas', 'balm'],
     /* 13 — Deodorants */
     'مزيلات': ['roll', 'roll on', 'deodorant', 'رول', 'مزيل عرق', 'axe', 'rexona', 'fa spray', 'nivea roll', 'dove spray', 'fogg', 'spray', 'spry', 'splash', 'بليه', 'ريكسونا'],
     /* 14 — Shaving */
@@ -5330,7 +5330,7 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور', 'لوفة', 'ليفه', 'zeina', 'm5 short', 'm4 - 58', 'قصافه'],
     /* 22 — GENERAL MEDICATIONS — DOSAGE-FORM FALLBACK, EVALUATED LAST. The
        matcher only lets this win when no groups 1..21 class matched. */
-    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'emulsion', 'gran', 'ml', 'mcg', 'gm', 'حبيبات', 'خلات', 'isis', 'مبيعات غير مكودة']
+    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'emulsion', 'gran', 'ml', 'mcg', 'gm', 'حبيبات', 'خلات', 'isis', 'مبيعات غير مكودة', 'ondalenz', 'zovirax', 'proximol', 'uripan', 'urimex', 'urinex', 'vastarel', 'betacor', 'vildagluse', 'erectalis', 'depram', 'venaxan', 'bilichole', 'biolegam', 'dimra', 'diavance', 'ipanten', 'pystinon', 'ezacard', 'spectone', 'candal', 'cipra', 'capoten', 'starkoprex', 'bional', 'elimbosis', 'monomak', 'moxen', 'natrilix', 'ashwagandha', 'lustral', 'enterogermina', 'imodium', 'inderal', 'iruxol', 'isoptin', 'kellagon', 'virecta', 'nanazoxid', 'dilatrol', 'steronate', 'rhinopro', 'ketofan', 'atshi', 'eucarbon', 'alexolyte', 'malcon', 'nerhafluks', 'oponov', 'erectamax', 'perolead', 'flagoshown']
 };
 
 /* The one generic dosage-form fallback. Used by the matcher to demote this
