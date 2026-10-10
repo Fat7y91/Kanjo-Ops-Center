@@ -95,6 +95,35 @@
             -webkit-user-drag: none; user-select: none; pointer-events: none;
         }
 
+        /* ── Grouped vendor sections ─────────────────────────────────────── */
+        .vendor-section-head {
+            display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+            margin-bottom: 1rem; padding: .75rem 1rem; border-radius: 1rem;
+            background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+        }
+        .vendor-section-icon {
+            width: 40px; height: 40px; border-radius: .75rem; flex: none;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 1rem;
+            box-shadow: 0 6px 16px rgba(0,0,0,.25), inset 0 0 0 1px rgba(255,255,255,.18);
+        }
+        .vendor-section-title { color: #fff; font-weight: 900; font-size: 1.05rem; line-height: 1.25; }
+        .vendor-section-sub { color: rgba(226,213,255,.6); font-size: 11px; font-weight: 600; }
+        .vendor-section-count {
+            font-weight: 900; font-size: .8rem; color: #230535; background: var(--brand-gold);
+            border-radius: 999px; padding: .15rem .65rem; min-width: 1.7rem; text-align: center; flex: none;
+        }
+        .vendor-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 1rem; }
+        @media (min-width: 640px) { .vendor-grid { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+        @media (min-width: 768px) { .vendor-grid { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+        @media (min-width: 1280px) { .vendor-grid { grid-template-columns: repeat(5, minmax(0,1fr)); } }
+        .accent-success { border-color: rgba(16,185,129,.38); }
+        .accent-success .vendor-section-icon { background: linear-gradient(135deg,#065F46,#10B981); }
+        .accent-under { border-color: rgba(245,158,11,.38); }
+        .accent-under .vendor-section-icon { background: linear-gradient(135deg,#854D0E,#F59E0B); }
+        .accent-prep { border-color: rgba(124,58,237,.4); }
+        .accent-prep .vendor-section-icon { background: linear-gradient(135deg,#230535,#7C3AED); }
+
         .agency-nav-btn {
             display: flex; align-items: center; gap: .7rem; width: 100%;
             padding: .8rem 1rem; border-radius: .85rem; color: #d8cff0; font-weight: 700;
@@ -197,7 +226,7 @@
                         </div>
                         <span class="chip"><i class="fa-solid fa-store"></i> <span id="vendorsCount">0</span> مورد</span>
                     </div>
-                    <div id="vendorsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+                    <div id="vendorsGrid" class="space-y-8"></div>
                     <div id="vendorsLoading" class="py-16 text-center text-purple-200/60"><i class="fa-solid fa-circle-notch spin text-2xl"></i></div>
                     <div id="vendorsEmpty" class="hidden py-16 text-center text-purple-200/60 font-bold">لا توجد بيانات موردين.</div>
                 </section>

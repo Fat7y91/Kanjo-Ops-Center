@@ -29,7 +29,35 @@ const PRODUCT_FIELDS = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
     'variations', 'status'
 ];
-const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo'];
+const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo', 'contractStatus', 'productCount'];
+
+/* Contracted vendors only — the portal deliberately hides every merchant that
+   is not a final agreement ('final') or an under-contract VIP pre-agreement
+   ('vip'). Status is denormalized onto `merchants.contractStatus` by
+   scripts/sync-merchant-status.mjs, so no operational data is ever read here. */
+const VENDOR_SECTIONS = [
+    {
+        key: 'success',
+        title: 'شركاء النجاح',
+        subtitle: 'تعاقد نهائي · الكتالوج متاح',
+        icon: 'fa-trophy',
+        match: (v) => v.contractStatus === 'final' && v.productCount > 0
+    },
+    {
+        key: 'under',
+        title: 'شركاء تحت التعاقد',
+        subtitle: 'عرض مبدئي · VIP',
+        icon: 'fa-file-signature',
+        match: (v) => v.contractStatus === 'vip'
+    },
+    {
+        key: 'prep',
+        title: 'جاري تجهيز الكتالوج',
+        subtitle: 'تعاقد نهائي · بانتظار المنتجات',
+        icon: 'fa-screwdriver-wrench',
+        match: (v) => v.contractStatus === 'final' && !(v.productCount > 0)
+    }
+];
 
 const state = {
     view: 'vendors',
@@ -190,6 +218,23 @@ const restoreSession = () => {
 };
 
 /* ── Rendering ───────────────────────────────────────────────────────────── */
+const vendorCardHtml = (v) => {
+    const name = escapeHtml(v.name || v.id);
+    const display = v.name || v.id;
+    const color = monogramColor(display);
+    const initials = escapeHtml(monogram(display));
+    const src = vendorLogoSrc(v);
+    const media = src
+        ? `<img class="monogram-logo" src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';var m=this.nextElementSibling;if(m){m.style.display='flex';}"><div class="monogram" style="display:none;background:${color}">${initials}</div>`
+        : `<div class="monogram" style="background:${color}">${initials}</div>`;
+    return `
+    <button type="button" class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
+        ${media}
+        <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.4rem] px-1">${name}</div>
+        <div class="text-[11px] text-purple-500/80 mt-1 font-semibold">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></div>
+    </button>`;
+};
+
 const renderVendors = () => {
     const grid = $('vendorsGrid');
     const list = state.vendors;
@@ -201,21 +246,23 @@ const renderVendors = () => {
         return;
     }
     $('vendorsEmpty').classList.add('hidden');
-    grid.innerHTML = list.map((v) => {
-        const name = escapeHtml(v.name || v.id);
-        const display = v.name || v.id;
-        const color = monogramColor(display);
-        const initials = escapeHtml(monogram(display));
-        const src = vendorLogoSrc(v);
-        const media = src
-            ? `<img class="monogram-logo" src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';var m=this.nextElementSibling;if(m){m.style.display='flex';}"><div class="monogram" style="display:none;background:${color}">${initials}</div>`
-            : `<div class="monogram" style="background:${color}">${initials}</div>`;
+    grid.innerHTML = VENDOR_SECTIONS.map((section) => {
+        const items = list.filter(section.match);
+        if (!items.length) return '';
         return `
-        <button type="button" class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
-            ${media}
-            <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.4rem] px-1">${name}</div>
-            <div class="text-[11px] text-purple-500/80 mt-1 font-semibold">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></div>
-        </button>`;
+        <section class="vendor-section" data-section="${section.key}">
+            <div class="vendor-section-head accent-${section.key}">
+                <div class="flex items-center gap-3 min-w-0">
+                    <span class="vendor-section-icon"><i class="fa-solid ${section.icon}"></i></span>
+                    <div class="min-w-0">
+                        <h3 class="vendor-section-title">${section.title}</h3>
+                        <p class="vendor-section-sub">${section.subtitle}</p>
+                    </div>
+                </div>
+                <span class="vendor-section-count">${items.length}</span>
+            </div>
+            <div class="vendor-grid">${items.map(vendorCardHtml).join('')}</div>
+        </section>`;
     }).join('');
 };
 
@@ -301,7 +348,14 @@ const loadVendors = async () => {
         const rows = await window.kanjoRest.list([VENDORS_COLLECTION], { pageSize: 300, maxPages: 20, select: VENDOR_FIELDS });
         state.vendors = (rows || [])
             .filter((r) => r && (r.name || r.id))
-            .map((r) => ({ id: r.id || r.merchantId, name: r.name || r.merchantId || r.id, logoUrl: r.logoUrl || r.logo || '' }))
+            .map((r) => ({
+                id: r.id || r.merchantId,
+                name: r.name || r.merchantId || r.id,
+                logoUrl: r.logoUrl || r.logo || '',
+                contractStatus: String(r.contractStatus || ''),
+                productCount: Number(r.productCount) || 0
+            }))
+            .filter((v) => v.contractStatus === 'final' || v.contractStatus === 'vip')
             .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
         state.vendorsLoaded = true;
         state.vendorLogos = new Map();

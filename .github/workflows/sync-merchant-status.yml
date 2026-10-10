@@ -1,0 +1,30 @@
+# Denormalizes each merchant's contract status ('final'/'vip') and mapped
+# product count onto the `merchants` collection, so the isolated marketing
+# agency portal can filter and group vendors without reading operational
+# `tasks`. Runs on push to main when the script changes, daily, or manually.
+name: Sync merchant contract status
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/sync-merchant-status.mjs'
+      - '.github/workflows/sync-merchant-status.yml'
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Run merchant status sync
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: node scripts/sync-merchant-status.mjs
