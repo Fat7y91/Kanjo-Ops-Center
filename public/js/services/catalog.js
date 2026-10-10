@@ -5274,31 +5274,31 @@ KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
    "Congestal Syrup" resolves to برد (congestal) and never to أدوية (syrup). */
 const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 1 — Antibiotics */
-    'مضادات': ['augmentin', 'curam', 'hibiotic', 'flumox', 'ceftriaxone', 'cipro', 'zithro', 'xithrone', 'tavanic', 'suprax', 'biotic', 'mycin', 'megamox', 'cef', 'amox', 'floxa', 'zolid', 'مضاد حيوي', 'clindam', 'bacticlor'],
+    'مضادات': ['augmentin', 'curam', 'hibiotic', 'flumox', 'ceftriaxone', 'cipro', 'zithro', 'xithrone', 'tavanic', 'suprax', 'biotic', 'mycin', 'megamox', 'cef', 'amox', 'floxa', 'zolid', 'مضاد حيوي', 'clindam', 'bacticlor', 'macrofuran', 'tarivid', 'azrolid'],
     /* 2 — Stomach & GI */
-    'معدة': ['pantoloc', 'controloc', 'downoprazol', 'omez', 'antinal', 'gastro', 'spasmo', 'colona', 'duspatalin', 'motinorm', 'digest', 'prazole', 'flagyl', 'معدة', 'قولون', 'هضم', 'مغص', 'ezogast', 'nexicure', 'rennie', 'gaviscon'],
+    'معدة': ['pantoloc', 'controloc', 'downoprazol', 'omez', 'antinal', 'gastro', 'spasmo', 'colona', 'duspatalin', 'motinorm', 'digest', 'prazole', 'flagyl', 'معدة', 'قولون', 'هضم', 'مغص', 'ezogast', 'nexicure', 'rennie', 'gaviscon', 'amrizole', 'furazol', 'spasmofree', 'simedill'],
     /* 3 — Painkillers */
-    'مسكنات': ['panadol', 'paramol', 'cetal', 'abimol', 'brufen', 'cataflam', 'voltaren', 'dolphin', 'declophen', 'novalgin', 'megafen', 'flotac', 'مسكن', 'صداع', 'profen', 'coxib', 'migraine', 'aspirin'],
+    'مسكنات': ['panadol', 'paramol', 'cetal', 'abimol', 'brufen', 'cataflam', 'voltaren', 'dolphin', 'declophen', 'novalgin', 'megafen', 'flotac', 'مسكن', 'صداع', 'profen', 'coxib', 'migraine', 'aspirin', 'rivo', 'aspocid', 'celebrex', 'arythrex', 'flexilax'],
     /* 4 — Cold & Cough */
-    'برد': ['congestal', '123', 'cold', 'flu', 'tuss', 'bronch', 'oplex', 'rhin', 'otrivin', 'guava', 'isilin', 'cough', 'كومتركس', 'كونجستال', 'كولد', 'زكام', 'كحة', 'sinus', 'aller', 'rhinex'],
+    'برد': ['congestal', '123', 'cold', 'flu', 'tuss', 'bronch', 'oplex', 'rhin', 'otrivin', 'guava', 'isilin', 'cough', 'كومتركس', 'كونجستال', 'كولد', 'زكام', 'كحة', 'sinus', 'aller', 'rhinex', 'muc', 'mucosol', 'broncho', 'ventolin', 'inhaler', 'vaposol'],
     /* 5 — Allergies */
-    'حساسية': ['zyrtec', 'telfast', 'aerius', 'claritine', 'fenistil', 'hist', 'lerg', 'حساسية', 'cetirizine', 'loratadine', 'allerban'],
+    'حساسية': ['zyrtec', 'telfast', 'aerius', 'claritine', 'fenistil', 'hist', 'lerg', 'حساسية', 'cetirizine', 'loratadine', 'allerban', 'levohistam'],
     /* 6 — Chronic (BP / diabetes / cardiac) */
-    'مزمنة': ['concor', 'amaryl', 'glucophage', 'cidophage', 'diamicron', 'tareg', 'atacand', 'capoten', 'plavix', 'lipanthyl', 'crestor', 'سكر', 'ضغط', 'card', 'vasc', 'diab', 'lip', 'ten'],
+    'مزمنة': ['concor', 'amaryl', 'glucophage', 'cidophage', 'diamicron', 'tareg', 'atacand', 'capoten', 'plavix', 'lipanthyl', 'crestor', 'سكر', 'ضغط', 'card', 'vasc', 'diab', 'lip', 'ten', 'vildagluse', 'zestril', 'mixtard', 'lantus', 'penfill'],
     /* 7 — Eye & Ear drops */
-    'قطرات': ['drops', 'dps', 'eye', 'ear', 'tobradex', 'polyfresh', 'tears', 'opti', 'remowax', 'otal', 'قطرة', 'قطره', 'عين', 'أذن', 'dexatrol', 'systane'],
+    'قطرات': ['drops', 'dps', 'drps', 'eye', 'ear', 'tobradex', 'polyfresh', 'tears', 'opti', 'remowax', 'otal', 'قطرة', 'قطره', 'عين', 'أذن', 'dexatrol', 'systane', 'blink'],
     /* 8 — Vitamins & supplements */
-    'فيتامينات': ['limitless', 'osteocare', 'centrum', 'perfectil', 'kerovit', 'ferosac', 'calcitron', 'vit', 'zinc', 'calc', 'ferro', 'omega', 'فيتامين', 'حديد', 'كالسيوم', 'مكمل', 'iron'],
+    'فيتامينات': ['limitless', 'osteocare', 'centrum', 'perfectil', 'kerovit', 'ferosac', 'calcitron', 'vit', 'zinc', 'calc', 'ferro', 'omega', 'فيتامين', 'حديد', 'كالسيوم', 'مكمل', 'iron', 'cervitam', 'biotin', 'b12'],
     /* 9 — Oral & dental care */
-    'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex'],
+    'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex', 'tantum'],
     /* 10 — Medical supplies */
-    'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات'],
+    'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات', 'ringer', 'pcs', 'pack'],
     /* 11 — Hair care */
-    'الشعر': ['shampoo', 'شامبو', 'balsam', 'بلسم', 'oil', 'زيت', 'hair', 'henna', 'حنة', 'صبغة', 'شعر', 'conditioner', 'keratin', 'cream', 'tresemme', 'clear', 'sunsilk'],
+    'الشعر': ['shampoo', 'شامبو', 'balsam', 'بلسم', 'oil', 'زيت', 'hair', 'henna', 'حنة', 'صبغة', 'شعر', 'conditioner', 'keratin', 'cream', 'tresemme', 'clear', 'sunsilk', 'haircode', 'vatika'],
     /* 12 — Skin care */
-    'البشرة': ['cream', 'gel', 'lotion', 'ointment', 'oint', 'كريم', 'جل', 'مرهم', 'لوشن', 'مرطب', 'sunscreen', 'sunblock', 'واقي', 'صن بلوك', 'skin', 'face', 'cleanser', 'wash', 'غسول', 'panthenol', 'عناية بالبشرة', 'nivea', 'dove', 'eva'],
+    'البشرة': ['cream', 'cr', 'gel', 'lotion', 'ointment', 'oint', 'كريم', 'جل', 'مرهم', 'لوشن', 'مرطب', 'sunscreen', 'sunblock', 'واقي', 'صن بلوك', 'skin', 'face', 'cleanser', 'wash', 'غسول', 'panthenol', 'عناية بالبشرة', 'nivea', 'dove', 'eva', 'betaderm', 'quadriderm', 'fucicort', 'fucidin'],
     /* 13 — Deodorants */
-    'مزيلات': ['roll', 'roll on', 'deodorant', 'رول', 'مزيل عرق', 'axe', 'rexona', 'fa spray', 'nivea roll', 'dove spray', 'fogg', 'spray'],
+    'مزيلات': ['roll', 'roll on', 'deodorant', 'رول', 'مزيل عرق', 'axe', 'rexona', 'fa spray', 'nivea roll', 'dove spray', 'fogg', 'spray', 'splash'],
     /* 14 — Shaving */
     'حلاقة': ['gillette', 'جيليت', 'شفرات', 'امواس', 'lord', 'ماكينة حلاقة', 'shave', 'shaving', 'blade'],
     /* 15 — Antiseptics */
@@ -5308,16 +5308,16 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 17 — Insecticides */
     'مبيدات': ['raid', 'ريد', 'مبيد', 'قاتل حشرات', '55555', 'insect', 'pesticide', 'ناموس', 'ذباب'],
     /* 18 — Diapers */
-    'حفاضات': ['pampers', 'diaper', 'حفاض', 'حفاضات', 'بامبرز', 'molfix', 'babyjoy'],
+    'حفاضات': ['pampers', 'diaper', 'حفاض', 'حفاضات', 'بامبرز', 'molfix', 'babyjoy', 'pufies'],
     /* 19 — Baby care */
-    'الأطفال': ['baby', 'infant', 'inf', 'child', 'milk', 'formula', 'لبن', 'cerelac', 'سيريلاك', 'biberon', 'ببرونه', 'ببرونة', 'رضاعة', 'pacifier', 'سكاته', 'سكاتة', 'عضاضه', 'عضاضة', 'أطفال', 'بيبي', 'نونو', 'kids', 'nestogen', 'nan '],
+    'الأطفال': ['baby', 'infant', 'inf', 'child', 'milk', 'formula', 'لبن', 'cerelac', 'سيريلاك', 'biberon', 'ببرونه', 'ببرونة', 'رضاعة', 'pacifier', 'سكاته', 'سكاتة', 'عضاضه', 'عضاضة', 'أطفال', 'بيبي', 'نونو', 'kids', 'nestogen', 'nan ', 'bebelac'],
     /* 20 — Women's care */
-    'المرأة': ['always', 'sofy', 'freshdays', 'private', 'فوط نسائية', 'نسائي', 'women', 'vaginal', 'ovule', 'gyno', 'feminine'],
+    'المرأة': ['always', 'sofy', 'freshdays', 'private', 'فوط نسائية', 'نسائي', 'women', 'vaginal', 'ovule', 'gyno', 'feminine', 'molped'],
     /* 21 — Personal care */
     'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور'],
     /* 22 — GENERAL MEDICATIONS — DOSAGE-FORM FALLBACK, EVALUATED LAST. The
        matcher only lets this win when no groups 1..21 class matched. */
-    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس']
+    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'solution', 'emulsion', 'gran']
 };
 
 /* The one generic dosage-form fallback. Used by the matcher to demote this
