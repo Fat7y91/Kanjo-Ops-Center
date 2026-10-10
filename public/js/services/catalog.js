@@ -5305,7 +5305,7 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 9 — Oral & dental care */
     'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex', 'tantum'],
     /* 10 — Medical supplies */
-    'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات', 'ringer', 'pcs', 'pack', 'condom', 'condoms', 'واقي ذكري', 'silkplast', 'latex gloves', 'حلق طبى', 'بلستر', 'رباط ضاغط'],
+    'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات', 'ringer', 'pcs', 'pack', 'condom', 'condoms', 'واقي ذكري', 'silkplast', 'latex gloves', 'حلق طبى', 'بلستر', 'رباط ضاغط', 'ماسك تنفس'],
     /* 11 — Hair care */
     'الشعر': ['shampoo', 'شامبو', 'balsam', 'بلسم', 'oil', 'زيت', 'hair', 'henna', 'حنة', 'صبغة', 'شعر', 'conditioner', 'keratin', 'cream', 'tresemme', 'clear', 'sunsilk', 'haircode', 'vatika', 'انبوبه 160مل'],
     /* 12 — Skin care */
@@ -5327,10 +5327,10 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 20 — Women's care */
     'المرأة': ['always', 'sofy', 'freshdays', 'private', 'فوط نسائية', 'نسائي', 'women', 'vaginal', 'ovule', 'gyno', 'feminine', 'molped'],
     /* 21 — Personal care */
-    'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور', 'لوفة', 'ليفه', 'zeina', 'm5 short', 'm4 - 58'],
+    'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور', 'لوفة', 'ليفه', 'zeina', 'm5 short', 'm4 - 58', 'قصافه'],
     /* 22 — GENERAL MEDICATIONS — DOSAGE-FORM FALLBACK, EVALUATED LAST. The
        matcher only lets this win when no groups 1..21 class matched. */
-    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'emulsion', 'gran', 'ml', 'mcg', 'gm', 'حبيبات', 'خلات', 'isis']
+    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'emulsion', 'gran', 'ml', 'mcg', 'gm', 'حبيبات', 'خلات', 'isis', 'مبيعات غير مكودة']
 };
 
 /* The one generic dosage-form fallback. Used by the matcher to demote this
