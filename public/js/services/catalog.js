@@ -144,10 +144,15 @@ window.isProductAuditUser = () => !!(window.currentUser && window.currentUser.ro
    founder and contract managers). */
 window.isKanjoAdminAccount = () => !!(window.currentUser && window.currentUser.role === 'admin');
 
-/* Who may open the product editor: field reps (their own drafts/list), the
-   audit team (any product) and the admin account 8492 (any product). Adding a
-   product is gated separately below. */
-window.canEditCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+/* Who may open the product editor. PEER REVIEW (2026): every authenticated
+   session may edit any product (to fix typos/categories across colleagues'
+   items), so this is now open to all signed-in users. The role helpers are kept
+   in the disjunction purely for readability — `window.currentUser` already
+   covers reps, the audit team and the admin account 8492. Creating a product
+   stays gated separately by canCreateCatalogProducts below, and the deletion
+   request → approval workflow is untouched. */
+window.canEditCatalogProducts = () => !!window.currentUser
+    || window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
 
 /* Who may ADD a brand-new product. Field reps keep their existing create flow;
    the product-audit team and the admin account 8492 may add products for any

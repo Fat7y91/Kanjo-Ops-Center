@@ -236,18 +236,20 @@ service cloud.firestore {
     // Product catalog pipeline (`merchant_products`).
     // Auth is anonymous + PIN; reps and data-entry create/edit catalog rows and
     // KPI managers read the full set. Reads stay open to any signed-in session so
-    // the catalog reference pickers keep working. Creating/editing is limited to
-    // the catalog roles plus the product-audit team: the audit team may ADD new
-    // items (for merchants missed by the agents) and UPDATE any item (names,
-    // typos, variants, prices, descriptions, images), but is deliberately absent
-    // from the delete rule below: create + read + update only, never delete.
+    // the catalog reference pickers keep working.
+    // PEER REVIEW (2026): any signed-in session may UPDATE any product so reps can
+    // fix typos/categories on colleagues' items. Creating is limited to the
+    // catalog roles plus the product-audit team, and DELETION is deliberately
+    // unchanged (privileged / Ops Manager / data-entry only) so the
+    // agent-request → Mahmoud-approval delete workflow keeps working exactly as
+    // before.
     match /merchant_products/{docId} {
       function canWriteCatalog() {
         return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
       }
       allow read: if isSignedIn();
       allow create: if legacy() || canWriteCatalog() || isProductAudit();
-      allow update: if legacy() || canWriteCatalog() || isProductAudit();
+      allow update: if isSignedIn();
       allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
     }
 
