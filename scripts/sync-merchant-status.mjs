@@ -16,6 +16,9 @@
      primaryCategory: the vendor's business category (from tasks.cat), e.g.
                       "🍔 مطاعم وكافيهات"; the portal only strips the emoji for
                       display. Empty when the source task carries none.
+     logoUrl        : the vendor logo (tasks.merchantLogo, a Base64 data URI).
+                      Denormalized here because the agency role cannot read
+                      `tasks`. Empty when the source task carries none.
      contractStatusSyncedAt : server write time
 
    Contracted merchants that have no merchant document yet (e.g. fresh VIP
@@ -44,6 +47,20 @@ const getBaseName = (name) => {
 };
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
+
+/* Keep merchant documents well under Firestore's ~1 MiB document limit: a logo
+   larger than this is skipped (that vendor simply keeps its monogram fallback)
+   rather than risking a failed batch commit. */
+const MAX_LOGO_CHARS = 900000;
+const pickLogo = (value) => {
+  const logo = value ? String(value) : '';
+  if (!logo) return '';
+  if (logo.length > MAX_LOGO_CHARS) {
+    console.warn(`[skip] merchantLogo too large (${logo.length} chars > ${MAX_LOGO_CHARS})`);
+    return '';
+  }
+  return logo;
+};
 
 let adminApp;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -82,8 +99,15 @@ const main = async () => {
       if (status === 'final') existing.status = 'final';
       if (!existing.merchantId && t.merchantId) existing.merchantId = t.merchantId;
       if (!existing.cat && t.cat) existing.cat = String(t.cat).trim();
+      if (!existing.logo && t.merchantLogo) existing.logo = pickLogo(t.merchantLogo);
     } else {
-      contracted.set(base, { merchantId: t.merchantId || '', name: base, status, cat: t.cat ? String(t.cat).trim() : '' });
+      contracted.set(base, {
+        merchantId: t.merchantId || '',
+        name: base,
+        status,
+        cat: t.cat ? String(t.cat).trim() : '',
+        logo: pickLogo(t.merchantLogo)
+      });
     }
   });
   const contractedIds = new Set(
@@ -134,8 +158,9 @@ const main = async () => {
       const mid = String(m.merchantId || doc.id);
       const count = productCount.get(mid) || 0;
       const cat = c.cat || '';
-      if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count || String(m.primaryCategory || '') !== cat) {
-        write(doc.ref, { contractStatus: c.status, productCount: count, primaryCategory: cat, contractStatusSyncedAt: new Date() });
+      const logo = c.logo || '';
+      if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count || String(m.primaryCategory || '') !== cat || String(m.logoUrl || '') !== logo) {
+        write(doc.ref, { contractStatus: c.status, productCount: count, primaryCategory: cat, logoUrl: logo, contractStatusSyncedAt: new Date() });
         summary.updated += 1;
         if (opCount >= 480) await flush();
       }
@@ -150,6 +175,7 @@ const main = async () => {
         contractStatus: c.status,
         productCount: count,
         primaryCategory: c.cat || '',
+        logoUrl: c.logo || '',
         contractStatusSyncedAt: new Date(),
         createdAt: new Date()
       });
