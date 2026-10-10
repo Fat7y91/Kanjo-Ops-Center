@@ -5287,23 +5287,23 @@ KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
    "Congestal Syrup" resolves to برد (congestal) and never to أدوية (syrup). */
 const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 1 — Antibiotics */
-    'مضادات': ['augmentin', 'curam', 'hibiotic', 'flumox', 'ceftriaxone', 'cipro', 'zithro', 'xithrone', 'tavanic', 'suprax', 'biotic', 'mycin', 'megamox', 'cef', 'amox', 'floxa', 'zolid', 'مضاد حيوي', 'clindam', 'bacticlor', 'macrofuran', 'tarivid', 'azrolid'],
+    'مضادات': ['augmentin', 'curam', 'hibiotic', 'flumox', 'ceftriaxone', 'cipro', 'zithro', 'xithrone', 'tavanic', 'suprax', 'biotic', 'mycin', 'megamox', 'cef', 'amox', 'floxa', 'zolid', 'مضاد حيوي', 'clindam', 'bacticlor', 'macrofuran', 'tarivid', 'azrolid', 'terramycin', 'zithromax', 'ciproquin', 'vigamox', 'cefotax', 'cefaxone', 'sulbacef', 'gastrobiotic', 'amrizole', 'ciprofar', 'garamycin', 'ibiamox', 'zithrokan', 'vibramycin', 'klacid', 'rame-zithro'],
     /* 2 — Stomach & GI */
-    'معدة': ['pantoloc', 'controloc', 'downoprazol', 'omez', 'antinal', 'gastro', 'spasmo', 'colona', 'duspatalin', 'motinorm', 'digest', 'prazole', 'flagyl', 'معدة', 'قولون', 'هضم', 'مغص', 'ezogast', 'nexicure', 'rennie', 'gaviscon', 'amrizole', 'furazol', 'spasmofree', 'simedill', 'fawar fruit'],
+    'معدة': ['pantoloc', 'controloc', 'downoprazol', 'omez', 'antinal', 'gastro', 'spasmo', 'colona', 'duspatalin', 'motinorm', 'digest', 'prazole', 'flagyl', 'معدة', 'قولون', 'هضم', 'مغص', 'ezogast', 'nexicure', 'rennie', 'gaviscon', 'amrizole', 'furazol', 'spasmofree', 'simedill', 'fawar fruit', 'eucarbon', 'digestozyme', 'limitless digest'],
     /* 3 — Painkillers */
-    'مسكنات': ['panadol', 'paramol', 'cetal', 'abimol', 'brufen', 'cataflam', 'voltaren', 'dolphin', 'declophen', 'novalgin', 'megafen', 'flotac', 'مسكن', 'صداع', 'profen', 'coxib', 'migraine', 'aspirin', 'rivo', 'aspocid', 'celebrex', 'arythrex', 'flexilax'],
+    'مسكنات': ['panadol', 'paramol', 'cetal', 'abimol', 'brufen', 'cataflam', 'voltaren', 'dolphin', 'declophen', 'novalgin', 'megafen', 'flotac', 'مسكن', 'صداع', 'profen', 'coxib', 'migraine', 'aspirin', 'rivo', 'aspocid', 'celebrex', 'arythrex', 'flexilax', 'dimra', 'dolo-d', 'algason', 'recoxibright', 'anselacox'],
     /* 4 — Cold & Cough */
-    'برد': ['congestal', '123', 'cold', 'flu', 'tuss', 'bronch', 'oplex', 'rhin', 'otrivin', 'guava', 'isilin', 'cough', 'كومتركس', 'كونجستال', 'كولد', 'زكام', 'كحة', 'sinus', 'aller', 'rhinex', 'muc', 'mucosol', 'broncho', 'ventolin', 'inhaler', 'vaposol', 'pectol', 'pulmicort', 'ns'],
+    'برد': ['congestal', '123', 'cold', 'flu', 'tuss', 'bronch', 'oplex', 'rhin', 'otrivin', 'guava', 'isilin', 'cough', 'كومتركس', 'كونجستال', 'كولد', 'زكام', 'كحة', 'sinus', 'aller', 'rhinex', 'muc', 'mucosol', 'broncho', 'ventolin', 'inhaler', 'vaposol', 'pectol', 'pulmicort', 'ns', 'quibron-t', 'atrovent', 'deltarhino', 'azelast', 'aironyl', '123 syrup', 'four vent', 'tussistop', 'broncho-vaxom', 'vental', 'acetylcistein', 'ivyrospan', 'ventocough', 'budelizer', 'c-retard', 'omit-c', 'rhinopro', 'xilone', 'mucotec', 'forbudes', 'norhinose', 'muco', 'ticanase', 'ivy zad'],
     /* 5 — Allergies */
     'حساسية': ['zyrtec', 'telfast', 'aerius', 'claritine', 'fenistil', 'hist', 'lerg', 'حساسية', 'cetirizine', 'loratadine', 'allerban', 'levohistam'],
     /* 6 — Chronic (BP / diabetes / cardiac) */
-    'مزمنة': ['concor', 'amaryl', 'glucophage', 'cidophage', 'diamicron', 'tareg', 'atacand', 'capoten', 'plavix', 'lipanthyl', 'crestor', 'سكر', 'ضغط', 'card', 'vasc', 'diab', 'lip', 'ten', 'vildagluse', 'zestril', 'mixtard', 'lantus', 'penfill'],
+    'مزمنة': ['concor', 'amaryl', 'glucophage', 'cidophage', 'diamicron', 'tareg', 'atacand', 'capoten', 'plavix', 'lipanthyl', 'crestor', 'سكر', 'ضغط', 'card', 'vasc', 'diab', 'lip', 'ten', 'vildagluse', 'zestril', 'mixtard', 'lantus', 'penfill', 'uripan', 'tritace', 'vastarel', 'betacor', 'pletaal', 'diavance', 'blokium', 'ezacard', 'ator', 'candalkan', 'cardura', 'bisocard', 'carvid', 'depakine', 'feburic', 'examide', 'exforge', 'glimet', 'nevilob', 'procoralan', 'alkapress', 'aldomet', 'rytmonorm', 'galvus'],
     /* 7 — Eye & Ear drops */
-    'قطرات': ['drops', 'dps', 'drps', 'dp', 'eye', 'ear', 'tobradex', 'polyfresh', 'tears', 'opti', 'remowax', 'otal', 'قطرة', 'قطره', 'عين', 'أذن', 'dexatrol', 'systane', 'blink', 'renu', 'solution', 'lens'],
+    'قطرات': ['drops', 'dps', 'drps', 'dp', 'eye', 'ear', 'tobradex', 'polyfresh', 'tears', 'opti', 'remowax', 'otal', 'قطرة', 'قطره', 'عين', 'أذن', 'dexatrol', 'systane', 'blink', 'renu', 'solution', 'lens', 'otocort', 'plegica', 'benox', 'nystatin', 'hyfresh', 'tymer', 'dexaflox', 'dexatobrin', 'optipred', 'tears guard', 'clearest', 'twinzol', 'lubrivisc', 'alphanova', 'cornetears', 'orchadexoline', 'cyanaro', 'lacritears'],
     /* 8 — Vitamins & supplements */
-    'فيتامينات': ['limitless', 'osteocare', 'centrum', 'perfectil', 'kerovit', 'ferosac', 'calcitron', 'vit', 'zinc', 'calc', 'ferro', 'omega', 'فيتامين', 'حديد', 'كالسيوم', 'مكمل', 'iron', 'cervitam', 'biotin', 'b12', 'egy growth powder', 'sideral folic'],
+    'فيتامينات': ['limitless', 'osteocare', 'centrum', 'perfectil', 'kerovit', 'ferosac', 'calcitron', 'vit', 'zinc', 'calc', 'ferro', 'omega', 'فيتامين', 'حديد', 'كالسيوم', 'مكمل', 'iron', 'cervitam', 'biotin', 'b12', 'egy growth powder', 'sideral folic', 'cal-mag', 'calcium d3f', 'folicap', 'centravita', 'deltavit', 'ferrofol', 'l-carnitine', 'cobal-f', 'depovit', 'bone care', 'maxical', 'c zinc', 'davalindi'],
     /* 9 — Oral & dental care */
-    'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex', 'tantum'],
+    'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex', 'tantum', 'tantum verde', 'glotek', 'pongeel'],
     /* 10 — Medical supplies */
     'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات', 'ringer', 'pcs', 'pack', 'condom', 'condoms', 'واقي ذكري', 'silkplast', 'latex gloves', 'حلق طبى', 'بلستر', 'رباط ضاغط', 'ماسك تنفس'],
     /* 11 — Hair care */
@@ -5323,11 +5323,11 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
     /* 18 — Diapers */
     'حفاضات': ['pampers', 'diaper', 'حفاض', 'حفاضات', 'بامبرز', 'molfix', 'babyjoy', 'pufies'],
     /* 19 — Baby care */
-    'الأطفال': ['baby', 'infant', 'inf', 'child', 'milk', 'formula', 'لبن', 'cerelac', 'سيريلاك', 'biberon', 'ببرونه', 'ببرونة', 'رضاعة', 'pacifier', 'سكاته', 'سكاتة', 'عضاضه', 'عضاضة', 'أطفال', 'بيبي', 'نونو', 'kids', 'nestogen', 'nan ', 'bebelac', 'algo skata', 'breast pump'],
+    'الأطفال': ['baby', 'infant', 'inf', 'child', 'milk', 'formula', 'لبن', 'cerelac', 'سيريلاك', 'biberon', 'ببرونه', 'ببرونة', 'رضاعة', 'pacifier', 'سكاته', 'سكاتة', 'عضاضه', 'عضاضة', 'أطفال', 'بيبي', 'نونو', 'kids', 'nestogen', 'nan ', 'bebelac', 'algo skata', 'breast pump', 'hero baby'],
     /* 20 — Women's care */
     'المرأة': ['always', 'sofy', 'freshdays', 'private', 'فوط نسائية', 'نسائي', 'women', 'vaginal', 'ovule', 'gyno', 'feminine', 'molped'],
     /* 21 — Personal care */
-    'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور', 'لوفة', 'ليفه', 'zeina', 'm5 short', 'm4 - 58', 'قصافه'],
+    'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور', 'لوفة', 'ليفه', 'zeina', 'm5 short', 'm4 - 58', 'قصافه', 'لوكس صابون', 'lux shower', 'granet', 'bembo'],
     /* 22 — GENERAL MEDICATIONS — DOSAGE-FORM FALLBACK, EVALUATED LAST. The
        matcher only lets this win when no groups 1..21 class matched. */
     'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس', 'films', 'emulsion', 'gran', 'ml', 'mcg', 'gm', 'حبيبات', 'خلات', 'isis', 'مبيعات غير مكودة', 'ondalenz', 'zovirax', 'proximol', 'uripan', 'urimex', 'urinex', 'vastarel', 'betacor', 'vildagluse', 'erectalis', 'depram', 'venaxan', 'bilichole', 'biolegam', 'dimra', 'diavance', 'ipanten', 'pystinon', 'ezacard', 'spectone', 'candal', 'cipra', 'capoten', 'starkoprex', 'bional', 'elimbosis', 'monomak', 'moxen', 'natrilix', 'ashwagandha', 'lustral', 'enterogermina', 'imodium', 'inderal', 'iruxol', 'isoptin', 'kellagon', 'virecta', 'nanazoxid', 'dilatrol', 'steronate', 'rhinopro', 'ketofan', 'atshi', 'eucarbon', 'alexolyte', 'malcon', 'nerhafluks', 'oponov', 'erectamax', 'perolead', 'flagoshown']
@@ -6288,6 +6288,45 @@ const kanjoCategoryMatchInfo = (cat, haystack, extraKeywords) => {
     return { pos: best, defining, boundary, specificity, nameLen: nameNorm.length };
 };
 
+/* Latin brand fragments that must match at a word START to avoid colliding with
+   common English words in product descriptions (e.g. 'ator' inside
+   "anti-inflammatory"). Every other dictionary token keeps the standard
+   whole-word-for-short / sub-string-for-long behaviour. */
+const KANJO_PHARMACY_PREFIX_ONLY = new Set(['ator']);
+
+/* Match info for the pharmacy brand dictionary. Same aggregation as
+   kanjoCategoryMatchInfo over cat.keywords + aliasKeywords + dictKeywords, with
+   the KANJO_PHARMACY_PREFIX_ONLY guard applied to the listed fragment(s). */
+const kanjoPharmacyMatchInfo = (cat, haystack, extraKeywords, dictKeywords) => {
+    const nameNorm = normalizeArabic(cat.name);
+    let best = -1;
+    let defining = false;
+    let boundary = false;
+    let specificity = 0;
+    const dictSet = new Set((dictKeywords || []).map((k) => normalizeArabic(k)));
+    const base = (extraKeywords && extraKeywords.length) ? cat.keywords.concat(extraKeywords) : cat.keywords;
+    const terms = (dictKeywords && dictKeywords.length) ? base.concat(dictKeywords) : base;
+    terms.forEach((keyword) => {
+        const kw = normalizeArabic(keyword);
+        if (!kw) return;
+        let hitIndex = -1;
+        if (dictSet.has(kw) && KANJO_PHARMACY_PREFIX_ONLY.has(kw)) {
+            const esc = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const m = new RegExp('(^|[^\\p{L}\\p{N}])' + esc, 'u').exec(haystack);
+            if (m) hitIndex = m.index + m[1].length;
+        } else if (kanjoCategoryKeywordHit(keyword, haystack)) {
+            hitIndex = haystack.indexOf(kw);
+        }
+        if (hitIndex === -1) return;
+        if (nameNorm === kw || nameNorm.indexOf(kw) === 0) defining = true;
+        if (kanjoCategoryBoundaryHit(kw, haystack)) boundary = true;
+        specificity = Math.max(specificity, kw.length);
+        if (best === -1 || hitIndex < best) best = hitIndex;
+    });
+    if (best === -1) return null;
+    return { pos: best, defining, boundary, specificity, nameLen: nameNorm.length };
+};
+
 /* Categories ordered most-specific first (longest normalized name first) for
    matching. The canonical KANJO_PRODUCT_CATEGORIES order/id is preserved for the
    exported value and the audit dropdown; only the matcher walks this view. */
@@ -6514,6 +6553,9 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         ? vendorType
         : ((product && (product.category || product.vendor_type || product.vendorType)) || '')).trim();
     const rule = kanjoVendorRuleFor(vendor);
+    /* Pharmacy scope is resolved ONCE here so the strict 'أدوية' fallback at the
+       tail of the matcher can reuse it (the haystack branch consumes it too). */
+    const pharmacyScope = kanjoQemaResolveVendorType(vendor) === 'صيدلية';
     let allowedCats = kanjoVendorAllowedCategories(vendor);
     /* STRICT vendor scope (ZERO reads): the candidate set is EXACTLY the keys of
        DASHBOARD_CATEGORIES_TAXONOMY[<vendor_type>]. Each key is resolved back to
@@ -6579,10 +6621,9 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     const ranked = [];
     if (haystack) {
         const matches = [];
-        /* The aggressive pharmacy dictionary is applied ONLY inside the pharmacy
-           vendor scope, so its brand/generic tokens can never leak into another
-           vertical (several category names are shared). */
-        const pharmacyScope = kanjoQemaResolveVendorType(vendor) === 'صيدلية';
+        /* The aggressive pharmacy dictionary (KANJO_PHARMACY_CATEGORY_SYNONYMS) is
+           applied ONLY inside the pharmacy vendor scope, so its brand/generic
+           tokens can never leak into another vertical (several names are shared). */
         /* Dynamic categories are appended after the static specificity view with
            a higher canonical index, so an equal-position tie always favours the
            static catalogue and a dynamic hit only wins on merit. */
@@ -6591,11 +6632,13 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             .map((cat, i) => ({ cat, canonical: KANJO_PRODUCT_CATEGORIES.length + i }));
         KANJO_CATEGORIES_BY_SPECIFICITY.concat(dynamicCandidates).forEach(({ cat, canonical }) => {
             if (!allowedIds.has(cat.id)) return;
-            let extraKeywords = kanjoQemaCategoryAliasKeywords(cat.name);
-            if (pharmacyScope && KANJO_PHARMACY_CATEGORY_SYNONYMS[cat.name]) {
-                extraKeywords = extraKeywords.concat(KANJO_PHARMACY_CATEGORY_SYNONYMS[cat.name]);
-            }
-            const info = kanjoCategoryMatchInfo(cat, haystack, extraKeywords);
+            const aliasKeywords = kanjoQemaCategoryAliasKeywords(cat.name);
+            /* Pharmacy brand dictionary is applied only inside the pharmacy scope
+               and only via the guarded matcher (see kanjoPharmacyMatchInfo). */
+            const dictKeywords = pharmacyScope ? (KANJO_PHARMACY_CATEGORY_SYNONYMS[cat.name] || null) : null;
+            const info = dictKeywords
+                ? kanjoPharmacyMatchInfo(cat, haystack, aliasKeywords, dictKeywords)
+                : kanjoCategoryMatchInfo(cat, haystack, aliasKeywords);
             if (info) matches.push({
                 cat,
                 canonical,
@@ -6682,6 +6725,17 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     if (haystack && haystack.indexOf(normalizeArabic('وجبة')) !== -1 && meal) {
         const value = kanjoCategoryValue(meal);
         return { status: 'matched', category: value, categories: [value], primary: value, options: [] };
+    }
+    /* STRICT pharmacy fallback: inside the pharmacy scope ANY product left
+       unmatched by every specific class (and by 'أدوية' itself) MUST default to
+       the generic 'أدوية' category (ID 194) instead of staying unmapped. */
+    if (pharmacyScope) {
+        const generic = allowedCats.find((cat) => cat.id === 194 && normalizeArabic(cat.name) === normalizeArabic(KANJO_PHARMACY_GENERIC_CATEGORY))
+            || allowedCats.find((cat) => normalizeArabic(cat.name) === normalizeArabic(KANJO_PHARMACY_GENERIC_CATEGORY));
+        if (generic) {
+            const value = kanjoCategoryValue(generic);
+            return { status: 'matched', category: value, categories: [value], primary: value, options: [] };
+        }
     }
     return { status: 'unmapped', category: '', categories: [], primary: '', options: [] };
 };
