@@ -5166,6 +5166,24 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 183, name: 'عصير', keywords: ['عصير', 'juice'], parent: { id: 176, name: 'مشروبات' } },
     { id: 184, name: 'آيس كوفي', keywords: ['آيس كوفي', 'ايس كوفي', 'iced coffee', 'ice coffee'], parent: { id: 176, name: 'مشروبات' } },
     { id: 185, name: 'فرابيه', keywords: ['فرابيه', 'فرابية', 'frappe'], parent: { id: 176, name: 'مشروبات' } },
+    /* ===== Pharmacy / personal-care vertical (IDs from the Kanjo dashboard,
+       2026). The 12 scopes added to DASHBOARD_CATEGORIES_TAXONOMY["صيدلية"] whose
+       names had no static entry yet. Their rich keyword families live in
+       KANJO_PHARMACY_CATEGORY_SYNONYMS and are applied ONLY to a pharmacy vendor,
+       so a name shared with another scope (الشعر/البشرة/مستلزمات/معطرات) can never
+       leak these tokens into a non-pharmacy export. Only the canonical name is a
+       static keyword here; the synonyms are vendor-scoped at match time. */
+    { id: 194, name: 'أدوية', keywords: ['أدوية'] },
+    { id: 195, name: 'برد', keywords: ['برد'] },
+    { id: 196, name: 'معدة', keywords: ['معدة'] },
+    { id: 197, name: 'مضادات', keywords: ['مضادات'] },
+    { id: 198, name: 'حساسية', keywords: ['حساسية'] },
+    { id: 199, name: 'قطرات', keywords: ['قطرات'] },
+    { id: 200, name: 'أسنان', keywords: ['أسنان'] },
+    { id: 201, name: 'مزيلات', keywords: ['مزيلات'] },
+    { id: 202, name: 'حلاقة', keywords: ['حلاقة'] },
+    { id: 203, name: 'مطهرات', keywords: ['مطهرات'] },
+    { id: 205, name: 'مبيدات', keywords: ['مبيدات'] },
 ];
 
 /* ===== Export text normalization (auto-typo correction) =====
@@ -5240,6 +5258,71 @@ KANJO_PRODUCT_CATEGORIES.forEach((cat) => {
         if (cat.keywords.indexOf(token) === -1) cat.keywords.push(token);
     });
 });
+
+/* ===== Pharmacy / personal-care keyword dictionary (2026) =====
+   Aggressive auto-classification for pharmacy + personal-care items onto the 24
+   pharmacy-scope categories. Keys are the EXACT dashboard category NAMES. Unlike
+   KANJO_CATEGORY_SYNONYMS this dictionary is NOT merged into the global keyword
+   lists: several names (الشعر/البشرة/مستلزمات/معطرات) exist under other vendor
+   scopes too, so merging would leak pharmacy tokens (syringe, gauze, shampoo…)
+   into a non-pharmacy export. kanjoMatchProductCategory applies these families
+   ONLY when the resolved vendor type is the pharmacy scope.
+
+   ORDERING IS THE WHOLE POINT: groups 1..21 are specific therapeutic/product
+   classes and MUST outrank the broad dosage-form fallback 'أدوية' (group 22).
+   The matcher only falls back to 'أدوية' when no specific class matched, so
+   "Congestal Syrup" resolves to برد (congestal) and never to أدوية (syrup). */
+const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
+    /* 1 — Antibiotics */
+    'مضادات': ['augmentin', 'curam', 'hibiotic', 'flumox', 'ceftriaxone', 'cipro', 'zithro', 'xithrone', 'tavanic', 'suprax', 'biotic', 'mycin', 'megamox', 'cef', 'amox', 'floxa', 'zolid', 'مضاد حيوي', 'clindam', 'bacticlor'],
+    /* 2 — Stomach & GI */
+    'معدة': ['pantoloc', 'controloc', 'downoprazol', 'omez', 'antinal', 'gastro', 'spasmo', 'colona', 'duspatalin', 'motinorm', 'digest', 'prazole', 'flagyl', 'معدة', 'قولون', 'هضم', 'مغص', 'ezogast', 'nexicure', 'rennie', 'gaviscon'],
+    /* 3 — Painkillers */
+    'مسكنات': ['panadol', 'paramol', 'cetal', 'abimol', 'brufen', 'cataflam', 'voltaren', 'dolphin', 'declophen', 'novalgin', 'megafen', 'flotac', 'مسكن', 'صداع', 'profen', 'coxib', 'migraine', 'aspirin'],
+    /* 4 — Cold & Cough */
+    'برد': ['congestal', '123', 'cold', 'flu', 'tuss', 'bronch', 'oplex', 'rhin', 'otrivin', 'guava', 'isilin', 'cough', 'كومتركس', 'كونجستال', 'كولد', 'زكام', 'كحة', 'sinus', 'aller', 'rhinex'],
+    /* 5 — Allergies */
+    'حساسية': ['zyrtec', 'telfast', 'aerius', 'claritine', 'fenistil', 'hist', 'lerg', 'حساسية', 'cetirizine', 'loratadine', 'allerban'],
+    /* 6 — Chronic (BP / diabetes / cardiac) */
+    'مزمنة': ['concor', 'amaryl', 'glucophage', 'cidophage', 'diamicron', 'tareg', 'atacand', 'capoten', 'plavix', 'lipanthyl', 'crestor', 'سكر', 'ضغط', 'card', 'vasc', 'diab', 'lip', 'ten'],
+    /* 7 — Eye & Ear drops */
+    'قطرات': ['drops', 'dps', 'eye', 'ear', 'tobradex', 'polyfresh', 'tears', 'opti', 'remowax', 'otal', 'قطرة', 'قطره', 'عين', 'أذن', 'dexatrol', 'systane'],
+    /* 8 — Vitamins & supplements */
+    'فيتامينات': ['limitless', 'osteocare', 'centrum', 'perfectil', 'kerovit', 'ferosac', 'calcitron', 'vit', 'zinc', 'calc', 'ferro', 'omega', 'فيتامين', 'حديد', 'كالسيوم', 'مكمل', 'iron'],
+    /* 9 — Oral & dental care */
+    'أسنان': ['toothpaste', 'brush', 'mouthwash', 'm.w', 'floss', 'معجون', 'فرشاة', 'فرشه', 'مضمضة', 'غسول فم', 'خلة', 'closeup', 'signal', 'sensodyne', 'dental', 'depurdent', 'gum', 'orovex'],
+    /* 10 — Medical supplies */
+    'مستلزمات': ['سرنجه', 'سرنجة', 'شاش', 'قطن', 'بلاستر', 'لاصق', 'لزقه', 'لصقه', 'كانيولا', 'غيار', 'جهاز', 'كمامه', 'كمامة', 'كيس', 'جوانتي', 'قفازات', 'دعامة', 'حزام', 'حامل', 'رافع', 'محلول ملح', 'ماء مقطر', 'مذيب', 'مزيب', 'ترمو', 'ترمومتر', 'سن قلم', 'ملقاط', 'sling', 'support', 'syringe', 'cotton', 'gauze', 'plaster', 'mask', 'مستلزمات'],
+    /* 11 — Hair care */
+    'الشعر': ['shampoo', 'شامبو', 'balsam', 'بلسم', 'oil', 'زيت', 'hair', 'henna', 'حنة', 'صبغة', 'شعر', 'conditioner', 'keratin', 'cream', 'tresemme', 'clear', 'sunsilk'],
+    /* 12 — Skin care */
+    'البشرة': ['cream', 'gel', 'lotion', 'ointment', 'oint', 'كريم', 'جل', 'مرهم', 'لوشن', 'مرطب', 'sunscreen', 'sunblock', 'واقي', 'صن بلوك', 'skin', 'face', 'cleanser', 'wash', 'غسول', 'panthenol', 'عناية بالبشرة', 'nivea', 'dove', 'eva'],
+    /* 13 — Deodorants */
+    'مزيلات': ['roll', 'roll on', 'deodorant', 'رول', 'مزيل عرق', 'axe', 'rexona', 'fa spray', 'nivea roll', 'dove spray', 'fogg', 'spray'],
+    /* 14 — Shaving */
+    'حلاقة': ['gillette', 'جيليت', 'شفرات', 'امواس', 'lord', 'ماكينة حلاقة', 'shave', 'shaving', 'blade'],
+    /* 15 — Antiseptics */
+    'مطهرات': ['betadine', 'بتادين', 'alcohol', 'كحول', 'dettol', 'ديتول', 'antiseptic', 'مطهر', 'تعقيم'],
+    /* 16 — Fresheners */
+    'معطرات': ['frida', 'فريدا', 'معطر', 'room spray', 'freshener', 'scent', 'مخمرية', 'بخور'],
+    /* 17 — Insecticides */
+    'مبيدات': ['raid', 'ريد', 'مبيد', 'قاتل حشرات', '55555', 'insect', 'pesticide', 'ناموس', 'ذباب'],
+    /* 18 — Diapers */
+    'حفاضات': ['pampers', 'diaper', 'حفاض', 'حفاضات', 'بامبرز', 'molfix', 'babyjoy'],
+    /* 19 — Baby care */
+    'الأطفال': ['baby', 'infant', 'inf', 'child', 'milk', 'formula', 'لبن', 'cerelac', 'سيريلاك', 'biberon', 'ببرونه', 'ببرونة', 'رضاعة', 'pacifier', 'سكاته', 'سكاتة', 'عضاضه', 'عضاضة', 'أطفال', 'بيبي', 'نونو', 'kids', 'nestogen', 'nan '],
+    /* 20 — Women's care */
+    'المرأة': ['always', 'sofy', 'freshdays', 'private', 'فوط نسائية', 'نسائي', 'women', 'vaginal', 'ovule', 'gyno', 'feminine'],
+    /* 21 — Personal care */
+    'الشخصية': ['soap', 'صابون', 'صابونة', 'wipes', 'wipe', 'مناديل', 'pads', 'pad', 'فوط', 'shower', 'شاور'],
+    /* 22 — GENERAL MEDICATIONS — DOSAGE-FORM FALLBACK, EVALUATED LAST. The
+       matcher only lets this win when no groups 1..21 class matched. */
+    'أدوية': ['tabs', 'tab', 'caps', 'cap', 'syp', 'syr', 'syrup', 'susp', 'amps', 'amp', 'vial', 'supp', 'eff', 'sach', 'sachets', 'اقراص', 'كبسول', 'شراب', 'حقن', 'امبول', 'لبوس', 'فوار', 'اكياس']
+};
+
+/* The one generic dosage-form fallback. Used by the matcher to demote this
+   category below every specific pharmacy class regardless of keyword position. */
+const KANJO_PHARMACY_GENERIC_CATEGORY = 'أدوية';
 
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
 
@@ -6310,7 +6393,11 @@ const KANJO_VENDOR_CATEGORY_RULES = [
     },
     {
         match: ['صيدليات', 'صيدلية', 'pharmacy'],
-        allow: ['الأدوية', 'مسكنات', 'فيتامينات', 'المناعة', 'صحي', 'العناية', 'سبلايز', 'مزمنة', 'المشترك', 'الأم']
+        /* Fallback scope (used only when the dashboard taxonomy is unavailable).
+           Mirrors DASHBOARD_CATEGORIES_TAXONOMY["صيدلية"] including the 2026
+           additions (أدوية/برد/معدة/مضادات/حساسية/قطرات/أسنان/مزيلات/حلاقة/مطهرات/
+           معطرات/مبيدات) so pharmacy matching behaves even without QEMA_TAXONOMY. */
+        allow: ['الأدوية', 'أدوية', 'مسكنات', 'مزمنة', 'فيتامينات', 'المناعة', 'صحي', 'العناية', 'سبلايز', 'المشترك', 'الأم', 'البشرة', 'الشعر', 'حفاضات', 'الأطفال', 'المرأة', 'الشخصية', 'مستلزمات', 'برد', 'معدة', 'مضادات', 'حساسية', 'قطرات', 'أسنان', 'مزيلات', 'حلاقة', 'مطهرات', 'معطرات', 'مبيدات']
     },
     {
         match: ['كوزماتكس', 'عناية شخصية', 'تجميل', 'cosmetic', 'beauty'],
@@ -6479,6 +6566,10 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     const ranked = [];
     if (haystack) {
         const matches = [];
+        /* The aggressive pharmacy dictionary is applied ONLY inside the pharmacy
+           vendor scope, so its brand/generic tokens can never leak into another
+           vertical (several category names are shared). */
+        const pharmacyScope = kanjoQemaResolveVendorType(vendor) === 'صيدلية';
         /* Dynamic categories are appended after the static specificity view with
            a higher canonical index, so an equal-position tie always favours the
            static catalogue and a dynamic hit only wins on merit. */
@@ -6487,7 +6578,11 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             .map((cat, i) => ({ cat, canonical: KANJO_PRODUCT_CATEGORIES.length + i }));
         KANJO_CATEGORIES_BY_SPECIFICITY.concat(dynamicCandidates).forEach(({ cat, canonical }) => {
             if (!allowedIds.has(cat.id)) return;
-            const info = kanjoCategoryMatchInfo(cat, haystack, kanjoQemaCategoryAliasKeywords(cat.name));
+            let extraKeywords = kanjoQemaCategoryAliasKeywords(cat.name);
+            if (pharmacyScope && KANJO_PHARMACY_CATEGORY_SYNONYMS[cat.name]) {
+                extraKeywords = extraKeywords.concat(KANJO_PHARMACY_CATEGORY_SYNONYMS[cat.name]);
+            }
+            const info = kanjoCategoryMatchInfo(cat, haystack, extraKeywords);
             if (info) matches.push({
                 cat,
                 canonical,
@@ -6495,7 +6590,12 @@ const kanjoMatchProductCategory = (product, vendorType) => {
                 defining: info.defining ? 1 : 0,
                 boundary: info.boundary ? 1 : 0,
                 specificity: info.specificity,
-                nameLen: info.nameLen
+                nameLen: info.nameLen,
+                /* Group priority: the generic dosage-form fallback (أدوية) ranks
+                   BELOW every specific pharmacy class, so it can never win just
+                   because its keyword appears earlier/first. Non-pharmacy
+                   categories are all tier 1, so this is inert outside pharmacy. */
+                tier: (pharmacyScope && cat.name === KANJO_PHARMACY_GENERIC_CATEGORY) ? 0 : 1
             });
         });
         if (matches.length) {
@@ -6504,8 +6604,15 @@ const kanjoMatchProductCategory = (product, vendorType) => {
                stronger filling category is present, regardless of position. */
             const SANDWICH_OVERRIDES = ['برجر', 'شاورما', 'حواوشي'];
             const hasFilling = matches.some((m) => SANDWICH_OVERRIDES.indexOf(m.cat.name) !== -1);
-            const pool = (hasFilling ? matches.filter((m) => m.cat.name !== 'ساندوتشات') : matches);
-            const sorted = (pool.length ? pool : matches).slice().sort((a, b) => (a.pos - b.pos)
+            let pool = (hasFilling ? matches.filter((m) => m.cat.name !== 'ساندوتشات') : matches);
+            /* Pharmacy: (أدوية) is a dosage-form FALLBACK, not an additive tag.
+               Drop it whenever at least one specific class (groups 1..21) matched,
+               so "Congestal Syrup" exports برد and never also the generic أدوية. */
+            if (pharmacyScope && pool.some((m) => m.tier === 1)) {
+                pool = pool.filter((m) => m.tier === 1);
+            }
+            const sorted = (pool.length ? pool : matches).slice().sort((a, b) => (b.tier - a.tier)
+                || (a.pos - b.pos)
                 || (b.defining - a.defining)
                 || (b.boundary - a.boundary)
                 || (b.nameLen - a.nameLen)
