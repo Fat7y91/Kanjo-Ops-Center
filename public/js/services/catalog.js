@@ -167,6 +167,14 @@ window.isDesoukOpsManager = () => {
 
 window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager() || window.isProductAuditUser());
 
+/* PEER REVIEW browse (2026): field reps may open the "all products" browser to
+   find and edit colleagues' items. Deliberately SEPARATE from
+   canViewAllCatalogProducts (managers) so reps get the product browser WITHOUT
+   the cross-rep leaderboard, the pending-set boot read, or the global realtime
+   listener. The full collection is still read only when the widget is opened
+   (allowFull), never on a plain boot/refresh. */
+window.canBrowseCatalogProducts = () => window.canViewAllCatalogProducts() || window.isCatalogRepUser();
+
 window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
 
 window.canUseStagingCatalog = () => !!window.isDataEntryUser();
@@ -2778,7 +2786,7 @@ window.renderCatalogMyProductsWidget = () => {
 };
 
 window.toggleCatalogAllProductsWidget = () => {
-    if (!window.canViewAllCatalogProducts()) return;
+    if (!window.canBrowseCatalogProducts()) return;
     const body = document.getElementById('catalogAllProductsBody');
     const chevron = document.getElementById('catalogAllProductsChevron');
     if (!body) return;
@@ -3556,7 +3564,7 @@ const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAll
 window.renderCatalogAllProductsWidget = () => {
     const widget = document.getElementById('catalogAllProductsWidget');
     if (!widget) return;
-    const canView = window.canViewAllCatalogProducts();
+    const canView = window.canBrowseCatalogProducts();
     widget.classList.toggle('hidden', !canView);
     const countEl = document.getElementById('catalogAllProductsCount');
     if (countEl) {
@@ -8080,9 +8088,9 @@ window.startCatalogListeners = () => {
        refreshed on a slow poll so they stay current without a live listener.
        Cost model: the timed poll only re-fetches the small pending (+ delete
        request) sets, and only when a cheap aggregation count shows they
-       changed; the full collection is read once at boot and again only when a
-       manager explicitly opens/refreshes the "all products" widget. A plain rep
-       never reads either global set — only their own products. */
+       changed; the full collection is read only when a manager OR a rep (peer
+       review) explicitly opens/refreshes the "all products" widget — never on a
+       plain boot. A rep's global sets stay unread until they open the widget. */
     const refreshFromRest = async (allowFull = false) => {
         /* Skip if the previous poll is still in flight: a slow network must not
            stack overlapping full-collection reads. Also skip hidden tabs — a
@@ -8092,6 +8100,12 @@ window.startCatalogListeners = () => {
         window._catalogRestRefreshInFlight = true;
         try {
             const canViewAll = window.canViewAllCatalogProducts();
+            /* PEER REVIEW: reps may also open the "all products" browser, so the
+               on-demand full read is gated on canBrowseCatalogProducts rather
+               than the manager-only canViewAllCatalogProducts. Pending/leaderboard
+               reads below stay manager-scoped, so a rep's boot/periodic cost is
+               still zero. */
+            const canBrowse = window.canBrowseCatalogProducts();
             /* The global pending set only feeds the content editor / manager
                views; a plain rep renders its own products from
                `loadMyCatalogProducts` and must not pay for it. The audit team
@@ -8104,7 +8118,7 @@ window.startCatalogListeners = () => {
                read per document — 4,000+ today). It is therefore NEVER issued by
                the timed poll (`allowFull === false`); only on boot and when the
                user explicitly opens/refreshes the "all products" widget. */
-            const wantAllProducts = allowFull && canViewAll
+            const wantAllProducts = allowFull && canBrowse
                 && (window._catalogAllProductsOpen === true || !window._catalogAllProductsLoaded);
             /* Never read the rep's own-product set on a plain boot/refresh: it is
                deferred to the "منتجاتي" widget being opened (which calls
