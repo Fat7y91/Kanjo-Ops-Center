@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanjo | بوابة وكالات التسويق</title>
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="shortcut icon" href="favicon.ico">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        kanjo: { primary: '#6D28D9', dark: '#4C1D95', light: '#F5F3FF', bg: '#F9FAFB' },
+                        brand: { purple: '#230535', deep: '#4B0082', gold: '#FFD700', goldsoft: '#F59E0B' }
+                    },
+                    fontFamily: { cairo: ['Cairo', 'system-ui', 'sans-serif'] }
+                }
+            }
+        };
+    </script>
+
+    <style>
+        :root { --brand-purple: #230535; --brand-deep: #4B0082; --brand-gold: #FFD700; }
+        html, body { font-family: 'Cairo', system-ui, sans-serif; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(1200px 600px at 100% -10%, rgba(75,0,130,.55), transparent 60%),
+                radial-gradient(900px 500px at -10% 110%, rgba(255,215,0,.10), transparent 55%),
+                linear-gradient(135deg, #0c0517 0%, #150829 45%, #1d0b33 100%);
+            color: #1f2937;
+        }
+
+        /* ── Anti-scraping friction ─────────────────────────────────────── */
+        #vendorsGrid, #productsGrid, #agencyLightbox .lb-media,
+        .product-card, .vendor-card { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
+        #productsGrid img, #vendorsGrid img, .lb-media img { pointer-events: none; -webkit-user-drag: none; user-drag: none; }
+
+        .glass { background: rgba(255,255,255,.06); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,.10); }
+        .gold-text { color: var(--brand-gold); }
+        .brand-gradient { background: linear-gradient(90deg, var(--brand-purple), var(--brand-deep)); }
+
+        .product-card {
+            background: #ffffff;
+            border-radius: 1.1rem;
+            overflow: hidden;
+            border: 1px solid rgba(35,5,53,.08);
+            box-shadow: 0 8px 26px rgba(12,5,23,.28);
+            transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+            display: flex; flex-direction: column;
+        }
+        .product-card:hover { transform: translateY(-5px); box-shadow: 0 18px 42px rgba(255,215,0,.18); border-color: rgba(255,215,0,.55); }
+        .product-thumb { position: relative; aspect-ratio: 1 / 1; background: linear-gradient(135deg,#f3e8ff,#ede9fe); overflow: hidden; }
+        .product-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .product-thumb .ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #b8a6d9; font-size: 2.4rem; }
+
+        .vendor-card {
+            background: rgba(255,255,255,.97);
+            border-radius: 1.1rem;
+            border: 1px solid rgba(255,255,255,.14);
+            box-shadow: 0 8px 26px rgba(12,5,23,.28);
+            transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+            cursor: pointer; text-align: center; padding: 1.1rem .75rem;
+        }
+        .vendor-card:hover { transform: translateY(-4px); border-color: rgba(255,215,0,.6); box-shadow: 0 16px 38px rgba(255,215,0,.16); }
+        .monogram {
+            width: 64px; height: 64px; margin: 0 auto .6rem; border-radius: 1rem;
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-weight: 900; font-size: 1.5rem; letter-spacing: .5px;
+            box-shadow: inset 0 0 0 2px rgba(255,255,255,.25), 0 6px 16px rgba(75,0,130,.35);
+        }
+
+        .agency-nav-btn {
+            display: flex; align-items: center; gap: .7rem; width: 100%;
+            padding: .8rem 1rem; border-radius: .85rem; color: #d8cff0; font-weight: 700;
+            border: 1px solid transparent; transition: all .18s ease; cursor: pointer;
+        }
+        .agency-nav-btn:hover { background: rgba(255,255,255,.07); color: #fff; }
+        .agency-nav-btn.active { background: linear-gradient(90deg, rgba(75,0,130,.85), rgba(35,5,53,.6)); color: #fff; border-color: rgba(255,215,0,.5); }
+        .agency-nav-btn.active i { color: var(--brand-gold); }
+
+        .filter-select {
+            appearance: none; background: rgba(255,255,255,.96);
+            border: 1px solid rgba(35,5,53,.12); border-radius: .7rem;
+            padding: .6rem 2.1rem .6rem .9rem; font-weight: 600; color: #230535;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%234B0082' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: left .6rem center; background-size: 1rem;
+        }
+        .chip { display:inline-flex; align-items:center; gap:.4rem; background: rgba(255,215,0,.15); border:1px solid rgba(255,215,0,.5); color:#fff; border-radius:9999px; padding:.25rem .7rem; font-weight:700; font-size:.8rem; }
+
+        .pager-btn { border-radius:.7rem; padding:.5rem 1.1rem; font-weight:700; border:1px solid rgba(255,255,255,.18); color:#fff; background:rgba(255,255,255,.06); transition: all .18s; }
+        .pager-btn:hover:not(:disabled) { background:rgba(255,215,0,.18); border-color:rgba(255,215,0,.5); }
+        .pager-btn:disabled { opacity:.35; cursor:not-allowed; }
+
+        .skeleton { background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.14) 37%, rgba(255,255,255,.06) 63%); background-size: 400% 100%; animation: sk 1.3s ease infinite; }
+        @keyframes sk { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+        .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+    </style>
+</head>
+
+<body class="font-cairo">
+
+    <!-- ══════════ Login gate ══════════ -->
+    <div id="agencyLogin" class="min-h-screen flex items-center justify-center p-5">
+        <div class="glass rounded-3xl p-8 sm:p-10 w-full max-w-md text-center shadow-2xl">
+            <img src="logo.png" alt="Kanjo" class="w-24 h-24 mx-auto mb-4 object-contain drop-shadow-lg">
+            <h1 class="text-2xl font-black text-white">بوابة <span class="gold-text">التسويق</span></h1>
+            <p class="text-purple-200/80 text-sm mt-2 mb-7">دخول وكالات التسويق المعتمدة</p>
+            <div class="relative">
+                <input id="agencyPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
+                    class="w-full text-center tracking-[0.5em] text-xl font-bold rounded-xl py-3.5 pr-4 pl-4 outline-none border-2 border-purple-400/30 focus:border-amber-400 bg-white/95 text-[#230535]"
+                    placeholder="• • • •">
+            </div>
+            <button id="agencyLoginBtn" class="brand-gradient w-full mt-5 py-3.5 rounded-xl text-white font-black text-lg shadow-lg hover:opacity-95 transition">
+                <i class="fa-solid fa-arrow-right-to-bracket ml-2"></i> دخول
+            </button>
+            <p id="agencyLoginError" class="hidden text-rose-300 text-sm font-semibold mt-4"></p>
+            <p class="text-purple-200/40 text-xs mt-6 leading-relaxed">
+                هذه البوابة مخصّصة للاطّلاع فقط. جميع بيانات الكتالوج محمية ولا يجوز نسخها أو إعادة نشرها.
+            </p>
+        </div>
+    </div>
+
+    <!-- ══════════ Portal shell ══════════ -->
+    <div id="agencyApp" class="hidden min-h-screen flex flex-col">
+
+        <header class="glass sticky top-0 z-30">
+            <div class="max-w-[1500px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <img src="logo.png" alt="Kanjo" class="w-10 h-10 object-contain">
+                    <div class="leading-tight">
+                        <div class="text-white font-black text-lg">كنجو <span class="gold-text">| بوابة التسويق</span></div>
+                        <div class="text-purple-200/60 text-[11px]">Kanjo Marketing Agency Portal · اطلّاع فقط</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="hidden sm:flex items-center gap-2 text-purple-100 text-sm font-bold">
+                        <i class="fa-solid fa-user-shield gold-text"></i>
+                        <span id="agencyUserName">—</span>
+                    </span>
+                    <button id="agencyLogout" class="text-purple-100 hover:text-white border border-white/20 hover:border-amber-400 rounded-lg px-3 py-1.5 text-sm font-bold transition">
+                        <i class="fa-solid fa-right-from-bracket ml-1"></i> خروج
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-[1500px] mx-auto w-full flex-1 px-4 sm:px-6 py-5 flex flex-col lg:flex-row gap-5">
+
+            <!-- Sidebar -->
+            <aside class="lg:w-60 shrink-0">
+                <nav class="glass rounded-2xl p-3 flex lg:flex-col gap-2 lg:sticky lg:top-24">
+                    <button id="navVendors" class="agency-nav-btn active" data-view="vendors">
+                        <i class="fa-solid fa-store w-5 text-center"></i><span>الموردين</span>
+                    </button>
+                    <button id="navProducts" class="agency-nav-btn" data-view="products">
+                        <i class="fa-solid fa-cubes-stacked w-5 text-center"></i><span>المنتجات</span>
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- Content -->
+            <main class="flex-1 min-w-0">
+
+                <!-- Vendors view -->
+                <section id="vendorsView">
+                    <div class="flex items-end justify-between mb-4">
+                        <div>
+                            <h2 class="text-white text-2xl font-black">دليل الموردين</h2>
+                            <p class="text-purple-200/60 text-sm mt-0.5">اختر المورد لعرض منتجاته</p>
+                        </div>
+                        <span class="chip"><i class="fa-solid fa-store"></i> <span id="vendorsCount">0</span> مورد</span>
+                    </div>
+                    <div id="vendorsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+                    <div id="vendorsLoading" class="py-16 text-center text-purple-200/60"><i class="fa-solid fa-circle-notch spin text-2xl"></i></div>
+                    <div id="vendorsEmpty" class="hidden py-16 text-center text-purple-200/60 font-bold">لا توجد بيانات موردين.</div>
+                </section>
+
+                <!-- Products view -->
+                <section id="productsView" class="hidden">
+                    <div class="flex items-end justify-between mb-3">
+                        <div>
+                            <h2 class="text-white text-2xl font-black">كتالوج المنتجات</h2>
+                            <p class="text-purple-200/60 text-sm mt-0.5">تصفّح المنتجات حسب الفئة أو المورد</p>
+                        </div>
+                        <span class="chip"><i class="fa-solid fa-cubes-stacked"></i> <span id="productsCount">0</span> منتج</span>
+                    </div>
+
+                    <div class="glass rounded-2xl p-3 mb-4 flex flex-wrap items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <label class="text-purple-100 text-sm font-bold">الفئة</label>
+                            <select id="filterCategory" class="filter-select text-sm"><option value="">كل الفئات</option></select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-purple-100 text-sm font-bold">المورد</label>
+                            <select id="filterVendor" class="filter-select text-sm max-w-[220px]"><option value="">كل الموردين</option></select>
+                        </div>
+                        <button id="clearFilters" class="hidden text-amber-300 hover:text-amber-100 text-sm font-bold"><i class="fa-solid fa-xmark"></i> مسح الفلاتر</button>
+                        <span id="activeVendorChip" class="chip hidden"><i class="fa-solid fa-filter"></i> <span id="activeVendorName"></span></span>
+                    </div>
+
+                    <div id="productsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4"></div>
+                    <div id="productsLoading" class="py-16 text-center text-purple-200/60 hidden"><i class="fa-solid fa-circle-notch spin text-2xl"></i></div>
+                    <div id="productsEmpty" class="hidden py-16 text-center text-purple-200/60 font-bold">لا توجد منتجات مطابقة.</div>
+
+                    <div id="productsPager" class="hidden flex items-center justify-center gap-4 mt-6">
+                        <button id="pagerPrev" class="pager-btn"><i class="fa-solid fa-chevron-right"></i> السابق</button>
+                        <span id="pagerInfo" class="text-purple-100 font-bold text-sm">صفحة 1</span>
+                        <button id="pagerNext" class="pager-btn">التالي <i class="fa-solid fa-chevron-left"></i></button>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+
+        <footer class="text-center text-purple-200/40 text-xs py-5">
+            © Kanjo. محتوى محمي — يُمنع النسخ أو إعادة النشر.
+        </footer>
+    </div>
+
+    <!-- Lightbox -->
+    <div id="agencyLightbox" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm items-center justify-center p-4">
+        <div class="bg-white rounded-2xl overflow-hidden max-w-3xl w-full max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                <h3 id="lbName" class="font-black text-[#230535] truncate"></h3>
+                <button id="lbClose" class="text-slate-400 hover:text-rose-500 text-xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="lb-media bg-slate-50 flex-1 overflow-auto flex items-center justify-center min-h-[240px]">
+                <img id="lbImage" alt="" class="max-h-[64vh] w-auto object-contain">
+            </div>
+            <div id="lbMeta" class="px-4 py-3 text-sm text-slate-600"></div>
+        </div>
+    </div>
+
+    <script type="module" src="js/agency.js"></script>
+</body>
+
+</html>

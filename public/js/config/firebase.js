@@ -339,6 +339,11 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
         });
     }
     if (limit) structuredQuery.limit = limit;
+    /* Optional offset for strict server-side pagination. Combined with `limit`
+       this lets a read-only surface fetch a single page (e.g. 24 docs) instead
+       of the whole collection. Firestore bills the skipped docs, so callers
+       should keep pages small and pagination user-driven. */
+    if (options.offset) structuredQuery.offset = options.offset;
     /* Optional field mask: without it runQuery returns every field of every
        document (including large Base64 blobs such as tasks.merchantLogo). */
     if (options.select && options.select.length) {

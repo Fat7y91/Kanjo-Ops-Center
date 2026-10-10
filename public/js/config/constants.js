@@ -51,7 +51,15 @@ const users = {
        descriptions and images can be refined before launch, but NEVER delete.
        Enforced client-side (no delete controls) and server-side
        (firestore.rules grants update only). */
-    '3141': { name: 'مراجعة وتدقيق المنتجات', role: 'product_audit' }
+    '3141': { name: 'مراجعة وتدقيق المنتجات', role: 'product_audit' },
+
+    /* External marketing agencies (وكالات التسويق). They get a dedicated,
+       isolated read-only portal (see agency.html) to browse the vendor
+       directory and the product catalog so they can prepare marketing content.
+       Server-side (firestore.rules) they are hard-blocked from every write on
+       `merchants` and `merchant_products`; the portal never renders export,
+       edit, delete or admin controls and paginates at 24 items per request. */
+    '8080': { name: 'ماجنت', role: 'marketing_agency' }
 
 };
 
@@ -63,6 +71,11 @@ const PRODUCT_AUDIT_PIN = '3141';
    (بوابة التسويق). Kept as a named constant so the login routing and the
    marketing section's access helper share a single source of truth. */
 const MARKETING_PIN = '8899';
+
+/* PIN that unlocks the standalone read-only Marketing Agency portal
+   (agency.html). External agencies sign in with this PIN; the portal only ever
+   exposes the vendor directory and the product catalog. */
+const MARKETING_AGENCY_PIN = '8080';
 
 const teamMembers = { 'Fox Team': 'سارة، مصطفى', 'Power Team': 'أحمد جمعه، يوسف' };
 
@@ -93,10 +106,11 @@ window.categories = categories;
 window.users = users;
 window.teamMembers = teamMembers;
 window.MARKETING_PIN = MARKETING_PIN;
+window.MARKETING_AGENCY_PIN = MARKETING_AGENCY_PIN;
 window.PRODUCT_AUDIT_PIN = PRODUCT_AUDIT_PIN;
 window.KANJO_REP_PAYROLL = KANJO_REP_PAYROLL;
 window.KANJO_DRIVE_SCRIPT_URL = KANJO_DRIVE_SCRIPT_URL;
 window.KANJO_DRIVE_SCRIPT_TOKEN = KANJO_DRIVE_SCRIPT_TOKEN;
 window.KANJO_CATALOG_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuhM_6hVjfAEUvWmLkLRKCKGunp_h1DRy722Sz5AIWiLpxgLElOgad5W0TcUz0RHhg/exec";
 
-export { userImageMap, teamImageMap, categories, users, teamMembers, MARKETING_PIN, PRODUCT_AUDIT_PIN, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };
+export { userImageMap, teamImageMap, categories, users, teamMembers, MARKETING_PIN, MARKETING_AGENCY_PIN, PRODUCT_AUDIT_PIN, KANJO_REP_PAYROLL, KANJO_DRIVE_SCRIPT_URL, KANJO_DRIVE_SCRIPT_TOKEN };

@@ -48,6 +48,12 @@ service cloud.firestore {
     // Product review & audit (مراجعة وتدقيق المنتجات): read + UPDATE across all
     // product catalogs, but never create or delete.
     function isProductAudit() { return claimRole() == 'product_audit'; }
+    // External marketing agencies (وكالات التسويق): STRICTLY read-only. They may
+    // browse the vendor directory (merchants) and the product catalog
+    // (merchant_products) through the isolated agency portal, but every write is
+    // denied on every collection they can reach. The portal additionally never
+    // renders edit/delete/export controls and paginates at 24 items per request.
+    function isMarketingAgency() { return claimRole() == 'marketing_agency'; }
 
     function isPrivileged() { return isAdmin() || isFounder(); }
     function isOpsManager() { return isSignedIn() && tok().get('kanjoOps', false) == true; }
@@ -79,12 +85,12 @@ service cloud.firestore {
     // - Read: Allowed for all authenticated users so dashboard stats can compute correctly.
     // - Write/Update/Delete: STRICTLY ADMIN ONLY.
     match /contracts/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && !isMarketingAgency();
       allow write: if isAdmin();
     }
 
     match /commissions/{docId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && !isMarketingAgency();
       allow write: if isAdmin();
     }
 
@@ -108,10 +114,10 @@ service cloud.firestore {
       }
 
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isMerchantDocForItself();
-      allow update: if isAdmin()
-        || (isSignedIn() && merchantUpdateTouchesOnlyDocumentFields());
-      allow delete: if isAdmin();
+      allow create: if !isMarketingAgency() && isSignedIn() && isMerchantDocForItself();
+      allow update: if !isMarketingAgency() && (isAdmin()
+        || (isSignedIn() && merchantUpdateTouchesOnlyDocumentFields()));
+      allow delete: if !isMarketingAgency() && isAdmin();
     }
 
     // 3) Operational tasks.
@@ -127,7 +133,7 @@ service cloud.firestore {
         return isPrivileged() || isOpsManager()
           || (isRep() && resource.data.team == claimTeam());
       }
-      allow read: if legacy() || canReadTask();
+      allow read: if !isMarketingAgency() && (legacy() || canReadTask());
       allow create: if legacy()
         || isPrivileged() || isOpsManager()
         || (isRep() && request.resource.data.team == claimTeam());
@@ -157,9 +163,9 @@ service cloud.firestore {
     // feature works before the marketing device is provisioned claims, exactly
     // like the other collections' migration-window escape hatch.
     match /campaign_leads/{docId} {
-      allow read: if legacy() || isPrivileged() || isMarketing();
+      allow read: if !isMarketingAgency() && (legacy() || isPrivileged() || isMarketing());
       allow create, update: if isPrivileged();
-      allow delete: if legacy() || isPrivileged() || isMarketing();
+      allow delete: if !isMarketingAgency() && (legacy() || isPrivileged() || isMarketing());
     }
 
     // ─── Notifications ───────────────────────────────────────────────
@@ -173,7 +179,7 @@ service cloud.firestore {
       function canCreateNotification() {
         return isPrivileged() || isOpsManager() || isAccounting() || isRep();
       }
-      allow read: if legacy() || canReadNotifications();
+      allow read: if !isMarketingAgency() && (legacy() || canReadNotifications());
       allow create: if legacy() || (canCreateNotification()
         && request.resource.data.title is string
         && request.resource.data.isRead == false);
@@ -185,7 +191,7 @@ service cloud.firestore {
     // Transfer requests: reps raise them for their own tasks; managers review
     // and resolve. Only managers may mutate a request's status.
     match /transferRequests/{docId} {
-      allow read: if legacy() || isPrivileged() || isOpsManager() || isAccounting() || isRep();
+      allow read: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager() || isAccounting() || isRep());
       allow create: if legacy()
         || isPrivileged() || isOpsManager()
         || (isRep() && request.resource.data.requestedBy == claimName());
@@ -195,9 +201,9 @@ service cloud.firestore {
     // Financial payment profiles: reps own exactly one document keyed by their
     // display name; accounting and managers manage the whole set.
     match /financial_profiles/{docId} {
-      allow read: if legacy()
+      allow read: if !isMarketingAgency() && (legacy()
         || isPrivileged() || isOpsManager() || isAccounting()
-        || (isRep() && docId == claimName());
+        || (isRep() && docId == claimName()));
       allow write: if legacy()
         || isPrivileged() || isOpsManager() || isAccounting()
         || (isRep() && docId == claimName()
@@ -210,7 +216,7 @@ service cloud.firestore {
       function canUsePayrollConfig() {
         return isPrivileged() || isOpsManager() || isAccounting();
       }
-      allow read: if legacy() || canUsePayrollConfig();
+      allow read: if !isMarketingAgency() && (legacy() || canUsePayrollConfig());
       allow write: if docId == 'payrollConfig'
         && (legacy() || canUsePayrollConfig());
     }
@@ -230,7 +236,7 @@ service cloud.firestore {
 
     // Moderation bin for archived/wrong reports — Operations Manager + admins.
     match /archivedReports/{docId} {
-      allow read, write: if legacy() || isManagerViewer();
+      allow read, write: if !isMarketingAgency() && (legacy() || isManagerViewer());
     }
 
     // Product catalog pipeline (`merchant_products`).
@@ -248,9 +254,9 @@ service cloud.firestore {
         return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
       }
       allow read: if isSignedIn();
-      allow create: if legacy() || canWriteCatalog() || isProductAudit();
-      allow update: if isSignedIn();
-      allow delete: if legacy() || isPrivileged() || isOpsManager() || isDataEntry();
+      allow create: if !isMarketingAgency() && (legacy() || canWriteCatalog() || isProductAudit());
+      allow update: if !isMarketingAgency() && isSignedIn();
+      allow delete: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager() || isDataEntry());
     }
 
     // Learned product→category taxonomy from the interactive pre-export audit.
@@ -259,8 +265,8 @@ service cloud.firestore {
     // never a dependency of the export (which uses in-memory data), so reads are
     // optional tooling only.
     match /category_learning/{docId} {
-      allow read: if isSignedIn();
-      allow write: if legacy() || isPrivileged() || isOpsManager();
+      allow read: if isSignedIn() && !isMarketingAgency();
+      allow write: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager());
     }
 
     // Pharmacy intake run state (one doc per pharmacy). Records the document ids
@@ -268,7 +274,7 @@ service cloud.firestore {
     // reconciled and re-uploaded without duplicating rows. Data-entry tooling;
     // reads stay available to managers for support/diagnostics.
     match /pharmacy_intake_runs/{docId} {
-      allow read, write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
+      allow read, write: if !isMarketingAgency() && (legacy() || isDataEntry() || isPrivileged() || isOpsManager());
     }
 
     // Black Box — immutable, system-wide audit trail (`audit_logs`).
@@ -283,22 +289,22 @@ service cloud.firestore {
     //   is switched on, legacy() becomes false and ONLY tokens with
     //   kanjoRole == 'founder' can read (admins such as محمود stay denied).
     match /audit_logs/{docId} {
-      allow read: if legacy() || isFounder();
+      allow read: if !isMarketingAgency() && (legacy() || isFounder());
       allow create: if isSignedIn();
       allow update, delete: if false;
     }
 
     // JSON catalog importer staging (`staging_catalogs`) — data-entry tooling.
     match /staging_catalogs/{docId} {
-      allow read, write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
+      allow read, write: if !isMarketingAgency() && (legacy() || isDataEntry() || isPrivileged() || isOpsManager());
     }
 
     // Master catalog import/management (`master_catalog`). Reps may READ it
     // (reference search for supermarket merchants); only data-entry/managers
     // may import or clear it.
     match /master_catalog/{docId} {
-      allow read: if isSignedIn();
-      allow write: if legacy() || isDataEntry() || isPrivileged() || isOpsManager();
+      allow read: if isSignedIn() && !isMarketingAgency();
+      allow write: if !isMarketingAgency() && (legacy() || isDataEntry() || isPrivileged() || isOpsManager());
     }
 
     // KPI & quality tracking (`rep_kpis/{repId}` + daily_stats subcollection).
@@ -339,13 +345,13 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(summaryKeys());
       }
       // GLOBAL leaderboard: every signed-in user may read every rep's summary.
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && !isMarketingAgency();
       allow create: if legacy() || isManagerViewer() || isOwnSummaryCreate();
       allow update: if legacy() || isManagerViewer() || isOwnSummaryUpdate();
       allow delete: if legacy() || isManagerViewer();
 
       match /daily_stats/{date} {
-        allow read: if legacy() || isManagerViewer() || isOwnRep();
+        allow read: if !isMarketingAgency() && (legacy() || isManagerViewer() || isOwnRep());
         allow write: if legacy() || isManagerViewer() || isOwnRep();
       }
 
@@ -355,7 +361,7 @@ service cloud.firestore {
       // signed-in user (GLOBAL board); writable only by the owning rep or a
       // manager.
       match /monthly/{period} {
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && !isMarketingAgency();
         allow create: if legacy() || isManagerViewer() || isOwnSummaryCreate();
         allow update: if legacy() || isManagerViewer() || isOwnSummaryUpdate();
         allow delete: if legacy() || isManagerViewer();
@@ -386,7 +392,7 @@ service cloud.firestore {
     // only, so this explicit grant is required in addition to the hierarchical
     // match.
     match /{path=**}/monthly/{period} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && !isMarketingAgency();
     }
   }
 }

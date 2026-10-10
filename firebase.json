@@ -71,6 +71,14 @@
         "destination": "/dashboard.html"
       },
       {
+        "source": "/agency",
+        "destination": "/agency.html"
+      },
+      {
+        "source": "/agency/",
+        "destination": "/agency.html"
+      },
+      {
         "source": "**",
         "destination": "/dashboard.html"
       }

@@ -46,7 +46,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 
-const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry', 'marketing', 'product_audit'];
+const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry', 'marketing', 'product_audit', 'marketing_agency'];
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 const args = process.argv.slice(2);
