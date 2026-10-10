@@ -5337,6 +5337,50 @@ const KANJO_PHARMACY_CATEGORY_SYNONYMS = {
    category below every specific pharmacy class regardless of keyword position. */
 const KANJO_PHARMACY_GENERIC_CATEGORY = 'أدوية';
 
+/* Reviewer literal overrides: exact commercial drug names the heuristic cannot
+   place. This map is consulted BEFORE every keyword/regex rule (but after a
+   manual stored/learned decision), so a brand that would otherwise fall into the
+   generic أدوية dosage-form bucket is routed to the exact class the reviewer
+   chose. Keys are the product name (Arabic or English); values are a category
+   name or "ID:<n>". Matching is normalised with a whole-token containment
+   fallback, so a dosage suffix ("ONDALENZ 10MG") still resolves from "ONDALENZ".
+   Pharmacy scope only — the names never leak into another vertical. */
+const KANJO_PHARMACY_LITERAL_MAP = {
+    /* __KANJO_PHARMACY_LITERAL_MAP__ */
+};
+
+const kanjoPharmacyLiteralIndex = new Map();
+Object.keys(KANJO_PHARMACY_LITERAL_MAP).forEach((rawKey) => {
+    const key = normalizeArabic(String(rawKey).trim()).replace(/\s+/g, ' ');
+    if (key) kanjoPharmacyLiteralIndex.set(key, KANJO_PHARMACY_LITERAL_MAP[rawKey]);
+});
+
+/* Resolve a product to its reviewer-assigned category, or null. Examines English
+   then Arabic name, prefers an exact whole-name hit, then a whole-token
+   containment hit (keys shorter than 3 chars are never contained-matched). */
+const kanjoPharmacyLiteralCategory = (product, allowedCats) => {
+    if (!product || !kanjoPharmacyLiteralIndex.size || !allowedCats || !allowedCats.length) return null;
+    const names = [product.name_en, product.name_ar]
+        .map((value) => normalizeArabic(String(value || '').trim()).replace(/\s+/g, ' '))
+        .filter(Boolean);
+    let spec = '';
+    for (const name of names) {
+        if (spec) break;
+        const exact = kanjoPharmacyLiteralIndex.get(name);
+        if (exact) { spec = exact; break; }
+        const padded = ' ' + name + ' ';
+        kanjoPharmacyLiteralIndex.forEach((value, key) => {
+            if (spec || key.length < 3) return;
+            if (padded.indexOf(' ' + key + ' ') !== -1) spec = value;
+        });
+    }
+    if (!spec) return null;
+    const idMatch = /^ID:\s*(\d+)/.exec(String(spec).trim());
+    if (idMatch) return allowedCats.find((cat) => String(cat.id) === idMatch[1]) || null;
+    const target = normalizeArabic(String(spec).trim());
+    return allowedCats.find((cat) => normalizeArabic(cat.name) === target) || null;
+};
+
 const kanjoCategoryValue = (cat) => (cat ? ('ID:' + cat.id + ' | ' + cat.name) : '');
 
 /* ===== Semantic auto-tagging (dataset-driven) =====
@@ -6603,6 +6647,16 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     if (learnedOfficial) {
         const learnedList = learnedOfficial.split(', ').filter(Boolean);
         return { status: 'matched', category: learnedOfficial, categories: learnedList, primary: learnedList[0] || '', options: [] };
+    }
+    /* Reviewer literal overrides (pharmacy only) run before the keyword/regex
+       heuristics, so a reviewed commercial name is placed exactly where it was
+       assigned instead of into the generic أدوية dosage-form bucket. */
+    if (pharmacyScope) {
+        const literalCat = kanjoPharmacyLiteralCategory(product, allowedCats);
+        if (literalCat) {
+            const literalValue = kanjoCategoryValue(literalCat);
+            return { status: 'matched', category: literalValue, categories: [literalValue], primary: literalValue, options: [] };
+        }
     }
     const existing = String((product && product.category) || '').trim();
     const existingOfficial = kanjoOfficialCategoryString(existing, allowedValues);
