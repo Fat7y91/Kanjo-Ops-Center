@@ -61,9 +61,43 @@
         };
     };
 
-    /* Scans a raw AOA (all cells of the `_lookups` sheet) and splits the ID
-       tokens into the category scope and the variant/attribute scope. */
+    /* The `_lookups` sheet is COLUMN-oriented: one column of categories, one of
+       attributes (attribute-group names such as "ID:1 | الحجم"), one of options
+       (variant values such as "ID:5 | ATTR:1 | وسط"). Resolving each column by
+       its header is what keeps attribute-group names OUT of the category set. */
+    const LOOKUP_COLUMN_ALIASES = {
+        categories: ['categories', 'category', 'التصنيفات', 'التصنيف', 'الفئات', 'الفئة', 'الأقسام', 'القسم'],
+        attributes: ['attributes', 'attribute', 'الخصائص', 'خصائص', 'السمات', 'سمات'],
+        options: ['options', 'option', 'variants', 'variant', 'الخيارات', 'خيارات', 'القيم', 'قيم', 'المتغيرات', 'متغيرات']
+    };
+
+    /* Locate the `_lookups` header row and the column index of each scope. Scans
+       only the first rows and matches a header alias by normalised name; returns
+       null when the sheet is unstructured (no recognisable header). */
+    const findLookupColumns = (aoaRows) => {
+        const rows = aoaRows || [];
+        const limit = Math.min(rows.length, 15);
+        for (let r = 0; r < limit; r++) {
+            const cells = (Array.isArray(rows[r]) ? rows[r] : [rows[r]]).map((c) => normKey(c));
+            const cols = {};
+            Object.keys(LOOKUP_COLUMN_ALIASES).forEach((key) => {
+                const aliases = LOOKUP_COLUMN_ALIASES[key].map(normKey);
+                const idx = cells.findIndex((c) => !!c && aliases.indexOf(c) !== -1);
+                if (idx !== -1) cols[key] = idx;
+            });
+            if (Object.keys(cols).length) return { headerRow: r, cols: cols };
+        }
+        return null;
+    };
+
+    /* Column-strict `_lookups` parser. When the sheet has a recognisable header,
+       categories are read ONLY from the categories column and variants ONLY from
+       the attributes/options columns — so the attribute and option columns can
+       never bleed into the category scope (the bug a flat scan caused). Sheets
+       without a header fall back to the original all-cell scan, which remains
+       harmless because it is only reached for unstructured/legacy workbooks. */
     const extractLookups = (aoaRows) => {
+        const rows = aoaRows || [];
         const all = [];
         const categories = [];
         const variants = [];
@@ -71,26 +105,57 @@
         const byVariantName = new Map();
         const byVariantNameAttr = new Map();
         const seen = new Set();
-        (aoaRows || []).forEach((row) => {
+        const take = (parsed) => {
+            if (!parsed || seen.has(parsed.full)) return;
+            seen.add(parsed.full);
+            all.push(parsed);
+            if (parsed.isVariant) {
+                variants.push(parsed);
+                const nk = normKey(parsed.name);
+                if (nk && !byVariantName.has(nk)) byVariantName.set(nk, parsed);
+                const ak = nk + '::' + parsed.attr;
+                if (nk && !byVariantNameAttr.has(ak)) byVariantNameAttr.set(ak, parsed);
+            } else {
+                categories.push(parsed);
+                const nk = normKey(parsed.name);
+                if (nk && !byCategoryName.has(nk)) byCategoryName.set(nk, parsed);
+            }
+        };
+        const cellAt = (row, idx) => {
             const cells = Array.isArray(row) ? row : [row];
-            cells.forEach((cell) => {
-                const parsed = parseIdToken(cell);
-                if (!parsed || seen.has(parsed.full)) return;
-                seen.add(parsed.full);
-                all.push(parsed);
-                if (parsed.isVariant) {
-                    variants.push(parsed);
-                    const nk = normKey(parsed.name);
-                    if (nk && !byVariantName.has(nk)) byVariantName.set(nk, parsed);
-                    const ak = nk + '::' + parsed.attr;
-                    if (nk && !byVariantNameAttr.has(ak)) byVariantNameAttr.set(ak, parsed);
+            return cells[idx];
+        };
+        const header = findLookupColumns(rows);
+        if (header && header.cols.categories != null) {
+            for (let r = header.headerRow + 1; r < rows.length; r++) {
+                take(parseIdToken(cellAt(rows[r], header.cols.categories)));
+            }
+            /* Variant cells carry an `ATTR:<n>` marker. A cell in the attributes /
+               options columns WITHOUT that marker is an attribute-group NAME
+               ("ID:1 | الحجم") and must be ignored entirely — never a category. */
+            const variantCols = ['attributes', 'options']
+                .map((k) => header.cols[k])
+                .filter((i) => i != null);
+            for (let r = header.headerRow + 1; r < rows.length; r++) {
+                const row = rows[r];
+                if (variantCols.length) {
+                    variantCols.forEach((c) => {
+                        const parsed = parseIdToken(cellAt(row, c));
+                        if (parsed && parsed.isVariant) take(parsed);
+                    });
                 } else {
-                    categories.push(parsed);
-                    const nk = normKey(parsed.name);
-                    if (nk && !byCategoryName.has(nk)) byCategoryName.set(nk, parsed);
+                    (Array.isArray(row) ? row : [row]).forEach((cell) => {
+                        const parsed = parseIdToken(cell);
+                        if (parsed && parsed.isVariant) take(parsed);
+                    });
                 }
+            }
+        } else {
+            rows.forEach((row) => {
+                const cells = Array.isArray(row) ? row : [row];
+                cells.forEach((cell) => take(parseIdToken(cell)));
             });
-        });
+        }
         const firstCategory = categories.length ? categories[0].full : (all.length ? all[0].full : '');
         return { all, categories, variants, byCategoryName, byVariantName, byVariantNameAttr, firstCategory };
     };
