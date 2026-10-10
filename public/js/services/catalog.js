@@ -7060,6 +7060,9 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
     const productRows = [];
     const uniqueSkuById = new Map();
     const seenSkus = new Set();
+    /* Base price per (unique) sku, so an orphaned `variant` product that is
+       degraded to a simple row below can carry its own price instead of 0. */
+    const basePriceBySku = new Map();
     /* Qualifiers/units that no variant rule could map are preserved on the
        parent product name instead of being lost or turned into fake IDs. */
     const variantNameSuffix = new Map();
@@ -7088,6 +7091,7 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         while (seenSkus.has(sku)) { sku = base + '-D' + suffix; suffix++; }
         seenSkus.add(sku);
         uniqueSkuById.set(key, sku);
+        basePriceBySku.set(sku, Number(product.base_price) || 0);
         row.sku = sku;
         /* Variants link to their parent via product_key, so it must carry the
            NEW deduped sku on BOTH sheets or the relation breaks. */
@@ -7118,15 +7122,24 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         variantSeq.set(uniqueSku, n);
         row.variant_sku = uniqueSku + '-V' + n;
     });
-    /* Step 4 — orphaned product cleanup: a product exported as `variant` with
-       zero final variants (empty/missing variations) would be rejected as an
-       orphaned parent, so drop it from the Products sheet. Its (non-existent)
-       variants are never exported either. Simple products are always kept. */
+    /* Step 4 — orphaned parent handling: a product typed `variant` whose
+       variations produced ZERO final variant rows (empty variations, or every
+       option failed the strict taxonomy mapping) would be rejected by the
+       importer as an orphaned parent. Rather than SILENTLY DROPPING it — which
+       is why a 63-product merchant could export only 19 rows — degrade it to a
+       SIMPLE row that keeps its own base price. Products that DO have variant
+       rows stay `variant`, so the legitimate Parent -> Variants hierarchy is
+       untouched. Pure in-memory array work. */
     const parentsWithVariants = new Set(variantRows.map((row) => String(row.product_key || '')));
-    const cleanedProductRows = productRows.filter((row) => (
-        String(row.product_type || '').toLowerCase() !== 'variant'
-        || parentsWithVariants.has(String(row.product_key || ''))
-    ));
+    const cleanedProductRows = [];
+    productRows.forEach((row) => {
+        const isVariantParent = String(row.product_type || '').toLowerCase() === 'variant';
+        if (isVariantParent && !parentsWithVariants.has(String(row.product_key || ''))) {
+            row.product_type = 'simple';
+            row.base_price = basePriceBySku.get(String(row.product_key || '')) || 0;
+        }
+        cleanedProductRows.push(row);
+    });
     return { productRows: cleanedProductRows, variantRows };
 };
 
