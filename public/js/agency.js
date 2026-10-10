@@ -29,7 +29,7 @@ const PRODUCT_FIELDS = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
     'variations', 'status'
 ];
-const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt'];
+const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo'];
 
 const state = {
     view: 'vendors',
@@ -40,6 +40,7 @@ const state = {
     items: [],
     total: 0,
     vendors: [],
+    vendorLogos: new Map(),
     vendorsLoaded: false
 };
 
@@ -109,6 +110,16 @@ const monogramColor = (name) => {
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
     const pair = palette[h % palette.length];
     return 'linear-gradient(135deg,' + pair[0] + ',' + pair[1] + ')';
+};
+
+/* Vendor logo: accepts a direct http(s) URL, a Drive link/id, or a data URI.
+   Returns '' when no usable source is present so the caller falls back to a
+   monogram. Real logos are optional — merchants without one stay monogrammed. */
+const vendorLogoSrc = (v) => {
+    const raw = String((v && (v.logoUrl || v.logo)) || '').trim();
+    if (!raw) return '';
+    if (/^data:image\//i.test(raw)) return raw;
+    return driveThumb(raw, 'w200');
 };
 
 /* ── Session / login ─────────────────────────────────────────────────────── */
@@ -192,9 +203,16 @@ const renderVendors = () => {
     $('vendorsEmpty').classList.add('hidden');
     grid.innerHTML = list.map((v) => {
         const name = escapeHtml(v.name || v.id);
+        const display = v.name || v.id;
+        const color = monogramColor(display);
+        const initials = escapeHtml(monogram(display));
+        const src = vendorLogoSrc(v);
+        const media = src
+            ? `<img class="monogram-logo" src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';var m=this.nextElementSibling;if(m){m.style.display='flex';}"><div class="monogram" style="display:none;background:${color}">${initials}</div>`
+            : `<div class="monogram" style="background:${color}">${initials}</div>`;
         return `
         <button type="button" class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
-            <div class="monogram" style="background:${monogramColor(v.name || v.id)}">${escapeHtml(monogram(v.name || v.id))}</div>
+            ${media}
             <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.4rem] px-1">${name}</div>
             <div class="text-[11px] text-purple-500/80 mt-1 font-semibold">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></div>
         </button>`;
@@ -233,6 +251,10 @@ const renderProducts = () => {
         const img = productImage(p);
         const vendor = productVendor(p);
         const cat = String(p.category || '').replace(/^[^\p{L}\p{N}]+/u, '').trim() || 'غير مصنف';
+        const vlogo = state.vendorLogos.get(String(p.merchantId || ''));
+        const vendorBadge = vlogo
+            ? `<img class="vendor-badge" src="${escapeHtml(vlogo)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.outerHTML='<i class=&quot;fa-solid fa-store&quot;></i>'">`
+            : `<i class="fa-solid fa-store"></i>`;
         const thumb = img
             ? `<img src="${escapeHtml(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="ph" style="display:none"><i class="fa-solid fa-image"></i></span>`
             : `<span class="ph"><i class="fa-solid fa-image"></i></span>`;
@@ -242,7 +264,7 @@ const renderProducts = () => {
             <div class="p-3 flex-1 flex flex-col">
                 <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.5rem]">${escapeHtml(productName(p))}</div>
                 <div class="mt-2 flex items-center gap-1 text-[11px] text-purple-600 font-bold"><i class="fa-solid fa-tag"></i> <span class="truncate">${escapeHtml(cat)}</span></div>
-                ${vendor ? `<div class="mt-1 flex items-center gap-1 text-[11px] text-slate-500 font-semibold"><i class="fa-solid fa-store"></i> <span class="truncate">${escapeHtml(vendor)}</span></div>` : ''}
+                ${vendor ? `<div class="mt-1 flex items-center gap-1 text-[11px] text-slate-500 font-semibold">${vendorBadge} <span class="truncate">${escapeHtml(vendor)}</span></div>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -279,9 +301,14 @@ const loadVendors = async () => {
         const rows = await window.kanjoRest.list([VENDORS_COLLECTION], { pageSize: 300, maxPages: 20, select: VENDOR_FIELDS });
         state.vendors = (rows || [])
             .filter((r) => r && (r.name || r.id))
-            .map((r) => ({ id: r.id || r.merchantId, name: r.name || r.merchantId || r.id }))
+            .map((r) => ({ id: r.id || r.merchantId, name: r.name || r.merchantId || r.id, logoUrl: r.logoUrl || r.logo || '' }))
             .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
         state.vendorsLoaded = true;
+        state.vendorLogos = new Map();
+        state.vendors.forEach((v) => {
+            const src = vendorLogoSrc(v);
+            if (src) state.vendorLogos.set(String(v.id), src);
+        });
         renderVendors();
         populateVendorSelect();
     } catch (err) {
