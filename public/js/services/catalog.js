@@ -6726,17 +6726,8 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         const value = kanjoCategoryValue(meal);
         return { status: 'matched', category: value, categories: [value], primary: value, options: [] };
     }
-    /* STRICT pharmacy fallback: inside the pharmacy scope ANY product left
-       unmatched by every specific class (and by 'أدوية' itself) MUST default to
-       the generic 'أدوية' category (ID 194) instead of staying unmapped. */
-    if (pharmacyScope) {
-        const generic = allowedCats.find((cat) => cat.id === 194 && normalizeArabic(cat.name) === normalizeArabic(KANJO_PHARMACY_GENERIC_CATEGORY))
-            || allowedCats.find((cat) => normalizeArabic(cat.name) === normalizeArabic(KANJO_PHARMACY_GENERIC_CATEGORY));
-        if (generic) {
-            const value = kanjoCategoryValue(generic);
-            return { status: 'matched', category: value, categories: [value], primary: value, options: [] };
-        }
-    }
+    /* NO auto-fallback: pharmacy items that no explicit class (and no dictionary
+       token) matches are intentionally left UNMAPPED for manual review. */
     return { status: 'unmapped', category: '', categories: [], primary: '', options: [] };
 };
 
