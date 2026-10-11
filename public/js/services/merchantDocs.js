@@ -172,6 +172,28 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
 window.resolveCanonicalMerchantId = async (baseName, taskData) => {
     baseName = getBaseName(baseName || '');
 
+    /* Orphan task-id guard: a task can mirror a phantom merchantId that never
+       (or no longer) exists in `merchants`. If the authoritative directory
+       already holds a canonical record for this normalized base name, resolve to
+       that canonical id instead of propagating the orphan id into a new
+       merchant/product record (which would re-split the merchant's cards). */
+    const taskMerchantId = String((taskData && taskData.merchantId) || '').trim();
+    const directoryId = (() => {
+        if (!window.merchantsById || !window.merchantsById.size) return null;
+        let any = null, docs = null;
+        for (const [mid, rec] of window.merchantsById) {
+            if (!rec || rec.archived === true || !rec.name || getBaseName(rec.name) !== baseName) continue;
+            if (rec.driveFolderLink) return mid;
+            if (!any) any = mid;
+            const hasDocs = !!(rec.documents && typeof rec.documents === 'object' && Object.keys(rec.documents).length);
+            if (hasDocs && !docs) docs = mid;
+        }
+        return docs || any;
+    })();
+    if (directoryId && (!taskMerchantId || !(window.merchantsById && window.merchantsById.has(taskMerchantId)))) {
+        return directoryId;
+    }
+
     /* 1) Fast path: in-memory maps (kept fresh by the merchants onSnapshot). */
     const mem = window.findMerchantIdForBase(baseName);
     if (mem) return mem;

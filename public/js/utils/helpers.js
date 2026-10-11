@@ -4,10 +4,11 @@ const getBaseName = (name) => {
 
     if (!name) return '';
 
-    /* Strip RTL / bidi formatting control marks (U+200E, U+200F, U+202A-U+202E,
-       U+2066-U+2069, U+061C) so base-name matching is stable regardless of how a
-       name was pasted (e.g. "‏‎Mr Molten‎‏" and "Mr Molten" are the same group). */
-    let clean = String(name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]/g, '');
+    /* Strip RTL / bidi / invisible formatting control marks (U+200B-U+200F,
+       U+202A-U+202E, U+2060-U+2069, U+FEFF, U+061C) so base-name matching is
+       stable regardless of how a name was pasted (e.g. "‏‎Mr Molten‎‏" and
+       "Mr Molten" are the same group). */
+    let clean = String(name).replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u061C]/g, '');
 
     while (clean.includes('(متابعة)') || clean.includes('(متابعه)')) {
 

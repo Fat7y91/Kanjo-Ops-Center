@@ -51,7 +51,7 @@ const bucketName = String(process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.f
    stable across the app. */
 const getBaseName = (name) => {
   if (!name) return '';
-  let clean = String(name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]/g, '');
+  let clean = String(name).replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u061C]/g, '');
   while (clean.includes('(متابعة)') || clean.includes('(متابعه)')) {
     clean = clean.replace(/\s*\(متابعة\)\s*/g, '').replace(/\s*\(متابعه\)\s*/g, '').trim();
   }

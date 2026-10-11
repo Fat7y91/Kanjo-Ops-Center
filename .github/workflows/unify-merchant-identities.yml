@@ -1,0 +1,49 @@
+# One-off: unify merchant & product identities (canonical merchantId).
+# Collapses duplicate merchant cards caused by orphan/duplicate merchantIds.
+# Writes a backup artifact before mutating Firestore. Idempotent.
+#
+# Set UNIFY_DRY_RUN: '1' to only plan + back up (no writes), '0' to apply.
+name: Unify merchant identities
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/unify-merchant-identities.mjs'
+      - '.github/workflows/unify-merchant-identities.yml'
+  workflow_dispatch:
+
+jobs:
+  unify:
+    runs-on: ubuntu-latest
+    env:
+      UNIFY_DRY_RUN: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Install sharp (optional logo resize, used by the follow-up sync)
+        run: npm install sharp || echo "sharp unavailable; sync uploads logos unresized"
+      - name: Run identity unification
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          FIREBASE_PROJECT_ID: kanjo-desouk
+          FIREBASE_STORAGE_BUCKET: kanjo-desouk.firebasestorage.app
+        run: node scripts/unify-merchant-identities.mjs
+      - name: Upload backup artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: merchant-unification-backup
+          path: /tmp/merchant-unification-backup.json
+          if-no-files-found: warn
+      - name: Re-sync merchant statuses + counts
+        if: env.UNIFY_DRY_RUN != '1'
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          FIREBASE_PROJECT_ID: kanjo-desouk
+          FIREBASE_STORAGE_BUCKET: kanjo-desouk.firebasestorage.app
+        run: node scripts/sync-merchant-status.mjs

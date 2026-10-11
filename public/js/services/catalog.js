@@ -2609,8 +2609,21 @@ const groupCatalogProductsByMerchant = (products) => {
        display name is always the live directory name. */
     const grouped = new Map();
     (products || []).forEach((p) => {
-        const merchantId = String((p && (p.merchantId || p.merchant_id)) || '').trim();
-        const merchantName = catalogResolveMerchantName(p) || 'تاجر غير معروف';
+        let merchantId = String((p && (p.merchantId || p.merchant_id)) || '').trim();
+        /* An orphan/stale merchantId (absent from the loaded directory) must not
+           split one merchant into two cards: if a canonical `merchants` record
+           exists for the product's normalized name, bucket the product there. */
+        if (merchantId && window.merchantsById && typeof window.merchantsById.has === 'function' && !window.merchantsById.has(merchantId)) {
+            const stamped = String((p && (p.merchantName || p.merchant || p.merchant_name)) || '').trim();
+            const canonical = stamped && typeof window.findMerchantIdForBase === 'function' ? window.findMerchantIdForBase(stamped) : null;
+            if (canonical && window.merchantsById.has(canonical)) merchantId = canonical;
+        }
+        let merchantName = catalogResolveMerchantName(p) || 'تاجر غير معروف';
+        if (merchantId && window.merchantsById && window.merchantsById.has(merchantId)) {
+            const rec = window.merchantsById.get(merchantId);
+            const recName = rec && String(rec.name || '').trim();
+            if (recName) merchantName = window.getBaseName ? window.getBaseName(recName) : recName;
+        }
         const key = merchantId ? 'id:' + merchantId : 'name:' + merchantName;
         let group = grouped.get(key);
         if (!group) {
