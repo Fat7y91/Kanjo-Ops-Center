@@ -9338,23 +9338,12 @@ window.startCatalogListeners = () => {
         );
         window._appListenerUnsubscribers.push(unsubPending);
 
-        if (window.canViewAllCatalogProducts()) {
-            const unsubAll = window.onSnapshot(
-                window.collection(window.db, CATALOG_COLLECTION),
-                (snap) => {
-                    const items = [];
-                    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
-                    if (items.length || !(window.allCatalogProductsCache || []).length) {
-                        window.allCatalogProductsCache = sortCatalogProductsByCreatedAt(items);
-                    }
-                    window._catalogAllProductsLoaded = true;
-                    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
-                    if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
-                },
-                (err) => console.error('[catalog] all products listener failed:', err)
-            );
-            window._appListenerUnsubscribers.push(unsubAll);
-        }
+        /* The former unbounded full-collection SDK listener here streamed every
+           merchant_products document on boot and again on every write — a
+           multi-thousand-document read plus a full payload download. It is
+           deliberately NOT attached. The "all products" widget loads the set on
+           demand and count-gated instead: window.refreshCatalogFromRest() on the
+           REST path, fetchAllCatalogProducts() on the SDK path. */
 
         if (window.isMahmoudUser()) {
             const unsubDeleteReq = window.onSnapshot(

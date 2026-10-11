@@ -16,9 +16,13 @@
      primaryCategory: the vendor's business category (from tasks.cat), e.g.
                       "🍔 مطاعم وكافيهات"; the portal only strips the emoji for
                       display. Empty when the source task carries none.
-     logoUrl        : the vendor logo (tasks.merchantLogo, a Base64 data URI).
-                      Denormalized here because the agency role cannot read
-                      `tasks`. Empty when the source task carries none.
+     logoUrl        : a SHORT public Cloud Storage URL for the vendor logo
+                      (tasks.merchantLogo). The source is a Base64 data URI,
+                      which is opaque to the agency role and made every
+                      `merchants` read ~10 MB, so it is uploaded to Storage once
+                      (content-addressed + immutable cache) and only the short
+                      URL is stored. A raw Base64 blob is NEVER written back to
+                      Firestore. Empty when the source task carries none.
      contractStatusSyncedAt : server write time
 
    Contracted merchants that have no merchant document yet (e.g. fresh VIP
@@ -28,12 +32,20 @@
    Credentials:
      FIREBASE_SERVICE_ACCOUNT       : full service-account JSON (CI secret)
      GOOGLE_APPLICATION_CREDENTIALS : path to a service-account JSON file
+   Environment overrides:
+     FIREBASE_PROJECT_ID            (default: kanjo-desouk)
+     FIREBASE_STORAGE_BUCKET        (default: <projectId>.firebasestorage.app)
    Dry run (no writes):
      SYNC_DRY_RUN=1 node scripts/sync-merchant-status.mjs
 */
 
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
+import { createHash } from 'node:crypto';
+
+const projectId = String(process.env.FIREBASE_PROJECT_ID || 'kanjo-desouk').trim();
+const bucketName = String(process.env.FIREBASE_STORAGE_BUCKET || `${projectId}.firebasestorage.app`).trim();
 
 /* Must match public/js/utils/helpers.js `getBaseName` exactly so the join is
    stable across the app. */
@@ -48,15 +60,17 @@ const getBaseName = (name) => {
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 
-/* Keep merchant documents well under Firestore's ~1 MiB document limit: a logo
-   larger than this is skipped (that vendor simply keeps its monogram fallback)
-   rather than risking a failed batch commit. */
-const MAX_LOGO_CHARS = 900000;
-const pickLogo = (value) => {
+/* Pathological-input safety valve only. Logos are now stored in Cloud Storage,
+   not on the Firestore document, so normal sizes (largest observed ~0.9 MB) are
+   always kept. This cap merely stops a corrupt multi-megabyte blob from
+   exhausting memory during decode; it is not a size limit for real logos. */
+const MAX_LOGO_DECODE_CHARS = 6000000;
+const pickLogoSource = (value) => {
   const logo = value ? String(value) : '';
   if (!logo) return '';
-  if (logo.length > MAX_LOGO_CHARS) {
-    console.warn(`[skip] merchantLogo too large (${logo.length} chars > ${MAX_LOGO_CHARS})`);
+  if (!/^data:/i.test(logo)) return logo; // already a URL — keep it
+  if (logo.length > MAX_LOGO_DECODE_CHARS) {
+    console.warn(`[skip] merchantLogo too large to decode (${logo.length} chars > ${MAX_LOGO_DECODE_CHARS})`);
     return '';
   }
   return logo;
@@ -65,16 +79,99 @@ const pickLogo = (value) => {
 let adminApp;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   adminApp = initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+    projectId,
+    storageBucket: bucketName
   }, 'sync-merchant-status');
 } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  adminApp = initializeApp({ credential: applicationDefault() }, 'sync-merchant-status');
+  adminApp = initializeApp({
+    credential: applicationDefault(),
+    projectId,
+    storageBucket: bucketName
+  }, 'sync-merchant-status');
 } else {
   console.error('No Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS.');
   process.exit(1);
 }
 
 const db = getFirestore(adminApp);
+const bucket = getStorage(adminApp).bucket(bucketName);
+
+/* ── Logo → Cloud Storage ──────────────────────────────────────────────────
+   Content-addressed and immutable: the object path and its download token are
+   both derived from the source bytes, so re-running is a no-op (no churn, no
+   duplicate URLs) and the browser can cache the image for a year. If anything
+   fails the merchant simply keeps an empty URL (the portal shows its monogram
+   fallback) — we never fall back to storing the raw Base64 blob. */
+const LOGO_PATH_PREFIX = 'merchant-logos';
+const sha1 = (s) => createHash('sha1').update(s).digest('hex');
+const parseDataUri = (uri) => {
+  const m = /^data:([^;,]+)?(?:;base64)?,(.*)$/is.exec(uri);
+  if (!m) return null;
+  return { contentType: (m[1] || 'image/jpeg').trim(), base64: m[2] || '' };
+};
+const logoUrlFor = (objectPath, token) =>
+  `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+
+const uploadLogo = async (raw) => {
+  try {
+    const parsed = parseDataUri(raw);
+    if (!parsed) {
+      console.warn('[logo] unrecognized logo format; leaving URL empty (no raw blob stored)');
+      return '';
+    }
+    let buffer = Buffer.from(parsed.base64, 'base64');
+    let contentType = parsed.contentType || 'image/jpeg';
+    let ext = /png/i.test(contentType) ? 'png' : (/webp/i.test(contentType) ? 'webp' : 'jpg');
+    if (!buffer.length) return '';
+    /* Shrink to a card-friendly thumbnail when sharp is present; otherwise upload
+       the original bytes untouched (still zero loss). */
+    try {
+      const sharpMod = (await import('sharp')).default;
+      const resized = await sharpMod(buffer)
+        .rotate()
+        .resize({ width: 400, height: 400, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 82 })
+        .toBuffer();
+      if (resized && resized.length) {
+        buffer = resized;
+        contentType = 'image/jpeg';
+        ext = 'jpg';
+      }
+    } catch (_) { /* sharp unavailable — keep original bytes */ }
+
+    const hash = sha1(raw);
+    const objectPath = `${LOGO_PATH_PREFIX}/${hash}.${ext}`;
+    const token = sha1('kanjo-logo:' + hash).slice(0, 36);
+    const file = bucket.file(objectPath);
+    const [exists] = await file.exists();
+    if (!exists && !dryRun) {
+      await file.save(buffer, {
+        resumable: false,
+        metadata: {
+          contentType,
+          cacheControl: 'public, max-age=31536000, immutable',
+          metadata: { firebaseStorageDownloadTokens: token }
+        }
+      });
+      console.log(`[logo] uploaded ${objectPath} (${buffer.length} bytes)`);
+    }
+    return logoUrlFor(objectPath, token);
+  } catch (err) {
+    console.warn('[logo] upload failed; leaving URL empty instead of a raw blob:', err && err.message ? err.message : err);
+    return '';
+  }
+};
+
+/* Dedupe concurrent work on the same image (two merchants often share a logo). */
+const LOGO_CACHE = new Map(); // raw source -> Promise<public url>
+const resolveLogoUrl = (source) => {
+  const raw = source ? String(source) : '';
+  if (!raw) return Promise.resolve('');
+  if (/^https?:\/\//i.test(raw)) return Promise.resolve(raw);
+  if (!LOGO_CACHE.has(raw)) LOGO_CACHE.set(raw, uploadLogo(raw));
+  return LOGO_CACHE.get(raw);
+};
 
 const main = async () => {
   const [tasksSnap, merchantsSnap, productsSnap] = await Promise.all([
@@ -84,7 +181,7 @@ const main = async () => {
   ]);
 
   /* ── 1) Contracted merchants, keyed by base-name. Final wins over VIP. ── */
-  const contracted = new Map(); // base -> { merchantId, name, status }
+  const contracted = new Map(); // base -> { merchantId, name, status, cat, logoSource }
   tasksSnap.forEach((doc) => {
     const t = doc.data() || {};
     const base = getBaseName(t.name);
@@ -99,20 +196,27 @@ const main = async () => {
       if (status === 'final') existing.status = 'final';
       if (!existing.merchantId && t.merchantId) existing.merchantId = t.merchantId;
       if (!existing.cat && t.cat) existing.cat = String(t.cat).trim();
-      if (!existing.logo && t.merchantLogo) existing.logo = pickLogo(t.merchantLogo);
+      if (!existing.logoSource && t.merchantLogo) existing.logoSource = pickLogoSource(t.merchantLogo);
     } else {
       contracted.set(base, {
         merchantId: t.merchantId || '',
         name: base,
         status,
         cat: t.cat ? String(t.cat).trim() : '',
-        logo: pickLogo(t.merchantLogo)
+        logoSource: pickLogoSource(t.merchantLogo)
       });
     }
   });
   const contractedIds = new Set(
     [...contracted.values()].map((c) => c.merchantId).filter(Boolean)
   );
+
+  /* ── 1b) Resolve every unique logo to a short Storage URL (uploads once). ── */
+  await Promise.all([...contracted.values()].map(async (c) => {
+    c.logoUrl = await resolveLogoUrl(c.logoSource);
+  }));
+  const withLogo = [...contracted.values()].filter((c) => c.logoUrl).length;
+  console.log(`[logo] resolved ${withLogo}/${contracted.size} contracted logos to Storage URLs`);
 
   /* ── 2) Mapped product count per merchantId. ── */
   const productCount = new Map();
@@ -132,7 +236,7 @@ const main = async () => {
     if (base) byBase.set(base, doc);
   });
 
-  const summary = { contracted: contracted.size, final: 0, vip: 0, updated: 0, created: 0, cleared: 0 };
+  const summary = { contracted: contracted.size, final: 0, vip: 0, updated: 0, created: 0, cleared: 0, logos: withLogo };
 
   let batch = db.batch();
   let opCount = 0;
@@ -152,13 +256,13 @@ const main = async () => {
   for (const [base, c] of contracted) {
     summary[c.status] += 1;
     const doc = (c.merchantId && byId.get(c.merchantId)) || byBase.get(base) || null;
+    const logo = c.logoUrl || '';
 
     if (doc) {
       const m = doc.data() || {};
       const mid = String(m.merchantId || doc.id);
       const count = productCount.get(mid) || 0;
       const cat = c.cat || '';
-      const logo = c.logo || '';
       if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count || String(m.primaryCategory || '') !== cat || String(m.logoUrl || '') !== logo) {
         write(doc.ref, { contractStatus: c.status, productCount: count, primaryCategory: cat, logoUrl: logo, contractStatusSyncedAt: new Date() });
         summary.updated += 1;
@@ -175,7 +279,7 @@ const main = async () => {
         contractStatus: c.status,
         productCount: count,
         primaryCategory: c.cat || '',
-        logoUrl: c.logo || '',
+        logoUrl: logo,
         contractStatusSyncedAt: new Date(),
         createdAt: new Date()
       });

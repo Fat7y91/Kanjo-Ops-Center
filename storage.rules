@@ -13,6 +13,14 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // Vendor logos uploaded by scripts/sync-merchant-status.mjs (Admin SDK).
+    // Public read so the agency portal can render them with a long-lived cache;
+    // direct client writes remain denied.
+    match /merchant-logos/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

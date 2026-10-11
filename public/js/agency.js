@@ -5,7 +5,9 @@
    paginated product catalog (`merchant_products`).
 
    Anti-scraping posture:
-     - every product request is server-paginated at 24 items (limit + offset);
+     - every product request is server-paginated at 24 items (keyset cursor on
+       `__name__`; offsets are never used because Firestore bills skipped docs);
+     - the vendor directory is filtered server-side to active partners only;
      - all export / edit / delete / admin controls are absent from this page;
      - the grid text is non-selectable and images reject right-click + drag;
      - the grid/lightbox never expose a download affordance.
@@ -29,7 +31,16 @@ const PRODUCT_FIELDS = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
     'variations', 'status'
 ];
-const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'logo', 'contractStatus', 'productCount', 'primaryCategory'];
+const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'contractStatus', 'productCount', 'primaryCategory'];
+/* Only partners who are actually shown are read: `contractStatus` is
+   denormalized onto `merchants` by scripts/sync-merchant-status.mjs, so the
+   directory query filters server-side (~119 docs) instead of reading (and
+   downloading a logo for) every merchant in the collection. */
+const VENDOR_SECTION_STATUSES = ['final', 'vip'];
+const VENDOR_QUERY_LIMIT = 1000;
+/* Deterministic ordering is required for keyset paging (page N+1 resumes after
+   page N's last id), so every product page is explicitly ordered by `__name__`. */
+const PRODUCT_ORDER_BY = [['__name__', 'ASCENDING']];
 
 /* Contracted vendors only — the portal deliberately hides every merchant that
    is not a final agreement ('final') or an under-contract VIP pre-agreement
@@ -67,6 +78,9 @@ const state = {
     page: 1,
     items: [],
     total: 0,
+    /* Keyset pagination cursors: `pageCursors[p]` is the startAfter document id
+       for page p+1 (index 0 is null = first page). Never offsets. */
+    pageCursors: [null],
     vendors: [],
     vendorLogos: new Map(),
     vendorsLoaded: false
@@ -361,36 +375,50 @@ const setLoading = (on) => {
 };
 
 /* ── Data ────────────────────────────────────────────────────────────────── */
+let vendorsLoadPromise = null;
 const loadVendors = async () => {
     if (state.vendorsLoaded) return;
-    try {
-        await window.authReady;
-        const rows = await window.kanjoRest.list([VENDORS_COLLECTION], { pageSize: 300, maxPages: 20, select: VENDOR_FIELDS });
-        state.vendors = (rows || [])
-            .filter((r) => r && (r.name || r.id))
-            .map((r) => ({
-                id: r.id || r.merchantId,
-                name: r.name || r.merchantId || r.id,
-                logoUrl: r.logoUrl || r.logo || '',
-                contractStatus: String(r.contractStatus || ''),
-                productCount: Number(r.productCount) || 0,
-                primaryCategory: String(r.primaryCategory || '').trim()
-            }))
-            .filter((v) => v.contractStatus === 'final' || v.contractStatus === 'vip')
-            .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
-        state.vendorsLoaded = true;
-        state.vendorLogos = new Map();
-        state.vendors.forEach((v) => {
-            const src = vendorLogoSrc(v);
-            if (src) state.vendorLogos.set(String(v.id), src);
-        });
-        renderVendors();
-        populateVendorSelect();
-    } catch (err) {
-        $('vendorsLoading').classList.add('hidden');
-        $('vendorsEmpty').classList.remove('hidden');
-        console.error('[agency] vendors load failed:', err);
-    }
+    /* boots twice on login — boot() and setView('vendors') both request the
+       directory. Without an in-flight guard both start before the first sets
+       `vendorsLoaded`, so the whole payload is fetched and read twice. */
+    if (vendorsLoadPromise) return vendorsLoadPromise;
+    vendorsLoadPromise = (async () => {
+        try {
+            await window.authReady;
+            const rows = await window.kanjoRest.runQuery(
+                VENDORS_COLLECTION,
+                [['contractStatus', 'in', VENDOR_SECTION_STATUSES]],
+                VENDOR_QUERY_LIMIT,
+                { select: VENDOR_FIELDS }
+            );
+            state.vendors = (rows || [])
+                .filter((r) => r && (r.name || r.id))
+                .map((r) => ({
+                    id: r.id || r.merchantId,
+                    name: r.name || r.merchantId || r.id,
+                    logoUrl: r.logoUrl || '',
+                    contractStatus: String(r.contractStatus || ''),
+                    productCount: Number(r.productCount) || 0,
+                    primaryCategory: String(r.primaryCategory || '').trim()
+                }))
+                .filter((v) => v.contractStatus === 'final' || v.contractStatus === 'vip')
+                .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
+            state.vendorsLoaded = true;
+            state.vendorLogos = new Map();
+            state.vendors.forEach((v) => {
+                const src = vendorLogoSrc(v);
+                if (src) state.vendorLogos.set(String(v.id), src);
+            });
+            renderVendors();
+            populateVendorSelect();
+        } catch (err) {
+            vendorsLoadPromise = null;
+            $('vendorsLoading').classList.add('hidden');
+            $('vendorsEmpty').classList.remove('hidden');
+            console.error('[agency] vendors load failed:', err);
+        }
+    })();
+    return vendorsLoadPromise;
 };
 
 const loadProducts = async () => {
@@ -401,14 +429,25 @@ const loadProducts = async () => {
         const filters = [];
         if (state.category) filters.push(['category', '==', state.category]);
         if (state.vendorId) filters.push(['merchantId', '==', state.vendorId]);
-        const offset = (state.page - 1) * PAGE_SIZE;
+        const startAfterId = state.page > 1 ? state.pageCursors[state.page - 1] : null;
         const [rows, total] = await Promise.all([
-            window.kanjoRest.runQuery(PRODUCTS_COLLECTION, filters, PAGE_SIZE, { offset, select: PRODUCT_FIELDS }),
+            window.kanjoRest.runQuery(
+                PRODUCTS_COLLECTION,
+                filters,
+                PAGE_SIZE,
+                Object.assign({ select: PRODUCT_FIELDS, orderBy: PRODUCT_ORDER_BY }, startAfterId ? { startAfterId } : {})
+            ),
             window.kanjoRest.count(PRODUCTS_COLLECTION, filters)
         ]);
         if (seq !== requestSeq) return;
         state.items = rows || [];
         state.total = Number(total) || 0;
+        /* Remember the cursor for the NEXT page (keyset, never offset — offset
+           bills every skipped doc, making a full browse O(N^2)). */
+        if (state.items.length === PAGE_SIZE) {
+            const last = state.items[state.items.length - 1] || {};
+            if (last.id) state.pageCursors[state.page] = String(last.id);
+        }
         renderProducts();
         renderPager();
     } catch (err) {
@@ -439,6 +478,7 @@ const setView = (view) => {
 
 const resetToProducts = () => {
     state.page = 1;
+    state.pageCursors = [null];
     loadProducts();
 };
 
@@ -447,6 +487,7 @@ const selectVendor = (id, name) => {
     state.vendorName = name || '';
     state.category = '';
     state.page = 1;
+    state.pageCursors = [null];
     $('filterVendor').value = state.vendorId;
     $('filterCategory').value = '';
     updateActiveChip();
@@ -470,6 +511,7 @@ const clearFilters = () => {
     state.vendorId = '';
     state.vendorName = '';
     state.page = 1;
+    state.pageCursors = [null];
     $('filterCategory').value = '';
     $('filterVendor').value = '';
     updateActiveChip();

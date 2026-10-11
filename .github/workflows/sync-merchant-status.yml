@@ -24,7 +24,13 @@ jobs:
           node-version: 20
       - name: Install firebase-admin
         run: npm install firebase-admin@12
+      # Optional: resizes merchant logos to small card thumbnails before upload.
+      # If it fails to install the script still runs and uploads original bytes.
+      - name: Install sharp (optional logo resize)
+        run: npm install sharp || echo "sharp unavailable; logos upload unresized"
       - name: Run merchant status sync
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          FIREBASE_PROJECT_ID: kanjo-desouk
+          FIREBASE_STORAGE_BUCKET: kanjo-desouk.firebasestorage.app
         run: node scripts/sync-merchant-status.mjs

@@ -302,6 +302,55 @@ const restJsToFields = (obj) => {
     return fields;
 };
 
+/* ─── Write-payload guard (no blobs in Firestore) ───
+   Firestore documents are capped at ~1 MiB and are not a blob store: embedding
+   Base64 images makes every read huge (a 237-merchant directory was shipping
+   ~10 MB) and uncacheable. Refuse any write that inlines a Base64 data URI, or
+   that exceeds the size cap, so a blob can never be (re)introduced. Large assets
+   belong in Cloud Storage; store the short URL here. */
+const MAX_INLINE_DATA_URI_CHARS = 20000;
+const MAX_WRITE_JSON_BYTES = 300000;
+/* Only collections that feed bulk public reads are guarded, so unrelated
+   writes (e.g. `tasks`, which legitimately carries a Base64 logo for the
+   dashboard) are never affected. */
+const BLOB_GUARDED_COLLECTIONS = ['merchants', 'merchant_products'];
+const findInlineBase64 = (value, path, depth) => {
+    if (depth > 6 || value == null) return '';
+    if (typeof value === 'string') {
+        return (/^data:[^;,]+;base64,/i.test(value) && value.length > MAX_INLINE_DATA_URI_CHARS)
+            ? (path || '(root)')
+            : '';
+    }
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+            const hit = findInlineBase64(value[i], path + '[' + i + ']', depth + 1);
+            if (hit) return hit;
+        }
+        return '';
+    }
+    if (typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+            const hit = findInlineBase64(value[key], path ? path + '.' + key : key, depth + 1);
+            if (hit) return hit;
+        }
+    }
+    return '';
+};
+const assertWritePayloadSafe = (collectionId, data) => {
+    if (BLOB_GUARDED_COLLECTIONS.indexOf(String(collectionId)) === -1) return;
+    const blobPath = findInlineBase64(data, '', 0);
+    if (blobPath) {
+        throw new Error('[firebase] refusing to write an inline Base64 blob at "' + blobPath
+            + '" to ' + collectionId + '; upload it to Cloud Storage and store the URL instead.');
+    }
+    let bytes = 0;
+    try { bytes = JSON.stringify(data).length; } catch (_) { bytes = 0; }
+    if (bytes > MAX_WRITE_JSON_BYTES) {
+        throw new Error('[firebase] refusing to write a ' + bytes + '-byte document to ' + collectionId
+            + ' (cap ' + MAX_WRITE_JSON_BYTES + '); store large assets in Cloud Storage.');
+    }
+};
+
 /* The REST API wants operator enum names (EQUAL, LESS_THAN, ...), not the SDK's
    symbolic operators (`==`, `<`, ...). Without this mapping every filtered REST
    query fails with HTTP 400 "Invalid value ... FieldFilter.Operator". */
@@ -324,7 +373,7 @@ const restNormalizeOp = (op) => REST_OP_ALIASES[op] || op;
    ordered + limited query instead of paging the whole collection. */
 const restRunQuery = async (collectionId, filters = [], limit = null, options = {}) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
-        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToRestValue(value) }
     }));
     const structuredQuery = { from: [{ collectionId }] };
     if (options.allDescendants) structuredQuery.from[0].allDescendants = true;
@@ -339,11 +388,21 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
         });
     }
     if (limit) structuredQuery.limit = limit;
-    /* Optional offset for strict server-side pagination. Combined with `limit`
-       this lets a read-only surface fetch a single page (e.g. 24 docs) instead
-       of the whole collection. Firestore bills the skipped docs, so callers
-       should keep pages small and pagination user-driven. */
-    if (options.offset) structuredQuery.offset = options.offset;
+    /* Keyset (cursor) pagination. Firestore bills every document SKIPPED by an
+       `offset`, so offset paging is O(N^2): browsing the 7.5k-product catalog
+       that way costs ~1.2M reads. A cursor on the document id (`__name__`) is
+       O(N) total — each page reads only its own rows. `options.startAfterId` is
+       the id of the previous page's last row; we resume strictly after it. */
+    if (options.startAfterId) {
+        if (!(options.orderBy && options.orderBy.length)) {
+            structuredQuery.orderBy = [
+                { field: { fieldPath: '__name__' }, direction: 'ASCENDING' }
+            ];
+        }
+        const fullName = 'projects/' + firebaseConfig.projectId
+            + '/databases/(default)/documents/' + collectionId + '/' + options.startAfterId;
+        structuredQuery.startAt = { values: [{ referenceValue: fullName }], before: false };
+    }
     /* Optional field mask: without it runQuery returns every field of every
        document (including large Base64 blobs such as tasks.merchantLogo). */
     if (options.select && options.select.length) {
@@ -370,7 +429,7 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
    lifetime. */
 const restRunQueryUnder = async (parentSegments, collectionId, filters = [], limit = null, options = {}) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
-        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToRestValue(value) }
     }));
     const structuredQuery = { from: [{ collectionId }] };
     if (clauses.length === 1) structuredQuery.where = clauses[0];
@@ -400,7 +459,7 @@ const restRunQueryUnder = async (parentSegments, collectionId, filters = [], lim
    matched document count as a number. */
 const restCount = async (collectionId, filters = []) => {
     const clauses = (filters || []).map(([field, op, value]) => ({
-        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToValue(value) }
+        fieldFilter: { field: { fieldPath: field }, op: restNormalizeOp(op), value: restJsToRestValue(value) }
     }));
     const structuredQuery = { from: [{ collectionId }] };
     if (clauses.length === 1) structuredQuery.where = clauses[0];
@@ -479,6 +538,7 @@ const restGetDocument = async (segments) => {
 
 /* Create a document with a server-generated id over REST (mirrors addDoc). */
 const restCreateDocument = async (collectionId, data) => {
+    assertWritePayloadSafe(collectionId, data);
     const url = REST_DOCUMENTS_URL + '/' + encodeURIComponent(collectionId)
         + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
     const response = await fetch(url, {
@@ -512,6 +572,7 @@ const restDeleteDocument = async (segments) => {
    SDK's `setDoc(ref, data, { merge: true })`. Used so writes never have to wake
    the SDK streaming transport (the blocked channel behind the offline state). */
 const restPatchDocument = async (segments, data) => {
+    assertWritePayloadSafe(segments[0], data);
     const path = segments.map(encodeURIComponent).join('/');
     const fieldPaths = Object.keys(data || {})
         .map((f) => 'updateMask.fieldPaths=' + encodeURIComponent(f))
