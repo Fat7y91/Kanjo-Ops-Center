@@ -1162,7 +1162,14 @@ const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
         || '';
     const nameEn = (catalog ? String(catalog.name_en || '').trim() : '') || nameAr;
     const sku = intakeStableSku(m);
-    const category = (catalog ? String(catalog.category || '').trim() : '') || String(merchant.category || '').trim();
+    /* `category` in merchant_products is the product's VENDOR TYPE (the merchant
+       activity the export scopes the category matcher by), NOT a per-item section.
+       The enriched-catalog row carries the operator's sheet section (often the
+       placeholder "عام"), so the merchant's real activity MUST win; only fall back
+       to the sheet value when the merchant activity is blank. */
+    const category = String(merchant.category || '').trim()
+        || (catalog ? String(catalog.category || '').trim() : '')
+        || '';
     const price = Number(row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
     /* Descriptions come from the enriched catalog for MATCHED rows only.
        UNMATCHED rows keep both description fields strictly empty. */

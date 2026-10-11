@@ -235,7 +235,11 @@ window.menuImportBuildEntries = (rows, merchant) => {
             sku: menuProductSku(row),
             product_type: isVariable ? 'variable' : 'simple',
             base_price: isVariable ? Math.min(...variants.map((v) => Number(v.price) || 0)) : 0,
-            category: row.category || '',
+            /* `category` is the product's VENDOR TYPE (the merchant activity the
+               export scopes the matcher by), NOT the menu row's section. The
+               merchant's real activity wins; the sheet section is only a fallback
+               when it is unknown. */
+            category: String(merchant.category || '').trim() || row.category || '',
             rawImageUrl: '',
             rawImageUrls: [],
             enhancedImageUrl: '',
