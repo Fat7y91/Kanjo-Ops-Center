@@ -17,7 +17,7 @@ jobs:
   unify:
     runs-on: ubuntu-latest
     env:
-      UNIFY_DRY_RUN: '1'
+      UNIFY_DRY_RUN: '0'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
