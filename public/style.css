@@ -866,109 +866,237 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 
 /* ─── Laravel Dashboard Sync accents (merchant folder cards) ───
-   Uploaded merchants stand out: emerald/gold for a clean synced merchant,
-   pulsing amber for one whose edits still need transfer to the dashboard. */
+   A compact status pill floats at the top of the card: calm emerald when the
+   merchant is published & synced, pulsing amber when edits await transfer. */
 .catalog-merchant-card--dashboard-uploaded {
-    border: 1.5px solid #10b981;
-    background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), #fff 55%);
-    box-shadow: 0 6px 18px -8px rgba(16, 185, 129, 0.55);
+    border: 1.5px solid rgba(16, 185, 129, 0.35);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.06), #fff 55%);
+    box-shadow: 0 6px 18px -10px rgba(16, 185, 129, 0.5);
 }
 .catalog-merchant-card--dashboard-uploaded:hover {
-    border-color: #059669;
-    box-shadow: 0 14px 28px -12px rgba(16, 185, 129, 0.7);
+    border-color: rgba(16, 185, 129, 0.6);
+    box-shadow: 0 14px 28px -12px rgba(16, 185, 129, 0.65);
 }
 .catalog-merchant-card--dashboard-pending {
-    border: 1.5px solid #F59E0B;
-    background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), #fff 55%);
-    box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.6);
-    animation: catalogDashPulse 1.8s ease-in-out infinite;
+    border: 1.5px solid rgba(245, 158, 11, 0.55);
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.08), #fff 55%);
+    box-shadow: 0 6px 18px -10px rgba(245, 158, 11, 0.55);
 }
 .catalog-merchant-card--dashboard-pending:hover {
-    border-color: #d97706;
-    box-shadow: 0 14px 28px -12px rgba(245, 158, 11, 0.75);
-}
-@keyframes catalogDashPulse {
-    0%, 100% { box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.55); }
-    50% { box-shadow: 0 6px 22px -6px rgba(245, 158, 11, 0.95); }
-}
-@media (prefers-reduced-motion: reduce) {
-    .catalog-merchant-card--dashboard-pending { animation: none; }
+    border-color: rgba(217, 119, 6, 0.75);
+    box-shadow: 0 14px 28px -12px rgba(245, 158, 11, 0.7);
 }
 
 .catalog-dash-badge {
-    display: inline-block;
-    margin-bottom: 0.6rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.62rem;
-    font-weight: 900;
-    line-height: 1.5;
-}
-.catalog-dash-badge--synced { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-.catalog-dash-badge--pending { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
-
-/* ─── Laravel Dashboard Sync section (merchant profile modal) ─── */
-.mp-dash-section {
-    border-radius: 1rem;
-    padding: 0.85rem 1rem;
-    border: 1.5px solid rgba(35, 5, 53, 0.12);
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-}
-.mp-dash-section--todo { background: #f8fafc; border-color: #e2e8f0; }
-.mp-dash-section--synced { background: #ecfdf5; border-color: #a7f3d0; }
-.mp-dash-section--pending { background: #fffbeb; border-color: #fde68a; }
-.mp-dash-badge {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.7rem;
-    border-radius: 9999px;
-    font-size: 0.72rem;
-    font-weight: 900;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 8px;
+    white-space: nowrap;
 }
-.mp-dash-badge--todo { background: #f1f5f9; color: #475569; }
-.mp-dash-badge--synced { background: #d1fae5; color: #047857; }
-.mp-dash-badge--pending { background: #fef3c7; color: #b45309; }
-.mp-dash-meta { font-size: 0.7rem; font-weight: 800; color: #475569; }
-.mp-dash-btn {
-    border: none;
-    border-radius: 0.75rem;
-    padding: 0.55rem 0.9rem;
-    font-size: 0.72rem;
-    font-weight: 900;
+.catalog-dash-badge__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+}
+.catalog-dash-badge--synced {
+    background: #ECFDF5;
+    color: #047857;
+    border: 1px solid #A7F3D0;
+}
+.catalog-dash-badge--synced .catalog-dash-badge__dot { background: #10B981; }
+.catalog-dash-badge--pending {
+    background: #FFFBEB;
+    color: #B45309;
+    border: 1px solid #FCD34D;
     cursor: pointer;
-    align-self: flex-start;
-    transition: opacity 0.15s ease, transform 0.12s ease;
 }
-.mp-dash-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-.mp-dash-btn:active { transform: translateY(0) scale(0.98); }
-.mp-dash-btn--upload,
-.mp-dash-btn--confirm { background: #230535; color: #FFD700; }
-.mp-dash-btn--view { background: #F59E0B; color: #230535; }
-.mp-dash-btn--unmark { background: #f1f5f9; color: #475569; }
-.mp-dash-changes-wrap { max-height: 55vh; overflow-y: auto; text-align: right; }
-.mp-dash-changes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.mp-dash-change {
-    border: 1px solid rgba(35, 5, 53, 0.1);
-    border-radius: 0.75rem;
-    padding: 0.6rem 0.75rem;
-    background: #faf9fc;
+.catalog-dash-badge--pending .catalog-dash-badge__dot {
+    background: #F59E0B;
+    animation: catalogDashDotPulse 1.6s ease-in-out infinite;
 }
-.mp-dash-change-type {
-    font-size: 0.68rem;
-    font-weight: 900;
-    background: #230535;
+@keyframes catalogDashDotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.65); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .catalog-dash-badge--pending .catalog-dash-badge__dot { animation: none; }
+}
+
+/* Status-filter pills: SVG-style coloured dots for the dashboard-sync filters. */
+.catalog-status-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+    flex: 0 0 auto;
+}
+.catalog-status-chip-dot--emerald { background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18); }
+.catalog-status-chip-dot--amber { background: #F59E0B; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+
+/* ─── Laravel Dashboard Sync section (merchant profile modal) ─── */
+.mp-dash-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin: 12px 0;
+    direction: rtl;
+}
+.mp-dash-card__main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+.mp-dash-card__icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+}
+.mp-dash-card__text { min-width: 0; }
+.mp-dash-card__title {
+    font-size: 13.5px;
+    font-weight: 700;
+    line-height: 1.5;
+}
+.mp-dash-card__sub {
+    font-size: 11.5px;
+    line-height: 1.6;
+    margin-top: 2px;
+}
+.mp-dash-card--todo { background: #F8FAFC; border: 1px solid #E2E8F0; }
+.mp-dash-card--todo .mp-dash-card__icon--todo { background: #F1F5F9; color: #64748B; }
+.mp-dash-card--todo .mp-dash-card__title { color: #1E293B; }
+.mp-dash-card--todo .mp-dash-card__sub { color: #64748B; }
+
+.mp-dash-card--synced { background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%); border: 1px solid #A7F3D0; }
+.mp-dash-card--synced .mp-dash-card__icon--synced { background: #D1FAE5; color: #059669; }
+.mp-dash-card--synced .mp-dash-card__title { color: #065F46; }
+.mp-dash-card--synced .mp-dash-card__sub { color: #047857; }
+
+.mp-dash-card--pending { background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); border: 1px solid #FCD34D; }
+.mp-dash-card--pending .mp-dash-card__icon--pending { background: #FDE68A; color: #B45309; }
+.mp-dash-card--pending .mp-dash-card__title { color: #92400E; }
+.mp-dash-card--pending .mp-dash-card__sub { color: #B45309; }
+
+.mp-dash-cta {
+    border: none;
+    border-radius: 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+.mp-dash-cta:hover { transform: translateY(-1px); }
+.mp-dash-cta:active { transform: translateY(0) scale(0.98); }
+.mp-dash-cta--primary {
+    background: linear-gradient(135deg, #230535, #4B0082);
     color: #FFD700;
-    padding: 0.15rem 0.5rem;
-    border-radius: 9999px;
+    border: 1px solid rgba(255, 215, 0, 0.35);
+    padding: 8px 16px;
+    box-shadow: 0 2px 8px rgba(35, 5, 53, 0.18);
 }
-.mp-dash-change-time { font-size: 0.62rem; font-weight: 800; color: #64748b; }
-.mp-dash-change-item { font-size: 0.8rem; font-weight: 900; color: #230535; margin-top: 0.35rem; }
-.mp-dash-change-summary { font-size: 0.72rem; font-weight: 700; color: #475569; margin-top: 0.15rem; }
-.mp-dash-change-by { font-size: 0.62rem; font-weight: 800; color: #7c3aed; margin-top: 0.25rem; }
-.mp-dash-change-empty { text-align: center; color: #94a3b8; font-weight: 800; padding: 1rem; }
+.mp-dash-cta--ghost {
+    background: #FFFFFF;
+    color: #64748B;
+    border: 1px solid #CBD5E1;
+    padding: 6px 12px;
+    font-size: 11.5px;
+}
+.mp-dash-cta--ghost:hover { color: #334155; border-color: #94A3B8; }
+
+/* ─── Laravel Dashboard Sync: change-log modal ─── */
+.mp-dash-modal-popup { border-radius: 18px; }
+.mp-dash-modal-title {
+    background: linear-gradient(135deg, #230535, #4B0082) !important;
+    color: #FFD700 !important;
+    font-weight: 800 !important;
+    font-size: 1.05rem !important;
+    padding: 14px 18px !important;
+    border-radius: 12px;
+    margin: 0 0 0.9rem !important;
+    border-bottom: 2px solid rgba(255, 215, 0, 0.45);
+}
+.mp-dash-modal-html { text-align: right; }
+.mp-dash-confirm-btn {
+    width: 100% !important;
+    background: #230535 !important;
+    color: #FFD700 !important;
+    font-weight: 800 !important;
+    border: 1px solid rgba(255, 215, 0, 0.4) !important;
+    border-radius: 12px !important;
+    font-size: 12.5px !important;
+}
+.mp-dash-cancel-btn {
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+}
+
+.mp-dash-changes-wrap { max-height: 55vh; overflow-y: auto; text-align: right; padding-inline-end: 2px; }
+.mp-dash-changes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.mp-dash-change {
+    position: relative;
+    border: 1px solid #E9E4F2;
+    border-inline-start: 4px solid #230535;
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: #FCFBFE;
+}
+.mp-dash-change__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mp-dash-type {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 800;
+}
+.mp-dash-type--add { background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; }
+.mp-dash-type--edit { background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE; }
+.mp-dash-type--image { background: #FFFBEB; color: #B45309; border: 1px solid #FCD34D; }
+.mp-dash-type--delete { background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+.mp-dash-type--info { background: #F5F3FF; color: #6D28D9; border: 1px solid #DDD6FE; }
+.mp-dash-change-time { font-size: 10.5px; font-weight: 700; color: #64748b; }
+.mp-dash-change-item { font-size: 13px; font-weight: 800; color: #230535; margin-top: 6px; }
+.mp-dash-change-summary { font-size: 11.5px; font-weight: 600; color: #475569; margin-top: 3px; }
+.mp-dash-diff {
+    margin-top: 7px;
+    background: #F8FAFC;
+    border: 1px dashed #CBD5E1;
+    border-radius: 9px;
+    padding: 7px 10px;
+}
+.mp-dash-diff__label { display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 2px; }
+.mp-dash-diff__val { font-size: 12px; font-weight: 700; color: #334155; }
+.mp-dash-change-by { margin-top: 7px; }
+.mp-dash-user-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #6D28D9;
+    background: #F5F3FF;
+    border: 1px solid #DDD6FE;
+    padding: 2px 9px;
+    border-radius: 999px;
+}
+.mp-dash-change-empty { text-align: center; color: #94a3b8; font-weight: 800; padding: 1.4rem; }
 
 /* ─────────────────── KPI dashboard (Founders + Ops Manager) ─────────────────── */
 .kpi-stat-card {

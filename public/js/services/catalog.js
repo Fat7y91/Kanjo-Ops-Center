@@ -3000,16 +3000,19 @@ const renderCatalogMerchantFolderCard = (group) => {
     const logoHtml = logo
         ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" decoding="async" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
         : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
-    /* Laravel Dashboard Sync accent — uploaded merchants stand out immediately:
-       emerald/gold for a clean synced merchant, pulsing amber for one that has
-       edits pending transfer to the dashboard. */
+    /* Laravel Dashboard Sync accent — a compact floating status pill at the top
+       of the card. Synced = calm emerald; pending updates = pulsing amber and
+       clickable to open the change log directly. */
     const dashState = catalogGroupDashboardState(group);
     const dashClass = dashState === 'synced' ? ' catalog-merchant-card--dashboard-uploaded'
         : (dashState === 'pending' ? ' catalog-merchant-card--dashboard-pending' : '');
+    const dashMid = (group.merchantId && window.merchantsById && window.merchantsById.get(group.merchantId))
+        ? group.merchantId
+        : (window.findMerchantIdForBase ? window.findMerchantIdForBase(group.merchantName) : '');
     const dashBadge = dashState === 'synced'
-        ? '<div class="catalog-dash-badge catalog-dash-badge--synced">✅ مرفوع عالداشبورد</div>'
+        ? '<span class="catalog-dash-badge catalog-dash-badge--synced"><span class="catalog-dash-badge__dot"></span>منشور على التطبيق</span>'
         : (dashState === 'pending'
-            ? `<div class="catalog-dash-badge catalog-dash-badge--pending">🔔 يحتاج تحديث عالداشبورد (${catalogGroupDashboardPendingCount(group)})</div>`
+            ? `<span class="catalog-dash-badge catalog-dash-badge--pending" role="button" tabindex="0" onclick="event.stopPropagation(); openDashboardSyncChangesModal('${catalogEscapeHtml(dashMid)}');" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();event.preventDefault();openDashboardSyncChangesModal('${catalogEscapeHtml(dashMid)}');}"><span class="catalog-dash-badge__dot"></span>تحديثات معلّقة (${catalogGroupDashboardPendingCount(group)})</span>`
             : '');
     return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card${dashClass}">
         ${dashBadge}
@@ -3386,8 +3389,8 @@ const catalogMerchantStatusFilters = [
     { key: 'empty', label: 'بدون منتجات', icon: 'fa-box-open' },
     { key: 'recent', label: 'نشاط حديث', icon: 'fa-bolt' },
     { key: 'delete', label: 'طلبات حذف', icon: 'fa-trash-can' },
-    { key: 'dashboard_uploaded', label: 'مرفوع عالداشبورد', icon: 'fa-rocket' },
-    { key: 'dashboard_pending', label: 'يحتاج تحديث عالداشبورد', icon: 'fa-bell' }
+    { key: 'dashboard_uploaded', label: 'منشور على التطبيق', dot: 'emerald' },
+    { key: 'dashboard_pending', label: 'تحديثات معلّقة', dot: 'amber' }
 ];
 
 const catalogMerchantGroupsByStatus = (groups, status) => {
@@ -3423,8 +3426,11 @@ const renderCatalogStatusFilterBar = (groups) => {
        button with an aria-pressed state so the active filter is unmistakable. */
     bar.innerHTML = catalogMerchantStatusFilters.map((f) => {
         const on = f.key === active;
+        const lead = f.dot
+            ? `<span class="catalog-status-chip-dot catalog-status-chip-dot--${f.dot}" aria-hidden="true"></span>`
+            : `<i class="fa-solid ${f.icon}" aria-hidden="true"></i>`;
         return `<button type="button" onclick="onCatalogStatusFilterChange('${f.key}')" class="catalog-status-chip${on ? ' is-active' : ''}" aria-pressed="${on ? 'true' : 'false'}">
-            <i class="fa-solid ${f.icon}" aria-hidden="true"></i>
+            ${lead}
             <span class="catalog-status-chip-label">${f.label}</span>
             <span class="catalog-status-chip-count">(${counts[f.key] || 0})</span>
         </button>`;
@@ -3487,36 +3493,55 @@ window.renderMerchantDashboardSyncSection = (merchantId) => {
     const pending = uploaded && rec.hasPendingDashboardUpdates === true;
     const count = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.length : 0;
     const safeMid = catalogEscapeHtml(mid);
+    const iconTodo = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.7 1.6A3.5 3.5 0 0 0 6 19Z"/></svg>';
+    const iconSynced = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const iconPending = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
     let html = '';
     if (!uploaded) {
-        html = `<div class="mp-dash-section mp-dash-section--todo">
-            <div class="flex items-center gap-2"><span class="mp-dash-badge mp-dash-badge--todo">⚪ لم يُرفع على الداشبورد بعد</span></div>
-            ${canManage ? `<button type="button" onclick="markMerchantDashboardUploaded('${safeMid}')" class="mp-dash-btn mp-dash-btn--upload">🚀 تعليم كمرفوع على الداشبورد</button>` : ''}
+        html = `<div class="mp-dash-card mp-dash-card--todo">
+            <div class="mp-dash-card__main">
+                <div class="mp-dash-card__icon mp-dash-card__icon--todo">${iconTodo}</div>
+                <div class="mp-dash-card__text">
+                    <div class="mp-dash-card__title">حالة النشر: غير منشور على التطبيق</div>
+                    <div class="mp-dash-card__sub">لم يتم تفعيل ورفع بيانات التاجر على لوحة التحكم الرئيسية بعد</div>
+                </div>
+            </div>
+            ${canManage ? `<button type="button" onclick="markMerchantDashboardUploaded('${safeMid}')" class="mp-dash-cta mp-dash-cta--primary">اعتماد النشر على التطبيق</button>` : ''}
         </div>`;
     } else if (pending) {
-        html = `<div class="mp-dash-section mp-dash-section--pending">
-            <div class="flex items-center gap-2"><span class="mp-dash-badge mp-dash-badge--pending">⚠️ تعديلات جديدة تحتاج النقل للداشبورد (${count})</span></div>
-            <div class="flex flex-wrap gap-2">
-                <button type="button" onclick="openDashboardSyncChangesModal('${safeMid}')" class="mp-dash-btn mp-dash-btn--view">📋 عرض التعديلات وتأكيد التحديث</button>
-                ${canManage ? `<button type="button" onclick="confirmDashboardSync('${safeMid}')" class="mp-dash-btn mp-dash-btn--confirm">✅ تم النقل (تأكيد التحديث)</button>` : ''}
+        html = `<div class="mp-dash-card mp-dash-card--pending">
+            <div class="mp-dash-card__main">
+                <div class="mp-dash-card__icon mp-dash-card__icon--pending">${iconPending}</div>
+                <div class="mp-dash-card__text">
+                    <div class="mp-dash-card__title">يوجد (${count}) تعديل جديد بانتظار المزامنة</div>
+                    <div class="mp-dash-card__sub">تم تعديل بيانات أو منتجات بعد آخر رفع — يلزم تحديث لوحة التحكم</div>
+                </div>
             </div>
+            <button type="button" onclick="openDashboardSyncChangesModal('${safeMid}')" class="mp-dash-cta mp-dash-cta--primary">سجل التعديلات وتأكيد المزامنة</button>
         </div>`;
     } else {
         const when = formatDashboardSyncDate(rec.dashboardSyncedAt);
         const by = catalogEscapeHtml(rec.dashboardSyncedBy || '');
-        html = `<div class="mp-dash-section mp-dash-section--synced">
-            <div class="flex flex-wrap items-center gap-2"><span class="mp-dash-badge mp-dash-badge--synced">✅ مرفوع على الداشبورد ومُحدث</span>
-                ${when ? `<span class="mp-dash-meta">🕒 ${catalogEscapeHtml(when)}</span>` : ''}
-                ${by ? `<span class="mp-dash-meta">بواسطة: ${by}</span>` : ''}
+        const parts = [];
+        if (when) parts.push('آخر مزامنة: ' + catalogEscapeHtml(when));
+        if (by) parts.push('بواسطة: ' + by);
+        const sub = parts.length ? parts.join(' • ') : 'تم اعتماد نشر بيانات التاجر على لوحة التحكم الرئيسية';
+        html = `<div class="mp-dash-card mp-dash-card--synced">
+            <div class="mp-dash-card__main">
+                <div class="mp-dash-card__icon mp-dash-card__icon--synced">${iconSynced}</div>
+                <div class="mp-dash-card__text">
+                    <div class="mp-dash-card__title">منشور ومتزامن مع التطبيق</div>
+                    <div class="mp-dash-card__sub">${sub}</div>
+                </div>
             </div>
-            ${canManage ? `<button type="button" onclick="unmarkMerchantDashboardUploaded('${safeMid}')" class="mp-dash-btn mp-dash-btn--unmark">إلغاء تعليم الرفع</button>` : ''}
+            ${canManage ? `<button type="button" onclick="unmarkMerchantDashboardUploaded('${safeMid}')" class="mp-dash-cta mp-dash-cta--ghost">إلغاء حالة النشر</button>` : ''}
         </div>`;
     }
     el.innerHTML = html;
 };
 
 window.markMerchantDashboardUploaded = async (merchantId) => {
-    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('غير مصرح بهذا الإجراء', false); return; }
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('هذا الإجراء متاح للإدارة فقط', false); return; }
     const mid = String(merchantId || '').trim();
     if (!mid) return;
     const now = new Date().toISOString();
@@ -3525,11 +3550,11 @@ window.markMerchantDashboardUploaded = async (merchantId) => {
     if (rec) Object.assign(rec, patch);
     catalogDashboardRefreshAfterSync(mid);
     const ok = await patchMerchantDashboardFields(mid, patch);
-    if (window.showToast) window.showToast(ok ? 'تم تعليم التاجر كمرفوع على الداشبورد' : 'تعذر حفظ حالة الداشبورد', ok);
+    if (window.showToast) window.showToast(ok ? 'تم اعتماد نشر التاجر على التطبيق' : 'تعذر حفظ حالة النشر', ok);
 };
 
 window.unmarkMerchantDashboardUploaded = async (merchantId) => {
-    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('غير مصرح بهذا الإجراء', false); return; }
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('هذا الإجراء متاح للإدارة فقط', false); return; }
     const mid = String(merchantId || '').trim();
     if (!mid) return;
     const patch = { dashboardUploaded: false, hasPendingDashboardUpdates: false, pendingDashboardChanges: [] };
@@ -3537,11 +3562,11 @@ window.unmarkMerchantDashboardUploaded = async (merchantId) => {
     if (rec) Object.assign(rec, patch);
     catalogDashboardRefreshAfterSync(mid);
     const ok = await patchMerchantDashboardFields(mid, patch);
-    if (window.showToast) window.showToast(ok ? 'تم إلغاء تعليم الرفع على الداشبورد' : 'تعذر حفظ حالة الداشبورد', ok);
+    if (window.showToast) window.showToast(ok ? 'تم إلغاء حالة النشر' : 'تعذر حفظ حالة النشر', ok);
 };
 
 window.confirmDashboardSync = async (merchantId) => {
-    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('تأكيد التحديث متاح للإدارة فقط', false); return; }
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('تأكيد المزامنة متاح للإدارة فقط', false); return; }
     const mid = String(merchantId || '').trim();
     if (!mid) return;
     const now = new Date().toISOString();
@@ -3550,19 +3575,19 @@ window.confirmDashboardSync = async (merchantId) => {
     if (rec) Object.assign(rec, patch);
     catalogDashboardRefreshAfterSync(mid);
     const ok = await patchMerchantDashboardFields(mid, patch);
-    if (window.showToast) window.showToast(ok ? 'تم تأكيد نقل التعديلات للداشبورد' : 'تعذر تأكيد التحديث', ok);
+    if (window.showToast) window.showToast(ok ? 'تم تأكيد مزامنة التعديلات مع لوحة التحكم' : 'تعذر تأكيد المزامنة', ok);
 };
 
-const catalogDashboardChangeTypeLabel = (type) => ({
-    product_create: 'إضافة منتج',
-    product_edit: 'تعديل منتج',
-    product_delete: 'حذف منتج',
-    product_image: 'تحديث صورة',
-    product_bulk: 'إضافة دفعة أصناف',
-    merchant_info: 'تعديل بيانات التاجر',
-    merchant_logo: 'تحديث شعار التاجر',
-    merchant_docs: 'تحديث مستندات التاجر'
-}[String(type || '')] || 'تحديث');
+const catalogDashboardChangeTypeMeta = (type) => ({
+    product_create: { label: 'إضافة', tone: 'add' },
+    product_bulk: { label: 'إضافة', tone: 'add' },
+    product_edit: { label: 'تعديل', tone: 'edit' },
+    product_image: { label: 'صورة', tone: 'image' },
+    product_delete: { label: 'حذف', tone: 'delete' },
+    merchant_info: { label: 'بيانات', tone: 'info' },
+    merchant_logo: { label: 'شعار', tone: 'info' },
+    merchant_docs: { label: 'مستندات', tone: 'info' }
+}[String(type || '')] || { label: 'تحديث', tone: 'info' });
 
 window.openDashboardSyncChangesModal = async (merchantId) => {
     const mid = String(merchantId || '').trim();
@@ -3572,36 +3597,47 @@ window.openDashboardSyncChangesModal = async (merchantId) => {
     const canManage = window.canManageDashboardSync();
     const rows = entries.length ? entries.map((e) => {
         const when = formatDashboardSyncDate(e && e.at);
-        const typeLabel = catalogDashboardChangeTypeLabel(e && e.type);
+        const meta = catalogDashboardChangeTypeMeta(e && e.type);
+        const summary = String((e && e.summary) || '');
+        const diffHtml = summary.includes('⬅️')
+            ? `<div class="mp-dash-diff"><span class="mp-dash-diff__label">قبل ⬅️ بعد</span><span class="mp-dash-diff__val">${catalogEscapeHtml(summary)}</span></div>`
+            : (summary ? `<div class="mp-dash-change-summary">${catalogEscapeHtml(summary)}</div>` : '');
         return `<li class="mp-dash-change">
-            <div class="flex items-center justify-between gap-2">
-                <span class="mp-dash-change-type">${catalogEscapeHtml(typeLabel)}</span>
+            <div class="mp-dash-change__head">
+                <span class="mp-dash-type mp-dash-type--${meta.tone}">${catalogEscapeHtml(meta.label)}</span>
                 <span class="mp-dash-change-time">${catalogEscapeHtml(when)}</span>
             </div>
             ${e && e.item ? `<div class="mp-dash-change-item">${catalogEscapeHtml(e.item)}</div>` : ''}
-            ${e && e.summary ? `<div class="mp-dash-change-summary">${catalogEscapeHtml(e.summary)}</div>` : ''}
-            <div class="mp-dash-change-by"><i class="fa-solid fa-user-pen"></i> ${catalogEscapeHtml((e && e.by) || '')}</div>
+            ${diffHtml}
+            <div class="mp-dash-change-by"><span class="mp-dash-user-badge"><i class="fa-solid fa-user-pen" aria-hidden="true"></i> ${catalogEscapeHtml((e && e.by) || '—')}</span></div>
         </li>`;
     }).join('') : '<li class="mp-dash-change-empty">لا توجد تعديلات معلّقة</li>';
     const html = `<div class="mp-dash-changes-wrap"><ul class="mp-dash-changes-list">${rows}</ul></div>`;
     const opts = {
-        title: 'تعديلات تحتاج النقل للداشبورد',
+        title: 'سجل التعديلات المعلّقة',
         html,
-        width: 640,
+        width: 680,
         confirmButtonColor: '#230535',
         cancelButtonColor: '#94a3b8',
-        reverseButtons: true
+        reverseButtons: true,
+        customClass: {
+            popup: 'mp-dash-modal-popup',
+            title: 'mp-dash-modal-title',
+            htmlContainer: 'mp-dash-modal-html',
+            confirmButton: 'mp-dash-confirm-btn',
+            cancelButton: 'mp-dash-cancel-btn'
+        }
     };
     if (canManage) {
         opts.showCancelButton = true;
-        opts.confirmButtonText = '✅ تم نقل جميع التعديلات للداشبورد (تأكيد التحديث)';
+        opts.confirmButtonText = 'تأكيد نقل التعديلات ومزامنة التطبيق';
         opts.cancelButtonText = 'إغلاق';
     } else {
         opts.showCancelButton = false;
         opts.confirmButtonText = 'إغلاق';
     }
     if (typeof window.Swal === 'undefined') {
-        if (canManage && window.confirm('هل تم نقل جميع التعديلات للداشبورد؟')) window.confirmDashboardSync(mid);
+        if (canManage && window.confirm('هل تم نقل جميع التعديلات ومزامنتها مع التطبيق؟')) window.confirmDashboardSync(mid);
         return;
     }
     const res = await window.Swal.fire(opts);
