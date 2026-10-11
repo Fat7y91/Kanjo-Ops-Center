@@ -1222,6 +1222,18 @@ const intakeCommitBatches = async (entries) => {
             chunk.forEach((entry) => window.catalogApplyCreatedProductLocally({ id: entry.id, ...entry.data }));
         }
     }
+    /* One dashboard-sync entry for the whole batch (not N writes). */
+    if (saved > 0 && entries.length && typeof window.recordMerchantDashboardChange === 'function') {
+        const first = entries[0] && entries[0].data;
+        if (first) {
+            window.recordMerchantDashboardChange(first.merchantId, {
+                merchantName: first.merchantName,
+                type: 'product_bulk',
+                item: first.merchantName || '',
+                summary: 'إضافة ' + saved + ' صنف من نظام الجرد'
+            });
+        }
+    }
     return saved;
 };
 

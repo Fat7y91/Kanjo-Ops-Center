@@ -144,6 +144,89 @@ window.isProductAuditUser = () => !!(window.currentUser && window.currentUser.ro
    founder and contract managers). */
 window.isKanjoAdminAccount = () => !!(window.currentUser && window.currentUser.role === 'admin');
 
+/* Laravel Dashboard Sync — who may mark a merchant as uploaded to the Laravel
+   dashboard or confirm a sync. Mahmoud (ops), the founder, and the admin
+   account. Reps, data-entry and content users may SEE the badge and their edits
+   auto-track, but they cannot toggle or clear the sync state. */
+window.canManageDashboardSync = () => !!(window.isMahmoudUser()
+    || window.isCatalogFounderUser()
+    || window.isCatalogAdminUser()
+    || window.isKanjoAdminAccount());
+
+/* ─── Laravel Dashboard Sync: change tracking ───
+   Keeps a bounded (max 50) in-document audit trail of edits made AFTER a
+   merchant was uploaded to the Laravel dashboard. It rides the EXISTING
+   `merchants/{merchantId}` document (0 extra reads, no listeners). Writes are
+   best-effort and never block the caller. Nothing is recorded — and no write is
+   made — until the merchant is actually marked as uploaded. */
+const DASHBOARD_SYNC_CHANGES_CAP = 50;
+const dashboardSyncUserName = () => (window.currentUser && window.currentUser.name) || '';
+
+const resolveDashboardMerchantId = (merchantId, merchantName) => {
+    const mid = String(merchantId || '').trim();
+    if (mid && window.merchantsById && window.merchantsById.has(mid)) return mid;
+    const base = merchantName
+        ? (window.getBaseName ? window.getBaseName(merchantName) : String(merchantName).trim())
+        : '';
+    if (base && typeof window.findMerchantIdForBase === 'function') {
+        const found = window.findMerchantIdForBase(base);
+        if (found) return found;
+    }
+    return mid;
+};
+
+/* Resolve the merchant context of a product id from the already-loaded caches
+   (0 reads) so deletion/image hooks can attribute the change to its merchant. */
+const catalogProductMerchantContext = (productId) => {
+    const pid = String(productId || '');
+    if (!pid) return null;
+    const pools = [window.merchantProductsCache, window.doneCatalogProductsCache,
+        window.allCatalogProductsCache, window.repCatalogProductsCache, window.catalogDeleteRequestsCache];
+    for (const pool of pools) {
+        const p = Array.isArray(pool) ? pool.find((x) => x && x.id === pid) : null;
+        if (p) return p;
+    }
+    return null;
+};
+window.catalogProductMerchantContext = catalogProductMerchantContext;
+
+window.recordMerchantDashboardChange = (merchantId, change) => {
+    try {
+        if (!change || typeof change !== 'object') return;
+        const mid = resolveDashboardMerchantId(merchantId, change.merchantName);
+        if (!mid) return;
+        const rec = window.merchantsById && window.merchantsById.get(mid);
+        if (!rec || rec.dashboardUploaded !== true) return; /* not uploaded: 0 writes */
+        const entry = {
+            at: new Date().toISOString(),
+            by: dashboardSyncUserName(),
+            type: String(change.type || 'update'),
+            item: String(change.item || rec.name || ''),
+            summary: String(change.summary || '')
+        };
+        if (change.productId) entry.productId = String(change.productId);
+        const prev = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.slice() : [];
+        prev.push(entry);
+        const capped = prev.slice(-DASHBOARD_SYNC_CHANGES_CAP);
+        rec.pendingDashboardChanges = capped;
+        rec.hasPendingDashboardUpdates = true;
+        const patch = { pendingDashboardChanges: capped, hasPendingDashboardUpdates: true };
+        /* Best-effort, non-blocking; reuses the existing merchants write path. */
+        Promise.resolve().then(async () => {
+            try {
+                if (typeof catalogRestMerge === 'function' && await catalogRestMerge(['merchants', mid], patch)) return;
+                if (window.setDoc && window.doc && window.db) {
+                    await window.setDoc(window.doc(window.db, 'merchants', mid), patch, { merge: true });
+                } else if (window.updateDoc && window.doc && window.db) {
+                    await window.updateDoc(window.doc(window.db, 'merchants', mid), patch);
+                }
+            } catch (err) { console.warn('[catalog] dashboard change patch failed:', err); }
+        });
+    } catch (err) {
+        console.warn('[catalog] recordMerchantDashboardChange failed:', err);
+    }
+};
+
 /* Who may open the product editor. PEER REVIEW (2026): every authenticated
    session may edit any product (to fix typos/categories across colleagues'
    items), so this is now open to all signed-in users. The role helpers are kept
@@ -452,7 +535,16 @@ window.uploadCatalogRawImage = async (file, merchantName) => {
     if (file.size > CATALOG_MAX_IMAGE_BYTES) throw new Error('TOO_LARGE');
     const base64 = await compressCatalogImage(file);
     const fileName = catalogJpegFileName('raw-' + Date.now(), 'raw.jpg');
-    return uploadCatalogImageToGas(base64, fileName, merchantName || 'Unknown', 'raw');
+    const url = await uploadCatalogImageToGas(base64, fileName, merchantName || 'Unknown', 'raw');
+    if (merchantName) {
+        window.recordMerchantDashboardChange('', {
+            merchantName: merchantName,
+            type: 'product_image',
+            item: merchantName,
+            summary: 'رفع صورة منتج (' + (file.name || '') + ')'
+        });
+    }
+    return url;
 };
 
 /* Ask the catalog Google Apps Script to copy an EXISTING Master Catalog image
@@ -2483,6 +2575,28 @@ const updateCatalogProductDirect = async () => {
         if (!(await catalogRestMerge([CATALOG_COLLECTION, editing.id], payload))) {
             await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, editing.id), payload);
         }
+        /* Human-readable Arabic diff of what changed, recorded on the merchant's
+           dashboard-sync trail (only when the merchant is already uploaded). */
+        (() => {
+            const parts = [];
+            if (String(payload.name_ar) !== String(editing.name_ar || '').trim()) parts.push('تعديل الاسم');
+            const oldPrice = Number(editing.base_price);
+            const newPrice = Number(payload.base_price);
+            if (oldPrice !== newPrice) parts.push('تعديل السعر: ' + (isNaN(oldPrice) ? '—' : oldPrice) + ' ⬅️ ' + (isNaN(newPrice) ? '—' : newPrice) + ' ج.م');
+            if (String(payload.category || '') !== String(editing.category || '')) parts.push('تعديل القسم الفرعي');
+            const varSig = (arr) => JSON.stringify((Array.isArray(arr) ? arr : []).map((v) => [v && v.name, v && v.price]));
+            if (varSig(payload.variations) !== varSig(editing.variations)) parts.push('تعديل الأحجام/الإضافات');
+            if (String(payload.description_ar) !== String(editing.description_ar || '').trim()) parts.push('تعديل الوصف');
+            if (hasNewImages) parts.push('تحديث صور المنتج');
+            if (!parts.length) parts.push('تحديث بيانات المنتج');
+            window.recordMerchantDashboardChange(payload.merchantId, {
+                merchantName: payload.merchantName,
+                type: 'product_edit',
+                item: payload.name_ar,
+                summary: parts.join(' · '),
+                productId: editing.id
+            });
+        })();
         /* Update the rep list locally instead of re-reading the collection. */
         if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
         window._catalogMyProductsSignature = '';
@@ -2886,7 +3000,19 @@ const renderCatalogMerchantFolderCard = (group) => {
     const logoHtml = logo
         ? `<img src="${catalogEscapeHtml(logo)}" alt="" loading="lazy" decoding="async" class="w-16 h-16 rounded-2xl object-cover border border-[#FFD700]/50 bg-white shadow-sm">`
         : `<div class="w-16 h-16 rounded-2xl grid place-items-center bg-[#230535] text-[#FFD700] text-2xl shadow-sm"><i class="fa-solid fa-store"></i></div>`;
-    return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card">
+    /* Laravel Dashboard Sync accent — uploaded merchants stand out immediately:
+       emerald/gold for a clean synced merchant, pulsing amber for one that has
+       edits pending transfer to the dashboard. */
+    const dashState = catalogGroupDashboardState(group);
+    const dashClass = dashState === 'synced' ? ' catalog-merchant-card--dashboard-uploaded'
+        : (dashState === 'pending' ? ' catalog-merchant-card--dashboard-pending' : '');
+    const dashBadge = dashState === 'synced'
+        ? '<div class="catalog-dash-badge catalog-dash-badge--synced">✅ مرفوع عالداشبورد</div>'
+        : (dashState === 'pending'
+            ? `<div class="catalog-dash-badge catalog-dash-badge--pending">🔔 يحتاج تحديث عالداشبورد (${catalogGroupDashboardPendingCount(group)})</div>`
+            : '');
+    return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card${dashClass}">
+        ${dashBadge}
         <div class="flex justify-center mb-3">${logoHtml}</div>
         <div class="font-black text-sm text-[#230535] leading-snug line-clamp-2 min-h-[2.5rem]">${name}</div>
         <div class="mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -3231,6 +3357,27 @@ const catalogMerchantIsRecent = (group) => {
 const catalogMerchantHasDeleteRequest = (group) => (group && group.products || [])
     .some((p) => !!(p && (p.deleteRequested || p.deleteRequestedBy)));
 
+/* ─── Laravel Dashboard Sync state on the merchant folder cards ───
+   Resolves the merchant's already-loaded record from the shared cache (0 reads)
+   and derives the sync badge state. */
+const catalogGroupDashboardRec = (group) => {
+    if (!group) return null;
+    const byId = group.merchantId && window.merchantsById ? window.merchantsById.get(group.merchantId) : null;
+    if (byId) return byId;
+    const mid = window.findMerchantIdForBase ? window.findMerchantIdForBase(group.merchantName) : '';
+    return (mid && window.merchantsById && window.merchantsById.get(mid)) || null;
+};
+const catalogGroupDashboardState = (group) => {
+    const rec = catalogGroupDashboardRec(group);
+    if (!rec || rec.dashboardUploaded !== true) return 'not_uploaded';
+    return rec.hasPendingDashboardUpdates === true ? 'pending' : 'synced';
+};
+const catalogGroupDashboardPendingCount = (group) => {
+    const rec = catalogGroupDashboardRec(group);
+    return rec && Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.length : 0;
+};
+window.catalogGroupDashboardState = catalogGroupDashboardState;
+
 const catalogMerchantStatusFilters = [
     { key: '', label: 'الكل', icon: 'fa-layer-group' },
     { key: 'full_done', label: 'مكتمل بالكامل', icon: 'fa-circle-check' },
@@ -3238,7 +3385,9 @@ const catalogMerchantStatusFilters = [
     { key: 'partial', label: 'مكتمل جزئي', icon: 'fa-circle-half-stroke' },
     { key: 'empty', label: 'بدون منتجات', icon: 'fa-box-open' },
     { key: 'recent', label: 'نشاط حديث', icon: 'fa-bolt' },
-    { key: 'delete', label: 'طلبات حذف', icon: 'fa-trash-can' }
+    { key: 'delete', label: 'طلبات حذف', icon: 'fa-trash-can' },
+    { key: 'dashboard_uploaded', label: 'مرفوع عالداشبورد', icon: 'fa-rocket' },
+    { key: 'dashboard_pending', label: 'يحتاج تحديث عالداشبورد', icon: 'fa-bell' }
 ];
 
 const catalogMerchantGroupsByStatus = (groups, status) => {
@@ -3246,16 +3395,21 @@ const catalogMerchantGroupsByStatus = (groups, status) => {
     if (!key) return groups || [];
     if (key === 'recent') return (groups || []).filter(catalogMerchantIsRecent);
     if (key === 'delete') return (groups || []).filter(catalogMerchantHasDeleteRequest);
+    if (key === 'dashboard_uploaded') return (groups || []).filter((g) => catalogGroupDashboardState(g) === 'synced');
+    if (key === 'dashboard_pending') return (groups || []).filter((g) => catalogGroupDashboardState(g) === 'pending');
     return (groups || []).filter((g) => catalogMerchantStatusKey(g) === key);
 };
 
 const catalogMerchantStatusCounts = (groups) => {
-    const counts = { '': (groups || []).length, full_done: 0, full_pending: 0, partial: 0, empty: 0, recent: 0, delete: 0 };
+    const counts = { '': (groups || []).length, full_done: 0, full_pending: 0, partial: 0, empty: 0, recent: 0, delete: 0, dashboard_uploaded: 0, dashboard_pending: 0 };
     (groups || []).forEach((g) => {
         const key = catalogMerchantStatusKey(g);
         counts[key] = (counts[key] || 0) + 1;
         if (catalogMerchantIsRecent(g)) counts.recent += 1;
         if (catalogMerchantHasDeleteRequest(g)) counts.delete += 1;
+        const dash = catalogGroupDashboardState(g);
+        if (dash === 'synced') counts.dashboard_uploaded += 1;
+        else if (dash === 'pending') counts.dashboard_pending += 1;
     });
     return counts;
 };
@@ -3283,6 +3437,175 @@ window.onCatalogStatusFilterChange = (key) => {
        the folder grid while a status filter is active. */
     window._catalogAllProductsSelectedMerchant = '';
     renderCatalogAllProductsListNow();
+};
+
+/* ─── Laravel Dashboard Sync: status section + confirm modal ───
+   All state lives on the existing `merchants/{merchantId}` document, so the
+   banner and the change list render from the already-loaded record (0 reads). */
+
+const formatDashboardSyncDate = (iso) => {
+    const d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    try {
+        return new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+    } catch (_) { return d.toLocaleString(); }
+};
+
+const patchMerchantDashboardFields = async (mid, patch) => {
+    try {
+        if (typeof catalogRestMerge === 'function' && await catalogRestMerge(['merchants', mid], patch)) return true;
+    } catch (_) { /* fall through to SDK */ }
+    try {
+        if (window.setDoc && window.doc && window.db) {
+            await window.setDoc(window.doc(window.db, 'merchants', mid), patch, { merge: true });
+        } else if (window.updateDoc && window.doc && window.db) {
+            await window.updateDoc(window.doc(window.db, 'merchants', mid), patch);
+        }
+        return true;
+    } catch (err) {
+        console.error('[catalog] dashboard sync write failed:', err);
+        return false;
+    }
+};
+
+const catalogDashboardRefreshAfterSync = (mid) => {
+    if (typeof window.renderMerchantDashboardSyncSection === 'function') window.renderMerchantDashboardSyncSection(mid);
+    if (typeof window.invalidateMerchantsCache === 'function') window.invalidateMerchantsCache();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    if (typeof window.renderCatalogAllProductsListNow === 'function') window.renderCatalogAllProductsListNow();
+};
+
+window.renderMerchantDashboardSyncSection = (merchantId) => {
+    const el = document.getElementById('mpDashboardSyncSection');
+    if (!el) return;
+    const mid = String(merchantId || '').trim();
+    const rec = mid && window.merchantsById ? window.merchantsById.get(mid) : null;
+    if (!mid || !rec) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    el.classList.remove('hidden');
+    const canManage = window.canManageDashboardSync();
+    const uploaded = rec.dashboardUploaded === true;
+    const pending = uploaded && rec.hasPendingDashboardUpdates === true;
+    const count = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.length : 0;
+    const safeMid = catalogEscapeHtml(mid);
+    let html = '';
+    if (!uploaded) {
+        html = `<div class="mp-dash-section mp-dash-section--todo">
+            <div class="flex items-center gap-2"><span class="mp-dash-badge mp-dash-badge--todo">⚪ لم يُرفع على الداشبورد بعد</span></div>
+            ${canManage ? `<button type="button" onclick="markMerchantDashboardUploaded('${safeMid}')" class="mp-dash-btn mp-dash-btn--upload">🚀 تعليم كمرفوع على الداشبورد</button>` : ''}
+        </div>`;
+    } else if (pending) {
+        html = `<div class="mp-dash-section mp-dash-section--pending">
+            <div class="flex items-center gap-2"><span class="mp-dash-badge mp-dash-badge--pending">⚠️ تعديلات جديدة تحتاج النقل للداشبورد (${count})</span></div>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="openDashboardSyncChangesModal('${safeMid}')" class="mp-dash-btn mp-dash-btn--view">📋 عرض التعديلات وتأكيد التحديث</button>
+                ${canManage ? `<button type="button" onclick="confirmDashboardSync('${safeMid}')" class="mp-dash-btn mp-dash-btn--confirm">✅ تم النقل (تأكيد التحديث)</button>` : ''}
+            </div>
+        </div>`;
+    } else {
+        const when = formatDashboardSyncDate(rec.dashboardSyncedAt);
+        const by = catalogEscapeHtml(rec.dashboardSyncedBy || '');
+        html = `<div class="mp-dash-section mp-dash-section--synced">
+            <div class="flex flex-wrap items-center gap-2"><span class="mp-dash-badge mp-dash-badge--synced">✅ مرفوع على الداشبورد ومُحدث</span>
+                ${when ? `<span class="mp-dash-meta">🕒 ${catalogEscapeHtml(when)}</span>` : ''}
+                ${by ? `<span class="mp-dash-meta">بواسطة: ${by}</span>` : ''}
+            </div>
+            ${canManage ? `<button type="button" onclick="unmarkMerchantDashboardUploaded('${safeMid}')" class="mp-dash-btn mp-dash-btn--unmark">إلغاء تعليم الرفع</button>` : ''}
+        </div>`;
+    }
+    el.innerHTML = html;
+};
+
+window.markMerchantDashboardUploaded = async (merchantId) => {
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('غير مصرح بهذا الإجراء', false); return; }
+    const mid = String(merchantId || '').trim();
+    if (!mid) return;
+    const now = new Date().toISOString();
+    const patch = { dashboardUploaded: true, dashboardSyncedAt: now, dashboardSyncedBy: dashboardSyncUserName(), hasPendingDashboardUpdates: false, pendingDashboardChanges: [] };
+    const rec = window.merchantsById && window.merchantsById.get(mid);
+    if (rec) Object.assign(rec, patch);
+    catalogDashboardRefreshAfterSync(mid);
+    const ok = await patchMerchantDashboardFields(mid, patch);
+    if (window.showToast) window.showToast(ok ? 'تم تعليم التاجر كمرفوع على الداشبورد' : 'تعذر حفظ حالة الداشبورد', ok);
+};
+
+window.unmarkMerchantDashboardUploaded = async (merchantId) => {
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('غير مصرح بهذا الإجراء', false); return; }
+    const mid = String(merchantId || '').trim();
+    if (!mid) return;
+    const patch = { dashboardUploaded: false, hasPendingDashboardUpdates: false, pendingDashboardChanges: [] };
+    const rec = window.merchantsById && window.merchantsById.get(mid);
+    if (rec) Object.assign(rec, patch);
+    catalogDashboardRefreshAfterSync(mid);
+    const ok = await patchMerchantDashboardFields(mid, patch);
+    if (window.showToast) window.showToast(ok ? 'تم إلغاء تعليم الرفع على الداشبورد' : 'تعذر حفظ حالة الداشبورد', ok);
+};
+
+window.confirmDashboardSync = async (merchantId) => {
+    if (!window.canManageDashboardSync()) { if (window.showToast) window.showToast('تأكيد التحديث متاح للإدارة فقط', false); return; }
+    const mid = String(merchantId || '').trim();
+    if (!mid) return;
+    const now = new Date().toISOString();
+    const patch = { pendingDashboardChanges: [], hasPendingDashboardUpdates: false, dashboardSyncedAt: now, dashboardSyncedBy: dashboardSyncUserName() };
+    const rec = window.merchantsById && window.merchantsById.get(mid);
+    if (rec) Object.assign(rec, patch);
+    catalogDashboardRefreshAfterSync(mid);
+    const ok = await patchMerchantDashboardFields(mid, patch);
+    if (window.showToast) window.showToast(ok ? 'تم تأكيد نقل التعديلات للداشبورد' : 'تعذر تأكيد التحديث', ok);
+};
+
+const catalogDashboardChangeTypeLabel = (type) => ({
+    product_create: 'إضافة منتج',
+    product_edit: 'تعديل منتج',
+    product_delete: 'حذف منتج',
+    product_image: 'تحديث صورة',
+    product_bulk: 'إضافة دفعة أصناف',
+    merchant_info: 'تعديل بيانات التاجر',
+    merchant_logo: 'تحديث شعار التاجر',
+    merchant_docs: 'تحديث مستندات التاجر'
+}[String(type || '')] || 'تحديث');
+
+window.openDashboardSyncChangesModal = async (merchantId) => {
+    const mid = String(merchantId || '').trim();
+    const rec = mid && window.merchantsById ? window.merchantsById.get(mid) : null;
+    if (!rec) return;
+    const entries = (Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.slice() : []).reverse();
+    const canManage = window.canManageDashboardSync();
+    const rows = entries.length ? entries.map((e) => {
+        const when = formatDashboardSyncDate(e && e.at);
+        const typeLabel = catalogDashboardChangeTypeLabel(e && e.type);
+        return `<li class="mp-dash-change">
+            <div class="flex items-center justify-between gap-2">
+                <span class="mp-dash-change-type">${catalogEscapeHtml(typeLabel)}</span>
+                <span class="mp-dash-change-time">${catalogEscapeHtml(when)}</span>
+            </div>
+            ${e && e.item ? `<div class="mp-dash-change-item">${catalogEscapeHtml(e.item)}</div>` : ''}
+            ${e && e.summary ? `<div class="mp-dash-change-summary">${catalogEscapeHtml(e.summary)}</div>` : ''}
+            <div class="mp-dash-change-by"><i class="fa-solid fa-user-pen"></i> ${catalogEscapeHtml((e && e.by) || '')}</div>
+        </li>`;
+    }).join('') : '<li class="mp-dash-change-empty">لا توجد تعديلات معلّقة</li>';
+    const html = `<div class="mp-dash-changes-wrap"><ul class="mp-dash-changes-list">${rows}</ul></div>`;
+    const opts = {
+        title: 'تعديلات تحتاج النقل للداشبورد',
+        html,
+        width: 640,
+        confirmButtonColor: '#230535',
+        cancelButtonColor: '#94a3b8',
+        reverseButtons: true
+    };
+    if (canManage) {
+        opts.showCancelButton = true;
+        opts.confirmButtonText = '✅ تم نقل جميع التعديلات للداشبورد (تأكيد التحديث)';
+        opts.cancelButtonText = 'إغلاق';
+    } else {
+        opts.showCancelButton = false;
+        opts.confirmButtonText = 'إغلاق';
+    }
+    if (typeof window.Swal === 'undefined') {
+        if (canManage && window.confirm('هل تم نقل جميع التعديلات للداشبورد؟')) window.confirmDashboardSync(mid);
+        return;
+    }
+    const res = await window.Swal.fire(opts);
+    if (res && res.isConfirmed && canManage) window.confirmDashboardSync(mid);
 };
 
 const catalogStatusNoResultsHtml = (status) => {
@@ -3741,11 +4064,21 @@ window.approveCatalogProductDeletion = async (productId) => {
     }
     const ok = window.confirm('سيتم حذف المنتج نهائياً. هل أنت متأكد؟');
     if (!ok) return;
+    const delCtx = catalogProductMerchantContext(productId);
     try {
         if (!(await catalogRestDelete([CATALOG_COLLECTION, productId]))) {
             await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, productId));
         }
         window.showToast('تم حذف المنتج نهائياً');
+        if (delCtx) {
+            window.recordMerchantDashboardChange(delCtx.merchantId, {
+                merchantName: delCtx.merchantName,
+                type: 'product_delete',
+                item: delCtx.name_ar || delCtx.name_en || '',
+                summary: 'حذف منتج: ' + (delCtx.name_ar || delCtx.name_en || ''),
+                productId: productId
+            });
+        }
     } catch (err) {
         console.error('[catalog] approve deletion failed:', err);
         window.showToast('فشل حذف المنتج', false);
@@ -3980,6 +4313,13 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
     if (created && created.id && typeof window.catalogApplyCreatedProductLocally === 'function') {
         window.catalogApplyCreatedProductLocally(created);
     }
+    window.recordMerchantDashboardChange(payload.merchantId, {
+        merchantName: payload.merchantName,
+        type: 'product_create',
+        item: nameAr,
+        summary: 'إضافة منتج جديد: ' + nameAr,
+        productId: created && created.id
+    });
 };
 
 window.syncAllCatalogDrafts = async () => {
@@ -4345,6 +4685,17 @@ const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
     if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], patch))) {
         await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
     }
+    (() => {
+        const ctx = catalogProductMerchantContext(productId);
+        if (!ctx) return;
+        window.recordMerchantDashboardChange(ctx.merchantId, {
+            merchantName: ctx.merchantName,
+            type: 'product_image',
+            item: ctx.name_ar || ctx.name_en || '',
+            summary: 'تحديث/اعتماد صورة المنتج' + (ctx.name_ar ? ': ' + ctx.name_ar : ''),
+            productId: productId
+        });
+    })();
     /* A completion changes the editor's global processed total and the imported
        pool. Merge the row in place (zero reads) instead of dropping the global
        completed set, which forced a full multi-thousand-doc re-read per

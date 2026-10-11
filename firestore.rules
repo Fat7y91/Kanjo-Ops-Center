@@ -113,10 +113,39 @@ service cloud.firestore {
         ]);
       }
 
+      // Laravel Dashboard Sync state. Marking/clearing the upload state is a
+      // management action (admin/founder/ops/content); appending an auto-tracked
+      // change is allowed for any signed-in non-marketing operator, but ONLY on a
+      // merchant that is already uploaded. The change list is capped at 50.
+      // `legacy()` mirrors every other collection's migration-window escape hatch
+      // so an ops session without provisioned claims is never locked out; the UI
+      // still hides the toggles from reps/data-entry/content users.
+      function canManageDashboardSync() {
+        return isPrivileged() || isOpsManager() || isContentUser() || legacy();
+      }
+
+      function merchantUpdateTouchesOnlyDashboardSyncFields() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'dashboardUploaded', 'dashboardSyncedAt', 'dashboardSyncedBy',
+          'hasPendingDashboardUpdates', 'pendingDashboardChanges'
+        ]);
+      }
+
+      function canToggleDashboardSync() {
+        return merchantUpdateTouchesOnlyDashboardSyncFields()
+          && (!('pendingDashboardChanges' in request.resource.data)
+              || request.resource.data.pendingDashboardChanges.size() <= 50)
+          && (canManageDashboardSync()
+            || (resource.data.dashboardUploaded == true
+              && request.resource.data.hasPendingDashboardUpdates == true
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                   'pendingDashboardChanges', 'hasPendingDashboardUpdates'])));
+      }
+
       allow read: if isSignedIn();
       allow create: if !isMarketingAgency() && isSignedIn() && isMerchantDocForItself();
       allow update: if !isMarketingAgency() && (isAdmin()
-        || (isSignedIn() && merchantUpdateTouchesOnlyDocumentFields()));
+        || (isSignedIn() && (merchantUpdateTouchesOnlyDocumentFields() || canToggleDashboardSync())));
       allow delete: if !isMarketingAgency() && isAdmin();
     }
 

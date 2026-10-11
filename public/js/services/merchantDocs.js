@@ -111,7 +111,9 @@ const MERCHANTS_LIST_FIELDS = [
     'documents', 'docsUpdatedAt', 'docsUpdatedBy',
     'driveFolderId', 'driveFolderLink',
     'merchantLogo',
-    'archived', 'vipPreContract', 'createdAt'
+    'archived', 'vipPreContract', 'createdAt',
+    'dashboardUploaded', 'dashboardSyncedAt', 'dashboardSyncedBy',
+    'hasPendingDashboardUpdates', 'pendingDashboardChanges'
 ];
 
 window.loadMerchantsCache = async ({ force = false } = {}) => {
@@ -783,7 +785,19 @@ window.persistDriveFolder = async (merchantId, folderId, folderLink, merchantNam
             }
         });
     }
-    if (window.merchantsById) window.merchantsById.set(merchantId, merchantRec);
+    /* Record the document update on the merchant's Laravel-dashboard sync trail
+       (no-op unless the merchant is already marked uploaded). */
+    if (typeof window.recordMerchantDashboardChange === 'function') {
+        window.recordMerchantDashboardChange(merchantId, {
+            merchantName,
+            type: 'merchant_docs',
+            item: merchantName,
+            summary: 'تحديث مستندات التاجر' + (docs && docs.length ? ' (' + docs.length + ')' : '')
+        });
+    }
+    /* Preserve the cached dashboard-sync fields when refreshing the record. */
+    const priorRec = window.merchantsById && window.merchantsById.get(merchantId);
+    if (window.merchantsById) window.merchantsById.set(merchantId, Object.assign({}, priorRec || {}, merchantRec));
     if (typeof window.invalidateMerchantsCache === 'function') window.invalidateMerchantsCache();
 
     if (window.lastSnapshot && typeof window.renderDashboard === 'function') {

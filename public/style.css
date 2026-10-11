@@ -865,6 +865,111 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .catalog-status-chip:active { transform: none; }
 }
 
+/* ─── Laravel Dashboard Sync accents (merchant folder cards) ───
+   Uploaded merchants stand out: emerald/gold for a clean synced merchant,
+   pulsing amber for one whose edits still need transfer to the dashboard. */
+.catalog-merchant-card--dashboard-uploaded {
+    border: 1.5px solid #10b981;
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.08), #fff 55%);
+    box-shadow: 0 6px 18px -8px rgba(16, 185, 129, 0.55);
+}
+.catalog-merchant-card--dashboard-uploaded:hover {
+    border-color: #059669;
+    box-shadow: 0 14px 28px -12px rgba(16, 185, 129, 0.7);
+}
+.catalog-merchant-card--dashboard-pending {
+    border: 1.5px solid #F59E0B;
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.12), #fff 55%);
+    box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.6);
+    animation: catalogDashPulse 1.8s ease-in-out infinite;
+}
+.catalog-merchant-card--dashboard-pending:hover {
+    border-color: #d97706;
+    box-shadow: 0 14px 28px -12px rgba(245, 158, 11, 0.75);
+}
+@keyframes catalogDashPulse {
+    0%, 100% { box-shadow: 0 6px 18px -8px rgba(245, 158, 11, 0.55); }
+    50% { box-shadow: 0 6px 22px -6px rgba(245, 158, 11, 0.95); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .catalog-merchant-card--dashboard-pending { animation: none; }
+}
+
+.catalog-dash-badge {
+    display: inline-block;
+    margin-bottom: 0.6rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1.5;
+}
+.catalog-dash-badge--synced { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.catalog-dash-badge--pending { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+
+/* ─── Laravel Dashboard Sync section (merchant profile modal) ─── */
+.mp-dash-section {
+    border-radius: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1.5px solid rgba(35, 5, 53, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.mp-dash-section--todo { background: #f8fafc; border-color: #e2e8f0; }
+.mp-dash-section--synced { background: #ecfdf5; border-color: #a7f3d0; }
+.mp-dash-section--pending { background: #fffbeb; border-color: #fde68a; }
+.mp-dash-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 900;
+}
+.mp-dash-badge--todo { background: #f1f5f9; color: #475569; }
+.mp-dash-badge--synced { background: #d1fae5; color: #047857; }
+.mp-dash-badge--pending { background: #fef3c7; color: #b45309; }
+.mp-dash-meta { font-size: 0.7rem; font-weight: 800; color: #475569; }
+.mp-dash-btn {
+    border: none;
+    border-radius: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.72rem;
+    font-weight: 900;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.mp-dash-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.mp-dash-btn:active { transform: translateY(0) scale(0.98); }
+.mp-dash-btn--upload,
+.mp-dash-btn--confirm { background: #230535; color: #FFD700; }
+.mp-dash-btn--view { background: #F59E0B; color: #230535; }
+.mp-dash-btn--unmark { background: #f1f5f9; color: #475569; }
+.mp-dash-changes-wrap { max-height: 55vh; overflow-y: auto; text-align: right; }
+.mp-dash-changes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.mp-dash-change {
+    border: 1px solid rgba(35, 5, 53, 0.1);
+    border-radius: 0.75rem;
+    padding: 0.6rem 0.75rem;
+    background: #faf9fc;
+}
+.mp-dash-change-type {
+    font-size: 0.68rem;
+    font-weight: 900;
+    background: #230535;
+    color: #FFD700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+}
+.mp-dash-change-time { font-size: 0.62rem; font-weight: 800; color: #64748b; }
+.mp-dash-change-item { font-size: 0.8rem; font-weight: 900; color: #230535; margin-top: 0.35rem; }
+.mp-dash-change-summary { font-size: 0.72rem; font-weight: 700; color: #475569; margin-top: 0.15rem; }
+.mp-dash-change-by { font-size: 0.62rem; font-weight: 800; color: #7c3aed; margin-top: 0.25rem; }
+.mp-dash-change-empty { text-align: center; color: #94a3b8; font-weight: 800; padding: 1rem; }
+
 /* ─────────────────── KPI dashboard (Founders + Ops Manager) ─────────────────── */
 .kpi-stat-card {
     background: #fff;

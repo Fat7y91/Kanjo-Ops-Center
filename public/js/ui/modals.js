@@ -59,6 +59,13 @@ window.openMerchantProfile = (merchantBaseName) => {
         merchantIdEl.innerText = mid ? `المعرف الدائم: ${mid}` : '';
     }
 
+    /* Laravel Dashboard Sync banner — rendered from the already-loaded merchant
+       record (0 reads). */
+    if (typeof window.renderMerchantDashboardSyncSection === 'function') {
+        const profileMid = (window.findMerchantIdForBase ? window.findMerchantIdForBase(merchantBaseName) : '') || '';
+        window.renderMerchantDashboardSyncSection(profileMid);
+    }
+
     const nameEditEl = document.getElementById('mpMerchantNameEdit');
 
     if (nameEditEl) nameEditEl.value = merchantBaseName;
@@ -896,6 +903,14 @@ window.saveMerchantNameEdit = async () => {
         } catch (err) {
             console.error("[merchantId] merchant record name sync failed:", err);
         }
+        if (typeof window.recordMerchantDashboardChange === 'function') {
+            window.recordMerchantDashboardChange(existingMid, {
+                merchantName: newName,
+                type: 'merchant_info',
+                item: newName,
+                summary: 'تعديل اسم التاجر: ' + oldBaseName + ' ⬅️ ' + newName
+            });
+        }
     }
 
     activeMerchantBaseName = newName;
@@ -1637,6 +1652,19 @@ window.persistMerchantLogo = async (logoBase64, merchantBaseName) => {
     });
 
     await batch.commit();
+
+    /* Record the logo update on the merchant's Laravel-dashboard sync trail. */
+    if (typeof window.recordMerchantDashboardChange === 'function') {
+        const logoMid = window.findMerchantIdForBase ? window.findMerchantIdForBase(merchantBaseName) : '';
+        if (logoMid) {
+            window.recordMerchantDashboardChange(logoMid, {
+                merchantName: merchantBaseName,
+                type: 'merchant_logo',
+                item: merchantBaseName,
+                summary: 'تحديث شعار التاجر'
+            });
+        }
+    }
 
 };
 
