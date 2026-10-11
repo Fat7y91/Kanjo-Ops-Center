@@ -70,12 +70,21 @@ const normKey = (s) => getBaseName(s).normalize('NFKC')
   .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().toLowerCase();
 const normProduct = (data) => normKey(String((data && (data.name_ar || data.name_en || data.name)) || ''));
 
-/* Promoted merchants: no `merchants` doc exists yet; the primary id is minted as
-   canonical and the secondary bucket folded in. */
-const PROMOTE_BY_NAME = {
-  'المصري': { id: 'KJ-A4SAM5', name: 'المصرى' },
-  'جوستو': { id: 'KJ-RQQHPU', name: 'جوستو' }
-};
+/* Explicit canonical ids sanctioned for this migration, keyed by normalized
+   name. The 6 existing merchants keep their product-bearing directory id; the
+   two promoted names (المصرى, جوستو) are forced onto the primary bucket id and
+   any pre-existing directory doc for them is folded in (fields merged, then the
+   redundant doc removed). */
+const FORCED_CANONICAL = Object.fromEntries([
+  { id: 'KJ-6VHCEF', name: 'Marassi' },
+  { id: 'KJ-UVMKKM', name: 'Sivana' },
+  { id: 'KJ-QZADGM', name: 'بوابة دمشق' },
+  { id: 'KJ-P9VVNX', name: 'طيب الشام' },
+  { id: 'KJ-J77X6G', name: 'أسماك بحري' },
+  { id: 'KJ-WWYTQF', name: 'جرين باسكت' },
+  { id: 'KJ-A4SAM5', name: 'المصرى', promoted: true },
+  { id: 'KJ-RQQHPU', name: 'جوستو', promoted: true }
+].map((t) => [normKey(t.name), t]));
 
 const IMG_ARRAY_FIELDS = ['rawImageUrls', 'enhancedImageUrls'];
 const IMG_SCALAR_FIELDS = ['rawImageUrl', 'enhancedImageUrl', 'image_url'];
@@ -137,6 +146,34 @@ const main = async () => {
 
   for (const [nk, list] of byNorm) {
     list.sort((a, b) => score(b) - score(a) || String(a.id).localeCompare(String(b.id)));
+    const force = FORCED_CANONICAL[nk];
+    /* Forced canonical id (the migration's explicitly sanctioned target). */
+    if (force) {
+      const forcedDoc = list.find((d) => d.id === force.id) || null;
+      if (forcedDoc && force.promoted) console.warn(`[force] "${nk}" promoted id ${force.id} unexpectedly already exists`);
+      if (!forcedDoc && !force.promoted) {
+        console.error(`[ABORT] forced canonical ${force.id} for "${nk}" not found in merchants`);
+        process.exit(1);
+      }
+      const cleaned = force.promoted ? force.name : (cleanInvisible(forcedDoc.data.name || '').trim() || force.name);
+      canonicalOfId.set(force.id, force.id);
+      const merge = {};
+      const deletedDocs = [];
+      for (const dup of list) {
+        if (dup.id === force.id) continue;
+        canonicalOfId.set(dup.id, force.id);
+        deletedDocs.push(dup);
+        for (const [k, v] of Object.entries(dup.data)) {
+          if (k === 'merchantId' || isEmptyField(v)) continue;
+          if (isEmptyField(forcedDoc ? forcedDoc.data[k] : undefined) && isEmptyField(merge[k])) merge[k] = v;
+        }
+      }
+      const existing = !!forcedDoc && !force.promoted;
+      nameCanonical.set(nk, { id: force.id, name: cleaned, existing });
+      merchantGroups.push({ nk, forced: true, promoted: !existing, canonical: forcedDoc, id: force.id, merge, deletedDocs, cleaned,
+        needsUpdate: forcedDoc ? (Object.keys(merge).length > 0 || cleaned !== forcedDoc.data.name || String(forcedDoc.data.merchantId || '') !== force.id) : false });
+      continue;
+    }
     const canonical = list[0];
     const cleaned = cleanInvisible(canonical.data.name || '').trim() || canonical.data.name || '';
     canonicalOfId.set(canonical.id, canonical.id);
@@ -155,14 +192,12 @@ const main = async () => {
       needsUpdate: Object.keys(merge).length > 0 || cleaned !== canonical.data.name || String(canonical.data.merchantId || '') !== canonical.id });
   }
 
-  for (const [nk, info] of Object.entries(PROMOTE_BY_NAME)) {
-    if (nameCanonical.has(nk)) {
-      console.warn(`[promote] name "${nk}" already has a canonical doc (${nameCanonical.get(nk).id}); skipping promotion`);
-      continue;
-    }
-    canonicalOfId.set(info.id, info.id);
-    nameCanonical.set(nk, { id: info.id, name: info.name, existing: false });
-    merchantGroups.push({ nk, promoted: true, id: info.id, name: info.name, deletedDocs: [] });
+  /* Forced names with no directory doc at all (pure promotion). */
+  for (const [nk, force] of Object.entries(FORCED_CANONICAL)) {
+    if (nameCanonical.has(nk)) continue;
+    canonicalOfId.set(force.id, force.id);
+    nameCanonical.set(nk, { id: force.id, name: force.name, existing: false });
+    merchantGroups.push({ nk, forced: true, promoted: true, id: force.id, name: force.name, merge: {}, deletedDocs: [] });
   }
 
   const existingNameIds = new Set([...nameCanonical.values()].filter((v) => v.existing).map((v) => v.id));
@@ -263,7 +298,8 @@ const main = async () => {
   const merchantDeletes = [];
   for (const grp of merchantGroups) {
     if (grp.promoted) {
-      merchantCreates.push({ ref: db.collection('merchants').doc(grp.id), data: { merchantId: grp.id, name: grp.name, createdAt: new Date() } });
+      merchantCreates.push({ ref: db.collection('merchants').doc(grp.id), data: { ...(grp.merge || {}), merchantId: grp.id, name: grp.name || grp.cleaned, createdAt: new Date() } });
+      for (const dup of grp.deletedDocs) merchantDeletes.push({ ref: dup.ref, id: dup.id, name: dup.data.name || '', canonical: grp.id });
       continue;
     }
     if (grp.needsUpdate) {
