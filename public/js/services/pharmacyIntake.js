@@ -574,6 +574,12 @@ const intakeExactMatch = (name) => {
    exact decorated label) keeps it working with/without the leading emoji and
    with minor naming variations. */
 const INTAKE_PHARMACY_CATEGORY_KEYWORDS = ['صيدل', 'عناية شخصية'];
+/* Canonical vendor type for the pharmacy vertical. Because this module ingests
+   pharmacy stock only, a row's vendor type is ALWAYS the merchant's pharmacy
+   activity — never the operator's sheet section name. Used as the last-resort
+   fallback so a blank merchant activity can never leak a CSV section into
+   `merchant_products.category` (which the export uses to scope the matcher). */
+const INTAKE_PHARMACY_VENDOR_TYPE = '💊 صيدليات وعناية شخصية';
 const intakeIsPharmacyMerchant = (merchant) => {
     if (!merchant) return false;
     const type = String(merchant.category || merchant.cat || merchant.type || merchant.merchantType || '');
@@ -1165,11 +1171,10 @@ const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
     /* `category` in merchant_products is the product's VENDOR TYPE (the merchant
        activity the export scopes the category matcher by), NOT a per-item section.
        The enriched-catalog row carries the operator's sheet section (often the
-       placeholder "عام"), so the merchant's real activity MUST win; only fall back
-       to the sheet value when the merchant activity is blank. */
-    const category = String(merchant.category || '').trim()
-        || (catalog ? String(catalog.category || '').trim() : '')
-        || '';
+       placeholder "عام", or a cosmetics/accessories section), so it must NEVER be
+       written here; the merchant's real activity wins and falls back to the
+       canonical pharmacy vendor type. */
+    const category = String(merchant.category || '').trim() || INTAKE_PHARMACY_VENDOR_TYPE;
     const price = Number(row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
     /* Descriptions come from the enriched catalog for MATCHED rows only.
        UNMATCHED rows keep both description fields strictly empty. */
