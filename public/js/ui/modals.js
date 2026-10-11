@@ -37,6 +37,131 @@ window.downloadMerchantLogo = async () => {
     }
 };
 
+/* ─── Laravel Dashboard Sync control card (merchant profile modal) ───
+   Self-contained and cache-proof: the CSS below is injected into <head> at
+   runtime (id=kanjo-dashboard-sync-styles) AND every critical property is also
+   applied inline, so the card can never render as unstyled text even if
+   style.css is served stale from cache. Overrides the catalog.js renderer
+   because modals.js is imported after catalog.js in main.js. */
+const KDS_STYLE_ID = 'kanjo-dashboard-sync-styles';
+const ensureDashboardSyncStyles = () => {
+    if (typeof document === 'undefined' || document.getElementById(KDS_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = KDS_STYLE_ID;
+    style.textContent = `
+        #mpDashboardSyncSection { margin: 14px 0; }
+        #mpDashboardSyncSection .kds-card {
+            margin: 14px 0; padding: 16px 18px; border-radius: 16px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; direction: rtl; transition: transform .25s ease, box-shadow .25s ease;
+        }
+        #mpDashboardSyncSection .kds-card:hover { transform: translateY(-1px); }
+        #mpDashboardSyncSection .kds-icon { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        #mpDashboardSyncSection .kds-pill {
+            display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+            border-radius: 999px; font-size: 11.5px; font-weight: 800; line-height: 1.5; white-space: nowrap;
+        }
+        #mpDashboardSyncSection .kds-cta {
+            display: inline-flex; align-items: center; gap: 8px; cursor: pointer; white-space: nowrap;
+            transition: transform .15s ease, box-shadow .2s ease, filter .2s ease;
+        }
+        #mpDashboardSyncSection .kds-cta:hover { transform: translateY(-1px); filter: brightness(1.06); }
+        #mpDashboardSyncSection .kds-cta:active { transform: translateY(0) scale(.98); }
+        #mpDashboardSyncSection svg { display: block; }
+        .mp-dash-modal-title {
+            background: linear-gradient(135deg, #230535, #4B0082) !important;
+            color: #FFD700 !important; font-weight: 800 !important; font-size: 1.05rem !important;
+            padding: 14px 18px !important; border-radius: 12px; margin: 0 0 .9rem !important;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.45);
+        }
+        .mp-dash-confirm-btn {
+            width: 100% !important; background: #230535 !important; color: #FFD700 !important;
+            font-weight: 800 !important; border: 1px solid rgba(255, 215, 0, 0.4) !important;
+            border-radius: 12px !important; font-size: 12.5px !important;
+        }
+    `;
+    document.head.appendChild(style);
+};
+
+const kdsEsc = (value) => {
+    if (typeof window.catalogEscapeHtml === 'function') return window.catalogEscapeHtml(value);
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+};
+
+const kdsFormatDate = (iso) => {
+    const d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return '';
+    try { return new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }).format(d); }
+    catch (_) { return d.toLocaleString(); }
+};
+
+window.renderMerchantDashboardSyncSection = (merchantId) => {
+    const el = document.getElementById('mpDashboardSyncSection');
+    if (!el) return;
+    ensureDashboardSyncStyles();
+    const mid = String(merchantId || '').trim();
+    const rec = mid && window.merchantsById ? window.merchantsById.get(mid) : null;
+    if (!mid || !rec) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    el.classList.remove('hidden');
+
+    const canManage = typeof window.canManageDashboardSync === 'function' ? window.canManageDashboardSync() : false;
+    const uploaded = rec.dashboardUploaded === true;
+    const pending = uploaded && rec.hasPendingDashboardUpdates === true;
+    const count = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges.length : 0;
+    const safeMid = kdsEsc(mid);
+
+    const cloudSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.7 1.6A3.5 3.5 0 0 0 6 19Z"/></svg>';
+    const checkSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+    const alertSvg = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    const rocketSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>';
+
+    const icon = (bg, color, shadow, svg) => `<div class="kds-icon" style="width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:${bg};color:${color};${shadow}">${svg}</div>`;
+    const pill = (bg, color, dot, label) => `<span class="kds-pill" style="display:inline-flex;align-items:center;gap:6px;background:${bg};color:${color};padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap"><span style="width:7px;height:7px;border-radius:999px;background:${dot};display:inline-block;flex:0 0 auto"></span>${label}</span>`;
+
+    let html = '';
+    if (!uploaded) {
+        html = `<div class="kds-card" style="margin:14px 0;padding:16px 18px;border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;direction:rtl;transition:all .25s ease;background:linear-gradient(135deg,#F8FAFC 0%,#F1F5F9 100%);border:1.5px solid #CBD5E1;box-shadow:0 4px 12px rgba(15,23,42,.05)">
+            <div style="display:flex;align-items:center;gap:14px;min-width:0">
+                ${icon('#E2E8F0', '#475569', '', cloudSvg)}
+                <div style="min-width:0">
+                    ${pill('#E2E8F0', '#334155', '#94A3B8', 'غير منشور على التطبيق')}
+                    <div style="font-size:12px;color:#64748B;margin-top:5px;font-weight:500">اضغط على زر الاعتماد بعد رفع بيانات ومنتجات التاجر على لوحة التحكم</div>
+                </div>
+            </div>
+            ${canManage ? `<button type="button" onclick="markMerchantDashboardUploaded('${safeMid}')" class="kds-cta" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#230535 0%,#4B0082 100%) !important;color:#FFD700 !important;border:1.5px solid #F59E0B !important;padding:10px 18px !important;border-radius:12px !important;font-size:13px !important;font-weight:800 !important;cursor:pointer;box-shadow:0 4px 14px rgba(75,0,130,.28) !important;white-space:nowrap">${rocketSvg} اعتماد النشر على التطبيق</button>` : ''}
+        </div>`;
+    } else if (pending) {
+        html = `<div class="kds-card" style="margin:14px 0;padding:16px 18px;border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;direction:rtl;transition:all .25s ease;background:linear-gradient(135deg,#FFFBEB 0%,#FEF3C7 100%);border:2px solid #F59E0B;box-shadow:0 6px 16px rgba(245,158,11,.16)">
+            <div style="display:flex;align-items:center;gap:14px;min-width:0">
+                ${icon('#D97706', '#FFFFFF', '', alertSvg)}
+                <div style="min-width:0">
+                    ${pill('#92400E', '#FEF3C7', '#FBBF24', `يوجد (${count}) تحديثات معلّقة بانتظار المزامنة`)}
+                    <div style="font-size:12px;color:#92400E;margin-top:5px;font-weight:600">تم تعديل منتجات أو صور بعد آخر رفع — يلزم تحديث لوحة التحكم</div>
+                </div>
+            </div>
+            <button type="button" onclick="openDashboardSyncChangesModal('${safeMid}')" class="kds-cta" style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#230535 0%,#4B0082 100%) !important;color:#FFD700 !important;border:1.5px solid #F59E0B !important;padding:10px 16px !important;border-radius:12px !important;font-size:12.5px !important;font-weight:800 !important;cursor:pointer;box-shadow:0 4px 12px rgba(35,5,53,.25) !important;white-space:nowrap">${checkSvg} عرض التعديلات وتأكيد المزامنة</button>
+        </div>`;
+    } else {
+        const when = kdsFormatDate(rec.dashboardSyncedAt);
+        const by = kdsEsc(rec.dashboardSyncedBy || '');
+        const parts = [];
+        if (when) parts.push('آخر مزامنة: ' + kdsEsc(when));
+        if (by) parts.push('بواسطة: ' + by);
+        const sub = parts.length ? parts.join(' • ') : 'تم اعتماد نشر بيانات التاجر على لوحة التحكم الرئيسية';
+        html = `<div class="kds-card" style="margin:14px 0;padding:16px 18px;border-radius:16px;display:flex;align-items:center;justify-content:space-between;gap:16px;direction:rtl;transition:all .25s ease;background:linear-gradient(135deg,#ECFDF5 0%,#D1FAE5 100%);border:1.5px solid #34D399;box-shadow:0 4px 14px rgba(5,150,105,.10)">
+            <div style="display:flex;align-items:center;gap:14px;min-width:0">
+                ${icon('#059669', '#FFFFFF', 'box-shadow:0 3px 8px rgba(5,150,105,.25);', checkSvg)}
+                <div style="min-width:0">
+                    ${pill('#065F46', '#FFFFFF', '#4ADE80', 'منشور ومتزامن مع التطبيق')}
+                    <div style="font-size:12px;color:#065F46;margin-top:5px;font-weight:600">${sub}</div>
+                </div>
+            </div>
+            ${canManage ? `<button type="button" onclick="unmarkMerchantDashboardUploaded('${safeMid}')" class="kds-cta" style="display:inline-flex;align-items:center;gap:8px;background:#FFFFFF !important;color:#DC2626 !important;border:1.5px solid #FCA5A5 !important;padding:8px 14px !important;border-radius:10px !important;font-size:12px !important;font-weight:700 !important;cursor:pointer;box-shadow:0 2px 5px rgba(0,0,0,.04);white-space:nowrap">إلغاء النشر</button>` : ''}
+        </div>`;
+    }
+    el.innerHTML = html;
+};
+
 window.openMerchantProfile = (merchantBaseName) => {
 
     activeMerchantBaseName = merchantBaseName;
