@@ -6828,6 +6828,10 @@ const KANJO_RESTAURANT_ADDON_RULES = [
    fries and meals are never mis-tagged as an add-on. */
 const KANJO_ADDON_NAME_RE = kanjoSemanticTermRegex(['صوص', 'إضافة', 'اضافة', 'إضافه', 'اضافه', 'اكسترا']);
 const KANJO_MAIN_DISH_NAME_RE = kanjoSemanticTermRegex(['برجر', 'بيرجر', 'سماش', 'بانز', 'فرايز', 'راب', 'ساندوتش', 'سندوتش', 'وجبة', 'طاجن', 'بيتزا', 'كريب', 'شاورما', 'مشويات', 'باستا']);
+/* A product whose NAME is fries is a side, never a burger — even when its
+   description mentions beef ("بيف مدخن") or its name carries the brand word
+   "بانز". Used to strip the برجر keyword hit from fries. */
+const KANJO_FRIES_NAME_RE = kanjoSemanticTermRegex(['فرايز', 'بطاطس', 'fries']);
 
 /* Parse an already-official category cell (single value or comma-joined multi
    value). Returns the cell unchanged when EVERY part is a category this vendor
@@ -7652,12 +7656,19 @@ const kanjoSaveLearnedCategoryRules = () => {
 
 kanjoLoadLearnedCategoryRules();
 
-/* Categories already persisted on a product (array or comma string). */
+/* Categories already persisted on a product (array or comma string). A
+   standalone appetizer (مقبلات) must never ALSO carry the إضافات add-on, so a
+   stale persisted pair is sanitised here (covers both the manual-decision and
+   the keyword paths, which both read this helper). */
 const kanjoStoredCategoryValues = (product) => {
     const raw = product && product[KANJO_CATEGORY_LEARNED_FIELD];
-    if (Array.isArray(raw)) return raw.map((v) => String(v || '').trim()).filter(Boolean);
-    if (typeof raw === 'string' && raw.trim()) return raw.split(',').map((v) => v.trim()).filter(Boolean);
-    return [];
+    let list;
+    if (Array.isArray(raw)) list = raw.map((v) => String(v || '').trim()).filter(Boolean);
+    else if (typeof raw === 'string' && raw.trim()) list = raw.split(',').map((v) => v.trim()).filter(Boolean);
+    else list = [];
+    const isId = (v, id) => new RegExp('^ID:' + id + '(\\D|$)').test(String(v || ''));
+    if (list.some((v) => isId(v, 147))) list = list.filter((v) => !isId(v, 149));
+    return list;
 };
 
 /* Parse "ID:37 | حلويات" -> 37 (0 when unrecognised). */
@@ -8176,6 +8187,14 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             pushSemanticId(149);
         }
     }
+    /* A fries product is a side, not a burger: strip the برجر keyword/semantic
+       hit (e.g. "بيف" in a mushroom-fries description, or "بانز" in a brand name)
+       so fries keep only بطاطس (and كرسبي when strips). */
+    if (nameHaystack && kanjoHasSemanticTerm(nameHaystack, KANJO_FRIES_NAME_RE)) {
+        for (let i = ranked.length - 1; i >= 0; i--) {
+            if (ranked[i] && ranked[i].id === 12) ranked.splice(i, 1);
+        }
+    }
     /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
        exported once, mirroring the single option shown in the audit modal. */
     const seenNames = new Set();
@@ -8275,7 +8294,7 @@ const KANJO_ALIAS_MAPPINGS = [
   { regex: /\b(دبل لارج|دابل لارج)\b/i, value: 'ID:56 | ATTR:1 | دبل لارج' },
   { regex: /\b(سنجل)\b/i, value: 'ID:48 | ATTR:1 | سنجل' },
   { regex: /\b(دبل|دوبل|دابل|double|dbl)\b/i, value: 'ID:50 | ATTR:1 | دبل' },
-  { regex: /\b(تريبل|تربل|ترابل|triple)\b/i, value: 'ID:56 | ATTR:1 | دبل لارج' },
+  { regex: /\b(تريبل|تربل|ترابل|triple)\b/i, value: 'ID:70 | ATTR:1 | تريبل' },
   { regex: /\b(عائلي|عائلية)\b/i, value: 'ID:49 | ATTR:1 | عائلي' },
 
   // 2. BREAD TYPES (ATTR:3)
