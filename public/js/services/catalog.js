@@ -5382,7 +5382,7 @@ window.loadMerchantExportFilterFull = () => populateMerchantExportFilter(true);
    synonym list). */
 const KANJO_PRODUCT_CATEGORIES = [
     { id: 149, name: 'إضافات', keywords: ['إضافات'] },
-    { id: 12, name: 'برجر', keywords: ['برجر'] },
+    { id: 12, name: 'برجر', keywords: ['برجر', 'بيرجر', 'سماش', 'بانز', 'بيف', 'burger', 'smash'] },
     { id: 148, name: 'بيتي', keywords: ['بيتي'] },
     { id: 160, name: 'تمور', keywords: ['تمور'] },
     { id: 159, name: 'تمور', keywords: ['تمور'] },
@@ -5445,7 +5445,7 @@ const KANJO_PRODUCT_CATEGORIES = [
     { id: 27, name: 'المرأة', keywords: ['المرأة'] },
     { id: 50, name: 'الفطائر', keywords: ['الفطائر'] },
     { id: 33, name: 'تسالي', keywords: ['تسالي'] },
-    { id: 4, name: 'ساندوتشات', keywords: ['ساندوتشات', 'سندوتشات', 'ساندوتش', 'سندوتش', 'سندويتش'] },
+    { id: 4, name: 'ساندوتشات', keywords: ['ساندوتشات', 'سندوتشات', 'ساندوتش', 'سندوتش', 'سندويتش', 'راب', 'فاهيتا', 'wrap'] },
     { id: 81, name: 'مجهزة', keywords: ['مجهزة'] },
     { id: 94, name: 'الحمام', keywords: ['الحمام'] },
     { id: 121, name: 'قطط', keywords: ['قطط'] },
@@ -5542,7 +5542,7 @@ const KANJO_PRODUCT_CATEGORIES = [
        only to restaurants via the vendor rule below; "فراخ" therefore repeats the
        poultry name and MUST be pinned per-domain. */
     { id: 163, name: 'اللمة', keywords: ['اللمة', 'لمه'] },
-    { id: 164, name: 'فراخ', keywords: ['فراخ'] },
+    { id: 164, name: 'فراخ', keywords: ['فراخ', 'تشيكن', 'دجاج', 'زنجر', 'استربس', 'ستربس', 'سوبريم', 'جريل', 'grill', 'supreme', 'strips', 'zinger'] },
     /* 2026 restaurant fries vertical. "بطاطس" is the canonical keyword; the
        colloquial pack/serving words are handled by the semantic rules below. */
     { id: 165, name: 'بطاطس', keywords: ['بطاطس'] },
@@ -6817,11 +6817,17 @@ const kanjoHasSemanticTerm = (haystack, re) => !!haystack && !!re && re.test(hay
    never leak into a non-restaurant vertical. The regexes reuse the Unicode-aware
    boundary helper, so "محمرة" cannot fire inside an unrelated word. */
 const KANJO_RESTAURANT_ADDON_RULES = [
-    { ids: [149], terms: ['صوص', 'إضافة', 'اضافة', 'إضافه', 'اضافه', 'اكسترا'] },
-    { ids: [16, 147, 149], terms: ['سلطة', 'سلطه'] },
-    { ids: [165, 149], terms: ['بطاطس', 'باكيت', 'باكت', 'محمرة'] },
+    { ids: [16, 147], terms: ['سلطة', 'سلطه'] },
+    { ids: [165], terms: ['بطاطس', 'باكيت', 'باكت', 'محمرة'] },
     { ids: [4], terms: ['ساندوتش'] }
 ].map((rule) => ({ ids: rule.ids, re: kanjoSemanticTermRegex(rule.terms) }));
+
+/* ID:149 | إضافات is a standalone sauce/add-on, NOT something a main dish merely
+   mentions in its description ("مع صوص شيدر…"). It is matched against the
+   product NAME only, and never when the name is a main dish, so burgers, wraps,
+   fries and meals are never mis-tagged as an add-on. */
+const KANJO_ADDON_NAME_RE = kanjoSemanticTermRegex(['صوص', 'إضافة', 'اضافة', 'إضافه', 'اضافه', 'اكسترا']);
+const KANJO_MAIN_DISH_NAME_RE = kanjoSemanticTermRegex(['برجر', 'بيرجر', 'سماش', 'بانز', 'فرايز', 'راب', 'ساندوتش', 'سندوتش', 'وجبة', 'طاجن', 'بيتزا', 'كريب', 'شاورما', 'مشويات', 'باستا']);
 
 /* Parse an already-official category cell (single value or comma-joined multi
    value). Returns the cell unchanged when EVERY part is a category this vendor
@@ -8075,6 +8081,14 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     ].filter(Boolean).join(' '))
         .replace(/\s+/g, ' ')
         .trim();
+    /* Name-only haystack: used for signals that must not fire on descriptive
+       prose (e.g. the إضافات add-on, which every burger description mentions). */
+    const nameHaystack = normalizeArabic([
+        product && product.name_ar,
+        product && product.name_en
+    ].filter(Boolean).join(' '))
+        .replace(/\s+/g, ' ')
+        .trim();
     const ranked = [];
     if (haystack) {
         const matches = [];
@@ -8155,6 +8169,12 @@ const kanjoMatchProductCategory = (product, vendorType) => {
         KANJO_RESTAURANT_ADDON_RULES.forEach((addon) => {
             if (kanjoHasSemanticTerm(haystack, addon.re)) addon.ids.forEach(pushSemanticId);
         });
+        /* ID:149 إضافات fires on a standalone sauce/add-on NAME only, never on a
+           main dish whose description merely references a sauce. */
+        if (nameHaystack && !KANJO_MAIN_DISH_NAME_RE.test(nameHaystack)
+            && kanjoHasSemanticTerm(nameHaystack, KANJO_ADDON_NAME_RE)) {
+            pushSemanticId(149);
+        }
     }
     /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
        exported once, mirroring the single option shown in the audit modal. */
@@ -8254,7 +8274,8 @@ const KANJO_ALIAS_MAPPINGS = [
   { regex: /\b(صاروخ)\b/i, value: 'ID:5 | ATTR:1 | صاروخ' },
   { regex: /\b(دبل لارج|دابل لارج)\b/i, value: 'ID:56 | ATTR:1 | دبل لارج' },
   { regex: /\b(سنجل)\b/i, value: 'ID:48 | ATTR:1 | سنجل' },
-  { regex: /\b(دبل|دابل)\b/i, value: 'ID:50 | ATTR:1 | دبل' },
+  { regex: /\b(دبل|دوبل|دابل|double|dbl)\b/i, value: 'ID:50 | ATTR:1 | دبل' },
+  { regex: /\b(تريبل|تربل|ترابل|triple)\b/i, value: 'ID:56 | ATTR:1 | دبل لارج' },
   { regex: /\b(عائلي|عائلية)\b/i, value: 'ID:49 | ATTR:1 | عائلي' },
 
   // 2. BREAD TYPES (ATTR:3)
@@ -8336,6 +8357,16 @@ const KANJO_VARIANT_TASTE_SAUCE_MAPPINGS = [
 const KANJO_VARIANT_MAPPINGS = KANJO_ALIAS_MAPPINGS.concat(KANJO_VARIANT_TASTE_SAUCE_MAPPINGS);
 const KANJO_VARIANT_ALIAS_FALLBACK_VALUE = 'ID:1 | ATTR:1 | صغير';
 
+/* Size/option qualifiers that are legitimate variant labels, never product-name
+   qualifiers. Even when a spelling slips past the alias regexes (e.g. "سينجل",
+   "ميديم"), these tokens must NEVER be concatenated onto Products.name_ar. */
+const KANJO_VARIANT_IGNORED_TOKENS = new Set([
+    'سنجل', 'سينجل', 'فردي', 'دبل', 'دوبل', 'دابل', 'double', 'dbl',
+    'تريبل', 'تربل', 'ترابل', 'triple', 'صغير', 'وسط', 'كبير', 'جامبو',
+    'عائلي', 'لارج', 'ميديم', 'سمول', 'اكس', 'اكس لارج', 'دبل لارج',
+    'سادة', 'سبايسي', 'حار', 'عادي'
+].map((t) => normalizeArabic(t)));
+
 /* Words inside a product's variants that NO alias/supplemental rule recognises.
    They are appended to the parent product's name_ar so nothing is lost (the
    raw variant name when the variant matches nothing at all). */
@@ -8374,7 +8405,7 @@ const kanjoVariantUnrecognizedWords = (product) => {
             for (let k = start; k < start + w.length; k++) if (covered[k]) { isCovered = true; break; }
             if (isCovered) return;
             const key = normalizeArabic(rawWords[i]);
-            if (!key || seen.has(key)) return;
+            if (!key || seen.has(key) || KANJO_VARIANT_IGNORED_TOKENS.has(key)) return;
             seen.add(key);
             out.push(rawWords[i]);
         });
@@ -8494,7 +8525,16 @@ const kanjoBuildVariantRow = (p, v, index) => {
         branch: '',
         price: Number(v && v.price) || 0,
         stock: Number(v && v.stock) || 0,
-        thumbnail_url: catalogDirectImageUrl((v && v.image_url) || '') || '',
+        /* Prefer the product's enhanced (media-team) image so Products.main_image_url
+           and Variants.thumbnail_url agree. A variant keeps its own image only when
+           it has a distinct, non-raw custom image. */
+        thumbnail_url: (() => {
+            const variantUrl = catalogDirectImageUrl((v && v.image_url) || '') || '';
+            const rawUrls = catalogRawImageUrls(p);
+            const isRawOrEmpty = !variantUrl || rawUrls.indexOf(variantUrl) !== -1;
+            if (isRawOrEmpty) return catalogEnhancedImageUrls(p)[0] || variantUrl || rawUrls[0] || '';
+            return variantUrl;
+        })(),
         status: 'active'
     };
     /* Each assignment lands in ITS OWN attribute family. */
