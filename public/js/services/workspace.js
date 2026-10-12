@@ -54,6 +54,10 @@
     });
     const ALL_IDS = Object.keys(ID_GROUP);
 
+    /* Action banners that render as elevated Bento cards on desktop. */
+    const CARD_IDS = ['catalogRepBanner', 'catalogDraftsWidget', 'quickLinksWalletBanner',
+        'financialProfileBanner', 'founderPayrollSummaryBox', 'merchantDocsAuditBanner'];
+
     const ADMIN_TABS = [
         { id: 'visits', label: 'المتابعة والمهام الميدانية', short: 'المتابعة', icon: 'fa-calendar-days', groups: ['visits'] },
         { id: 'catalog', label: 'كتالوج ومنتجات التجار', short: 'الكتالوج', icon: 'fa-box-open', groups: ['catalog', 'my_products'], badge: 'catalog' },
@@ -110,11 +114,16 @@
     const isKpiOpen = () => { const v = kpiViewEl(); return !!(v && !v.classList.contains('hidden')); };
 
     /* ── Visibility engine ─────────────────────────────────────────────────── */
+    function tagPane(el, id) {
+        el.classList.add('kanjo-workspace-pane');
+        if (CARD_IDS.indexOf(id) !== -1) el.classList.add('kws-card');
+    }
+
     function hideAllPanes() {
         ALL_IDS.forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.classList.add('kanjo-workspace-pane');
+            tagPane(el, id);
             el.classList.remove('kws-in-active-view');
         });
     }
@@ -124,7 +133,7 @@
         ALL_IDS.forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.classList.add('kanjo-workspace-pane');
+            tagPane(el, id);
             if (active.has(ID_GROUP[id])) el.classList.add('kws-in-active-view');
             else el.classList.remove('kws-in-active-view');
         });
@@ -137,8 +146,10 @@
         if (!tab) return;
         state.active = tab.id;
         try { sessionStorage.setItem(STORAGE_KEY, tab.id); } catch (_) { /* ignore */ }
+        setViewClass(tab.id);
         hideAllPanes();
         renderNavs();
+        syncSidebarChrome();
     }
 
     /* ── Tab activation ────────────────────────────────────────────────────── */
@@ -147,6 +158,10 @@
         if (!tab) return;
         state.active = tab.id;
         try { sessionStorage.setItem(STORAGE_KEY, tab.id); } catch (_) { /* ignore */ }
+        setViewClass(tab.id);
+        if (tab.id !== 'rep_catalog') {
+            document.body.classList.remove('kws-repcatalog-all', 'kws-repcatalog-mine');
+        }
 
         if (tab.kpi) {
             hideAllPanes();
@@ -164,9 +179,11 @@
                 try { window.closeKpiDashboard(); } catch (_) { /* ignore */ }
             }
             applyGroups(tab.groups);
+            autoOpenCatalogForView(tab.id);
         }
 
         renderNavs();
+        syncSidebarChrome();
         const nextHash = '#ws=' + tab.id;
         if (!opts || opts.silentHash !== true) {
             if (location.hash !== nextHash) {
@@ -198,6 +215,140 @@
         return 0;
     }
 
+    /* ── Desktop view state: body view class + Bento grid ──────────────────── */
+    const VIEW_CLASS_PREFIX = 'kws-view-';
+    let currentViewClass = '';
+
+    function setViewClass(tabId) {
+        if (currentViewClass) document.body.classList.remove(currentViewClass);
+        currentViewClass = VIEW_CLASS_PREFIX + tabId;
+        document.body.classList.add(currentViewClass);
+    }
+
+    function setBento(on) {
+        const d = document.getElementById('dashboardSection');
+        if (d) d.classList.toggle('kws-bento', !!on);
+    }
+
+    /* ── Rep catalog segmented switcher (all products | my products) ───────── */
+    const REP_SEG_KEY = 'kanjo.repCatalogSeg';
+    const repSeg = () => {
+        try { return sessionStorage.getItem(REP_SEG_KEY) === 'mine' ? 'mine' : 'all'; }
+        catch (_) { return 'all'; }
+    };
+
+    function applyRepSeg(seg) {
+        document.body.classList.toggle('kws-repcatalog-all', seg !== 'mine');
+        document.body.classList.toggle('kws-repcatalog-mine', seg === 'mine');
+        const sw = document.getElementById('kanjoCatalogSwitcher');
+        if (sw && typeof sw.querySelectorAll === 'function') {
+            Array.prototype.forEach.call(sw.querySelectorAll('[data-kws-seg]'), (b) => {
+                b.classList.toggle('is-active', b.getAttribute('data-kws-seg') === seg);
+            });
+        }
+    }
+
+    function ensureCatalogSwitcher() {
+        let sw = document.getElementById('kanjoCatalogSwitcher');
+        if (sw) return sw;
+        if (typeof document.createElement !== 'function') return null;
+        const anchor = document.getElementById('catalogMyProductsWidget');
+        if (!anchor || !anchor.parentNode) return null;
+        sw = document.createElement('div');
+        sw.id = 'kanjoCatalogSwitcher';
+        sw.className = 'kws-segmented';
+        sw.innerHTML = '<button type="button" data-kws-seg="all"><i class="fa-solid fa-box"></i> جميع منتجات المناديب</button>'
+            + '<button type="button" data-kws-seg="mine"><i class="fa-solid fa-user"></i> منتجاتي</button>';
+        sw.addEventListener('click', (e) => {
+            const btn = e.target && e.target.closest ? e.target.closest('[data-kws-seg]') : null;
+            if (!btn) return;
+            const seg = btn.getAttribute('data-kws-seg');
+            try { sessionStorage.setItem(REP_SEG_KEY, seg); } catch (_) { /* ignore */ }
+            applyRepSeg(seg);
+            openSelectedCatalog(seg);
+        });
+        anchor.parentNode.insertBefore(sw, anchor);
+        return sw;
+    }
+
+    /* Open a catalog accordion body without ever closing an already-open one. */
+    function forceOpenBody(bodyId, openFn) {
+        const body = document.getElementById(bodyId);
+        if (!body) return;
+        const isHidden = body.classList.contains('hidden');
+        if (!isHidden) return; // already expanded — no second click needed
+        if (typeof openFn === 'function') {
+            try { openFn(); } catch (_) { /* fall through to the defensive reveal */ }
+        }
+        if (body.classList.contains('hidden')) body.classList.remove('hidden');
+    }
+
+    function openSelectedCatalog(seg) {
+        if (seg === 'mine') forceOpenBody('catalogMyProductsBody', window.toggleCatalogMyProductsWidget);
+        else forceOpenBody('catalogAllProductsBody', window.toggleCatalogAllProductsWidget);
+    }
+
+    /* Auto-expand the catalog when its view becomes active (no accordion click). */
+    function autoOpenCatalogForView(tabId) {
+        if (tabId === 'catalog') {
+            forceOpenBody('catalogAllProductsBody', window.toggleCatalogAllProductsWidget);
+        } else if (tabId === 'rep_catalog') {
+            ensureCatalogSwitcher();
+            const seg = repSeg();
+            applyRepSeg(seg);
+            openSelectedCatalog(seg);
+        }
+    }
+
+    /* ── Desktop sidebar chrome (brand footer: user, notif, quick links) ───── */
+    const ROLE_LABELS = {
+        founder: 'مؤسس', admin: 'أدمن', rep: 'مندوب', media: 'ميديا',
+        data_entry: 'إدخال بيانات', product_audit: 'تدقيق منتجات',
+        accounting: 'حسابات', marketing: 'تسويق'
+    };
+
+    function syncSidebarChrome() {
+        const side = document.getElementById('kanjoWorkspaceSidebar');
+        if (!side) return;
+        const u = window.currentUser || {};
+        const nameEl = document.getElementById('kanjoSidebarUserName');
+        if (nameEl) {
+            const un = document.getElementById('userNameDisplay');
+            nameEl.textContent = u.name || (un ? un.textContent : '') || '';
+        }
+        const roleEl = document.getElementById('kanjoSidebarUserRole');
+        if (roleEl) roleEl.textContent = ROLE_LABELS[u.role] || (u.role || '');
+        const av = document.getElementById('kanjoSidebarAvatar');
+        if (av) {
+            const src = document.getElementById('userAvatarContainer');
+            av.innerHTML = src ? src.innerHTML : '';
+        }
+        const badge = document.getElementById('kanjoSidebarNotifBadge');
+        if (badge) {
+            const src = document.getElementById('notifBadge');
+            badge.classList.toggle('hidden', !src || src.classList.contains('hidden'));
+        }
+        const quick = document.getElementById('kanjoSidebarQuick');
+        if (quick) {
+            const wants = [];
+            const mkt = document.getElementById('marketingNavBtnWrapper');
+            if (mkt && !mkt.classList.contains('hidden')) {
+                wants.push({ label: 'بوابة التسويق', icon: 'fa-bullhorn', fn: 'openMarketingDashboard()' });
+            }
+            const bb = document.getElementById('blackBoxNavBtnWrapper');
+            if (bb && !bb.classList.contains('hidden')) {
+                wants.push({ label: 'Black Box', icon: 'fa-box-archive', fn: 'openBlackBox()' });
+            }
+            const sig = wants.map((w) => w.fn).join('|');
+            if (quick._kwsSig !== sig) {
+                quick._kwsSig = sig;
+                quick.innerHTML = wants.map((w) =>
+                    `<button type="button" onclick="${w.fn}"><i class="fa-solid ${w.icon}"></i> ${w.label}</button>`
+                ).join('');
+            }
+        }
+    }
+
     /* ── Nav rendering ─────────────────────────────────────────────────────── */
     function tabButtonHtml(tab) {
         const badge = tab.badge ? badgeValue(tab.badge) : 0;
@@ -212,11 +363,13 @@
     }
 
     function renderNavs() {
-        const html = state.tabs.map(tabButtonHtml).join('');
+        const inner = '<div class="kws-nav-inner">' + state.tabs.map(tabButtonHtml).join('') + '</div>';
         const top = document.getElementById('kanjoWorkspaceNav');
-        if (top) top.innerHTML = '<div class="kws-nav-inner">' + html + '</div>';
+        if (top) top.innerHTML = inner;
         const bottom = document.getElementById('kanjoMobileNav');
-        if (bottom) bottom.innerHTML = '<div class="kws-nav-inner">' + html + '</div>';
+        if (bottom) bottom.innerHTML = inner;
+        const side = document.getElementById('kanjoSidebarNav');
+        if (side) side.innerHTML = inner;
     }
 
     function onNavClick(e) {
@@ -237,15 +390,18 @@
         const shell = detectShell();
         if (!shell) {
             /* Accounting / marketing: make sure no stale pane hiding leaks in. */
-            document.body.classList.remove('kanjo-shell-admin', 'kanjo-shell-mobile');
+            document.body.classList.remove('kanjo-shell-admin', 'kanjo-shell-mobile',
+                'kws-repcatalog-all', 'kws-repcatalog-mine');
+            if (currentViewClass) { document.body.classList.remove(currentViewClass); currentViewClass = ''; }
+            setBento(false);
             ALL_IDS.forEach((id) => {
                 const el = document.getElementById(id);
-                if (el) el.classList.remove('kanjo-workspace-pane', 'kws-in-active-view');
+                if (el) el.classList.remove('kanjo-workspace-pane', 'kws-in-active-view', 'kws-card');
             });
-            const top = document.getElementById('kanjoWorkspaceNav');
-            if (top) top.innerHTML = '';
-            const bottom = document.getElementById('kanjoMobileNav');
-            if (bottom) bottom.innerHTML = '';
+            ['kanjoWorkspaceNav', 'kanjoMobileNav', 'kanjoSidebarNav'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
             state.started = false;
             state.active = null;
             return;
@@ -256,9 +412,12 @@
         state.tabs = tabs;
         document.body.classList.toggle('kanjo-shell-admin', shell === 'admin');
         document.body.classList.toggle('kanjo-shell-mobile', shell === 'mobile');
+        setBento(true);
 
         wireNav('kanjoWorkspaceNav');
         wireNav('kanjoMobileNav');
+        wireNav('kanjoSidebarNav');
+        syncSidebarChrome();
 
         /* If the KPI view was auto-opened (rep home), keep its tab selected. */
         if (isKpiOpen() && kpiTab()) {
@@ -286,7 +445,7 @@
     window.kanjoWorkspace = {
         refresh,
         setTab,
-        updateBadges: () => { if (state.shell) renderNavs(); },
+        updateBadges: () => { if (state.shell) { renderNavs(); syncSidebarChrome(); } },
         get active() { return state.active; },
         get shell() { return state.shell; },
         _groups: GROUPS

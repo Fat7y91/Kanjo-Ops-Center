@@ -1264,8 +1264,39 @@
 
     </header>
 
-    <!-- Workspace top navigation (desktop command center) — rendered by workspace.js -->
+    <!-- Workspace top navigation (compact tablets only) — rendered by workspace.js -->
     <nav id="kanjoWorkspaceNav" class="kanjo-workspace-nav hidden" aria-label="مساحات العمل"></nav>
+
+    <!-- Workspace right sidebar app shell (desktop >= 992px) — rendered by workspace.js -->
+    <aside id="kanjoWorkspaceSidebar" class="kanjo-sidebar hidden" aria-label="القائمة الجانبية">
+        <div class="ksb-brand">
+            <img src="logo.png" alt="Logo" class="ksb-logo" decoding="async">
+            <div class="ksb-brand-text">
+                <span class="ksb-brand-title">KANJO <span>OPS</span></span>
+                <span class="ksb-brand-sub">FOX TEAM</span>
+            </div>
+        </div>
+        <nav id="kanjoSidebarNav" class="ksb-nav" aria-label="مساحات العمل"></nav>
+        <div class="ksb-footer">
+            <div class="ksb-user">
+                <div id="kanjoSidebarAvatar" class="ksb-avatar"></div>
+                <div class="ksb-user-meta">
+                    <span id="kanjoSidebarUserName" class="ksb-user-name"></span>
+                    <span id="kanjoSidebarUserRole" class="ksb-user-role"></span>
+                </div>
+                <div class="ksb-user-actions">
+                    <button type="button" class="ksb-icon-btn" onclick="toggleNotifications()" aria-label="الإشعارات">
+                        <i class="fa-solid fa-bell"></i>
+                        <span id="kanjoSidebarNotifBadge" class="ksb-notif-badge hidden"></span>
+                    </button>
+                    <button type="button" class="ksb-icon-btn ksb-logout" onclick="logout()" aria-label="تسجيل الخروج">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="kanjoSidebarQuick" class="ksb-quick"></div>
+        </div>
+    </aside>
 
     <main class="p-4 sm:p-6 pb-24 min-h-6xl mx-auto">
 
@@ -2324,6 +2355,16 @@
 
                 </button>
 
+                <!-- Catalog view header actions (desktop SaaS): export lives HERE, not in the visits tab -->
+                <div class="kws-catalog-actions">
+                    <div class="kws-catalog-actions-title">
+                        <i class="fa-solid fa-box-open"></i> كتالوج منتجات التجار
+                    </div>
+                    <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥
+                    </button>
+                </div>
+
                 <div id="catalogAllProductsBody" class="hidden bg-slate-50 p-3 space-y-3">
 
                     <div id="catalogRepLeaderboard" class="hidden"></div>
@@ -2788,12 +2829,6 @@
 
                     </button>
 
-                    <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden flex-1 bg-[#230535] text-[#FFD700] py-3.5 rounded-2xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
-
-                        <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥
-
-                    </button>
-
                 </div>
 
             </div>
@@ -2897,7 +2932,7 @@
 
                         <button type="button" onclick="renderKpiDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-rotate"></i> تحديث</button>
 
-                        <button type="button" onclick="closeKpiDashboard()" class="bg-[#FFD700] text-[#230535] hover:opacity-90 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية</button>
+                        <button type="button" id="kpiBackToDashboardBtn" onclick="closeKpiDashboard()" class="bg-[#FFD700] text-[#230535] hover:opacity-90 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية</button>
 
                     </div>
 
