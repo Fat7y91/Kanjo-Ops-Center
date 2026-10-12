@@ -58,11 +58,12 @@
     const CARD_IDS = ['catalogRepBanner', 'catalogDraftsWidget', 'quickLinksWalletBanner',
         'financialProfileBanner', 'founderPayrollSummaryBox', 'merchantDocsAuditBanner'];
 
+    /* Executive 4-tab top nav (founders/admins). Pharmacy is no longer a tab;
+       it is revealed on demand from a compact pill inside the visits hub. */
     const ADMIN_TABS = [
         { id: 'visits', label: 'المتابعة والمهام الميدانية', short: 'المتابعة', icon: 'fa-calendar-days', groups: ['visits'] },
         { id: 'catalog', label: 'كتالوج ومنتجات التجار', short: 'الكتالوج', icon: 'fa-box-open', groups: ['catalog', 'my_products'], badge: 'catalog' },
         { id: 'analytics', label: 'لوحة تحليل الأداء', short: 'التحليل', icon: 'fa-chart-line', groups: ['analytics'] },
-        { id: 'pharmacy', label: 'مراجعة الصيدليات', short: 'الصيدليات', icon: 'fa-pills', groups: ['pharmacy'], badge: 'pharmacy' },
         { id: 'admin_finance', label: 'الإدارة والمالية والتدقيق', short: 'المالية', icon: 'fa-briefcase', groups: ['finance', 'data_entry'] }
     ];
 
@@ -130,11 +131,16 @@
 
     function applyGroups(groupNames) {
         const active = new Set(groupNames || []);
+        /* Pharmacy is an on-demand overlay inside the visits view, revealed by
+           the compact pill (body.kws-pharmacy-open) rather than a nav tab. */
+        const pharmacyOpen = active.has('visits') && document.body.classList.contains('kws-pharmacy-open');
         ALL_IDS.forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
             tagPane(el, id);
-            if (active.has(ID_GROUP[id])) el.classList.add('kws-in-active-view');
+            const grp = ID_GROUP[id];
+            const inView = grp === 'pharmacy' ? pharmacyOpen : active.has(grp);
+            if (inView) el.classList.add('kws-in-active-view');
             else el.classList.remove('kws-in-active-view');
         });
     }
@@ -162,6 +168,9 @@
         if (tab.id !== 'rep_catalog') {
             document.body.classList.remove('kws-repcatalog-all', 'kws-repcatalog-mine');
         }
+        /* Leaving the visits view collapses the pharmacy overlay. */
+        if (tab.id !== 'visits') document.body.classList.remove('kws-pharmacy-open');
+        syncPharmacyPill();
 
         if (tab.kpi) {
             hideAllPanes();
@@ -180,6 +189,8 @@
             }
             applyGroups(tab.groups);
             autoOpenCatalogForView(tab.id);
+            if (tab.id === 'visits') wireFlightCalendar();
+            if (tab.id === 'admin_finance') syncFinanceHub();
         }
 
         renderNavs();
@@ -292,12 +303,233 @@
     function autoOpenCatalogForView(tabId) {
         if (tabId === 'catalog') {
             forceOpenBody('catalogAllProductsBody', window.toggleCatalogAllProductsWidget);
+            wireCatalogTabs();
         } else if (tabId === 'rep_catalog') {
             ensureCatalogSwitcher();
             const seg = repSeg();
             applyRepSeg(seg);
             openSelectedCatalog(seg);
         }
+    }
+
+    /* ── Founder Command Hub (visits view) ─────────────────────────────────── */
+    const TASKS_REVEAL = 'kws-tasks-revealed';
+
+    function revealTasks() { document.body.classList.add(TASKS_REVEAL); }
+
+    function syncPharmacyPill() {
+        const pill = document.getElementById('kanjoPharmacyPill');
+        if (pill) pill.classList.toggle('is-active', document.body.classList.contains('kws-pharmacy-open'));
+    }
+
+    function reapplyActiveGroups() {
+        if (!state.shell) return;
+        const t = state.tabs.find((x) => x.id === state.active);
+        if (t && !t.kpi) applyGroups(t.groups);
+    }
+
+    function togglePharmacy() {
+        const open = document.body.classList.toggle('kws-pharmacy-open');
+        syncPharmacyPill();
+        reapplyActiveGroups();
+        if (open) {
+            const el = document.getElementById('pharmacyIntakeWidget');
+            if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function spotlightSearch(q) {
+        const si = document.getElementById('searchInput');
+        if (si) si.value = q || '';
+        revealTasks();
+        try { if (typeof window.applySearch === 'function') window.applySearch(); } catch (_) { /* ignore */ }
+    }
+
+    function visitsReset() {
+        document.body.classList.remove(TASKS_REVEAL, 'kws-pharmacy-open');
+        syncPharmacyPill();
+        const spot = document.getElementById('kanjoSpotlightInput');
+        if (spot) spot.value = '';
+        const si = document.getElementById('searchInput');
+        if (si) si.value = '';
+        try { if (typeof window.applySearch === 'function') window.applySearch(); } catch (_) { /* ignore */ }
+        reapplyActiveGroups();
+    }
+
+    function pickDate(value) {
+        if (!value) return;
+        revealTasks();
+        try { if (typeof window.tasksDateChange === 'function') window.tasksDateChange(value); } catch (_) { /* ignore */ }
+        closeFlightCalendar();
+        const el = document.getElementById('tasksContainer');
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    /* ── Flight-style calendar picker (visits hub) ─────────────────────────── */
+    const AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    const AR_DAYS = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+    let fcCursor = null;
+
+    function isoDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function renderFlightCalendar() {
+        const grid = document.getElementById('kanjoFlightGrid');
+        const label = document.getElementById('kanjoFlightMonth');
+        if (!grid) return;
+        const now = new Date();
+        if (!fcCursor) fcCursor = new Date(now.getFullYear(), now.getMonth(), 1);
+        if (label) label.textContent = `${AR_MONTHS[fcCursor.getMonth()]} ${fcCursor.getFullYear()}`;
+        const todayIso = isoDate(now);
+        const selected = (typeof window.getTasksSelectedDate === 'function'
+            ? window.getTasksSelectedDate() : '') || todayIso;
+        const firstDay = new Date(fcCursor.getFullYear(), fcCursor.getMonth(), 1).getDay();
+        const daysInMonth = new Date(fcCursor.getFullYear(), fcCursor.getMonth() + 1, 0).getDate();
+        let html = AR_DAYS.map((d) => `<span class="kfc-dow">${d}</span>`).join('');
+        for (let i = 0; i < firstDay; i++) html += '<span class="kfc-empty"></span>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const iso = isoDate(new Date(fcCursor.getFullYear(), fcCursor.getMonth(), d));
+            const cls = ['kfc-day'];
+            if (iso === todayIso) cls.push('is-today');
+            if (iso === selected) cls.push('is-selected');
+            html += `<button type="button" class="${cls.join(' ')}" data-kfc-day="${iso}">${d}</button>`;
+        }
+        grid.innerHTML = html;
+    }
+
+    function openFlightCalendar() {
+        const modal = document.getElementById('kanjoFlightCalendarModal');
+        if (!modal) return;
+        const cur = (typeof window.getTasksSelectedDate === 'function' ? window.getTasksSelectedDate() : '') || '';
+        const base = cur ? new Date(cur + 'T00:00:00') : new Date();
+        fcCursor = new Date(base.getFullYear(), base.getMonth(), 1);
+        renderFlightCalendar();
+        modal.classList.remove('hidden');
+    }
+
+    function closeFlightCalendar() {
+        const modal = document.getElementById('kanjoFlightCalendarModal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function flightShift(delta) {
+        if (!fcCursor) fcCursor = new Date();
+        fcCursor = new Date(fcCursor.getFullYear(), fcCursor.getMonth() + delta, 1);
+        renderFlightCalendar();
+    }
+
+    function flightToday() { fcCursor = new Date(); renderFlightCalendar(); }
+
+    function wireFlightCalendar() {
+        const modal = document.getElementById('kanjoFlightCalendarModal');
+        if (!modal || modal._kwsWired) return;
+        modal._kwsWired = true;
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) { closeFlightCalendar(); return; }
+            const day = e.target.closest ? e.target.closest('[data-kfc-day]') : null;
+            if (day) { pickDate(day.getAttribute('data-kfc-day')); return; }
+            const nav = e.target.closest ? e.target.closest('[data-kfc-nav]') : null;
+            if (nav) {
+                const a = nav.getAttribute('data-kfc-nav');
+                if (a === 'prev') flightShift(-1);
+                else if (a === 'next') flightShift(1);
+                else if (a === 'today') flightToday();
+                else if (a === 'close') closeFlightCalendar();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeFlightCalendar();
+        });
+    }
+
+    /* ── Founder Finance Hub (admin_finance view): best-effort number mirror ── */
+    function syncFinanceHub() {
+        const hub = document.getElementById('kanjoFinanceHub');
+        if (!hub) return;
+        const monthEl = document.getElementById('kanjoFinMonth');
+        if (monthEl) {
+            try {
+                monthEl.textContent = new Date().toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+            } catch (_) { /* ignore */ }
+        }
+        const net = document.getElementById('founderTotalNetDisplay');
+        const totalEl = document.getElementById('kanjoFinPayrollTotal');
+        if (totalEl) {
+            const v = net ? String(net.textContent || '').trim() : '';
+            totalEl.textContent = v || '—';
+        }
+        const banner = document.getElementById('merchantDocsAuditBanner');
+        const ratioEl = document.getElementById('kanjoFinAuditRatio');
+        const countEl = document.getElementById('kanjoFinAuditCount');
+        const ratioSrc = document.getElementById('merchantDocsAuditRatio');
+        const ratioText = ratioSrc ? String(ratioSrc.textContent || '').trim() : '';
+        const ratio = ratioText.match(/(\d+)\s*\/\s*(\d+)/);
+        if (ratioEl && ratio) ratioEl.textContent = ratio[1] + ' / ' + ratio[2];
+        if (countEl) {
+            if (ratio) countEl.textContent = ratio[2] + ' ملف';
+            else if (banner) {
+                const n = (banner.textContent || '').match(/(\d+)/);
+                countEl.textContent = n ? n[1] + ' ملف' : '—';
+            }
+        }
+    }
+
+    /* ── Export Studio helpers (searchable merchant picker + card) ─────────── */
+    function filterExportMerchants(q) {
+        const select = document.getElementById('merchantExportFilter');
+        if (!select || !select.options) return;
+        const term = String(q || '').trim().toLowerCase();
+        Array.prototype.forEach.call(select.options, (o) => {
+            if (!o.value) { o.hidden = false; o.style.display = ''; return; } // placeholder
+            const match = !term || String(o.textContent || '').toLowerCase().indexOf(term) !== -1;
+            o.hidden = !match;
+            o.style.display = match ? '' : 'none';
+        });
+        syncExportCardBtn();
+    }
+
+    function syncExportCardBtn() {
+        const select = document.getElementById('merchantExportFilter');
+        const btn = document.getElementById('kanjoExportMerchantCardBtn');
+        if (btn) btn.disabled = !(select && select.value);
+    }
+
+    function openSelectedMerchantCard() {
+        const select = document.getElementById('merchantExportFilter');
+        const name = select ? String(select.value || '') : '';
+        if (!name) return;
+        if (typeof window.openMerchantProfile === 'function') window.openMerchantProfile(name);
+    }
+
+
+    /* ── Catalog executive sub-tabs (browse | export) ──────────────────────── */
+    function wireCatalogTabs() {
+        const tabs = document.getElementById('kanjoCatalogTabs');
+        if (!tabs) return;
+        /* Mirror the existing export RBAC gate: no export tab when the export
+           button itself is hidden for this role. */
+        const expBtn = document.getElementById('openExportProductsBtn');
+        const expTab = tabs.querySelector ? tabs.querySelector('[data-kws-ctab="export"]') : null;
+        if (expTab) expTab.style.display = (expBtn && !expBtn.classList.contains('hidden')) ? '' : 'none';
+        if (tabs._kwsWired) return;
+        tabs._kwsWired = true;
+        tabs.addEventListener('click', (e) => {
+            const btn = e.target.closest ? e.target.closest('[data-kws-ctab]') : null;
+            if (!btn) return;
+            const mode = btn.getAttribute('data-kws-ctab');
+            Array.prototype.forEach.call(tabs.querySelectorAll('[data-kws-ctab]'), (b) => {
+                b.classList.toggle('is-active', b === btn);
+            });
+            if (mode === 'export') {
+                if (typeof window.openExportProductsModal === 'function') window.openExportProductsModal();
+                else if (typeof window.openMerchantExportModal === 'function') window.openMerchantExportModal();
+            }
+        });
     }
 
     /* ── Desktop sidebar chrome (brand footer: user, notif, quick links) ───── */
@@ -445,11 +677,23 @@
     window.kanjoWorkspace = {
         refresh,
         setTab,
-        updateBadges: () => { if (state.shell) { renderNavs(); syncSidebarChrome(); } },
+        updateBadges: () => { if (state.shell) { renderNavs(); syncSidebarChrome(); syncFinanceHub(); } },
         get active() { return state.active; },
         get shell() { return state.shell; },
         _groups: GROUPS
     };
+
+    /* Founder Command Hub + Finance Hub public API (inline onclick handlers). */
+    window.kanjoTogglePharmacy = togglePharmacy;
+    window.kanjoOpenFlightCalendar = openFlightCalendar;
+    window.kanjoCloseFlightCalendar = closeFlightCalendar;
+    window.kanjoPickDate = pickDate;
+    window.kanjoSpotlightSearch = spotlightSearch;
+    window.kanjoVisitsReset = visitsReset;
+    window.kanjoSyncFinanceHub = syncFinanceHub;
+    window.kanjoFilterExportMerchants = filterExportMerchants;
+    window.kanjoSyncExportCardBtn = syncExportCardBtn;
+    window.kanjoOpenSelectedMerchantCard = openSelectedMerchantCard;
 
     /* ── Keep the router in sync with the existing header nav ────────────────
        Header buttons still run their original inline handler (capture runs
@@ -484,6 +728,32 @@
             return r;
         };
     }
+
+    /* Wrap the export studio opener so the searchable picker resets and the
+       "merchant card" button state is correct each time it is shown. */
+    if (typeof window.openExportProductsModal === 'function') {
+        const origOpenExport = window.openExportProductsModal;
+        window.openExportProductsModal = function () {
+            const search = document.getElementById('kanjoExportMerchantSearch');
+            if (search) search.value = '';
+            filterExportMerchants('');
+            syncExportCardBtn();
+            return origOpenExport.apply(this, arguments);
+        };
+    }
+
+    /* Keep the Finance Hub mirror in sync with the underlying payroll / audit
+       widgets whenever they re-render (best-effort, zero reads). */
+    ['renderPayrollTable', 'renderMerchantDocsAudit'].forEach((fn) => {
+        const orig = window[fn];
+        if (typeof orig === 'function') {
+            window[fn] = function () {
+                const r = orig.apply(this, arguments);
+                try { syncFinanceHub(); } catch (_) { /* ignore */ }
+                return r;
+            };
+        }
+    });
 
     /* Update count badges when the source widgets re-render (memory-only). */
     ['renderCatalogWidgets', 'renderCatalogAllProductsWidget', 'renderFounderAuditWidget'].forEach((fn) => {

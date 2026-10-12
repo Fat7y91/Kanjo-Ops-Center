@@ -2889,3 +2889,209 @@ body.kanjo-shell-mobile #kpiBackToDashboardBtn { display: none !important; }
         margin-top: auto;
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXECUTIVE SCREENS — Command Hub, Finance Hub, Flight Calendar, Export Studio
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Hubs are shown only in their own workspace view (never for reps). */
+.kws-hub-pane { display: none; }
+body.kws-view-visits #kanjoCommandHub { display: block; }
+body.kws-view-admin_finance #kanjoFinanceHub { display: block; }
+
+/* ── Command Hub ───────────────────────────────────────────────────────── */
+.kws-hub-head { margin-bottom: 1rem; }
+.kws-hub-title { font-weight: 900; font-size: 1.35rem; color: #230535; margin: 0; }
+.kws-hub-sub { font-weight: 700; font-size: 0.82rem; color: #64748b; margin: 0.25rem 0 0; }
+.kws-hub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.kws-hub-card {
+    position: relative;
+    display: flex;
+    gap: 0.9rem;
+    padding: 1.1rem;
+    border-radius: 1.25rem;
+    background: linear-gradient(135deg, #ffffff 0%, #faf5ff 100%);
+    border: 1px solid rgba(35, 5, 53, 0.1);
+    box-shadow: 0 10px 30px rgba(35, 5, 53, 0.08);
+}
+.kws-hub-card-action { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.kws-hub-card-action:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(35, 5, 53, 0.14); }
+.kws-hub-ic {
+    flex-shrink: 0;
+    width: 46px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 0.9rem;
+    font-size: 1.15rem;
+    color: #FFD700;
+    background: linear-gradient(135deg, #230535, #4C1D95);
+}
+.kws-hub-ic-gold { background: linear-gradient(135deg, #facc15, #FFD700); color: #230535; }
+.kws-hub-body { min-width: 0; flex: 1; }
+.kws-hub-body h3 { font-weight: 900; font-size: 0.98rem; color: #230535; margin: 0 0 0.25rem; }
+.kws-hub-body p { font-weight: 700; font-size: 0.76rem; color: #64748b; margin: 0 0 0.6rem; line-height: 1.5; }
+.kws-hub-search { position: relative; }
+.kws-hub-search i { position: absolute; right: 0.85rem; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.8rem; pointer-events: none; }
+.kws-hub-search input {
+    width: 100%;
+    padding: 0.7rem 2.2rem 0.7rem 0.8rem;
+    border-radius: 0.85rem;
+    border: 2px solid rgba(35, 5, 53, 0.12);
+    background: #fff;
+    font-weight: 800;
+    font-size: 0.82rem;
+    color: #230535;
+    outline: none;
+}
+.kws-hub-search input:focus { border-color: #230535; box-shadow: 0 0 0 4px rgba(35, 5, 53, 0.08); }
+.kws-hub-cta {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 0.85rem;
+    background: linear-gradient(90deg, #230535, #4C1D95);
+    color: #FFD700; font-weight: 900; font-size: 0.78rem;
+}
+.kws-hub-utility { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1rem; }
+.kws-pill {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    border-radius: 9999px;
+    background: #fff;
+    border: 2px solid rgba(35, 5, 53, 0.15);
+    font-weight: 800; font-size: 0.8rem; color: #230535;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.kws-pill:hover { background: #f5f3ff; }
+.kws-pill.is-active { background: linear-gradient(90deg, #230535, #4C1D95); color: #FFD700; border-color: transparent; }
+.kws-pill-ghost { background: transparent; border-color: transparent; color: #64748b; }
+.kws-pill-ghost:hover { background: #f1f5f9; color: #230535; }
+
+/* Hide the raw task board until a date is picked or a search begins. */
+body.kanjo-shell-admin.kws-view-visits #tasksDateNav { display: none !important; }
+body.kanjo-shell-admin.kws-view-visits:not(.kws-tasks-revealed) #tasksSearchWrapper,
+body.kanjo-shell-admin.kws-view-visits:not(.kws-tasks-revealed) #tasksContainer { display: none !important; }
+
+/* ── Finance Hub (admin_finance) ───────────────────────────────────────── */
+.kws-fin-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    max-width: 960px;
+}
+.kws-fin-card {
+    display: flex; flex-direction: column;
+    padding: 1.4rem;
+    border-radius: 1.35rem;
+    background: #fff;
+    border: 1px solid rgba(35, 5, 53, 0.1);
+    box-shadow: 0 14px 40px rgba(35, 5, 53, 0.08);
+}
+.kws-fin-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem; }
+.kws-fin-ic {
+    width: 46px; height: 46px; display: flex; align-items: center; justify-content: center;
+    border-radius: 0.9rem; font-size: 1.1rem; color: #FFD700;
+    background: linear-gradient(135deg, #230535, #4C1D95);
+}
+.kws-fin-ic-teal { background: linear-gradient(135deg, #0d9488, #14b8a6); color: #fff; }
+.kws-fin-badge { font-size: 0.72rem; font-weight: 900; color: #230535; background: #F5F3FF; border: 1px solid rgba(35, 5, 53, 0.1); padding: 0.3rem 0.7rem; border-radius: 9999px; }
+.kws-fin-card h3 { font-weight: 900; font-size: 1rem; color: #230535; margin: 0 0 0.4rem; }
+.kws-fin-amount { font-weight: 900; font-size: 1.9rem; color: #230535; line-height: 1.1; margin-bottom: 0.4rem; }
+.kws-fin-card p { font-weight: 700; font-size: 0.78rem; color: #64748b; line-height: 1.55; margin: 0 0 1rem; }
+.kws-cta-primary {
+    margin-top: auto;
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    width: 100%; padding: 0.85rem 1rem;
+    border-radius: 1rem;
+    background: linear-gradient(90deg, #230535, #4C1D95);
+    color: #FFD700; font-weight: 900; font-size: 0.85rem;
+    transition: opacity 0.15s, transform 0.15s;
+}
+.kws-cta-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+
+/* The legacy full-width finance strips are replaced by the hub cards. */
+body.kws-view-admin_finance #founderPayrollSummaryBox,
+body.kws-view-admin_finance #merchantDocsAuditBanner { display: none !important; }
+
+@media (max-width: 640px) {
+    .kws-fin-grid { grid-template-columns: 1fr; gap: 16px; }
+}
+
+/* ── Flight-style calendar picker ──────────────────────────────────────── */
+.kfc-panel {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 1.5rem;
+    padding: 1.1rem 1.2rem 1.3rem;
+    box-shadow: 0 30px 70px rgba(15, 23, 42, 0.35);
+}
+.kfc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
+.kfc-head-title { font-weight: 900; color: #230535; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.kfc-head-title i { color: #facc15; }
+.kfc-close { width: 34px; height: 34px; border-radius: 0.7rem; color: #64748b; background: #f1f5f9; }
+.kfc-close:hover { color: #ef4444; }
+.kfc-nav { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; }
+.kfc-nav button { width: 38px; height: 38px; border-radius: 0.8rem; background: #F5F3FF; color: #230535; font-weight: 900; }
+.kfc-nav button:hover { background: #ede9fe; }
+.kfc-month { font-weight: 900; color: #230535; font-size: 0.95rem; }
+.kfc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; }
+.kfc-dow { text-align: center; font-size: 0.66rem; font-weight: 900; color: #94a3b8; padding: 0.25rem 0; }
+.kfc-empty { visibility: hidden; }
+.kfc-day {
+    aspect-ratio: 1 / 1;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 0.7rem;
+    font-weight: 800; font-size: 0.82rem; color: #230535;
+    background: #f8fafc; transition: background 0.12s, color 0.12s, transform 0.12s;
+}
+.kfc-day:hover { background: #ede9fe; transform: translateY(-1px); }
+.kfc-day.is-today { box-shadow: inset 0 0 0 2px #facc15; }
+.kfc-day.is-selected { background: linear-gradient(135deg, #230535, #4C1D95); color: #FFD700; }
+.kfc-foot { display: flex; justify-content: center; margin-top: 1rem; }
+.kfc-today {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    padding: 0.6rem 1.1rem; border-radius: 9999px;
+    background: #230535; color: #FFD700; font-weight: 900; font-size: 0.8rem;
+}
+
+/* ── Catalog executive sub-tabs ────────────────────────────────────────── */
+.kws-ctabs { display: flex; gap: 0.35rem; padding: 0.28rem; background: #F5F3FF; border-radius: 0.9rem; }
+.kws-ctabs button {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.55rem 0.9rem; border-radius: 0.7rem;
+    font-weight: 800; font-size: 0.78rem; color: #475569;
+    transition: background 0.15s, color 0.15s;
+}
+.kws-ctabs button.is-active { background: linear-gradient(90deg, #230535, #4C1D95); color: #FFD700; }
+body.kws-view-catalog .kws-catalog-actions { flex-wrap: wrap; }
+
+/* ── Export Studio extras ──────────────────────────────────────────────── */
+.kws-export-searchwrap { position: relative; }
+.kws-export-searchwrap i { position: absolute; right: 0.9rem; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.85rem; pointer-events: none; }
+.kws-export-searchwrap input {
+    width: 100%;
+    padding: 0.8rem 2.4rem 0.8rem 0.9rem;
+    border-radius: 0.85rem;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-weight: 800; font-size: 0.85rem; color: #230535; outline: none;
+}
+.kws-export-searchwrap input:focus { border-color: #230535; box-shadow: 0 0 0 4px rgba(35, 5, 53, 0.08); }
+.kws-advanced { border: 1px solid #eef2f7; border-radius: 1rem; overflow: hidden; }
+.kws-advanced > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.85rem 1rem;
+    font-weight: 900; font-size: 0.82rem; color: #230535;
+    background: #f8fafc;
+}
+.kws-advanced > summary::-webkit-details-marker { display: none; }
+.kws-advanced > summary::after { content: '\f078'; font-family: 'Font Awesome 6 Free'; font-weight: 900; margin-right: auto; color: #94a3b8; transition: transform 0.15s; }
+.kws-advanced[open] > summary::after { transform: rotate(180deg); }
+.kws-advanced-body { padding: 0.9rem 1rem 1rem; }
+
+/* Rep catalog keeps its own segmented switcher — no executive sub-tabs. */
+body.kws-view-rep_catalog #kanjoCatalogTabs { display: none !important; }

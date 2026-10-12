@@ -42,7 +42,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20261012a">
 
     <script>
 
@@ -871,45 +871,58 @@
 
             <div class="space-y-3">
 
-                <button id="exportBtn" onclick="openGeneralExportFromProducts()" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير البيانات العامة (Excel)</button>
-
                 <div id="catalogExportSection" class="hidden space-y-3">
 
-                    <select id="merchantExportFilter" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
+                    <div class="kws-export-searchwrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" id="kanjoExportMerchantSearch" placeholder="ابحث عن تاجر..." autocomplete="off" oninput="window.kanjoFilterExportMerchants && window.kanjoFilterExportMerchants(this.value)">
+                    </div>
+
+                    <select id="merchantExportFilter" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" onchange="window.kanjoSyncExportCardBtn && window.kanjoSyncExportCardBtn()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
 
                         <option value="" disabled selected>اختر التاجر للتصدير...</option>
 
                     </select>
+
+                    <button id="kanjoExportMerchantCardBtn" type="button" disabled onclick="window.kanjoOpenSelectedMerchantCard && window.kanjoOpenSelectedMerchantCard()" class="w-full bg-white text-[#230535] border-2 border-[#230535]/20 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-id-card"></i> إظهار بطاقة التاجر</button>
 
                     <label for="exportIncludePending" class="flex items-center gap-3 p-3.5 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer select-none hover:bg-[#230535]/5 transition">
                         <input type="checkbox" id="exportIncludePending" class="w-5 h-5 shrink-0 accent-[#230535]">
                         <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
                     </label>
 
-                    <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel (Products + Variants)</button>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel</button>
 
-                    <button id="catalogTemplateExportBtn" type="button" onclick="document.getElementById('kanjoTemplateFileInput').click()" class="w-full bg-[#FFD700] text-[#230535] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-import"></i> تعبئة قالب التاجر (Excel)</button>
-                    <input type="file" id="kanjoTemplateFileInput" accept=".xlsx,.xls" class="sr-only">
+                        <button id="catalogTemplateExportBtn" type="button" onclick="document.getElementById('kanjoTemplateFileInput').click()" class="w-full bg-[#FFD700] text-[#230535] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-import"></i> تعبئة قالب التاجر</button>
+                        <input type="file" id="kanjoTemplateFileInput" accept=".xlsx,.xls" class="sr-only">
+                    </div>
 
-                    <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
+                    <details id="kanjoExportAdvanced" class="kws-advanced">
+                        <summary><i class="fa-solid fa-gear"></i> الإعدادات والأدوات المتقدمة</summary>
+                        <div class="kws-advanced-body space-y-3">
+                            <button id="exportBtn" onclick="openGeneralExportFromProducts()" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير البيانات العامة (Excel)</button>
 
-                    <button id="catalogResolveDuplicatesBtn" type="button" onclick="openCatalogDuplicatesModal()" class="w-full bg-white text-[#230535] border-2 border-[#FFD700] py-3.5 rounded-xl font-black hover:bg-[#FFD700]/10 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-clone"></i> معالجة التكرارات <span id="catalogDuplicatesBadge" class="hidden bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span></button>
+                            <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
 
-                    <div class="pt-1 mt-1 border-t border-purple-100">
-                        <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">تصدير قاموس لوحة التحكم (Qema)</p>
-                        <div class="grid grid-cols-1 gap-2">
-                            <button id="exportTaxonomyVariantsBtn" type="button" onclick="exportQemaTaxonomyVariants()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-list"></i> تصدير جميع المتغيرات</button>
-                            <button id="exportTaxonomyCategoriesBtn" type="button" onclick="exportQemaTaxonomyCategories()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-tags"></i> تصدير جميع التصنيفات</button>
+                            <button id="catalogResolveDuplicatesBtn" type="button" onclick="openCatalogDuplicatesModal()" class="w-full bg-white text-[#230535] border-2 border-[#FFD700] py-3.5 rounded-xl font-black hover:bg-[#FFD700]/10 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-clone"></i> معالجة التكرارات <span id="catalogDuplicatesBadge" class="hidden bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span></button>
+
+                            <div class="pt-1 mt-1 border-t border-purple-100">
+                                <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">تصدير قاموس لوحة التحكم (Qema)</p>
+                                <div class="grid grid-cols-1 gap-2">
+                                    <button id="exportTaxonomyVariantsBtn" type="button" onclick="exportQemaTaxonomyVariants()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-list"></i> تصدير جميع المتغيرات</button>
+                                    <button id="exportTaxonomyCategoriesBtn" type="button" onclick="exportQemaTaxonomyCategories()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-tags"></i> تصدير جميع التصنيفات</button>
+                                </div>
+                            </div>
+
+                            <div class="pt-1 mt-1 border-t border-purple-100">
+                                <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">مزامنة تصنيفات النظام</p>
+                                <button id="kanjoDynamicTaxonomyBtn" type="button" onclick="document.getElementById('kanjoDynamicTaxonomyFileInput').click()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> تحديث تصنيفات النظام (CSV)</button>
+                                <input type="file" id="kanjoDynamicTaxonomyFileInput" accept=".csv,text/csv" class="sr-only">
+                                <p id="kanjoDynamicTaxonomyStatus" class="hidden mt-2 text-[11px] font-black text-emerald-600"></p>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="pt-1 mt-1 border-t border-purple-100">
-                        <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">مزامنة تصنيفات النظام</p>
-                        <button id="kanjoDynamicTaxonomyBtn" type="button" onclick="document.getElementById('kanjoDynamicTaxonomyFileInput').click()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> تحديث تصنيفات النظام (CSV)</button>
-                        <input type="file" id="kanjoDynamicTaxonomyFileInput" accept=".csv,text/csv" class="sr-only">
-                        <p id="kanjoDynamicTaxonomyStatus" class="hidden mt-2 text-[11px] font-black text-emerald-600"></p>
-                    </div>
-
+                    </details>
 
                 </div>
 
@@ -917,6 +930,25 @@
 
         </div>
 
+    </div>
+
+    <!-- ═══════════ FLIGHT-STYLE TASKS CALENDAR (founder visits hub) ═══════════ -->
+    <div id="kanjoFlightCalendarModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
+        <div class="kfc-panel">
+            <div class="kfc-head">
+                <div class="kfc-head-title"><i class="fa-solid fa-plane-departure"></i> جدول المهام والزيارات</div>
+                <button type="button" data-kfc-nav="close" class="kfc-close" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="kfc-nav">
+                <button type="button" data-kfc-nav="prev" aria-label="الشهر السابق"><i class="fa-solid fa-chevron-right"></i></button>
+                <span id="kanjoFlightMonth" class="kfc-month"></span>
+                <button type="button" data-kfc-nav="next" aria-label="الشهر التالي"><i class="fa-solid fa-chevron-left"></i></button>
+            </div>
+            <div id="kanjoFlightGrid" class="kfc-grid"></div>
+            <div class="kfc-foot">
+                <button type="button" data-kfc-nav="today" class="kfc-today"><i class="fa-solid fa-crosshairs"></i> اليوم</button>
+            </div>
+        </div>
     </div>
 
     <!-- ═══════════ DUPLICATE SKU RESOLUTION DASHBOARD ═══════════ -->
@@ -1753,7 +1785,66 @@
 
         <div id="dashboardSection" class="hidden space-y-6">
 
-            
+            <!-- ═══════════ FOUNDER COMMAND HUB (visits) ═══════════ -->
+            <div id="kanjoCommandHub" class="kws-hub-pane">
+                <div class="kws-hub-head">
+                    <div>
+                        <h2 class="kws-hub-title">🧭 مركز القيادة التنفيذي</h2>
+                        <p class="kws-hub-sub">ابدأ بالبحث عن تاجر أو استعرض جدول مهام وزيارات الفريق.</p>
+                    </div>
+                </div>
+                <div class="kws-hub-grid">
+                    <div class="kws-hub-card" id="kanjoSearchModeCard">
+                        <div class="kws-hub-ic"><i class="fa-solid fa-magnifying-glass"></i></div>
+                        <div class="kws-hub-body">
+                            <h3>🔍 البحث الشامل عن تاجر</h3>
+                            <p>ابحث باسم التاجر أو المطعم لعرض المهام وتقارير الزيارة وبطاقة التاجر مباشرة.</p>
+                            <div class="kws-hub-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="search" id="kanjoSpotlightInput" placeholder="اكتب اسم تاجر / مطعم..." oninput="window.kanjoSpotlightSearch && window.kanjoSpotlightSearch(this.value)" autocomplete="off">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kws-hub-card kws-hub-card-action" id="kanjoCalendarModeCard" role="button" tabindex="0" onclick="window.kanjoOpenFlightCalendar && window.kanjoOpenFlightCalendar()">
+                        <div class="kws-hub-ic kws-hub-ic-gold"><i class="fa-solid fa-calendar-days"></i></div>
+                        <div class="kws-hub-body">
+                            <h3>📅 عرض جدول المهام والزيارات</h3>
+                            <p>تقويم زيارات بأسلوب حجز الرحلات — اختر اليوم لعرض بطاقات الزيارات.</p>
+                            <span class="kws-hub-cta"><i class="fa-solid fa-plane-departure"></i> عرض جدول المهام والزيارات</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="kws-hub-utility">
+                    <button type="button" id="kanjoPharmacyPill" class="kws-pill" onclick="window.kanjoTogglePharmacy && window.kanjoTogglePharmacy()"><i class="fa-solid fa-pills"></i> أرشيف مراجعة الصيدليات</button>
+                    <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث وإخفاء المهام</button>
+                </div>
+            </div>
+
+            <!-- ═══════════ FOUNDER FINANCE HUB (admin_finance) ═══════════ -->
+            <div id="kanjoFinanceHub" class="kws-hub-pane">
+                <div class="kws-fin-grid">
+                    <div class="kws-fin-card">
+                        <div class="kws-fin-top">
+                            <span class="kws-fin-ic"><i class="fa-solid fa-wallet"></i></span>
+                            <span class="kws-fin-badge" id="kanjoFinMonth">الشهر الحالي</span>
+                        </div>
+                        <h3>💰 الرواتب والمستحقات المالية</h3>
+                        <div class="kws-fin-amount" id="kanjoFinPayrollTotal">0 ج.م</div>
+                        <p>إجمالي رواتب الشركة مبني على التعاقدات النهائية للفترة المختارة.</p>
+                        <button type="button" class="kws-cta-primary" onclick="window.showFounderPayrollDetails && window.showFounderPayrollDetails()"><i class="fa-solid fa-file-invoice-dollar"></i> فتح كشف الرواتب والحسابات</button>
+                    </div>
+                    <div class="kws-fin-card">
+                        <div class="kws-fin-top">
+                            <span class="kws-fin-ic kws-fin-ic-teal"><i class="fa-solid fa-file-shield"></i></span>
+                            <span class="kws-fin-badge" id="kanjoFinAuditRatio">0 / 0</span>
+                        </div>
+                        <h3>🛡️ تدقيق ملفات التجار — الاتفاق النهائي</h3>
+                        <div class="kws-fin-amount" id="kanjoFinAuditCount">—</div>
+                        <p>راجع ملفات التجار ذوي الاتفاق النهائي واعتمد المستندات الناقصة.</p>
+                        <button type="button" class="kws-cta-primary" onclick="window.openMerchantDocsAuditModal && window.openMerchantDocsAuditModal()"><i class="fa-solid fa-magnifying-glass-chart"></i> فتح غرفة تدقيق العقود</button>
+                    </div>
+                </div>
+            </div>
 
             <!-- مربع ملخص رواتب الشركة الخاص بالحساب الحالي والشهر الحالي (للمؤسسين فقط) -->
 
@@ -2359,6 +2450,10 @@
                 <div class="kws-catalog-actions">
                     <div class="kws-catalog-actions-title">
                         <i class="fa-solid fa-box-open"></i> كتالوج منتجات التجار
+                    </div>
+                    <div id="kanjoCatalogTabs" class="kws-ctabs" role="tablist" aria-label="أقسام الكتالوج">
+                        <button type="button" data-kws-ctab="browse" class="is-active"><i class="fa-solid fa-store"></i> عرض المنتجات</button>
+                        <button type="button" data-kws-ctab="export"><i class="fa-solid fa-file-export"></i> تصدير المنتجات</button>
                     </div>
                     <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
                         <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥

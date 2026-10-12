@@ -32,7 +32,7 @@ import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
 import './services/marketing.js';
-import './services/workspace.js';
+import './services/workspace.js?v=20261012a';
 
 /* Start the IndexedDB delta-sync triggers (focus / visibilitychange + a 45s
    visible-tab heartbeat). The engine is inert until a collection registers a
