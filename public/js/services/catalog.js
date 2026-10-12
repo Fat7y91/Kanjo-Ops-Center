@@ -6818,7 +6818,7 @@ const kanjoHasSemanticTerm = (haystack, re) => !!haystack && !!re && re.test(hay
    boundary helper, so "محمرة" cannot fire inside an unrelated word. */
 const KANJO_RESTAURANT_ADDON_RULES = [
     { ids: [16, 147], terms: ['سلطة', 'سلطه'] },
-    { ids: [165], terms: ['بطاطس', 'باكيت', 'باكت', 'محمرة'] },
+    { ids: [165], terms: ['بطاطس', 'باكيت', 'باكت'] },
     { ids: [4], terms: ['ساندوتش'] }
 ].map((rule) => ({ ids: rule.ids, re: kanjoSemanticTermRegex(rule.terms) }));
 
@@ -6832,6 +6832,13 @@ const KANJO_MAIN_DISH_NAME_RE = kanjoSemanticTermRegex(['برجر', 'بيرجر'
    description mentions beef ("بيف مدخن") or its name carries the brand word
    "بانز". Used to strip the برجر keyword hit from fries. */
 const KANJO_FRIES_NAME_RE = kanjoSemanticTermRegex(['فرايز', 'بطاطس', 'fries']);
+/* Main-course categories: an add-on tag (إضافات 149) must never apply to one of
+   these, even when its description literally lists "الإضافات". Covers every main
+   family in the Ops catalogue (pasta, sandwiches, hawawshi, grills, fish, burgers,
+   pizza, crepe, oven dishes, koshary, chicken, and desserts حلويات). */
+const KANJO_MAIN_DISH_CATEGORY_IDS = new Set([1, 4, 7, 9, 10, 12, 13, 15, 37, 82, 83, 150, 151, 164]);
+/* Desserts: بطاطس (165) is a side and must never be tagged onto a sweet. */
+const KANJO_DESSERT_CATEGORY_IDS = new Set([37, 82]);
 
 /* Parse an already-official category cell (single value or comma-joined multi
    value). Returns the cell unchanged when EVERY part is a category this vendor
@@ -7667,7 +7674,16 @@ const kanjoStoredCategoryValues = (product) => {
     else if (typeof raw === 'string' && raw.trim()) list = raw.split(',').map((v) => v.trim()).filter(Boolean);
     else list = [];
     const isId = (v, id) => new RegExp('^ID:' + id + '(\\D|$)').test(String(v || ''));
-    if (list.some((v) => isId(v, 147))) list = list.filter((v) => !isId(v, 149));
+    const ids = new Set(list.map(kanjoCategoryIdFromValue));
+    /* إضافات (149) is a standalone add-on: drop it whenever the product is
+       already tagged main-dish or المقبلات (147). بطاطس (165) is a side: drop it
+       from any dessert (حلويات). Applied to persisted manual decisions too. */
+    if (ids.has(147) || Array.from(ids).some((id) => KANJO_MAIN_DISH_CATEGORY_IDS.has(id))) {
+        list = list.filter((v) => !isId(v, 149));
+    }
+    if (Array.from(ids).some((id) => KANJO_DESSERT_CATEGORY_IDS.has(id))) {
+        list = list.filter((v) => !isId(v, 165));
+    }
     return list;
 };
 
@@ -8193,6 +8209,18 @@ const kanjoMatchProductCategory = (product, vendorType) => {
     if (nameHaystack && kanjoHasSemanticTerm(nameHaystack, KANJO_FRIES_NAME_RE)) {
         for (let i = ranked.length - 1; i >= 0; i--) {
             if (ranked[i] && ranked[i].id === 12) ranked.splice(i, 1);
+        }
+    }
+    /* A main dish (كشري/برجر/طواجن/…) is never an add-on: strip إضافات even when
+       its description says "غني بالمكونات والإضافات". A dessert is never بطاطس. */
+    if (ranked.some((cat) => cat && KANJO_MAIN_DISH_CATEGORY_IDS.has(cat.id))) {
+        for (let i = ranked.length - 1; i >= 0; i--) {
+            if (ranked[i] && ranked[i].id === 149) ranked.splice(i, 1);
+        }
+    }
+    if (ranked.some((cat) => cat && KANJO_DESSERT_CATEGORY_IDS.has(cat.id))) {
+        for (let i = ranked.length - 1; i >= 0; i--) {
+            if (ranked[i] && ranked[i].id === 165) ranked.splice(i, 1);
         }
     }
     /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
@@ -8753,6 +8781,14 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
        parent product name instead of being lost or turned into fake IDs. */
     const variantNameSuffix = new Map();
     evaluations.forEach(({ product }) => {
+        /* Only a SINGLE-variant product may carry an unmapped qualifier on its
+           name_ar (e.g. a lone "وسط"). For a multi-variant product the parent
+           name must stay clean: appending a dropped variant's label ("كبده")
+           would corrupt the base bowl name AND still lose that variant's price. */
+        const variations = Array.isArray(product && product.variations)
+            ? product.variations.filter((v) => v && String(v.name || '').trim())
+            : [];
+        if (variations.length !== 1) return;
         const extra = kanjoVariantUnrecognizedWords(product);
         if (extra.length) variantNameSuffix.set(String((product && product.id) || ''), extra.join(' '));
     });
