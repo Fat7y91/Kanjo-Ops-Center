@@ -407,6 +407,12 @@ function applyThemeAndShowDashboard() {
             });
         }
     }
+
+    /* Modular workspace shell: single-active-view navigation. Must run AFTER
+       the role/section visibility above so it never fights the RBAC gating. */
+    if (window.kanjoWorkspace && typeof window.kanjoWorkspace.refresh === 'function') {
+        try { window.kanjoWorkspace.refresh(); } catch (err) { console.error('[workspace] refresh failed', err); }
+    }
     
     afterAuthReady().then(() => {
         if (window._appListenersRegistered) return;

@@ -3443,6 +3443,13 @@ window.onCatalogStatusFilterChange = (key) => {
        the folder grid while a status filter is active. */
     window._catalogAllProductsSelectedMerchant = '';
     renderCatalogAllProductsListNow();
+    /* Part 1: pull a delta in the background (≈1 read when idle) and repaint
+       from the shared IDB store so the pill's counts are never stale. */
+    if (window.kanjoSync && window.kanjoIdb
+        && window.kanjoSync.getLastSyncedAt(CATALOG_COLLECTION)
+        && typeof window.refreshCatalogFromRest === 'function') {
+        window.refreshCatalogFromRest();
+    }
 };
 
 /* ─── Laravel Dashboard Sync: status section + confirm modal ───
@@ -5319,6 +5326,19 @@ const catalogProductMerchantName = (p) => catalogResolveMerchantName(p) || Strin
 const fetchAllCatalogProductsForExport = async () => {
     if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
         return window.allCatalogProductsCache;
+    }
+    /* IndexedDB-first: warm sessions pay only the delta; cold sessions do one
+       full read that is captured as the baseline. */
+    if (window.kanjoSync && window.kanjoIdb && window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            const items = await catalogUnifiedFullList();
+            window.allCatalogProductsCache = items;
+            window._catalogAllProductsLoaded = true;
+            if (typeof window.refreshCatalogDuplicatesBadge === 'function') window.refreshCatalogDuplicatesBadge();
+            return items;
+        } catch (err) {
+            console.warn('[catalog] unified export fetch failed; trying legacy:', err);
+        }
     }
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
@@ -9637,6 +9657,97 @@ const sortCatalogProductsByCreatedAt = (items) => {
     return items;
 };
 
+/* Field mask for the ONE shared full/delta read of merchant_products. It is the
+   union of the catalog list fields and the KPI product fields so both consumers
+   can share a single IndexedDB-backed store instead of each issuing its own
+   one-read-per-document collection scan (catalog ~7.7k + KPI ~3.2k). */
+const catalogFullFields = () => {
+    const kpi = Array.isArray(window.KANJO_KPI_PRODUCT_FIELDS) ? window.KANJO_KPI_PRODUCT_FIELDS : [];
+    return Array.from(new Set(CATALOG_LIST_FIELDS.concat(kpi)));
+};
+
+let _catalogUnifiedInFlight = null;
+
+/* Unified merchant_products read (Part 1).
+   - IndexedDB is the source of truth across sessions. On a warm start it
+     hydrates from IDB and issues ONLY the `updatedAt > (lastSyncedAt - 60s)`
+     delta (≈1 read when idle), then merges into both the in-memory caches and
+     IDB. On a cold start (no baseline) it does a single full read and records
+     the baseline so every following reload is a delta.
+   - Falls back to the legacy full REST read when the engine is unavailable or
+     any step throws, so behaviour can never regress below the old path.
+   - Coalesces concurrent callers in the same tick (boot runs several jobs). */
+const catalogUnifiedFullList = () => {
+    if (_catalogUnifiedInFlight) return _catalogUnifiedInFlight;
+    _catalogUnifiedInFlight = (async () => {
+        const sync = window.kanjoSync;
+        const idb = window.kanjoIdb;
+        const restOk = window.kanjoRest && typeof window.kanjoRest.runQuery === 'function';
+        if (!sync || !idb || !restOk) return fetchAllCatalogProducts();
+        try {
+            await sync.hydrate(CATALOG_COLLECTION);
+            const hasBaseline = sync.size(CATALOG_COLLECTION) > 0 && !!sync.getLastSyncedAt(CATALOG_COLLECTION);
+            const fields = catalogFullFields();
+            if (hasBaseline) {
+                sync.registerFetcher(CATALOG_COLLECTION, (since) => window.kanjoRest.runQuery(
+                    CATALOG_COLLECTION,
+                    since ? [['updatedAt', '>', since]] : [],
+                    null,
+                    { select: fields }
+                ));
+                await sync.sync(CATALOG_COLLECTION, { force: true });
+                window._catalogIdbMode = 'delta';
+                return sortCatalogProductsByCreatedAt(sync.getRows(CATALOG_COLLECTION).slice());
+            }
+            const fresh = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: fields })) || [];
+            await sync.captureFullLoad(CATALOG_COLLECTION, fresh);
+            window._catalogIdbMode = 'full';
+            return sortCatalogProductsByCreatedAt(fresh.slice());
+        } catch (err) {
+            console.warn('[catalog] unified IDB read failed; using full REST read:', err);
+            return fetchAllCatalogProducts();
+        }
+    })().finally(() => { _catalogUnifiedInFlight = null; });
+    return _catalogUnifiedInFlight;
+};
+
+/* Push the unified merchant_products list into every in-memory cache the
+   catalog widgets read and repaint the active views. Zero reads. */
+const applyUnifiedCatalogCaches = (items, isMahmoudFlag) => {
+    window.allCatalogProductsCache = items;
+    window._catalogAllProductsLoaded = true;
+    window._catalogAllProductsCount = items.length;
+    window._catalogAllProductsFetchedAt = Date.now();
+    const pending = items.filter((p) => p.status === 'pending');
+    window.merchantProductsCache = pending;
+    window._catalogPendingLoaded = true;
+    window._catalogPendingCount = pending.length;
+    if (isMahmoudFlag) {
+        window.catalogDeleteRequestsCache = items.filter((p) => p.deleteRequested === true);
+        window._catalogDeleteRequestsLoaded = true;
+        window._catalogDeleteRequestsCount = window.catalogDeleteRequestsCache.length;
+    }
+    if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
+    if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+};
+
+/* Repaint the catalog from a background delta sync (focus/visibility/heartbeat
+   or an explicit refresh). Only when something actually changed, so the 45s
+   heartbeat never causes a needless repaint loop. */
+if (typeof window.addEventListener === 'function') {
+    window.addEventListener('kanjo:synced', (e) => {
+        const d = e && e.detail;
+        if (!d || d.store !== CATALOG_COLLECTION || !window.kanjoSync) return;
+        if (!d.count && !d.full) return;
+        try {
+            const items = sortCatalogProductsByCreatedAt(window.kanjoSync.getRows(CATALOG_COLLECTION).slice());
+            applyUnifiedCatalogCaches(items, window.isMahmoudUser());
+        } catch (_) { /* ignore */ }
+    });
+}
+
 /* Static (one-shot) loader for the rep's own catalog products. This replaces
    the previous real-time onSnapshot: overlapping listeners (tasks + catalog)
    repainted the same list continuously and made the rep dashboard blink.
@@ -9873,22 +9984,54 @@ window.startCatalogListeners = () => {
                deferred to the "منتجاتي" widget being opened (which calls
                `loadMyCatalogProducts`, count-gated) or an explicit force. */
             const jobs = [];
+
+            /* FAST PATH (Part 1): a previous session captured the full
+               merchant_products collection into IndexedDB, so this boot/reload
+               pays only for the `updatedAt > since` delta (~1 read when idle)
+               instead of re-reading the whole (or pending) set. Manager-scoped
+               so a plain rep's boot cost stays zero. */
+            const idbReady = !!(window.kanjoSync && window.kanjoIdb
+                && window.kanjoSync.getLastSyncedAt(CATALOG_COLLECTION)
+                && window.kanjoSync.size(CATALOG_COLLECTION) > 0);
+            if (idbReady && (canViewPending || isMahmoud)) {
+                jobs.push((async () => {
+                    try {
+                        const items = await catalogUnifiedFullList();
+                        applyUnifiedCatalogCaches(items, isMahmoud);
+                    } catch (err) {
+                        console.error('[catalog] IDB unified boot fetch failed:', err);
+                    }
+                })());
+                if (allowFull || window._catalogMyProductsOpen === true) {
+                    jobs.push(window.loadMyCatalogProducts(allowFull));
+                }
+                await Promise.all(jobs);
+                return;
+            }
             if (allowFull || window._catalogMyProductsOpen === true) {
                 jobs.push(window.loadMyCatalogProducts(allowFull));
             }
             if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
-                        /* Cheap change check: an aggregation count costs ~1 read
-                           per 1,000 docs, so an explicit re-open with unchanged
-                           data skips the full re-fetch. `null` (helper missing)
-                           forces the fetch. */
-                        const total = await catalogRestCount([]);
-                        if (total !== null && window._catalogAllProductsLoaded && total === window._catalogAllProductsCount) {
-                            window._catalogAllProductsFetchedAt = Date.now();
-                            return;
+                        let items;
+                        let total = null;
+                        if (window.kanjoSync && window.kanjoIdb && window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+                            /* Cold start: one full read, captured as the IDB
+                               baseline so the next reload is a cheap delta. */
+                            items = await catalogUnifiedFullList();
+                        } else {
+                            /* Cheap change check: an aggregation count costs ~1 read
+                               per 1,000 docs, so an explicit re-open with unchanged
+                               data skips the full re-fetch. `null` (helper missing)
+                               forces the fetch. */
+                            total = await catalogRestCount([]);
+                            if (total !== null && window._catalogAllProductsLoaded && total === window._catalogAllProductsCount) {
+                                window._catalogAllProductsFetchedAt = Date.now();
+                                return;
+                            }
+                            items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS }));
                         }
-                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS }));
                         window.allCatalogProductsCache = items;
                         window._catalogAllProductsLoaded = true;
                         window._catalogAllProductsCount = typeof total === 'number' ? total : items.length;
