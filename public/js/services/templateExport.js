@@ -620,8 +620,18 @@
                 purgeDataRows(XLSX, workbook.Sheets[variantsSheet], variantsHeader);
             }
             if (additionsSheet) {
-                const additionsHeader = findGenericHeaderRow(readAoa(additionsSheet));
-                purgeDataRows(XLSX, workbook.Sheets[additionsSheet], additionsHeader);
+                const additionsAoa = readAoa(additionsSheet);
+                const additionsHeader = findGenericHeaderRow(additionsAoa);
+                const additionRows = built.additionRows || [];
+                const additionsMap = buildColumnMap(additionsAoa[additionsHeader]);
+                if (additionRows.length && Object.keys(additionsMap).length) {
+                    /* Write the generated paid add-ons under the template's own
+                       Additions header (product_key/name_en/name_ar/price/status),
+                       replacing the placeholder example rows. */
+                    writeRowsIntoSheet(XLSX, workbook.Sheets[additionsSheet], additionsHeader, additionsMap, additionRows);
+                } else {
+                    purgeDataRows(XLSX, workbook.Sheets[additionsSheet], additionsHeader);
+                }
             }
 
             const out = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', cellStyles: true });

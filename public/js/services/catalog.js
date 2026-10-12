@@ -7183,6 +7183,10 @@ const kanjoQemaUnmappedVariants = (evaluations) => {
     if (!kanjoQemaTaxonomy()) return [];
     const found = new Map();
     (evaluations || []).forEach(({ product }) => {
+        /* Base + paid-topping products (e.g. كشري عادي + إضافة كبدة) have their
+           unmapped toppings exported into the `Additions` sheet, so they must NOT
+           trip the "unmapped variant" halt gate. */
+        if (kanjoDetectAddonPattern(product)) return;
         const variations = Array.isArray(product && product.variations)
             ? product.variations.filter((v) => v && String(v.name || '').trim())
             : [];
@@ -7684,6 +7688,8 @@ const kanjoStoredCategoryValues = (product) => {
     if (Array.from(ids).some((id) => KANJO_DESSERT_CATEGORY_IDS.has(id))) {
         list = list.filter((v) => !isId(v, 165));
     }
+    /* Koshary already implies pasta; drop the generic باستا (1) it carries. */
+    if (ids.has(151)) list = list.filter((v) => !isId(v, 1));
     return list;
 };
 
@@ -7712,6 +7718,9 @@ const kanjoPatchProductCaches = (productId, patch) => {
 
 const KANJO_PRODUCTS_SHEET_COLUMNS = ['product_key', 'product_type', 'sku', 'name_en', 'name_ar', 'description_en', 'description_ar', 'base_price', 'main_image_url', 'category', 'status'];
 const KANJO_VARIANTS_SHEET_COLUMNS = ['product_key', 'variant_sku', 'attribute_1_name', 'attribute_1_value', 'attribute_2_name', 'attribute_2_value', 'attribute_3_name', 'attribute_3_value', 'attribute_4_name', 'attribute_4_value', 'branch', 'price', 'stock', 'thumbnail_url', 'status'];
+/* Optional paid add-ons / toppings (see the official template's `Additions`
+   worksheet). One row per parent product + topping with the price DELTA. */
+const KANJO_ADDITIONS_SHEET_COLUMNS = ['product_key', 'name_en', 'name_ar', 'price', 'status'];
 
 /* Normalized substring hit. Both the keyword and the product name pass through
    normalizeArabic first, so minor spelling differences (hamza/alef forms, taa
@@ -8223,6 +8232,13 @@ const kanjoMatchProductCategory = (product, vendorType) => {
             if (ranked[i] && ranked[i].id === 165) ranked.splice(i, 1);
         }
     }
+    /* Koshary naturally contains macaroni: a كشري dish must never also export
+       the generic باستا (ID:1) bucket just because its description lists مكرونة. */
+    if (ranked.some((cat) => cat && cat.id === 151)) {
+        for (let i = ranked.length - 1; i >= 0; i--) {
+            if (ranked[i] && ranked[i].id === 1) ranked.splice(i, 1);
+        }
+    }
     /* De-dup by category name so a repeated name (e.g. "حلويات" across IDs) is
        exported once, mirroring the single option shown in the audit modal. */
     const seenNames = new Set();
@@ -8598,6 +8614,99 @@ const kanjoBuildVariantRows = (p) => {
         .filter(Boolean);
 };
 
+/* ===== Base + paid-topping detection (ZERO reads) =====
+   Some vendors model a paid topping as a second "variation" beside the plain
+   item (e.g. كشري [عادي 20] + [كبده 40]). The plain option carries the base
+   price and the topping is an unmapped, more-expensive option. The Kanjo
+   importer has no attribute for such a topping, but the vendor template exposes
+   an `Additions` worksheet, so we export these as product-level add-ons instead
+   of a lonely, pointless `عادي` variant row. */
+const KANJO_ADDON_BASE_LABELS = new Set([
+    'عادي', 'عادى', 'سادة', 'ساده', 'بدون', 'بدون اضافات', 'بدون إضافات'
+].map((t) => normalizeArabic(t)));
+
+/* Clean Arabic topping label -> English. Matched as substrings on the normalised
+   label so "كبدة" / "كبده" both land, and unknown toppings fall back to the
+   Arabic label (never left blank). */
+const KANJO_ADDON_ENGLISH = [
+    [['كبده', 'كبدة'], 'Extra Liver'],
+    [['سجق', 'سجوك'], 'Extra Sausage'],
+    [['فراخ', 'دجاج'], 'Extra Chicken'],
+    [['لحمه', 'لحمة', 'لحم'], 'Extra Meat'],
+    [['موتزاريلا', 'موزاريلا', 'جبنه', 'جبنة', 'جبن'], 'Extra Cheese'],
+    [['شيدر'], 'Extra Cheddar'],
+    [['بسطرمه', 'بسطرمة'], 'Extra Basturma'],
+    [['مكسرات'], 'Extra Nuts'],
+    [['قشطه', 'قشطة'], 'Extra Cream'],
+    [['صوص'], 'Extra Sauce']
+].map((pair) => ({ keys: pair[0].map((k) => normalizeArabic(k)), en: pair[1] }));
+
+const kanjoAddonEnglishName = (rawName) => {
+    const n = normalizeArabic(String(rawName || '').trim());
+    if (!n) return '';
+    const hit = KANJO_ADDON_ENGLISH.find((e) => e.keys.some((k) => n === k || n.indexOf(k) !== -1));
+    return hit ? hit.en : '';
+};
+
+const kanjoDetectAddonPattern = (product) => {
+    const variations = Array.isArray(product && product.variations)
+        ? product.variations.filter((v) => v && String(v.name || '').trim())
+        : [];
+    /* Needs at least one plain option plus one topping. */
+    if (variations.length < 2) return null;
+    const isBase = (v) => KANJO_ADDON_BASE_LABELS.has(normalizeArabic(String(v.name || '').trim()));
+    const baseVars = variations.filter(isBase);
+    if (baseVars.length !== 1) return null;
+    const base = baseVars[0];
+    const basePriceVal = Number(base.price);
+    if (!isFinite(basePriceVal)) return null;
+    /* The plain option must be the cheapest one (a topping is always a paid
+       upgrade) and, when the doc stores a base_price, it must match it. */
+    const prices = variations.map((v) => Number(v.price) || 0);
+    if (basePriceVal > Math.min.apply(null, prices)) return null;
+    const storedBase = Number(product && product.base_price);
+    if (isFinite(storedBase) && storedBase > 0 && basePriceVal !== storedBase) return null;
+    const addons = [];
+    for (let i = 0; i < variations.length; i++) {
+        const v = variations[i];
+        if (v === base) continue;
+        const price = Number(v.price) || 0;
+        /* Every other option MUST be an unmapped, more-expensive topping — else
+           this is an ordinary size/option product and we leave it untouched. */
+        if (price <= basePriceVal) return null;
+        const taxonomy = kanjoQemaVariantCells(v.name);
+        if (taxonomy && taxonomy.assignments && taxonomy.assignments.length) return null;
+        addons.push(v);
+    }
+    if (!addons.length) return null;
+    return { base: base, addons: addons };
+};
+
+/* Build the Additions rows for every base+topping product (parent sku resolved
+   via `skuById`). Pure array work — ZERO reads. */
+const kanjoBuildAdditionRows = (patternsById, skuById) => {
+    const rows = [];
+    patternsById.forEach((pattern, id) => {
+        const parentSku = skuById.get(String(id));
+        if (!parentSku) return;
+        const basePriceVal = Number(pattern.base.price) || 0;
+        pattern.addons.forEach((v) => {
+            const raw = String(v.name || '').trim();
+            if (!raw) return;
+            const nameAr = /^إضاف|^اضاف/.test(raw) ? raw : ('إضافة ' + raw);
+            const delta = (Number(v.price) || 0) - basePriceVal;
+            rows.push({
+                product_key: parentSku,
+                name_en: kanjoAddonEnglishName(raw) || nameAr,
+                name_ar: nameAr,
+                price: delta > 0 ? delta : 0,
+                status: 'active'
+            });
+        });
+    });
+    return rows;
+};
+
 /* Flatten every product's variants into audit-friendly entries that carry both
    the raw source option and the strict Kanjo row that will be exported. */
 const kanjoCollectVariantEntries = (evaluations) => {
@@ -8710,7 +8819,9 @@ const kanjoSheetFromRows = (columns, rows) => (
         : XLSX.utils.aoa_to_sheet([columns])
 );
 
-const kanjoWriteWorkbook = async (productRows, variantRows, fileName) => {
+const kanjoWriteWorkbook = async (productRows, variantRows, additionRows, fileName) => {
+    /* Backwards-compatible: older callers passed (products, variants, fileName). */
+    if (typeof additionRows === 'string' && fileName === undefined) { fileName = additionRows; additionRows = []; }
     /* P1.7: hand the (CPU-heavy) SheetJS serialization to the background worker.
        The worker receives plain row data and streams the .xlsx bytes back, so
        the dashboard thread stays responsive even for tens of thousands of rows. */
@@ -8718,6 +8829,9 @@ const kanjoWriteWorkbook = async (productRows, variantRows, fileName) => {
         { name: 'Products', header: KANJO_PRODUCTS_SHEET_COLUMNS, rows: productRows, colWidth: 22 },
         { name: 'Variants', header: KANJO_VARIANTS_SHEET_COLUMNS, rows: variantRows, colWidth: 22 }
     ];
+    if (additionRows && additionRows.length) {
+        sheets.push({ name: 'Additions', header: KANJO_ADDITIONS_SHEET_COLUMNS, rows: additionRows, colWidth: 22 });
+    }
     if (window.kanjoExportWorker && typeof window.kanjoExportWorker.writeWorkbook === 'function') {
         return window.kanjoExportWorker.writeWorkbook(sheets, fileName);
     }
@@ -8729,6 +8843,11 @@ const kanjoWriteWorkbook = async (productRows, variantRows, fileName) => {
     wsVariants['!cols'] = KANJO_VARIANTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
     XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
     XLSX.utils.book_append_sheet(wb, wsVariants, 'Variants');
+    if (additionRows && additionRows.length) {
+        const wsAdditions = kanjoSheetFromRows(KANJO_ADDITIONS_SHEET_COLUMNS, additionRows);
+        wsAdditions['!cols'] = KANJO_ADDITIONS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+        XLSX.utils.book_append_sheet(wb, wsAdditions, 'Additions');
+    }
     XLSX.writeFile(wb, fileName);
 };
 
@@ -8792,6 +8911,13 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         const extra = kanjoVariantUnrecognizedWords(product);
         if (extra.length) variantNameSuffix.set(String((product && product.id) || ''), extra.join(' '));
     });
+    /* Base + paid-topping products are exported as `simple` with their toppings
+       moved to the Additions sheet — resolved once, keyed by product id. */
+    const addonPatternsById = new Map();
+    evaluations.forEach(({ product }) => {
+        const pattern = kanjoDetectAddonPattern(product);
+        if (pattern) addonPatternsById.set(String((product && product.id) || ''), pattern);
+    });
     for (let i = 0; i < evaluations.length; i++) {
         if (i > 0 && i % 300 === 0 && typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
         const { product, match } = evaluations[i];
@@ -8804,6 +8930,14 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         const row = kanjoBuildProductRow(product, category);
         const extraName = variantNameSuffix.get(key);
         if (extraName) row.name_ar = (String(row.name_ar || '').trim() + ' ' + extraName).trim();
+        /* Base + topping pattern: keep the plain option as the parent's base
+           price and downgrade the product to `simple`, so it does NOT emit a
+           lonely single `عادي` row in the Variants sheet. */
+        const addonPattern = addonPatternsById.get(key);
+        if (addonPattern) {
+            row.product_type = 'simple';
+            row.base_price = Number(addonPattern.base.price) || 0;
+        }
         /* Deduplicate the parent SKU. Reps duplicate products, and the Kanjo
            importer rejects any repeated sku. A blank sku falls back to the
            (always unique) doc id so the cell is never empty. */
@@ -8829,6 +8963,7 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         variantRows = [];
         evaluations.forEach(({ product }) => variantRows.push(...kanjoBuildVariantRows(product)));
     }
+    variantRows = variantRows.filter((row) => !addonPatternsById.has(String((row && row.product_key) || '')));
     variantRows = kanjoDedupeVariantRows(variantRows);
     /* Re-point each variant at its parent's deduped sku and renumber
        variant_sku per parent. kanjoDedupeVariantRows already collapsed any
@@ -8862,17 +8997,19 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
         }
         cleanedProductRows.push(row);
     });
-    return { productRows: cleanedProductRows, variantRows };
+    const additionRows = kanjoBuildAdditionRows(addonPatternsById, uniqueSkuById);
+    return { productRows: cleanedProductRows, variantRows, additionRows };
 };
 
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
-        const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, variantEntries);
+        const { productRows, variantRows, additionRows } = await kanjoBuildExportRows(evaluations, selections, variantEntries);
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
-        await kanjoWriteWorkbook(productRows, variantRows, fileName);
-        if (window.showToast) window.showToast('تم تصدير ملف Excel (' + productRows.length + ' منتج، ' + variantRows.length + ' خيار) بنجاح');
+        await kanjoWriteWorkbook(productRows, variantRows, additionRows, fileName);
+        const addNote = (additionRows && additionRows.length) ? ('، ' + additionRows.length + ' إضافة') : '';
+        if (window.showToast) window.showToast('تم تصدير ملف Excel (' + productRows.length + ' منتج، ' + variantRows.length + ' خيار' + addNote + ') بنجاح');
     } catch (err) {
         kanjoReportExportError(err);
     }
@@ -8881,11 +9018,16 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
 /* Build (but do NOT download) the same Products/Variants workbook so the
    client-side vendor ZIP export can append it as an archive entry. */
 const MIME_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const kanjoBuildWorkbookBlob = async (productRows, variantRows, fileName) => {
+const kanjoBuildWorkbookBlob = async (productRows, variantRows, additionRows, fileName) => {
+    /* Backwards-compatible: older callers passed (products, variants, fileName). */
+    if (typeof additionRows === 'string' && fileName === undefined) { fileName = additionRows; additionRows = []; }
     const sheets = [
         { name: 'Products', header: KANJO_PRODUCTS_SHEET_COLUMNS, rows: productRows, colWidth: 22 },
         { name: 'Variants', header: KANJO_VARIANTS_SHEET_COLUMNS, rows: variantRows, colWidth: 22 }
     ];
+    if (additionRows && additionRows.length) {
+        sheets.push({ name: 'Additions', header: KANJO_ADDITIONS_SHEET_COLUMNS, rows: additionRows, colWidth: 22 });
+    }
     if (window.kanjoExportWorker && typeof window.kanjoExportWorker.buildWorkbookBlob === 'function') {
         return window.kanjoExportWorker.buildWorkbookBlob(sheets, fileName);
     }
@@ -8897,6 +9039,11 @@ const kanjoBuildWorkbookBlob = async (productRows, variantRows, fileName) => {
     wsVariants['!cols'] = KANJO_VARIANTS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
     XLSX.utils.book_append_sheet(wb, wsProducts, 'Products');
     XLSX.utils.book_append_sheet(wb, wsVariants, 'Variants');
+    if (additionRows && additionRows.length) {
+        const wsAdditions = kanjoSheetFromRows(KANJO_ADDITIONS_SHEET_COLUMNS, additionRows);
+        wsAdditions['!cols'] = KANJO_ADDITIONS_SHEET_COLUMNS.map(() => ({ wch: 22 }));
+        XLSX.utils.book_append_sheet(wb, wsAdditions, 'Additions');
+    }
     const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return new Blob([buffer], { type: MIME_XLSX });
 };
@@ -9002,7 +9149,7 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
             throw new Error(kanjoStrictMappingMessage(remaining));
         }
     }
-    const { productRows, variantRows } = await kanjoBuildExportRows(evaluations, selections, undefined, {
+    const { productRows, variantRows, additionRows } = await kanjoBuildExportRows(evaluations, selections, undefined, {
         categoryResolver: (vendorType, assigned, product) => {
             const key = String((product && product.id) || '');
             if (overrides[key]) return overrides[key];
@@ -9013,7 +9160,7 @@ window.kanjoBuildVendorWorkbookBlob = async (opts) => {
     const merchantName = String(o.merchantName || '').trim();
     const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
     const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
-    const blob = await kanjoBuildWorkbookBlob(productRows, variantRows, fileName);
+    const blob = await kanjoBuildWorkbookBlob(productRows, variantRows, additionRows, fileName);
     return { blob, fileName, productCount: productRows.length, variantCount: variantRows.length };
 };
 
