@@ -2436,7 +2436,9 @@ function calculateTopPerformer(tasks) {
 
         performerEl.innerHTML = `${selectedRepName} (${contractsCount} عقود | متوسط ${avgAchieved.toFixed(1)}%)`;
 
-        performerIconContainer.innerHTML = `<img src="${imgFileName}" alt="${selectedRepName}" decoding="async" class="w-full h-full object-cover rounded-xl shadow-sm">`;
+        performerIconContainer.innerHTML = (typeof window.kanjoAvatarImg === 'function')
+            ? window.kanjoAvatarImg(imgFileName, selectedRepName, 'w-full h-full object-cover rounded-xl shadow-sm')
+            : `<img src="${imgFileName}" alt="${selectedRepName}" decoding="async" class="w-full h-full object-cover rounded-xl shadow-sm">`;
 
         performerIconContainer.className = "bg-white border border-orange-200 p-0.5 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0 overflow-hidden";
 
@@ -2566,7 +2568,9 @@ function calculateTopTeam(tasks) {
 
         teamEl.innerHTML = `${selectedTeamName} (${contractsCount} عقود | متوسط ${avgAchieved.toFixed(1)}%)`;
 
-        teamIconContainer.innerHTML = `<img src="${logoFileName}" alt="${selectedTeamName}" decoding="async" class="w-full h-full object-contain p-1">`;
+        teamIconContainer.innerHTML = (typeof window.kanjoAvatarImg === 'function')
+            ? window.kanjoAvatarImg(logoFileName, selectedTeamName, 'w-full h-full object-contain p-1')
+            : `<img src="${logoFileName}" alt="${selectedTeamName}" decoding="async" class="w-full h-full object-contain p-1">`;
 
         teamIconContainer.className = "bg-white border border-blue-200 p-0.5 rounded-xl text-xl flex items-center justify-center w-12 h-12 flex-shrink-0 overflow-hidden";
 

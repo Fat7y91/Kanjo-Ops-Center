@@ -189,7 +189,7 @@
             }
             applyGroups(tab.groups);
             autoOpenCatalogForView(tab.id);
-            if (tab.id === 'visits') wireFlightCalendar();
+            if (tab.id === 'visits') { wireDateStrip(); renderDateStrip(); }
             if (tab.id === 'admin_finance') syncFinanceHub();
         }
 
@@ -360,16 +360,16 @@
         if (!value) return;
         revealTasks();
         try { if (typeof window.tasksDateChange === 'function') window.tasksDateChange(value); } catch (_) { /* ignore */ }
-        closeFlightCalendar();
+        renderDateStrip();
         const el = document.getElementById('tasksContainer');
         if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* ── Flight-style calendar picker (visits hub) ─────────────────────────── */
-    const AR_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    /* ── Premium horizontal date-strip carousel (visits hub) ───────────────── */
     const AR_DAYS = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
-    let fcCursor = null;
+    const STRIP_SPAN = 10;   /* days rendered at once */
+    const STRIP_STEP = 7;    /* days moved by the nav arrows */
+    let stripStart = null;   /* first day shown in the strip */
 
     function isoDate(d) {
         const y = d.getFullYear();
@@ -378,73 +378,70 @@
         return `${y}-${m}-${day}`;
     }
 
-    function renderFlightCalendar() {
-        const grid = document.getElementById('kanjoFlightGrid');
-        const label = document.getElementById('kanjoFlightMonth');
-        if (!grid) return;
+    function taskDotsByDate() {
+        const map = {};
+        const list = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
+        list.forEach((t) => {
+            const raw = t && (t.time || t.date || '');
+            const key = String(raw).slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(key)) map[key] = (map[key] || 0) + 1;
+        });
+        return map;
+    }
+
+    function renderDateStrip() {
+        const strip = document.getElementById('kanjoDateStrip');
+        if (!strip || typeof strip.innerHTML !== 'string') return;
         const now = new Date();
-        if (!fcCursor) fcCursor = new Date(now.getFullYear(), now.getMonth(), 1);
-        if (label) label.textContent = `${AR_MONTHS[fcCursor.getMonth()]} ${fcCursor.getFullYear()}`;
         const todayIso = isoDate(now);
+        if (!stripStart) stripStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const selected = (typeof window.getTasksSelectedDate === 'function'
             ? window.getTasksSelectedDate() : '') || todayIso;
-        const firstDay = new Date(fcCursor.getFullYear(), fcCursor.getMonth(), 1).getDay();
-        const daysInMonth = new Date(fcCursor.getFullYear(), fcCursor.getMonth() + 1, 0).getDate();
-        let html = AR_DAYS.map((d) => `<span class="kfc-dow">${d}</span>`).join('');
-        for (let i = 0; i < firstDay; i++) html += '<span class="kfc-empty"></span>';
-        for (let d = 1; d <= daysInMonth; d++) {
-            const iso = isoDate(new Date(fcCursor.getFullYear(), fcCursor.getMonth(), d));
-            const cls = ['kfc-day'];
+        const dots = taskDotsByDate();
+        let html = '';
+        for (let i = 0; i < STRIP_SPAN; i++) {
+            const d = new Date(stripStart.getFullYear(), stripStart.getMonth(), stripStart.getDate() + i);
+            const iso = isoDate(d);
+            const cls = ['kds-day'];
             if (iso === todayIso) cls.push('is-today');
-            if (iso === selected) cls.push('is-selected');
-            html += `<button type="button" class="${cls.join(' ')}" data-kfc-day="${iso}">${d}</button>`;
+            if (iso === selected) cls.push('is-active');
+            const dot = dots[iso] ? '<span class="kds-dot"></span>' : '';
+            html += `<button type="button" role="option" aria-selected="${iso === selected}" class="${cls.join(' ')}" data-kds-day="${iso}">`
+                + `<span class="kds-wd">${AR_DAYS[d.getDay()]}</span>`
+                + `<span class="kds-num">${d.getDate()}</span>${dot}</button>`;
         }
-        grid.innerHTML = html;
+        strip.innerHTML = html;
     }
 
-    function openFlightCalendar() {
-        const modal = document.getElementById('kanjoFlightCalendarModal');
-        if (!modal) return;
-        const cur = (typeof window.getTasksSelectedDate === 'function' ? window.getTasksSelectedDate() : '') || '';
-        const base = cur ? new Date(cur + 'T00:00:00') : new Date();
-        fcCursor = new Date(base.getFullYear(), base.getMonth(), 1);
-        renderFlightCalendar();
-        modal.classList.remove('hidden');
+    function stripShift(days) {
+        const base = stripStart || new Date();
+        stripStart = new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+        renderDateStrip();
     }
 
-    function closeFlightCalendar() {
-        const modal = document.getElementById('kanjoFlightCalendarModal');
-        if (modal) modal.classList.add('hidden');
+    function stripToday() {
+        stripStart = null;
+        renderDateStrip();
     }
 
-    function flightShift(delta) {
-        if (!fcCursor) fcCursor = new Date();
-        fcCursor = new Date(fcCursor.getFullYear(), fcCursor.getMonth() + delta, 1);
-        renderFlightCalendar();
-    }
-
-    function flightToday() { fcCursor = new Date(); renderFlightCalendar(); }
-
-    function wireFlightCalendar() {
-        const modal = document.getElementById('kanjoFlightCalendarModal');
-        if (!modal || modal._kwsWired) return;
-        modal._kwsWired = true;
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) { closeFlightCalendar(); return; }
-            const day = e.target.closest ? e.target.closest('[data-kfc-day]') : null;
-            if (day) { pickDate(day.getAttribute('data-kfc-day')); return; }
-            const nav = e.target.closest ? e.target.closest('[data-kfc-nav]') : null;
-            if (nav) {
-                const a = nav.getAttribute('data-kfc-nav');
-                if (a === 'prev') flightShift(-1);
-                else if (a === 'next') flightShift(1);
-                else if (a === 'today') flightToday();
-                else if (a === 'close') closeFlightCalendar();
-            }
+    function wireDateStrip() {
+        const strip = document.getElementById('kanjoDateStrip');
+        if (!strip || strip._kwsWired) return;
+        strip._kwsWired = true;
+        strip.addEventListener('click', (e) => {
+            const day = e.target && e.target.closest ? e.target.closest('[data-kds-day]') : null;
+            if (day) pickDate(day.getAttribute('data-kds-day'));
         });
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeFlightCalendar();
-        });
+        const wrap = strip.closest ? strip.closest('.kws-datestrip-wrap') : null;
+        if (wrap) {
+            wrap.addEventListener('click', (e) => {
+                const nav = e.target && e.target.closest ? e.target.closest('[data-kds-nav]') : null;
+                if (!nav) return;
+                const delta = Number(nav.getAttribute('data-kds-nav')) || 0;
+                if (delta === 0) stripToday();
+                else stripShift(delta * STRIP_STEP);
+            });
+        }
     }
 
     /* ── Founder Finance Hub (admin_finance view): best-effort number mirror ── */
@@ -559,6 +556,22 @@
         if (badge) {
             const src = document.getElementById('notifBadge');
             badge.classList.toggle('hidden', !src || src.classList.contains('hidden'));
+        }
+
+        /* Bug 1: the brand subtitle shows the field team ONLY for reps; every
+           executive role (founder/admin/Mahmoud) sees the founders label. */
+        const teamEl = document.getElementById('kanjoSidebarTeam');
+        if (teamEl) {
+            const isField = u.role === 'rep' || u.role === 'media';
+            const teamName = u.team || '';
+            teamEl.textContent = isField && teamName ? teamName : 'المؤسسين';
+        }
+
+        /* Bug 6: the sidebar notification bell is founder/admin-only. */
+        const notifBtn = document.getElementById('kanjoSidebarNotifBtn');
+        if (notifBtn) {
+            const canNotif = u.role === 'admin' || u.role === 'founder';
+            notifBtn.classList.toggle('hidden', !canNotif);
         }
         const quick = document.getElementById('kanjoSidebarQuick');
         if (quick) {
@@ -685,8 +698,7 @@
 
     /* Founder Command Hub + Finance Hub public API (inline onclick handlers). */
     window.kanjoTogglePharmacy = togglePharmacy;
-    window.kanjoOpenFlightCalendar = openFlightCalendar;
-    window.kanjoCloseFlightCalendar = closeFlightCalendar;
+    window.kanjoDateStripToday = stripToday;
     window.kanjoPickDate = pickDate;
     window.kanjoSpotlightSearch = spotlightSearch;
     window.kanjoVisitsReset = visitsReset;

@@ -2580,14 +2580,15 @@ body.black-box-open #contractPreviewModal { z-index: 260; }
     position: absolute;
     top: -8px;
     right: -14px;
-    background: #ef4444;
-    color: #fff;
-    border-radius: 9999px;
-    font-size: 0.6rem;
+    background: var(--kanjo-gold);
+    color: var(--kanjo-purple);
+    border-radius: 99px;
+    font-size: 10px;
     line-height: 1;
     padding: 2px 5px;
     font-weight: 900;
     border: 1px solid #fff;
+    box-shadow: 0 1px 4px rgba(35, 5, 53, 0.25);
 }
 .kws-badge.hidden { display: none; }
 
@@ -2821,6 +2822,7 @@ body.kanjo-shell-mobile #kpiBackToDashboardBtn { display: none !important; }
     #kanjoSidebarNav .kws-nav-inner { flex-direction: column; gap: 0.3rem; }
     .kanjo-sidebar .kws-tab {
         flex-direction: row;
+        align-items: center;
         justify-content: flex-start;
         gap: 0.7rem;
         width: 100%;
@@ -2837,7 +2839,25 @@ body.kanjo-shell-mobile #kpiBackToDashboardBtn { display: none !important; }
         color: #230535;
         box-shadow: 0 6px 18px rgba(250, 204, 21, 0.45);
     }
-    .kanjo-sidebar .kws-badge { position: static; margin-right: auto; }
+    /* Micro-pill badge: neat gold pill pinned to the far-left edge of the button. */
+    .kanjo-sidebar .kws-badge {
+        position: absolute;
+        top: 50%;
+        left: 0.6rem;
+        right: auto;
+        transform: translateY(-50%);
+        margin: 0;
+        background: var(--kanjo-gold);
+        color: var(--kanjo-purple);
+        border: none;
+        border-radius: 99px;
+        font-size: 10px;
+        line-height: 1;
+        padding: 2px 5px;
+        font-weight: 900;
+        box-shadow: 0 1px 4px rgba(35, 5, 53, 0.25);
+    }
+    .kanjo-sidebar .kws-tab.is-active .kws-badge { background: var(--kanjo-purple); color: var(--kanjo-gold); }
 
     /* ── Sidebar: user + quick links footer ────────────────────────────── */
     .ksb-footer { margin-top: auto; border-top: 1px solid rgba(250, 204, 21, 0.18); padding: 0.75rem; }
@@ -3019,54 +3039,90 @@ body.kws-view-admin_finance #merchantDocsAuditBanner { display: none !important;
     .kws-fin-grid { grid-template-columns: 1fr; gap: 16px; }
 }
 
-/* ── Flight-style calendar picker ──────────────────────────────────────── */
-.kfc-panel {
-    width: 100%;
-    max-width: 420px;
+/* ── Premium horizontal date-strip carousel (visits hub) ───────────────── */
+.kws-datestrip-wrap {
+    margin-top: 1.1rem;
+    padding: 1rem 1.1rem 1.1rem;
+    border-radius: 1.25rem;
     background: #fff;
-    border-radius: 1.5rem;
-    padding: 1.1rem 1.2rem 1.3rem;
-    box-shadow: 0 30px 70px rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(35, 5, 53, 0.08);
+    box-shadow: 0 10px 30px rgba(35, 5, 53, 0.07);
 }
-.kfc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.9rem; }
-.kfc-head-title { font-weight: 900; color: #230535; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; }
-.kfc-head-title i { color: #facc15; }
-.kfc-close { width: 34px; height: 34px; border-radius: 0.7rem; color: #64748b; background: #f1f5f9; }
-.kfc-close:hover { color: #ef4444; }
-.kfc-nav { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; }
-.kfc-nav button { width: 38px; height: 38px; border-radius: 0.8rem; background: #F5F3FF; color: #230535; font-weight: 900; }
-.kfc-nav button:hover { background: #ede9fe; }
-.kfc-month { font-weight: 900; color: #230535; font-size: 0.95rem; }
-.kfc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.3rem; }
-.kfc-dow { text-align: center; font-size: 0.66rem; font-weight: 900; color: #94a3b8; padding: 0.25rem 0; }
-.kfc-empty { visibility: hidden; }
-.kfc-day {
-    aspect-ratio: 1 / 1;
+.kws-datestrip-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.85rem; }
+.kws-datestrip-title { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 900; color: #230535; font-size: 0.92rem; }
+.kws-datestrip-title i { color: #facc15; }
+.kws-datestrip-row { display: flex; align-items: center; gap: 0.5rem; }
+.kds-nav {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 0.7rem;
-    font-weight: 800; font-size: 0.82rem; color: #230535;
-    background: #f8fafc; transition: background 0.12s, color 0.12s, transform 0.12s;
+    border-radius: 0.8rem;
+    background: #F5F3FF; color: #230535; font-weight: 900;
+    transition: background 0.15s, transform 0.15s;
 }
-.kfc-day:hover { background: #ede9fe; transform: translateY(-1px); }
-.kfc-day.is-today { box-shadow: inset 0 0 0 2px #facc15; }
-.kfc-day.is-selected { background: linear-gradient(135deg, #230535, #4C1D95); color: #FFD700; }
-.kfc-foot { display: flex; justify-content: center; margin-top: 1rem; }
-.kfc-today {
-    display: inline-flex; align-items: center; gap: 0.45rem;
-    padding: 0.6rem 1.1rem; border-radius: 9999px;
-    background: #230535; color: #FFD700; font-weight: 900; font-size: 0.8rem;
+.kds-nav:hover { background: #ede9fe; transform: translateY(-1px); }
+.kws-datestrip {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    padding: 0.2rem;
+    scrollbar-width: none;
 }
+.kws-datestrip::-webkit-scrollbar { display: none; }
+.kds-day {
+    position: relative;
+    flex: 0 0 64px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    padding: 0.55rem 0.3rem 0.65rem;
+    border-radius: 1rem;
+    background: #f8fafc;
+    border: 1px solid transparent;
+    color: #475569;
+    transition: background 0.16s, color 0.16s, transform 0.16s, box-shadow 0.16s;
+}
+.kds-day:hover { background: #f1f0ff; transform: translateY(-2px); }
+.kds-wd { font-size: 0.66rem; font-weight: 800; opacity: 0.8; }
+.kds-num { font-size: 1.05rem; font-weight: 900; color: #230535; }
+.kds-day.is-today { border-color: rgba(250, 204, 21, 0.85); }
+.kds-day.is-active {
+    background: linear-gradient(135deg, #230535, #4C1D95);
+    color: #FFD700;
+    box-shadow: 0 8px 20px rgba(35, 5, 53, 0.28);
+    transform: translateY(-2px);
+}
+.kds-day.is-active .kds-num { color: #FFD700; }
+.kds-day.is-active .kds-wd { opacity: 0.9; }
+.kds-dot {
+    position: absolute;
+    bottom: 0.28rem;
+    width: 5px; height: 5px;
+    border-radius: 9999px;
+    background: #facc15;
+}
+.kds-day.is-active .kds-dot { background: #FFD700; }
 
-/* ── Catalog executive sub-tabs ────────────────────────────────────────── */
-.kws-ctabs { display: flex; gap: 0.35rem; padding: 0.28rem; background: #F5F3FF; border-radius: 0.9rem; }
+/* ── Catalog executive sub-tabs (centered premium switcher) ────────────── */
+.kws-ctabs { display: flex; gap: 0.35rem; padding: 0.28rem; background: #F5F3FF; border-radius: 99px; }
 .kws-ctabs button {
     display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 0.55rem 0.9rem; border-radius: 0.7rem;
+    padding: 0.55rem 1rem; border-radius: 99px;
     font-weight: 800; font-size: 0.78rem; color: #475569;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.kws-ctabs button.is-active { background: linear-gradient(90deg, #230535, #4C1D95); color: #FFD700; }
-body.kws-view-catalog .kws-catalog-actions { flex-wrap: wrap; }
+.kws-ctabs button:hover { background: #ede9fe; }
+.kws-ctabs button.is-active { background: linear-gradient(90deg, #230535, #4C1D95); color: #FFD700; box-shadow: 0 6px 16px rgba(35, 5, 53, 0.25); }
+body.kws-view-catalog .kws-catalog-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+body.kws-view-catalog .kws-catalog-actions .kws-catalog-actions-title { display: none; }
+body.kws-view-catalog .kws-catalog-actions #openExportProductsBtn { display: none !important; }
+body.kws-view-catalog .kws-catalog-actions .kws-ctabs { align-self: center; }
 
 /* ── Export Studio extras ──────────────────────────────────────────────── */
 .kws-export-searchwrap { position: relative; }
@@ -3095,3 +3151,70 @@ body.kws-view-catalog .kws-catalog-actions { flex-wrap: wrap; }
 
 /* Rep catalog keeps its own segmented switcher — no executive sub-tabs. */
 body.kws-view-rep_catalog #kanjoCatalogTabs { display: none !important; }
+
+/* ── Executive design tokens ───────────────────────────────────────────── */
+:root {
+    --kanjo-gold: #facc15;
+    --kanjo-gold-strong: #FFD700;
+    --kanjo-purple: #230535;
+    --kanjo-purple-2: #4C1D95;
+}
+
+/* ── Legacy top header removal (desktop shell only) ────────────────────── */
+@media (min-width: 992px) {
+    body.kanjo-shell-admin > header,
+    body.kanjo-shell-mobile > header { display: none !important; }
+    body.kanjo-shell-admin #marketingBack,
+    body.kanjo-shell-mobile #marketingBack { display: none !important; }
+}
+
+/* ── Floating notifications panel (decoupled from the legacy header) ───── */
+#notificationsDropdown {
+    position: fixed;
+    top: 68px;
+    right: 16px;
+    width: min(90vw, 340px);
+    max-height: min(72vh, 460px);
+    background: #fff;
+    border: 1px solid #f3e8ff;
+    border-radius: 1.15rem;
+    box-shadow: 0 24px 60px rgba(35, 5, 53, 0.24);
+    z-index: 210;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+#notificationsDropdown.hidden { display: none !important; }
+@media (min-width: 992px) {
+    body.kanjo-shell-admin #notificationsDropdown,
+    body.kanjo-shell-mobile #notificationsDropdown { top: 16px; right: 272px; }
+}
+
+/* ── Resilient avatar fallback (initials on brand gradient) ────────────── */
+.kanjo-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, #230535, #4C1D95);
+    color: #FFD700;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1;
+}
+
+/* ── Command Hub head + corner pill ────────────────────────────────────── */
+.kws-hub-head {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.kws-pill-corner { flex-shrink: 0; }
+
+/* Catalog view: finance/audit strips live in the finance hub, not here. */
+body.kws-view-catalog #founderPayrollSummaryBox,
+body.kws-view-catalog #merchantDocsAuditBanner { display: none !important; }

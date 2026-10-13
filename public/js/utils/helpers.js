@@ -138,6 +138,34 @@ window.calculateComm = (target, achieved) => {
 
 window.getBaseName = getBaseName;
 
+/* ── Resilient avatars ──────────────────────────────────────────────────────
+   Every profile / team / rep avatar must degrade gracefully instead of showing
+   a broken-image glyph. Prefer the real image; on error (or when no URL is
+   supplied) swap to a styled circle carrying the person/team initial. */
+window.kanjoInitial = (name) => {
+    const s = String(name || '').replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF\u061C]/g, '').trim();
+    return s ? s.charAt(0).toUpperCase() : '؟';
+};
+
+window.kanjoAvatarError = (img) => {
+    if (!img || !img.parentNode) return;
+    const name = img.getAttribute('data-name') || img.getAttribute('alt') || '';
+    const cls = (img.getAttribute('class') || '').replace(/\bkanjo-avatar-fallback\b/g, '').trim();
+    const div = document.createElement('div');
+    div.className = (cls ? cls + ' ' : '') + 'kanjo-avatar-fallback';
+    div.textContent = window.kanjoInitial(name);
+    img.parentNode.replaceChild(div, img);
+};
+
+window.kanjoAvatarImg = (url, name, cls) => {
+    const safeName = String(name || '').replace(/"/g, '&quot;');
+    if (!url) {
+        return `<div class="${(cls || '') + ' kanjo-avatar-fallback'}" title="${safeName}">${window.kanjoInitial(name)}</div>`;
+    }
+    const safeUrl = String(url).replace(/"/g, '&quot;');
+    return `<img src="${safeUrl}" alt="${safeName}" data-name="${safeName}" loading="lazy" decoding="async" class="${cls || ''}" onerror="window.kanjoAvatarError&&window.kanjoAvatarError(this)">`;
+};
+
 window.isRestaurantCafeCategory = (cat) => String(cat || '').includes('مطاعم وكافيهات');
 
 window.isRestaurantCafeCategoryExact = (cat) => {

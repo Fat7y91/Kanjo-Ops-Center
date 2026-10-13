@@ -932,25 +932,6 @@
 
     </div>
 
-    <!-- ═══════════ FLIGHT-STYLE TASKS CALENDAR (founder visits hub) ═══════════ -->
-    <div id="kanjoFlightCalendarModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[110]">
-        <div class="kfc-panel">
-            <div class="kfc-head">
-                <div class="kfc-head-title"><i class="fa-solid fa-plane-departure"></i> جدول المهام والزيارات</div>
-                <button type="button" data-kfc-nav="close" class="kfc-close" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="kfc-nav">
-                <button type="button" data-kfc-nav="prev" aria-label="الشهر السابق"><i class="fa-solid fa-chevron-right"></i></button>
-                <span id="kanjoFlightMonth" class="kfc-month"></span>
-                <button type="button" data-kfc-nav="next" aria-label="الشهر التالي"><i class="fa-solid fa-chevron-left"></i></button>
-            </div>
-            <div id="kanjoFlightGrid" class="kfc-grid"></div>
-            <div class="kfc-foot">
-                <button type="button" data-kfc-nav="today" class="kfc-today"><i class="fa-solid fa-crosshairs"></i> اليوم</button>
-            </div>
-        </div>
-    </div>
-
     <!-- ═══════════ DUPLICATE SKU RESOLUTION DASHBOARD ═══════════ -->
     <div id="catalogDuplicatesModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[200]" onclick="if(event.target===this)closeCatalogDuplicatesModal()">
         <div class="bg-white rounded-3xl w-full max-w-6xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
@@ -1270,20 +1251,6 @@
 
                     </button>
 
-                    <div id="notificationsDropdown" class="hidden absolute right-0 sm:right-auto sm:left-0 top-10 w-[90vw] sm:w-80 max-w-sm bg-white rounded-2xl shadow-2xl border border-purple-100 z-50 overflow-hidden flex flex-col">
-
-                        <div class="bg-kanjo-light p-3 border-b border-purple-100 flex justify-between items-center">
-
-                            <span class="font-black text-kanjo-dark">الإشعارات</span>
-
-                            <button onclick="clearNotifications()" class="text-xs text-slate-500 hover:text-red-500 font-bold">تحديد كمقروء</button>
-
-                        </div>
-
-                        <div id="notificationsList" class="max-h-80 overflow-y-auto hide-scrollbar flex-1 bg-slate-50"></div>
-
-                    </div>
-
                 </div>
 
                 <span id="userNameDisplay" class="font-bold text-xs sm:text-sm text-kanjo-dark border-r border-purple-200 pr-3"></span>
@@ -1296,6 +1263,15 @@
 
     </header>
 
+    <!-- Notifications panel (body-level fixed so it works with the desktop sidebar bell too) -->
+    <div id="notificationsDropdown" class="hidden">
+        <div class="bg-kanjo-light p-3 border-b border-purple-100 flex justify-between items-center">
+            <span class="font-black text-kanjo-dark">الإشعارات</span>
+            <button onclick="clearNotifications()" class="text-xs text-slate-500 hover:text-red-500 font-bold">تحديد كمقروء</button>
+        </div>
+        <div id="notificationsList" class="max-h-80 overflow-y-auto hide-scrollbar flex-1 bg-slate-50"></div>
+    </div>
+
     <!-- Workspace top navigation (compact tablets only) — rendered by workspace.js -->
     <nav id="kanjoWorkspaceNav" class="kanjo-workspace-nav hidden" aria-label="مساحات العمل"></nav>
 
@@ -1305,7 +1281,7 @@
             <img src="logo.png" alt="Logo" class="ksb-logo" decoding="async">
             <div class="ksb-brand-text">
                 <span class="ksb-brand-title">KANJO <span>OPS</span></span>
-                <span class="ksb-brand-sub">FOX TEAM</span>
+                <span class="ksb-brand-sub" id="kanjoSidebarTeam">EXECUTIVE</span>
             </div>
         </div>
         <nav id="kanjoSidebarNav" class="ksb-nav" aria-label="مساحات العمل"></nav>
@@ -1317,7 +1293,7 @@
                     <span id="kanjoSidebarUserRole" class="ksb-user-role"></span>
                 </div>
                 <div class="ksb-user-actions">
-                    <button type="button" class="ksb-icon-btn" onclick="toggleNotifications()" aria-label="الإشعارات">
+                    <button type="button" id="kanjoSidebarNotifBtn" class="ksb-icon-btn hidden" onclick="toggleNotifications()" aria-label="الإشعارات">
                         <i class="fa-solid fa-bell"></i>
                         <span id="kanjoSidebarNotifBadge" class="ksb-notif-badge hidden"></span>
                     </button>
@@ -1788,16 +1764,17 @@
             <!-- ═══════════ FOUNDER COMMAND HUB (visits) ═══════════ -->
             <div id="kanjoCommandHub" class="kws-hub-pane">
                 <div class="kws-hub-head">
-                    <div>
-                        <h2 class="kws-hub-title">🧭 مركز القيادة التنفيذي</h2>
-                        <p class="kws-hub-sub">ابدأ بالبحث عن تاجر أو استعرض جدول مهام وزيارات الفريق.</p>
+                    <div class="kws-hub-head-text">
+                        <h2 class="kws-hub-title">مركز القيادة التنفيذي</h2>
+                        <p class="kws-hub-sub">ابدأ بالبحث عن تاجر ثم اختر اليوم من الشريط الزمني لعرض زيارات الفريق.</p>
                     </div>
+                    <button type="button" id="kanjoPharmacyPill" class="kws-pill kws-pill-corner" onclick="window.kanjoTogglePharmacy && window.kanjoTogglePharmacy()"><i class="fa-solid fa-pills"></i> أرشيف مراجعة الصيدليات</button>
                 </div>
                 <div class="kws-hub-grid">
                     <div class="kws-hub-card" id="kanjoSearchModeCard">
                         <div class="kws-hub-ic"><i class="fa-solid fa-magnifying-glass"></i></div>
                         <div class="kws-hub-body">
-                            <h3>🔍 البحث الشامل عن تاجر</h3>
+                            <h3>البحث الشامل عن تاجر</h3>
                             <p>ابحث باسم التاجر أو المطعم لعرض المهام وتقارير الزيارة وبطاقة التاجر مباشرة.</p>
                             <div class="kws-hub-search">
                                 <i class="fa-solid fa-magnifying-glass"></i>
@@ -1805,35 +1782,34 @@
                             </div>
                         </div>
                     </div>
-                    <div class="kws-hub-card kws-hub-card-action" id="kanjoCalendarModeCard" role="button" tabindex="0" onclick="window.kanjoOpenFlightCalendar && window.kanjoOpenFlightCalendar()">
-                        <div class="kws-hub-ic kws-hub-ic-gold"><i class="fa-solid fa-calendar-days"></i></div>
-                        <div class="kws-hub-body">
-                            <h3>📅 عرض جدول المهام والزيارات</h3>
-                            <p>تقويم زيارات بأسلوب حجز الرحلات — اختر اليوم لعرض بطاقات الزيارات.</p>
-                            <span class="kws-hub-cta"><i class="fa-solid fa-plane-departure"></i> عرض جدول المهام والزيارات</span>
-                        </div>
-                    </div>
                 </div>
-                <div class="kws-hub-utility">
-                    <button type="button" id="kanjoPharmacyPill" class="kws-pill" onclick="window.kanjoTogglePharmacy && window.kanjoTogglePharmacy()"><i class="fa-solid fa-pills"></i> أرشيف مراجعة الصيدليات</button>
-                    <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث وإخفاء المهام</button>
+                <div class="kws-datestrip-wrap">
+                    <div class="kws-datestrip-head">
+                        <span class="kws-datestrip-title"><i class="fa-regular fa-calendar-days"></i> جدول المهام والزيارات</span>
+                        <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث</button>
+                    </div>
+                    <div class="kws-datestrip-row">
+                        <button type="button" class="kds-nav" data-kds-nav="-1" aria-label="الأسبوع السابق"><i class="fa-solid fa-chevron-right"></i></button>
+                        <div id="kanjoDateStrip" class="kws-datestrip" role="listbox" aria-label="شريط الأيام"></div>
+                        <button type="button" class="kds-nav" data-kds-nav="1" aria-label="الأسبوع التالي"><i class="fa-solid fa-chevron-left"></i></button>
+                    </div>
                 </div>
             </div>
 
             <!-- ═══════════ FOUNDER FINANCE HUB (admin_finance) ═══════════ -->
             <div id="kanjoFinanceHub" class="kws-hub-pane">
                 <div class="kws-fin-grid">
-                    <div class="kws-fin-card">
+                    <div class="kws-fin-card" role="button" tabindex="0" onclick="window.showFounderPayrollDetails && window.showFounderPayrollDetails()">
                         <div class="kws-fin-top">
                             <span class="kws-fin-ic"><i class="fa-solid fa-wallet"></i></span>
                             <span class="kws-fin-badge" id="kanjoFinMonth">الشهر الحالي</span>
                         </div>
-                        <h3>💰 الرواتب والمستحقات المالية</h3>
+                        <h3>💰 الرواتب والمستحقات المالية للشركة</h3>
                         <div class="kws-fin-amount" id="kanjoFinPayrollTotal">0 ج.م</div>
                         <p>إجمالي رواتب الشركة مبني على التعاقدات النهائية للفترة المختارة.</p>
-                        <button type="button" class="kws-cta-primary" onclick="window.showFounderPayrollDetails && window.showFounderPayrollDetails()"><i class="fa-solid fa-file-invoice-dollar"></i> فتح كشف الرواتب والحسابات</button>
+                        <span class="kws-cta-primary"><i class="fa-solid fa-file-invoice-dollar"></i> عرض كشف الرواتب والحسابات</span>
                     </div>
-                    <div class="kws-fin-card">
+                    <div class="kws-fin-card" role="button" tabindex="0" onclick="window.openMerchantDocsAuditModal && window.openMerchantDocsAuditModal()">
                         <div class="kws-fin-top">
                             <span class="kws-fin-ic kws-fin-ic-teal"><i class="fa-solid fa-file-shield"></i></span>
                             <span class="kws-fin-badge" id="kanjoFinAuditRatio">0 / 0</span>
@@ -1841,7 +1817,7 @@
                         <h3>🛡️ تدقيق ملفات التجار — الاتفاق النهائي</h3>
                         <div class="kws-fin-amount" id="kanjoFinAuditCount">—</div>
                         <p>راجع ملفات التجار ذوي الاتفاق النهائي واعتمد المستندات الناقصة.</p>
-                        <button type="button" class="kws-cta-primary" onclick="window.openMerchantDocsAuditModal && window.openMerchantDocsAuditModal()"><i class="fa-solid fa-magnifying-glass-chart"></i> فتح غرفة تدقيق العقود</button>
+                        <span class="kws-cta-primary"><i class="fa-solid fa-magnifying-glass-chart"></i> عرض غرفة تدقيق العقود</span>
                     </div>
                 </div>
             </div>
