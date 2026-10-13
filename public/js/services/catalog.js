@@ -3818,8 +3818,20 @@ const renderCatalogAllProductsListNow = () => {
         if (countEl) countEl.textContent = '…';
         list.className = 'catalog-card-grid';
         list.innerHTML = catalogLoadingStateHtml();
+        /* Safety net for the cold-boot race (IDB hydration vs first paint):
+           skeletons must never stick forever. If no fetch is in flight, queue
+           one so the grid is guaranteed to repaint with real cards. */
+        if (!window._catalogSkeletonKick && !window._catalogRestRefreshInFlight) {
+            window._catalogSkeletonKick = true;
+            try {
+                if (typeof window.refreshCatalogFromRest === 'function') {
+                    Promise.resolve(window.refreshCatalogFromRest()).catch(() => { /* ignore */ });
+                }
+            } catch (_) { /* ignore */ }
+        }
         return;
     }
+    window._catalogSkeletonKick = false;
     if (!products.length) {
         if (toolbar) {
             if (selectedRep && searchQuery) {
@@ -3939,6 +3951,12 @@ const renderCatalogAllProductsListNow = () => {
 /* Snapshot-driven callers use the coalesced version (at most one rebuild per
    animation frame); explicit UI actions call Now() directly for instant feedback. */
 const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAllProductsListNow);
+
+/* Exposed for cross-module repaints (workspace view activation, delta export,
+   post-hydration). Previously only referenced through always-false typeof
+   guards, so a scheduled repaint could never reach the grid. */
+window.renderCatalogAllProductsList = renderCatalogAllProductsList;
+window.renderCatalogAllProductsListNow = renderCatalogAllProductsListNow;
 
 window.renderCatalogAllProductsWidget = () => {
     const widget = document.getElementById('catalogAllProductsWidget');
@@ -9472,6 +9490,75 @@ window.closeKanjoVariantConflictModal = () => {
     }
 };
 
+/* ── Timestamp parsing (shared by the delta export) ────────────────────────
+   Accepts an ISO string, epoch ms, Firestore Timestamp or {seconds}. Returns
+   epoch ms, or NaN when the value is unusable. */
+const catalogUpdatedAtMs = (v) => {
+    if (v === null || v === undefined || v === '') return NaN;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'object') {
+        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
+        if (v.seconds !== undefined) return Number(v.seconds) * 1000 + (Number(v.nanoseconds) || 0) / 1e6;
+    }
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : NaN;
+};
+window.catalogUpdatedAtMs = catalogUpdatedAtMs;
+
+/* ── Smart delta export (updatedAt > publish time) ─────────────────────────
+   When the selected merchant was already marked `dashboardUploaded`, count its
+   products edited AFTER `dashboardSyncedAt` and surface a dedicated button that
+   exports ONLY those products. Pure in-memory (zero reads). */
+window.kanjoSyncDeltaExport = () => {
+    const box = document.getElementById('kanjoDeltaExportBox');
+    const summary = document.getElementById('kanjoDeltaExportSummary');
+    const clear = () => {
+        window._kanjoDeltaExport = null;
+        if (box) box.classList.add('hidden');
+        if (summary) summary.textContent = '';
+    };
+    if (!box) return;
+    const select = document.getElementById('merchantExportFilter');
+    const merchantName = String((select && select.value) || '').trim();
+    if (!merchantName) return clear();
+    const mid = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(merchantName)) || '';
+    const rec = (mid && window.merchantsById && window.merchantsById.get(mid)) || null;
+    if (!rec || rec.dashboardUploaded !== true) return clear();
+    const sinceMs = catalogUpdatedAtMs(rec.dashboardSyncedAt)
+        || catalogUpdatedAtMs(rec.dashboardUploadedAt)
+        || 0;
+    if (!sinceMs) return clear();
+    const all = (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length)
+        ? window.allCatalogProductsCache
+        : [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
+    const updated = all.filter((p) => {
+        const isMerchant = mid
+            ? String(p.merchantId || '') === String(mid)
+            : catalogProductMerchantName(p) === merchantName;
+        if (!isMerchant) return false;
+        const t = catalogUpdatedAtMs(p.updatedAt);
+        return Number.isFinite(t) && t > sinceMs;
+    });
+    if (!updated.length) return clear();
+    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs, count: updated.length };
+    box.classList.remove('hidden');
+    if (summary) summary.textContent = updated.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
+};
+window.loadDeltaExport = window.kanjoSyncDeltaExport;
+
+window.kanjoExportMerchantDelta = async () => {
+    const state = window._kanjoDeltaExport;
+    if (!state || !state.count) {
+        if (window.showToast) window.showToast('لا توجد تحديثات بعد النشر لهذا التاجر', false);
+        return;
+    }
+    return window.exportKanjoExcel({
+        merchantName: state.merchantName,
+        merchantId: state.merchantId || undefined,
+        onlyUpdatedSince: state.sinceMs
+    });
+};
+
 window.exportKanjoExcel = async (options) => {
     const opts = options || {};
     if (!window.isCatalogAdminUser()) {
@@ -9503,8 +9590,20 @@ window.exportKanjoExcel = async (options) => {
         } else if (opts.merchantName) {
             filtered = source.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
         }
+        /* Delta export: keep only products edited AFTER the merchant was
+           published (`dashboardUploaded`), i.e. updatedAt > dashboardSyncedAt. */
+        if (opts.onlyUpdatedSince) {
+            filtered = filtered.filter((p) => {
+                const t = catalogUpdatedAtMs(p.updatedAt);
+                return Number.isFinite(t) && t > opts.onlyUpdatedSince;
+            });
+        }
         if (!filtered.length) {
-            if (window.showToast) window.showToast(includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير', false);
+            if (window.showToast) {
+                window.showToast(opts.onlyUpdatedSince
+                    ? 'لا توجد منتجات معدّلة بعد النشر لهذا التاجر'
+                    : (includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير'), false);
+            }
             return;
         }
         /* Auto-correct data-entry typos on name_ar/description_ar BEFORE the
@@ -9718,6 +9817,7 @@ const applyUnifiedCatalogCaches = (items, isMahmoudFlag) => {
     window._catalogAllProductsLoaded = true;
     window._catalogAllProductsCount = items.length;
     window._catalogAllProductsFetchedAt = Date.now();
+    window._catalogSkeletonKick = false;
     const pending = items.filter((p) => p.status === 'pending');
     window.merchantProductsCache = pending;
     window._catalogPendingLoaded = true;
@@ -9731,6 +9831,28 @@ const applyUnifiedCatalogCaches = (items, isMahmoudFlag) => {
     if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
     if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+    /* Cold-boot race guard: the IDB hydration may resolve BEFORE the catalog
+       view is painted. If the all-products grid is already open, force it to
+       repaint now (the widget repaint above is a no-op while its body is
+       collapsed), and announce readiness so any late view activation repaints. */
+    try {
+        const body = document.getElementById('catalogAllProductsBody');
+        if (body && !body.classList.contains('hidden')) renderCatalogAllProductsListNow();
+    } catch (_) { /* ignore */ }
+    try { window.dispatchEvent(new CustomEvent('kanjo:catalog-ready', { detail: { count: items.length } })); } catch (_) { /* ignore */ }
+};
+
+/* Force a full catalog repaint from the in-memory cache (zero reads). Used by
+   the workspace router when the catalog view becomes active, and by the ready
+   event, so hydrated data always reaches the DOM regardless of boot ordering. */
+window.repaintCatalog = () => {
+    try { if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets(); } catch (_) { /* ignore */ }
+    try { if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget(); } catch (_) { /* ignore */ }
+    try { if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget(); } catch (_) { /* ignore */ }
+    try {
+        const body = document.getElementById('catalogAllProductsBody');
+        if (body && !body.classList.contains('hidden')) renderCatalogAllProductsListNow();
+    } catch (_) { /* ignore */ }
 };
 
 /* Repaint the catalog from a background delta sync (focus/visibility/heartbeat
@@ -9921,6 +10043,7 @@ window.startCatalogListeners = () => {
     window._catalogPendingLoaded = false;
     window._catalogDoneLoaded = false;
     window._catalogAllProductsLoaded = false;
+    window._catalogSkeletonKick = false;
     window._catalogDeleteRequestsLoaded = false;
     /* Client-side view state for the "all products" folder grid: a category
        filter (empty = الكل), a merchant-status filter and a sort mode. Reset per
@@ -10091,14 +10214,26 @@ window.startCatalogListeners = () => {
         }
     };
 
+    /* Serialize every catalog refresh through one chain. Without this, a full
+       refresh requested from the UI (opening the all-products widget) while the
+       boot pending read is still in flight was silently dropped by the
+       `_catalogRestRefreshInFlight` guard — leaving the grid stuck on skeletons
+       until a manual reload. Now the late request simply runs after the first. */
+    let _catalogRefreshChain = Promise.resolve();
+    const queueCatalogRefresh = (allowFull) => {
+        _catalogRefreshChain = _catalogRefreshChain
+            .then(() => refreshFromRest(allowFull))
+            .catch(() => { /* swallow: refreshFromRest already logs */ });
+        return _catalogRefreshChain;
+    };
     /* Boot is count-gated: only the small pending/delete-request sets are read.
        The full catalog loads on demand when the "all products" widget is opened
        and the rep's own products when "منتجاتي" is opened, so a plain page load
        or refresh never pays for the multi-thousand-document reads. */
-    refreshFromRest(false);
+    queueCatalogRefresh(false);
     /* Exposed so opening the "all products" widget can pull the full set on
        demand instead of relying on a background poll. */
-    window.refreshCatalogFromRest = () => refreshFromRest(true);
+    window.refreshCatalogFromRest = () => queueCatalogRefresh(true);
     /* Automated background polling is FORBIDDEN (billing leak). Catalog widgets
        load once here and refresh only on demand: opening the all-products widget
        calls window.refreshCatalogFromRest() after its 60s staleness check. No

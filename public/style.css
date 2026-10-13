@@ -3274,3 +3274,256 @@ body.kws-view-catalog #merchantDocsAuditBanner { display: none !important; }
     body.kanjo-shell-mobile.kws-view-rep_work #catalogDraftsWidget,
     body.kanjo-shell-mobile.kws-view-rep_work #tasksDateNav { height: 100%; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Premium entry points — login portal + branded boot splash
+   Royal purple (#230535 / #4C1D95) · Deep slate · Gold (#FFD700) · Orange #E57723
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes kanjoPortalRise {
+    from { opacity: 0; transform: translateY(22px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes kanjoAuroraDrift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(-4%, 3%, 0) scale(1.08); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes kanjoPulseGlow {
+    0%   { transform: scale(0.85); opacity: 0.55; }
+    70%  { transform: scale(1.6); opacity: 0; }
+    100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes kanjoBarShimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Login portal ──────────────────────────────────────────────────────── */
+.login-portal {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    overflow: hidden;
+    background:
+        radial-gradient(1100px 620px at 82% -8%, rgba(76, 29, 149, 0.55), transparent 60%),
+        radial-gradient(900px 560px at 8% 108%, rgba(229, 119, 35, 0.28), transparent 62%),
+        linear-gradient(150deg, #12031f 0%, #230535 46%, #1b0a2e 100%);
+}
+.login-portal.hidden { display: none !important; }
+
+.login-portal__aurora {
+    position: absolute;
+    inset: -20%;
+    background:
+        radial-gradient(closest-side, rgba(255, 215, 0, 0.16), transparent 70%),
+        radial-gradient(closest-side, rgba(149, 76, 233, 0.20), transparent 72%);
+    filter: blur(10px);
+    animation: kanjoAuroraDrift 14s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.login-portal__card {
+    position: relative;
+    width: 100%;
+    max-width: 400px;
+    padding: 2.4rem 2rem 2rem;
+    text-align: center;
+    border-radius: 28px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    box-shadow: 0 30px 80px -24px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    animation: kanjoPortalRise 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.login-portal__logo {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 1.15rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.login-portal__logo img { width: 100%; height: 100%; object-fit: contain; position: relative; z-index: 1; }
+.login-portal__logo-glow {
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(255, 215, 0, 0.42), transparent 72%);
+    animation: kanjoPulseGlow 3.2s ease-out infinite;
+}
+
+.login-portal__title {
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.01em;
+}
+.login-portal__sub {
+    margin-top: 0.4rem;
+    margin-bottom: 1.6rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.7;
+    color: rgba(233, 213, 255, 0.78);
+}
+
+.login-portal__field {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 1rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1.5px solid rgba(255, 255, 255, 0.18);
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.login-portal__field:focus-within {
+    border-color: #FFD700;
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.16);
+}
+.login-portal__field i { color: #FFD700; font-size: 1rem; }
+.login-portal__field input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 1rem 0;
+    background: transparent;
+    border: 0;
+    outline: none;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.35em;
+    text-align: center;
+}
+.login-portal__field input::placeholder { color: rgba(233, 213, 255, 0.55); letter-spacing: normal; font-weight: 700; }
+
+.login-portal__btn {
+    width: 100%;
+    margin-top: 1.1rem;
+    padding: 1rem;
+    border-radius: 18px;
+    font-size: 1.02rem;
+    font-weight: 900;
+    color: #230535;
+    background: linear-gradient(135deg, #FFD700 0%, #E57723 100%);
+    box-shadow: 0 16px 34px -14px rgba(229, 119, 35, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+.login-portal__btn:hover { filter: brightness(1.06); box-shadow: 0 20px 40px -12px rgba(255, 215, 0, 0.85); }
+.login-portal__btn:active { transform: translateY(1px) scale(0.99); }
+
+.login-portal__hint {
+    margin-top: 1rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: rgba(233, 213, 255, 0.6);
+}
+.login-portal__hint i { color: #FFD700; margin-left: 0.35rem; }
+
+@media (max-width: 420px) {
+    .login-portal__card { padding: 2rem 1.35rem 1.6rem; border-radius: 24px; }
+    .login-portal__title { font-size: 1.4rem; }
+}
+
+/* ── Branded boot splash ───────────────────────────────────────────────── */
+.boot-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    overflow: hidden;
+    background: linear-gradient(150deg, #12031f 0%, #230535 50%, #1b0a2e 100%);
+    transition: opacity 0.4s ease;
+}
+.boot-splash__bg {
+    position: absolute;
+    inset: -20%;
+    background:
+        radial-gradient(closest-side, rgba(76, 29, 149, 0.5), transparent 70%),
+        radial-gradient(closest-side, rgba(229, 119, 35, 0.22), transparent 72%);
+    filter: blur(8px);
+    animation: kanjoAuroraDrift 12s ease-in-out infinite;
+    pointer-events: none;
+}
+.boot-splash__inner {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+.boot-splash__pulse {
+    position: relative;
+    width: 112px;
+    height: 112px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.boot-splash__pulse-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 215, 0, 0.55);
+    animation: kanjoPulseGlow 2.4s ease-out infinite;
+}
+.boot-splash__pulse-ring--2 { border-color: rgba(229, 119, 35, 0.55); animation-delay: 1.2s; }
+.boot-splash__logo {
+    width: 76px;
+    height: 76px;
+    object-fit: contain;
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 8px 22px rgba(255, 215, 0, 0.35));
+    animation: kangarooHop 1.1s ease-in-out infinite;
+}
+.boot-splash__title {
+    font-size: 1.7rem;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: 0.04em;
+}
+.boot-splash__title span { color: #FFD700; }
+.boot-splash__sub {
+    margin-top: 0.4rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: rgba(233, 213, 255, 0.72);
+}
+.boot-splash__bar {
+    position: relative;
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.boot-splash__bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #230535, #4C1D95, #E57723, #FFD700, #E57723, #4C1D95);
+    background-size: 200% 100%;
+    box-shadow: 0 0 14px rgba(255, 215, 0, 0.7);
+    animation: progressFill 0.9s linear forwards, kanjoBarShimmer 1.6s linear infinite;
+}

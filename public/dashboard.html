@@ -42,7 +42,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <link rel="stylesheet" href="style.css?v=20261013a">
+    <link rel="stylesheet" href="style.css?v=20261013b">
 
     <script>
 
@@ -70,6 +70,17 @@
 
             }, 800);
 
+            /* Enter key submits the login form just like clicking the button. */
+            const pin = document.getElementById('pinInput');
+            if (pin) {
+                pin.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const btn = document.getElementById('loginBtn');
+                    if (btn) btn.click();
+                });
+            }
+
         });
 
     </script>
@@ -88,27 +99,33 @@
 
 
 
-    <div id="kanjoLoadingSplash" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center p-4 transition-opacity duration-400">
+    <div id="kanjoLoadingSplash" class="boot-splash" role="status" aria-label="جارٍ تحميل النظام">
 
-        <div class="text-center space-y-6 max-w-sm w-full">
+        <div class="boot-splash__bg" aria-hidden="true"></div>
 
-            <div class="relative w-24 h-24 mx-auto flex items-center justify-center">
+        <div class="boot-splash__inner">
 
-                <img src="logo.png" alt="Kanjo Logo" class="w-20 h-20 object-contain kangaroo-jumping">
+            <div class="boot-splash__pulse">
 
-            </div>
+                <span class="boot-splash__pulse-ring" aria-hidden="true"></span>
 
-            <div class="space-y-2">
+                <span class="boot-splash__pulse-ring boot-splash__pulse-ring--2" aria-hidden="true"></span>
 
-                <h3 class="font-black text-2xl text-kanjo-dark">KANJO <span class="text-kanjo-primary">OPS</span></h3>
-
-                <p class="text-xs font-black text-kanjo-primary tracking-wide">الكانجارو جهز كل حاجة، ثواني وفتحت...</p>
+                <img src="logo.png" alt="Kanjo Logo" class="boot-splash__logo">
 
             </div>
 
-            <div class="relative w-full bg-kanjo-light h-4 rounded-full overflow-hidden p-0.5 border border-purple-100 shadow-inner">
+            <div class="boot-splash__text">
 
-                <div class="bg-kanjo-primary h-full rounded-full kanjo-progress-bar"></div>
+                <h3 class="boot-splash__title">KANJO <span>OPS</span></h3>
+
+                <p class="boot-splash__sub">الكانجارو جهز كل حاجة، ثواني وفتحت...</p>
+
+            </div>
+
+            <div class="boot-splash__bar" aria-hidden="true">
+
+                <span class="boot-splash__bar-fill kanjo-progress-bar"></span>
 
             </div>
 
@@ -891,6 +908,15 @@
                         <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
                     </label>
 
+                    <!-- Smart delta export: appears only when the selected merchant has
+                         products edited AFTER it was published (dashboardUploaded). -->
+                    <div id="kanjoDeltaExportBox" class="hidden rounded-2xl border-2 border-[#E57723]/50 bg-[#E57723]/5 p-3 space-y-2">
+                        <button id="kanjoDeltaExportBtn" type="button" onclick="window.kanjoExportMerchantDelta && window.kanjoExportMerchantDelta()" class="w-full bg-gradient-to-l from-[#E57723] to-[#f59e0b] text-white py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-file-circle-plus"></i> تحميل تحديثات المنتجات فقط
+                        </button>
+                        <p id="kanjoDeltaExportSummary" class="text-[11px] font-black text-[#E57723] text-center"></p>
+                    </div>
+
                     <div class="grid grid-cols-1 gap-2">
                         <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel</button>
 
@@ -1308,15 +1334,41 @@
 
     <main class="p-4 sm:p-6 pb-24 min-h-6xl mx-auto">
 
-        <div id="loginSection" class="max-w-md mx-auto mt-8 sm:mt-12 bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-purple-100 text-center">
+        <div id="loginSection" class="login-portal">
 
-            <img src="logo.png" alt="Logo" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6">
+            <div class="login-portal__aurora" aria-hidden="true"></div>
 
-            <h2 class="text-xl sm:text-2xl font-black mb-6 text-kanjo-dark">تسجيل الدخول</h2>
+            <div class="login-portal__card">
 
-            <input type="password" id="pinInput" placeholder="كود الدخول" autocomplete="current-password" class="w-full text-base sm:text-lg p-4 bg-white border border-purple-200 rounded-2xl mb-6 font-bold text-kanjo-dark outline-none focus:border-kanjo-dark focus:ring-2 focus:ring-kanjo-primary/30 transition-all">
+                <div class="login-portal__logo">
 
-            <button onclick="window.login ? window.login() : alert('جاري تحميل النظام، برجاء الانتظار ثانية واحدة...')" class="w-full bg-kanjo-primary text-white py-3.5 sm:py-4 rounded-2xl font-bold text-base sm:text-lg hover:bg-violet-800 transition">دخول النظام</button>
+                    <div class="login-portal__logo-glow" aria-hidden="true"></div>
+
+                    <img src="logo.png" alt="Kanjo Logo">
+
+                </div>
+
+                <h2 class="login-portal__title">تسجيل الدخول</h2>
+
+                <p class="login-portal__sub">لوحة تحكم عمليات كانجو — Kanjo OPS Center</p>
+
+                <label class="login-portal__field" for="pinInput">
+
+                    <i class="fa-solid fa-key" aria-hidden="true"></i>
+
+                    <input type="password" id="pinInput" placeholder="كود الدخول" autocomplete="current-password" inputmode="numeric" enterkeyhint="go">
+
+                </label>
+
+                <button id="loginBtn" type="button" onclick="window.login ? window.login() : alert('جاري تحميل النظام، برجاء الانتظار ثانية واحدة...')" class="login-portal__btn">
+
+                    <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i> دخول النظام
+
+                </button>
+
+                <p class="login-portal__hint"><i class="fa-solid fa-keyboard" aria-hidden="true"></i> اضغط Enter للدخول السريع</p>
+
+            </div>
 
         </div>
 
@@ -4045,7 +4097,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261013a"></script>
+    <script type="module" src="js/main.js?v=20261013b"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 

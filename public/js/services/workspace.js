@@ -169,18 +169,19 @@
     /* Mark the KPI view as the active pane (used when KPI is opened from the
        header nav or auto-opened on rep login) without re-rendering the KPI. */
     function markKpiOpen() {
-        const tab = kpiTab();
-        if (!tab) return;
-        state.active = tab.id;
-        try { sessionStorage.setItem(STORAGE_KEY, tab.id); } catch (_) { /* ignore */ }
-        setViewClass(tab.id);
-        hideAllPanes();
-        /* Bug 4: opening KPI must also dismiss the marketing / Black Box panes. */
+        /* Opening KPI must dismiss the marketing / Black Box panes (no overlay
+           lock-up), even when the active shell has no dedicated KPI tab. */
         OVERLAY_IDS.forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
         });
         if (document.body) document.body.classList.remove('black-box-open');
+        const tab = kpiTab();
+        if (!tab) { renderNavs(); syncSidebarChrome(); return; }
+        state.active = tab.id;
+        try { sessionStorage.setItem(STORAGE_KEY, tab.id); } catch (_) { /* ignore */ }
+        setViewClass(tab.id);
+        hideAllPanes();
         renderNavs();
         syncSidebarChrome();
     }
@@ -335,11 +336,15 @@
         if (tabId === 'catalog') {
             forceOpenBody('catalogAllProductsBody', window.toggleCatalogAllProductsWidget);
             wireCatalogTabs();
+            /* Repaint from the hydrated cache in case the IDB boot finished
+               before this view activated (cold-boot skeleton race). Zero reads. */
+            try { if (typeof window.repaintCatalog === 'function') window.repaintCatalog(); } catch (_) { /* ignore */ }
         } else if (tabId === 'rep_catalog') {
             ensureCatalogSwitcher();
             const seg = repSeg();
             applyRepSeg(seg);
             openSelectedCatalog(seg);
+            try { if (typeof window.repaintCatalog === 'function') window.repaintCatalog(); } catch (_) { /* ignore */ }
         }
     }
 
@@ -569,6 +574,9 @@
         const select = document.getElementById('merchantExportFilter');
         const btn = document.getElementById('kanjoExportMerchantCardBtn');
         if (btn) btn.disabled = !(select && select.value);
+        /* Smart delta export: refresh the "updated-after-publish" affordance for
+           the newly selected merchant (pure in-memory). */
+        try { if (typeof window.kanjoSyncDeltaExport === 'function') window.kanjoSyncDeltaExport(); } catch (_) { /* ignore */ }
     }
 
     function openSelectedMerchantCard() {
@@ -657,13 +665,36 @@
         }
         const quick = document.getElementById('kanjoSidebarQuick');
         if (quick) {
+            /* The removed top header still owns the RBAC visibility of each
+               utility link (auth.js toggles their wrapper's `hidden` class). We
+               mirror those wrappers into the sidebar footer so founders and the
+               Mahmoud operations-manager persona keep their admin tools. */
+            const visible = (id) => {
+                const el = document.getElementById(id);
+                return !!(el && !el.classList.contains('hidden'));
+            };
+            const wrapperLabel = (id, fallback) => {
+                const el = document.getElementById(id);
+                const span = el && el.querySelector ? el.querySelector('span') : null;
+                return (span && String(span.textContent || '').trim()) || fallback;
+            };
             const wants = [];
-            const mkt = document.getElementById('marketingNavBtnWrapper');
-            if (mkt && !mkt.classList.contains('hidden')) {
+            if (visible('kpiNavBtnWrapper')) {
+                wants.push({ label: wrapperLabel('kpiNavBtnWrapper', 'لوحة المؤشرات'), icon: 'fa-chart-line', fn: 'openKpiDashboard()' });
+            }
+            if (visible('contractsNavBtnWrapper')) {
+                wants.push({ label: 'إدارة العقود', icon: 'fa-file-signature', fn: 'openContractsManagerModal()' });
+            }
+            if (visible('adminTransferNavBtnWrapper')) {
+                wants.push({ label: 'طلبات النقل', icon: 'fa-right-left', fn: 'openAdminTransferModal()' });
+            }
+            if (visible('archivedReportsBtnWrapper')) {
+                wants.push({ label: 'سلة التقارير الخاطئة', icon: 'fa-inbox', fn: 'openViewArchivedReportsModal()' });
+            }
+            if (visible('marketingNavBtnWrapper')) {
                 wants.push({ label: 'بوابة التسويق', icon: 'fa-bullhorn', fn: 'kanjoOpenMarketingPane()' });
             }
-            const bb = document.getElementById('blackBoxNavBtnWrapper');
-            if (bb && !bb.classList.contains('hidden')) {
+            if (visible('blackBoxNavBtnWrapper')) {
                 wants.push({ label: 'Black Box', icon: 'fa-box-archive', fn: 'kanjoOpenBlackBoxPane()' });
             }
             const sig = wants.map((w) => w.fn).join('|');
@@ -792,6 +823,18 @@
     window.kanjoOpenMarketingPane = openMarketingPane;
     window.kanjoOpenBlackBoxPane = openBlackBoxPane;
     window.kanjoCloseWorkspaceOverlays = hideWorkspaceOverlays;
+
+    /* Cold-boot safety: when the catalog cache finishes hydrating, repaint the
+       catalog view if it is the active one. Covers the case where hydration
+       resolved between the view activation and its first paint. */
+    if (typeof window.addEventListener === 'function') {
+        window.addEventListener('kanjo:catalog-ready', () => {
+            if (!state.shell) return;
+            if (state.active === 'catalog' || state.active === 'rep_catalog') {
+                try { if (typeof window.repaintCatalog === 'function') window.repaintCatalog(); } catch (_) { /* ignore */ }
+            }
+        });
+    }
 
     /* ── Keep the router in sync with the existing header nav ────────────────
        Header buttons still run their original inline handler (capture runs
