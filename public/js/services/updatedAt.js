@@ -105,6 +105,32 @@
         window.writeBatch = wrappedBatch;
     }
 
+    /* runTransaction(): like writeBatch, the transaction object handed to the
+       callback has its own set/update. Stamp them so transactional `tasks`
+       writes (e.g. appending a report / contact to a merchant card) stay
+       visible to the delta sync across clients. */
+    if (typeof window.runTransaction === 'function' && !window.runTransaction._kanjoStampWrapped) {
+        const origTransaction = window.runTransaction;
+        const wrappedTransaction = function (db, updateFunction, ...rest) {
+            const wrappedUpdate = function (tx) {
+                if (tx && !tx._kanjoStampWrapped) {
+                    ['set', 'update'].forEach((m) => {
+                        const orig = tx[m];
+                        if (typeof orig !== 'function') return;
+                        tx[m] = function (ref, data, ...a) {
+                            return orig.call(this, ref, withStamp(ref, data), ...a);
+                        };
+                    });
+                    tx._kanjoStampWrapped = true;
+                }
+                return updateFunction.apply(this, arguments);
+            };
+            return origTransaction.call(this, db, wrappedUpdate, ...rest);
+        };
+        wrappedTransaction._kanjoStampWrapped = true;
+        window.runTransaction = wrappedTransaction;
+    }
+
     window.kanjoStampUpdatedAt = {
         STAMPED_COLLECTIONS: Array.from(STAMPED),
         collectionOf,

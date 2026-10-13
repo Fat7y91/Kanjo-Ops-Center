@@ -1022,6 +1022,24 @@ window._kpiSelectedRepId = window._kpiSelectedRepId || null;
 window._kpiCharts = window._kpiCharts || {};
 
 const kpiFetchAllProductsUncached = async () => {
+    /* Zero-bleed boot: catalog.js captures the ENTIRE merchant_products
+       collection into the shared IndexedDB store (same field union incl.
+       KPI_PRODUCT_FIELDS). Reuse it so the manager dashboard never issues a
+       second full-collection read in parallel with the catalog boot. */
+    try {
+        if (window.kanjoSync && window.kanjoSync.getLastSyncedAt(KPI_PRODUCTS_COLLECTION)
+            && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) > 0) {
+            const shared = window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION);
+            if (shared.length) return shared;
+        }
+        /* No baseline in memory yet (cold boot): await the catalog's coalesced
+           loader so we join its single in-flight read instead of racing it with
+           a second full-collection query. */
+        if (typeof window.kanjoUnifiedCatalogProducts === 'function') {
+            const unified = await window.kanjoUnifiedCatalogProducts();
+            if (unified && unified.length) return unified;
+        }
+    } catch (_) { /* fall through to the dedicated query */ }
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
             return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });

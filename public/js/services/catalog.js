@@ -2528,7 +2528,7 @@ const updateCatalogProductDirect = async () => {
             category: form.category,
             rawImageUrl,
             rawImageUrls,
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
         };
         if (effectiveProductType === 'variable') {
@@ -4732,7 +4732,7 @@ const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
     const patch = {
         enhancedImageUrl: urls[0] || '',
         enhancedImageUrls: urls,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
         updatedBy: (window.currentUser && window.currentUser.name) || ''
     };
     if (options && options.status) patch.status = options.status;
@@ -9788,12 +9788,24 @@ const catalogUnifiedFullList = () => {
             const hasBaseline = sync.size(CATALOG_COLLECTION) > 0 && !!sync.getLastSyncedAt(CATALOG_COLLECTION);
             const fields = catalogFullFields();
             if (hasBaseline) {
-                sync.registerFetcher(CATALOG_COLLECTION, (since) => window.kanjoRest.runQuery(
-                    CATALOG_COLLECTION,
-                    since ? [['updatedAt', '>', since]] : [],
-                    null,
-                    { select: fields }
-                ));
+                sync.registerFetcher(CATALOG_COLLECTION, (since) => {
+                    /* Zero-bleed guard: this fetcher is only ever registered once a
+                       complete baseline exists, so a null `since` means the baseline
+                       was lost (storage eviction / meta read error) — NOT a cold
+                       start. Refuse to fall back to a full 7.7k collection read;
+                       skip this round and let the next explicit full load rebuild
+                       the baseline. */
+                    if (!since) {
+                        console.warn('[catalog] delta synced without baseline; skipping to avoid full collection read');
+                        return Promise.resolve([]);
+                    }
+                    return window.kanjoRest.runQuery(
+                        CATALOG_COLLECTION,
+                        [['updatedAt', '>', since]],
+                        null,
+                        { select: fields }
+                    );
+                });
                 await sync.sync(CATALOG_COLLECTION, { force: true });
                 window._catalogIdbMode = 'delta';
                 return sortCatalogProductsByCreatedAt(sync.getRows(CATALOG_COLLECTION).slice());
@@ -9809,6 +9821,11 @@ const catalogUnifiedFullList = () => {
     })().finally(() => { _catalogUnifiedInFlight = null; });
     return _catalogUnifiedInFlight;
 };
+
+/* Exposed so other modules (kpi.js) share the SAME in-flight/coalesced
+   merchant_products read instead of issuing a parallel full-collection query
+   on boot. Always returns the unified sorted list. */
+window.kanjoUnifiedCatalogProducts = () => catalogUnifiedFullList();
 
 /* Push the unified merchant_products list into every in-memory cache the
    catalog widgets read and repaint the active views. Zero reads. */

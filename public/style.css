@@ -3425,14 +3425,6 @@ body.kws-view-catalog #merchantDocsAuditBanner { display: none !important; }
 .login-portal__btn:hover { filter: brightness(1.06); box-shadow: 0 20px 40px -12px rgba(255, 215, 0, 0.85); }
 .login-portal__btn:active { transform: translateY(1px) scale(0.99); }
 
-.login-portal__hint {
-    margin-top: 1rem;
-    font-size: 0.68rem;
-    font-weight: 800;
-    color: rgba(233, 213, 255, 0.6);
-}
-.login-portal__hint i { color: #FFD700; margin-left: 0.35rem; }
-
 @media (max-width: 420px) {
     .login-portal__card { padding: 2rem 1.35rem 1.6rem; border-radius: 24px; }
     .login-portal__title { font-size: 1.4rem; }
