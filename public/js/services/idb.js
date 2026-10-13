@@ -10,17 +10,24 @@
  *     in-memory Map with the SAME async API, so callers never branch.
  *   - Additive only: nothing here mutates app DOM or existing globals.
  *
- * Schema (db `kanjo_idb_v1`, v1):
+ * Schema (db `kanjo_idb_v1`, v2):
  *   store  merchant_products  keyPath id
  *   store  merchants          keyPath id
  *   store  tasks              keyPath id
  *   store  kanjo_meta         keyPath key   -> { key, value } (lastSyncedAt etc.)
+ *
+ * NOTE: DB_VERSION was bumped 1 -> 2. Clients that opened v1 BEFORE the
+ * `merchants`/`tasks` stores were added kept a v1 database WITHOUT those object
+ * stores; the browser never fires `onupgradeneeded` for an equal version, so
+ * `putAll('merchants', ...)` threw "One of the specified object stores was not
+ * found" and silently degraded to the in-memory fallback. Raising the version
+ * guarantees a single upgrade pass that creates every missing store in place.
  */
 (function () {
     'use strict';
 
     const DB_NAME = 'kanjo_idb_v1';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const META_STORE = 'kanjo_meta';
     const DATA_STORES = ['merchant_products', 'merchants', 'tasks'];
 
