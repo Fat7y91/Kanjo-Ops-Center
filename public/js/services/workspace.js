@@ -86,6 +86,21 @@
 
     /* ── Role detection (mirrors auth.js semantics, read-only) ─────────────── */
     const role = () => String((window.currentUser && window.currentUser.role) || '');
+    /* Mahmoud is an `admin` by role but a distinct operations-manager persona:
+       his identity comes from the shared name/handler contract, never a role id. */
+    const isMahmoudOps = () => {
+        try {
+            if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
+        } catch (_) { /* ignore */ }
+        return String((window.currentUser && window.currentUser.name) || '').includes('محمود');
+    };
+    /* Finance / payroll / audit is founder + (non-Mahmoud) admin only. */
+    const canViewFinance = () => {
+        const r = role();
+        if (r === 'founder') return true;
+        if (r === 'admin') return !isMahmoudOps();
+        return false;
+    };
     const isOps = () => {
         try {
             if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
@@ -106,7 +121,13 @@
     }
 
     function tabsFor(shell) {
-        if (shell === 'admin') return ADMIN_TABS;
+        if (shell === 'admin') {
+            /* Bug 1: the finance/payroll/audit tab is strictly founder + admin
+               (and never the Mahmoud operations-manager persona). */
+            return canViewFinance()
+                ? ADMIN_TABS
+                : ADMIN_TABS.filter((t) => t.id !== 'admin_finance');
+        }
         return role() === 'data_entry' ? MOBILE_TABS_DATA_ENTRY : MOBILE_TABS_BASE;
     }
 
@@ -154,6 +175,12 @@
         try { sessionStorage.setItem(STORAGE_KEY, tab.id); } catch (_) { /* ignore */ }
         setViewClass(tab.id);
         hideAllPanes();
+        /* Bug 4: opening KPI must also dismiss the marketing / Black Box panes. */
+        OVERLAY_IDS.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+        if (document.body) document.body.classList.remove('black-box-open');
         renderNavs();
         syncSidebarChrome();
     }
@@ -171,6 +198,10 @@
         /* Leaving the visits view collapses the pharmacy overlay. */
         if (tab.id !== 'visits') document.body.classList.remove('kws-pharmacy-open');
         syncPharmacyPill();
+
+        /* Bug 4: any real sidebar tab click force-closes the marketing / Black
+           Box panes so the router can never lock up behind an overlay. */
+        hideWorkspaceOverlays();
 
         if (tab.kpi) {
             hideAllPanes();
@@ -326,6 +357,50 @@
         if (!state.shell) return;
         const t = state.tabs.find((x) => x.id === state.active);
         if (t && !t.kpi) applyGroups(t.groups);
+    }
+
+    /* ── Marketing / Black Box router panes (Bug 4) ─────────────────────────
+       These are ordinary in-flow panes, not fixed overlays. Opening one hides
+       the dashboard section; any sidebar tab click force-hides them again. */
+    const OVERLAY_IDS = ['marketingSection', 'blackBoxModal'];
+
+    function hideWorkspaceOverlays() {
+        OVERLAY_IDS.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
+        if (document.body) document.body.classList.remove('black-box-open');
+        const d = document.getElementById('dashboardSection');
+        if (d) d.classList.remove('hidden');
+    }
+
+    function showWorkspaceOverlay(id) {
+        OVERLAY_IDS.forEach((x) => {
+            if (x === id) return;
+            const el = document.getElementById(x);
+            if (el) el.classList.add('hidden');
+        });
+        const target = document.getElementById(id);
+        if (target) target.classList.remove('hidden');
+        const d = document.getElementById('dashboardSection');
+        if (d) d.classList.add('hidden');
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { /* ignore */ }
+    }
+
+    function openMarketingPane() {
+        if (typeof window.marketingCanView === 'function' && !window.marketingCanView()) return;
+        showWorkspaceOverlay('marketingSection');
+        if (typeof window.initMarketingDashboard === 'function') {
+            try { window.initMarketingDashboard(); } catch (_) { /* ignore */ }
+        }
+    }
+
+    function openBlackBoxPane() {
+        if (typeof window.kanjoAuditCanView === 'function' && !window.kanjoAuditCanView()) return;
+        showWorkspaceOverlay('blackBoxModal');
+        if (typeof window.openBlackBox === 'function') {
+            try { window.openBlackBox(false); } catch (_) { /* ignore */ }
+        }
     }
 
     function togglePharmacy() {
@@ -546,7 +621,11 @@
             nameEl.textContent = u.name || (un ? un.textContent : '') || '';
         }
         const roleEl = document.getElementById('kanjoSidebarUserRole');
-        if (roleEl) roleEl.textContent = ROLE_LABELS[u.role] || (u.role || '');
+        if (roleEl) {
+            roleEl.textContent = isMahmoudOps()
+                ? 'مدير التشغيل'
+                : (ROLE_LABELS[u.role] || (u.role || ''));
+        }
         const av = document.getElementById('kanjoSidebarAvatar');
         if (av) {
             const src = document.getElementById('userAvatarContainer');
@@ -558,13 +637,16 @@
             badge.classList.toggle('hidden', !src || src.classList.contains('hidden'));
         }
 
-        /* Bug 1: the brand subtitle shows the field team ONLY for reps; every
-           executive role (founder/admin/Mahmoud) sees the founders label. */
+        /* Bug 1: the brand subtitle shows the field team ONLY for reps; the
+           Mahmoud operations-manager persona is labelled مدير التشغيل, and every
+           other executive role (founder/admin) sees the founders label. */
         const teamEl = document.getElementById('kanjoSidebarTeam');
         if (teamEl) {
             const isField = u.role === 'rep' || u.role === 'media';
             const teamName = u.team || '';
-            teamEl.textContent = isField && teamName ? teamName : 'المؤسسين';
+            if (isMahmoudOps()) teamEl.textContent = 'مدير التشغيل';
+            else if (isField && teamName) teamEl.textContent = teamName;
+            else teamEl.textContent = 'المؤسسين';
         }
 
         /* Bug 6: the sidebar notification bell is founder/admin-only. */
@@ -578,11 +660,11 @@
             const wants = [];
             const mkt = document.getElementById('marketingNavBtnWrapper');
             if (mkt && !mkt.classList.contains('hidden')) {
-                wants.push({ label: 'بوابة التسويق', icon: 'fa-bullhorn', fn: 'openMarketingDashboard()' });
+                wants.push({ label: 'بوابة التسويق', icon: 'fa-bullhorn', fn: 'kanjoOpenMarketingPane()' });
             }
             const bb = document.getElementById('blackBoxNavBtnWrapper');
             if (bb && !bb.classList.contains('hidden')) {
-                wants.push({ label: 'Black Box', icon: 'fa-box-archive', fn: 'openBlackBox()' });
+                wants.push({ label: 'Black Box', icon: 'fa-box-archive', fn: 'kanjoOpenBlackBoxPane()' });
             }
             const sig = wants.map((w) => w.fn).join('|');
             if (quick._kwsSig !== sig) {
@@ -601,9 +683,10 @@
             ? `<span class="kws-badge${badge > 0 ? '' : ' hidden'}" data-badge="${tab.badge}">${badge > 0 ? badge.toLocaleString('ar-EG') : ''}</span>`
             : '';
         return `<button type="button" class="kws-tab${tab.id === state.active ? ' is-active' : ''}" data-kws-tab="${tab.id}">`
-            + `<span class="kws-tab-ic"><i class="fa-solid ${tab.icon}"></i>${badgeHtml}</span>`
+            + `<span class="kws-tab-ic"><i class="fa-solid ${tab.icon}"></i></span>`
             + `<span class="kws-tab-label">${tab.label}</span>`
             + `<span class="kws-tab-label-short">${tab.short}</span>`
+            + badgeHtml
             + `</button>`;
     }
 
@@ -706,6 +789,9 @@
     window.kanjoFilterExportMerchants = filterExportMerchants;
     window.kanjoSyncExportCardBtn = syncExportCardBtn;
     window.kanjoOpenSelectedMerchantCard = openSelectedMerchantCard;
+    window.kanjoOpenMarketingPane = openMarketingPane;
+    window.kanjoOpenBlackBoxPane = openBlackBoxPane;
+    window.kanjoCloseWorkspaceOverlays = hideWorkspaceOverlays;
 
     /* ── Keep the router in sync with the existing header nav ────────────────
        Header buttons still run their original inline handler (capture runs
@@ -778,6 +864,26 @@
             };
         }
     });
+
+    /* Closing the Black Box pane (Bug 4) must restore the dashboard section so
+       the router never strands the user on an empty canvas. Only relevant when
+       a workspace shell is active (marketing role owns its section as home). */
+    if (typeof window.closeBlackBox === 'function') {
+        const origCloseBlackBox = window.closeBlackBox;
+        window.closeBlackBox = function () {
+            const r = origCloseBlackBox.apply(this, arguments);
+            try { if (state.shell) hideWorkspaceOverlays(); } catch (_) { /* ignore */ }
+            return r;
+        };
+    }
+    if (typeof window.closeMarketingDashboard === 'function') {
+        const origCloseMarketing = window.closeMarketingDashboard;
+        window.closeMarketingDashboard = function () {
+            const r = origCloseMarketing.apply(this, arguments);
+            try { if (state.shell) hideWorkspaceOverlays(); } catch (_) { /* ignore */ }
+            return r;
+        };
+    }
 
     window.addEventListener('hashchange', () => {
         const fromHash = (location.hash.match(/ws=([a-z_]+)/i) || [])[1];

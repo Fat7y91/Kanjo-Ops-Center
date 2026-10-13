@@ -42,7 +42,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <link rel="stylesheet" href="style.css?v=20261012a">
+    <link rel="stylesheet" href="style.css?v=20261013a">
 
     <script>
 
@@ -1166,7 +1166,7 @@
 
                 <div id="blackBoxNavBtnWrapper" class="hidden relative mr-1">
 
-                    <button onclick="openBlackBox()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+                    <button onclick="window.kanjoOpenBlackBoxPane ? window.kanjoOpenBlackBoxPane() : openBlackBox()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
 
                         <i class="fa-solid fa-box-archive text-[#230535]"></i>
 
@@ -1208,7 +1208,7 @@
 
                 <div id="marketingNavBtnWrapper" class="hidden relative mr-1">
 
-                    <button onclick="openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+                    <button onclick="window.kanjoOpenMarketingPane ? window.kanjoOpenMarketingPane() : openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
 
                         <i class="fa-solid fa-bullhorn text-[#230535]"></i>
 
@@ -1665,7 +1665,7 @@
 
         <!-- ═══════════ MARKETING — CAMPAIGN LEADS (integrated view) ═══════════ -->
 
-        <div id="marketingSection" class="hidden space-y-6">
+        <section id="marketingSection" data-workspace-view="marketing" class="hidden space-y-6">
 
             <div class="bg-gradient-to-l from-[#230535] to-[#4C1D95] rounded-3xl shadow-lg text-white p-4 sm:p-6 flex flex-wrap justify-between items-center gap-3">
 
@@ -1682,12 +1682,6 @@
                     </div>
 
                 </div>
-
-                <button id="marketingBack" type="button" onclick="closeMarketingDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2">
-
-                    <i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية
-
-                </button>
 
             </div>
 
@@ -1755,7 +1749,7 @@
 
             </div>
 
-        </div>
+        </section>
 
 
 
@@ -1770,28 +1764,33 @@
                     </div>
                     <button type="button" id="kanjoPharmacyPill" class="kws-pill kws-pill-corner" onclick="window.kanjoTogglePharmacy && window.kanjoTogglePharmacy()"><i class="fa-solid fa-pills"></i> أرشيف مراجعة الصيدليات</button>
                 </div>
-                <div class="kws-hub-grid">
-                    <div class="kws-hub-card" id="kanjoSearchModeCard">
-                        <div class="kws-hub-ic"><i class="fa-solid fa-magnifying-glass"></i></div>
-                        <div class="kws-hub-body">
-                            <h3>البحث الشامل عن تاجر</h3>
-                            <p>ابحث باسم التاجر أو المطعم لعرض المهام وتقارير الزيارة وبطاقة التاجر مباشرة.</p>
-                            <div class="kws-hub-search">
-                                <i class="fa-solid fa-magnifying-glass"></i>
-                                <input type="search" id="kanjoSpotlightInput" placeholder="اكتب اسم تاجر / مطعم..." oninput="window.kanjoSpotlightSearch && window.kanjoSpotlightSearch(this.value)" autocomplete="off">
+                <div class="kws-visits-top">
+                    <div class="kws-visits-search">
+                        <div class="kws-hub-card" id="kanjoSearchModeCard">
+                            <div class="kws-hub-ic"><i class="fa-solid fa-magnifying-glass"></i></div>
+                            <div class="kws-hub-body">
+                                <h3>البحث الشامل عن تاجر</h3>
+                                <p>ابحث باسم التاجر أو المطعم لعرض المهام وتقارير الزيارة وبطاقة التاجر مباشرة.</p>
+                                <div class="kws-hub-search">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="search" id="kanjoSpotlightInput" placeholder="اكتب اسم تاجر / مطعم..." oninput="window.kanjoSpotlightSearch && window.kanjoSpotlightSearch(this.value)" autocomplete="off">
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="kws-datestrip-wrap">
-                    <div class="kws-datestrip-head">
-                        <span class="kws-datestrip-title"><i class="fa-regular fa-calendar-days"></i> جدول المهام والزيارات</span>
-                        <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث</button>
-                    </div>
-                    <div class="kws-datestrip-row">
-                        <button type="button" class="kds-nav" data-kds-nav="-1" aria-label="الأسبوع السابق"><i class="fa-solid fa-chevron-right"></i></button>
-                        <div id="kanjoDateStrip" class="kws-datestrip" role="listbox" aria-label="شريط الأيام"></div>
-                        <button type="button" class="kds-nav" data-kds-nav="1" aria-label="الأسبوع التالي"><i class="fa-solid fa-chevron-left"></i></button>
+                    <div class="kws-visits-dates">
+                        <div class="kws-datestrip-wrap">
+                            <div class="kws-datestrip-head">
+                                <span class="kws-datestrip-title"><i class="fa-regular fa-calendar-days"></i> جدول المهام والزيارات</span>
+                                <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث</button>
+                            </div>
+                            <div id="kanjoDateStrip" class="kws-datestrip" role="listbox" aria-label="شريط الأيام"></div>
+                            <div class="kws-datestrip-foot">
+                                <button type="button" class="kds-nav" data-kds-nav="-1" aria-label="الأسبوع السابق"><i class="fa-solid fa-chevron-right"></i> الأسبوع السابق</button>
+                                <button type="button" class="kds-nav kds-nav-today" data-kds-nav="0" aria-label="اليوم"><i class="fa-solid fa-crosshairs"></i> اليوم</button>
+                                <button type="button" class="kds-nav" data-kds-nav="1" aria-label="الأسبوع التالي">الأسبوع التالي <i class="fa-solid fa-chevron-left"></i></button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3844,7 +3843,7 @@
 
     <!-- ═══════════ BLACK BOX — SYSTEM AUDIT LOG (founders only) ═══════════ -->
 
-    <div id="blackBoxModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[200]">
+    <section id="blackBoxModal" data-workspace-view="blackbox" class="hidden kws-overlay-pane">
 
         <div class="bg-white rounded-3xl w-full max-w-4xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
 
@@ -3934,7 +3933,7 @@
 
         </div>
 
-    </div>
+    </section>
 
 
 
@@ -4046,7 +4045,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261011c"></script>
+    <script type="module" src="js/main.js?v=20261013a"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 
