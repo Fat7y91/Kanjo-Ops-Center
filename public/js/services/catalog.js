@@ -2528,7 +2528,7 @@ const updateCatalogProductDirect = async () => {
             category: form.category,
             rawImageUrl,
             rawImageUrls,
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
         };
         if (effectiveProductType === 'variable') {
@@ -3443,6 +3443,13 @@ window.onCatalogStatusFilterChange = (key) => {
        the folder grid while a status filter is active. */
     window._catalogAllProductsSelectedMerchant = '';
     renderCatalogAllProductsListNow();
+    /* Part 1: pull a delta in the background (≈1 read when idle) and repaint
+       from the shared IDB store so the pill's counts are never stale. */
+    if (window.kanjoSync && window.kanjoIdb
+        && window.kanjoSync.getLastSyncedAt(CATALOG_COLLECTION)
+        && typeof window.refreshCatalogFromRest === 'function') {
+        window.refreshCatalogFromRest();
+    }
 };
 
 /* ─── Laravel Dashboard Sync: status section + confirm modal ───
@@ -3811,8 +3818,20 @@ const renderCatalogAllProductsListNow = () => {
         if (countEl) countEl.textContent = '…';
         list.className = 'catalog-card-grid';
         list.innerHTML = catalogLoadingStateHtml();
+        /* Safety net for the cold-boot race (IDB hydration vs first paint):
+           skeletons must never stick forever. If no fetch is in flight, queue
+           one so the grid is guaranteed to repaint with real cards. */
+        if (!window._catalogSkeletonKick && !window._catalogRestRefreshInFlight) {
+            window._catalogSkeletonKick = true;
+            try {
+                if (typeof window.refreshCatalogFromRest === 'function') {
+                    Promise.resolve(window.refreshCatalogFromRest()).catch(() => { /* ignore */ });
+                }
+            } catch (_) { /* ignore */ }
+        }
         return;
     }
+    window._catalogSkeletonKick = false;
     if (!products.length) {
         if (toolbar) {
             if (selectedRep && searchQuery) {
@@ -3932,6 +3951,12 @@ const renderCatalogAllProductsListNow = () => {
 /* Snapshot-driven callers use the coalesced version (at most one rebuild per
    animation frame); explicit UI actions call Now() directly for instant feedback. */
 const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAllProductsListNow);
+
+/* Exposed for cross-module repaints (workspace view activation, delta export,
+   post-hydration). Previously only referenced through always-false typeof
+   guards, so a scheduled repaint could never reach the grid. */
+window.renderCatalogAllProductsList = renderCatalogAllProductsList;
+window.renderCatalogAllProductsListNow = renderCatalogAllProductsListNow;
 
 window.renderCatalogAllProductsWidget = () => {
     const widget = document.getElementById('catalogAllProductsWidget');
@@ -4707,7 +4732,7 @@ const persistCatalogEnhancedUrls = async (productId, enhancedUrls, options) => {
     const patch = {
         enhancedImageUrl: urls[0] || '',
         enhancedImageUrls: urls,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
         updatedBy: (window.currentUser && window.currentUser.name) || ''
     };
     if (options && options.status) patch.status = options.status;
@@ -5319,6 +5344,19 @@ const catalogProductMerchantName = (p) => catalogResolveMerchantName(p) || Strin
 const fetchAllCatalogProductsForExport = async () => {
     if (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length) {
         return window.allCatalogProductsCache;
+    }
+    /* IndexedDB-first: warm sessions pay only the delta; cold sessions do one
+       full read that is captured as the baseline. */
+    if (window.kanjoSync && window.kanjoIdb && window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+        try {
+            const items = await catalogUnifiedFullList();
+            window.allCatalogProductsCache = items;
+            window._catalogAllProductsLoaded = true;
+            if (typeof window.refreshCatalogDuplicatesBadge === 'function') window.refreshCatalogDuplicatesBadge();
+            return items;
+        } catch (err) {
+            console.warn('[catalog] unified export fetch failed; trying legacy:', err);
+        }
     }
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
@@ -9452,6 +9490,75 @@ window.closeKanjoVariantConflictModal = () => {
     }
 };
 
+/* ── Timestamp parsing (shared by the delta export) ────────────────────────
+   Accepts an ISO string, epoch ms, Firestore Timestamp or {seconds}. Returns
+   epoch ms, or NaN when the value is unusable. */
+const catalogUpdatedAtMs = (v) => {
+    if (v === null || v === undefined || v === '') return NaN;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'object') {
+        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
+        if (v.seconds !== undefined) return Number(v.seconds) * 1000 + (Number(v.nanoseconds) || 0) / 1e6;
+    }
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : NaN;
+};
+window.catalogUpdatedAtMs = catalogUpdatedAtMs;
+
+/* ── Smart delta export (updatedAt > publish time) ─────────────────────────
+   When the selected merchant was already marked `dashboardUploaded`, count its
+   products edited AFTER `dashboardSyncedAt` and surface a dedicated button that
+   exports ONLY those products. Pure in-memory (zero reads). */
+window.kanjoSyncDeltaExport = () => {
+    const box = document.getElementById('kanjoDeltaExportBox');
+    const summary = document.getElementById('kanjoDeltaExportSummary');
+    const clear = () => {
+        window._kanjoDeltaExport = null;
+        if (box) box.classList.add('hidden');
+        if (summary) summary.textContent = '';
+    };
+    if (!box) return;
+    const select = document.getElementById('merchantExportFilter');
+    const merchantName = String((select && select.value) || '').trim();
+    if (!merchantName) return clear();
+    const mid = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(merchantName)) || '';
+    const rec = (mid && window.merchantsById && window.merchantsById.get(mid)) || null;
+    if (!rec || rec.dashboardUploaded !== true) return clear();
+    const sinceMs = catalogUpdatedAtMs(rec.dashboardSyncedAt)
+        || catalogUpdatedAtMs(rec.dashboardUploadedAt)
+        || 0;
+    if (!sinceMs) return clear();
+    const all = (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length)
+        ? window.allCatalogProductsCache
+        : [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
+    const updated = all.filter((p) => {
+        const isMerchant = mid
+            ? String(p.merchantId || '') === String(mid)
+            : catalogProductMerchantName(p) === merchantName;
+        if (!isMerchant) return false;
+        const t = catalogUpdatedAtMs(p.updatedAt);
+        return Number.isFinite(t) && t > sinceMs;
+    });
+    if (!updated.length) return clear();
+    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs, count: updated.length };
+    box.classList.remove('hidden');
+    if (summary) summary.textContent = updated.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
+};
+window.loadDeltaExport = window.kanjoSyncDeltaExport;
+
+window.kanjoExportMerchantDelta = async () => {
+    const state = window._kanjoDeltaExport;
+    if (!state || !state.count) {
+        if (window.showToast) window.showToast('لا توجد تحديثات بعد النشر لهذا التاجر', false);
+        return;
+    }
+    return window.exportKanjoExcel({
+        merchantName: state.merchantName,
+        merchantId: state.merchantId || undefined,
+        onlyUpdatedSince: state.sinceMs
+    });
+};
+
 window.exportKanjoExcel = async (options) => {
     const opts = options || {};
     if (!window.isCatalogAdminUser()) {
@@ -9483,8 +9590,20 @@ window.exportKanjoExcel = async (options) => {
         } else if (opts.merchantName) {
             filtered = source.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
         }
+        /* Delta export: keep only products edited AFTER the merchant was
+           published (`dashboardUploaded`), i.e. updatedAt > dashboardSyncedAt. */
+        if (opts.onlyUpdatedSince) {
+            filtered = filtered.filter((p) => {
+                const t = catalogUpdatedAtMs(p.updatedAt);
+                return Number.isFinite(t) && t > opts.onlyUpdatedSince;
+            });
+        }
         if (!filtered.length) {
-            if (window.showToast) window.showToast(includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير', false);
+            if (window.showToast) {
+                window.showToast(opts.onlyUpdatedSince
+                    ? 'لا توجد منتجات معدّلة بعد النشر لهذا التاجر'
+                    : (includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير'), false);
+            }
             return;
         }
         /* Auto-correct data-entry typos on name_ar/description_ar BEFORE the
@@ -9636,6 +9755,137 @@ const sortCatalogProductsByCreatedAt = (items) => {
     });
     return items;
 };
+
+/* Field mask for the ONE shared full/delta read of merchant_products. It is the
+   union of the catalog list fields and the KPI product fields so both consumers
+   can share a single IndexedDB-backed store instead of each issuing its own
+   one-read-per-document collection scan (catalog ~7.7k + KPI ~3.2k). */
+const catalogFullFields = () => {
+    const kpi = Array.isArray(window.KANJO_KPI_PRODUCT_FIELDS) ? window.KANJO_KPI_PRODUCT_FIELDS : [];
+    return Array.from(new Set(CATALOG_LIST_FIELDS.concat(kpi)));
+};
+
+let _catalogUnifiedInFlight = null;
+
+/* Unified merchant_products read (Part 1).
+   - IndexedDB is the source of truth across sessions. On a warm start it
+     hydrates from IDB and issues ONLY the `updatedAt > (lastSyncedAt - 60s)`
+     delta (≈1 read when idle), then merges into both the in-memory caches and
+     IDB. On a cold start (no baseline) it does a single full read and records
+     the baseline so every following reload is a delta.
+   - Falls back to the legacy full REST read when the engine is unavailable or
+     any step throws, so behaviour can never regress below the old path.
+   - Coalesces concurrent callers in the same tick (boot runs several jobs). */
+const catalogUnifiedFullList = () => {
+    if (_catalogUnifiedInFlight) return _catalogUnifiedInFlight;
+    _catalogUnifiedInFlight = (async () => {
+        const sync = window.kanjoSync;
+        const idb = window.kanjoIdb;
+        const restOk = window.kanjoRest && typeof window.kanjoRest.runQuery === 'function';
+        if (!sync || !idb || !restOk) return fetchAllCatalogProducts();
+        try {
+            await sync.hydrate(CATALOG_COLLECTION);
+            const hasBaseline = sync.size(CATALOG_COLLECTION) > 0 && !!sync.getLastSyncedAt(CATALOG_COLLECTION);
+            const fields = catalogFullFields();
+            if (hasBaseline) {
+                sync.registerFetcher(CATALOG_COLLECTION, (since) => {
+                    /* Zero-bleed guard: this fetcher is only ever registered once a
+                       complete baseline exists, so a null `since` means the baseline
+                       was lost (storage eviction / meta read error) — NOT a cold
+                       start. Refuse to fall back to a full 7.7k collection read;
+                       skip this round and let the next explicit full load rebuild
+                       the baseline. */
+                    if (!since) {
+                        console.warn('[catalog] delta synced without baseline; skipping to avoid full collection read');
+                        return Promise.resolve([]);
+                    }
+                    return window.kanjoRest.runQuery(
+                        CATALOG_COLLECTION,
+                        [['updatedAt', '>', since]],
+                        null,
+                        { select: fields }
+                    );
+                });
+                await sync.sync(CATALOG_COLLECTION, { force: true });
+                window._catalogIdbMode = 'delta';
+                return sortCatalogProductsByCreatedAt(sync.getRows(CATALOG_COLLECTION).slice());
+            }
+            const fresh = (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: fields })) || [];
+            await sync.captureFullLoad(CATALOG_COLLECTION, fresh);
+            window._catalogIdbMode = 'full';
+            return sortCatalogProductsByCreatedAt(fresh.slice());
+        } catch (err) {
+            console.warn('[catalog] unified IDB read failed; using full REST read:', err);
+            return fetchAllCatalogProducts();
+        }
+    })().finally(() => { _catalogUnifiedInFlight = null; });
+    return _catalogUnifiedInFlight;
+};
+
+/* Exposed so other modules (kpi.js) share the SAME in-flight/coalesced
+   merchant_products read instead of issuing a parallel full-collection query
+   on boot. Always returns the unified sorted list. */
+window.kanjoUnifiedCatalogProducts = () => catalogUnifiedFullList();
+
+/* Push the unified merchant_products list into every in-memory cache the
+   catalog widgets read and repaint the active views. Zero reads. */
+const applyUnifiedCatalogCaches = (items, isMahmoudFlag) => {
+    window.allCatalogProductsCache = items;
+    window._catalogAllProductsLoaded = true;
+    window._catalogAllProductsCount = items.length;
+    window._catalogAllProductsFetchedAt = Date.now();
+    window._catalogSkeletonKick = false;
+    const pending = items.filter((p) => p.status === 'pending');
+    window.merchantProductsCache = pending;
+    window._catalogPendingLoaded = true;
+    window._catalogPendingCount = pending.length;
+    if (isMahmoudFlag) {
+        window.catalogDeleteRequestsCache = items.filter((p) => p.deleteRequested === true);
+        window._catalogDeleteRequestsLoaded = true;
+        window._catalogDeleteRequestsCount = window.catalogDeleteRequestsCache.length;
+    }
+    if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    if (typeof populateMerchantExportFilter === 'function') populateMerchantExportFilter();
+    if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
+    /* Cold-boot race guard: the IDB hydration may resolve BEFORE the catalog
+       view is painted. If the all-products grid is already open, force it to
+       repaint now (the widget repaint above is a no-op while its body is
+       collapsed), and announce readiness so any late view activation repaints. */
+    try {
+        const body = document.getElementById('catalogAllProductsBody');
+        if (body && !body.classList.contains('hidden')) renderCatalogAllProductsListNow();
+    } catch (_) { /* ignore */ }
+    try { window.dispatchEvent(new CustomEvent('kanjo:catalog-ready', { detail: { count: items.length } })); } catch (_) { /* ignore */ }
+};
+
+/* Force a full catalog repaint from the in-memory cache (zero reads). Used by
+   the workspace router when the catalog view becomes active, and by the ready
+   event, so hydrated data always reaches the DOM regardless of boot ordering. */
+window.repaintCatalog = () => {
+    try { if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets(); } catch (_) { /* ignore */ }
+    try { if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget(); } catch (_) { /* ignore */ }
+    try { if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget(); } catch (_) { /* ignore */ }
+    try {
+        const body = document.getElementById('catalogAllProductsBody');
+        if (body && !body.classList.contains('hidden')) renderCatalogAllProductsListNow();
+    } catch (_) { /* ignore */ }
+};
+
+/* Repaint the catalog from a background delta sync (focus/visibility/heartbeat
+   or an explicit refresh). Only when something actually changed, so the 45s
+   heartbeat never causes a needless repaint loop. */
+if (typeof window.addEventListener === 'function') {
+    window.addEventListener('kanjo:synced', (e) => {
+        const d = e && e.detail;
+        if (!d || d.store !== CATALOG_COLLECTION || !window.kanjoSync) return;
+        if (!d.count && !d.full) return;
+        try {
+            const items = sortCatalogProductsByCreatedAt(window.kanjoSync.getRows(CATALOG_COLLECTION).slice());
+            applyUnifiedCatalogCaches(items, window.isMahmoudUser());
+        } catch (_) { /* ignore */ }
+    });
+}
 
 /* Static (one-shot) loader for the rep's own catalog products. This replaces
    the previous real-time onSnapshot: overlapping listeners (tasks + catalog)
@@ -9810,6 +10060,7 @@ window.startCatalogListeners = () => {
     window._catalogPendingLoaded = false;
     window._catalogDoneLoaded = false;
     window._catalogAllProductsLoaded = false;
+    window._catalogSkeletonKick = false;
     window._catalogDeleteRequestsLoaded = false;
     /* Client-side view state for the "all products" folder grid: a category
        filter (empty = الكل), a merchant-status filter and a sort mode. Reset per
@@ -9873,22 +10124,54 @@ window.startCatalogListeners = () => {
                deferred to the "منتجاتي" widget being opened (which calls
                `loadMyCatalogProducts`, count-gated) or an explicit force. */
             const jobs = [];
+
+            /* FAST PATH (Part 1): a previous session captured the full
+               merchant_products collection into IndexedDB, so this boot/reload
+               pays only for the `updatedAt > since` delta (~1 read when idle)
+               instead of re-reading the whole (or pending) set. Manager-scoped
+               so a plain rep's boot cost stays zero. */
+            const idbReady = !!(window.kanjoSync && window.kanjoIdb
+                && window.kanjoSync.getLastSyncedAt(CATALOG_COLLECTION)
+                && window.kanjoSync.size(CATALOG_COLLECTION) > 0);
+            if (idbReady && (canViewPending || isMahmoud)) {
+                jobs.push((async () => {
+                    try {
+                        const items = await catalogUnifiedFullList();
+                        applyUnifiedCatalogCaches(items, isMahmoud);
+                    } catch (err) {
+                        console.error('[catalog] IDB unified boot fetch failed:', err);
+                    }
+                })());
+                if (allowFull || window._catalogMyProductsOpen === true) {
+                    jobs.push(window.loadMyCatalogProducts(allowFull));
+                }
+                await Promise.all(jobs);
+                return;
+            }
             if (allowFull || window._catalogMyProductsOpen === true) {
                 jobs.push(window.loadMyCatalogProducts(allowFull));
             }
             if (wantAllProducts) {
                 jobs.push((async () => {
                     try {
-                        /* Cheap change check: an aggregation count costs ~1 read
-                           per 1,000 docs, so an explicit re-open with unchanged
-                           data skips the full re-fetch. `null` (helper missing)
-                           forces the fetch. */
-                        const total = await catalogRestCount([]);
-                        if (total !== null && window._catalogAllProductsLoaded && total === window._catalogAllProductsCount) {
-                            window._catalogAllProductsFetchedAt = Date.now();
-                            return;
+                        let items;
+                        let total = null;
+                        if (window.kanjoSync && window.kanjoIdb && window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
+                            /* Cold start: one full read, captured as the IDB
+                               baseline so the next reload is a cheap delta. */
+                            items = await catalogUnifiedFullList();
+                        } else {
+                            /* Cheap change check: an aggregation count costs ~1 read
+                               per 1,000 docs, so an explicit re-open with unchanged
+                               data skips the full re-fetch. `null` (helper missing)
+                               forces the fetch. */
+                            total = await catalogRestCount([]);
+                            if (total !== null && window._catalogAllProductsLoaded && total === window._catalogAllProductsCount) {
+                                window._catalogAllProductsFetchedAt = Date.now();
+                                return;
+                            }
+                            items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS }));
                         }
-                        const items = sortCatalogProductsByCreatedAt(await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: CATALOG_LIST_FIELDS }));
                         window.allCatalogProductsCache = items;
                         window._catalogAllProductsLoaded = true;
                         window._catalogAllProductsCount = typeof total === 'number' ? total : items.length;
@@ -9948,14 +10231,26 @@ window.startCatalogListeners = () => {
         }
     };
 
+    /* Serialize every catalog refresh through one chain. Without this, a full
+       refresh requested from the UI (opening the all-products widget) while the
+       boot pending read is still in flight was silently dropped by the
+       `_catalogRestRefreshInFlight` guard — leaving the grid stuck on skeletons
+       until a manual reload. Now the late request simply runs after the first. */
+    let _catalogRefreshChain = Promise.resolve();
+    const queueCatalogRefresh = (allowFull) => {
+        _catalogRefreshChain = _catalogRefreshChain
+            .then(() => refreshFromRest(allowFull))
+            .catch(() => { /* swallow: refreshFromRest already logs */ });
+        return _catalogRefreshChain;
+    };
     /* Boot is count-gated: only the small pending/delete-request sets are read.
        The full catalog loads on demand when the "all products" widget is opened
        and the rep's own products when "منتجاتي" is opened, so a plain page load
        or refresh never pays for the multi-thousand-document reads. */
-    refreshFromRest(false);
+    queueCatalogRefresh(false);
     /* Exposed so opening the "all products" widget can pull the full set on
        demand instead of relying on a background poll. */
-    window.refreshCatalogFromRest = () => refreshFromRest(true);
+    window.refreshCatalogFromRest = () => queueCatalogRefresh(true);
     /* Automated background polling is FORBIDDEN (billing leak). Catalog widgets
        load once here and refresh only on demand: opening the all-products widget
        calls window.refreshCatalogFromRest() after its 60s staleness check. No

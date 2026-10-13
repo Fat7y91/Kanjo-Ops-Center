@@ -536,8 +536,23 @@ const restGetDocument = async (segments) => {
     return { id: restDocId(body.name), ...restFieldsToJs(body.fields || {}) };
 };
 
+/* Delta-sync write stamping (REST half). The SDK half lives in updatedAt.js,
+   which wraps setDoc/updateDoc/addDoc/writeBatch. The REST-first writers below
+   bypass those wrappers, so a product edit / deletion request / brand-new
+   product saved from a field rep's mobile would carry NO `updatedAt` and stay
+   invisible to every other client's `updatedAt > since` delta query. Stamp the
+   exact ISO string here (NOT a Date: the delta query compares a string, so a
+   Firestore timestamp would never match). */
+const DELTA_STAMPED_COLLECTIONS = { merchant_products: true, merchants: true, tasks: true };
+const restStampUpdatedAt = (collectionId, data) => {
+    if (!DELTA_STAMPED_COLLECTIONS[collectionId]) return data;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+    return Object.assign({}, data, { updatedAt: new Date().toISOString() });
+};
+
 /* Create a document with a server-generated id over REST (mirrors addDoc). */
 const restCreateDocument = async (collectionId, data) => {
+    data = restStampUpdatedAt(collectionId, data);
     assertWritePayloadSafe(collectionId, data);
     const url = REST_DOCUMENTS_URL + '/' + encodeURIComponent(collectionId)
         + '?key=' + encodeURIComponent(firebaseConfig.apiKey);
@@ -572,6 +587,7 @@ const restDeleteDocument = async (segments) => {
    SDK's `setDoc(ref, data, { merge: true })`. Used so writes never have to wake
    the SDK streaming transport (the blocked channel behind the offline state). */
 const restPatchDocument = async (segments, data) => {
+    data = restStampUpdatedAt(Array.isArray(segments) ? segments[0] : segments, data);
     assertWritePayloadSafe(segments[0], data);
     const path = segments.map(encodeURIComponent).join('/');
     const fieldPaths = Object.keys(data || {})

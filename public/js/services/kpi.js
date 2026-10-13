@@ -54,6 +54,9 @@ const KPI_PRODUCT_FIELDS = [
 ];
 const KPI_REP_FIELDS = ['repName', 'historicalSeconds', 'historicalComputedAt'];
 const KPI_DAILY_STATS_FIELDS = ['activeSeconds', 'imageEditSeconds'];
+/* Shared with catalog.js so the ONE IndexedDB-backed merchant_products read
+   carries every field either consumer needs (see catalogFullFields). */
+if (typeof window !== 'undefined') window.KANJO_KPI_PRODUCT_FIELDS = KPI_PRODUCT_FIELDS;
 /* Field mask for the per-month leaderboard summaries. A collection-group read
    (all reps, one query) uses this so it never pays for unrelated fields. */
 const KPI_MONTHLY_FIELDS = [
@@ -1019,6 +1022,24 @@ window._kpiSelectedRepId = window._kpiSelectedRepId || null;
 window._kpiCharts = window._kpiCharts || {};
 
 const kpiFetchAllProductsUncached = async () => {
+    /* Zero-bleed boot: catalog.js captures the ENTIRE merchant_products
+       collection into the shared IndexedDB store (same field union incl.
+       KPI_PRODUCT_FIELDS). Reuse it so the manager dashboard never issues a
+       second full-collection read in parallel with the catalog boot. */
+    try {
+        if (window.kanjoSync && window.kanjoSync.getLastSyncedAt(KPI_PRODUCTS_COLLECTION)
+            && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) > 0) {
+            const shared = window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION);
+            if (shared.length) return shared;
+        }
+        /* No baseline in memory yet (cold boot): await the catalog's coalesced
+           loader so we join its single in-flight read instead of racing it with
+           a second full-collection query. */
+        if (typeof window.kanjoUnifiedCatalogProducts === 'function') {
+            const unified = await window.kanjoUnifiedCatalogProducts();
+            if (unified && unified.length) return unified;
+        }
+    } catch (_) { /* fall through to the dedicated query */ }
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
             return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });
@@ -1122,6 +1143,18 @@ const kpiFetchImportedUploadsForRep = (repName) => kpiCacheGet(
    accounts are field-rep scoped, so this grants the editor a true global total
    without pulling the entire collection. */
 const kpiFetchEditorProcessedUncached = async () => {
+    /* Part 1: when catalog.js has already captured the full merchant_products
+       collection into the shared IndexedDB store, derive the editor's "done"
+       set from it in memory — ZERO extra reads. Only fall back to the dedicated
+       full-collection query when no complete baseline exists yet. */
+    try {
+        if (window.kanjoSync && window.kanjoSync.getLastSyncedAt(KPI_PRODUCTS_COLLECTION)
+            && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) > 0) {
+            const shared = window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION)
+                .filter((p) => p && p.status === 'done');
+            if (shared.length) return shared;
+        }
+    } catch (_) { /* fall through to the dedicated query */ }
     let items = null;
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {

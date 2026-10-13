@@ -8,7 +8,12 @@ window.toggleNotifications = () => {
 document.addEventListener('click', (e) => {
     const wrapper = document.getElementById('notificationsWrapper');
     const dropdown = document.getElementById('notificationsDropdown');
-    if (wrapper && !wrapper.contains(e.target) && !dropdown.classList.contains('hidden')) {
+    if (!dropdown) return;
+    /* The desktop sidebar bell is decoupled from the legacy header wrapper, so
+       ignore it here — otherwise the very click that opened the panel would
+       immediately close it. */
+    if (e.target && e.target.closest && e.target.closest('#kanjoSidebarNotifBtn')) return;
+    if (wrapper && !wrapper.contains(e.target) && !dropdown.contains(e.target) && !dropdown.classList.contains('hidden')) {
         dropdown.classList.add('hidden');
     }
 });

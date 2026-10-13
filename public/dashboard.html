@@ -42,7 +42,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20261013b">
 
     <script>
 
@@ -70,6 +70,17 @@
 
             }, 800);
 
+            /* Enter key submits the login form just like clicking the button. */
+            const pin = document.getElementById('pinInput');
+            if (pin) {
+                pin.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const btn = document.getElementById('loginBtn');
+                    if (btn) btn.click();
+                });
+            }
+
         });
 
     </script>
@@ -88,27 +99,33 @@
 
 
 
-    <div id="kanjoLoadingSplash" class="fixed inset-0 bg-white z-[9999] flex flex-col items-center justify-center p-4 transition-opacity duration-400">
+    <div id="kanjoLoadingSplash" class="boot-splash" role="status" aria-label="جارٍ تحميل النظام">
 
-        <div class="text-center space-y-6 max-w-sm w-full">
+        <div class="boot-splash__bg" aria-hidden="true"></div>
 
-            <div class="relative w-24 h-24 mx-auto flex items-center justify-center">
+        <div class="boot-splash__inner">
 
-                <img src="logo.png" alt="Kanjo Logo" class="w-20 h-20 object-contain kangaroo-jumping">
+            <div class="boot-splash__pulse">
 
-            </div>
+                <span class="boot-splash__pulse-ring" aria-hidden="true"></span>
 
-            <div class="space-y-2">
+                <span class="boot-splash__pulse-ring boot-splash__pulse-ring--2" aria-hidden="true"></span>
 
-                <h3 class="font-black text-2xl text-kanjo-dark">KANJO <span class="text-kanjo-primary">OPS</span></h3>
-
-                <p class="text-xs font-black text-kanjo-primary tracking-wide">الكانجارو جهز كل حاجة، ثواني وفتحت...</p>
+                <img src="logo.png" alt="Kanjo Logo" class="boot-splash__logo">
 
             </div>
 
-            <div class="relative w-full bg-kanjo-light h-4 rounded-full overflow-hidden p-0.5 border border-purple-100 shadow-inner">
+            <div class="boot-splash__text">
 
-                <div class="bg-kanjo-primary h-full rounded-full kanjo-progress-bar"></div>
+                <h3 class="boot-splash__title">KANJO <span>OPS</span></h3>
+
+                <p class="boot-splash__sub">الكانجارو جهز كل حاجة، ثواني وفتحت...</p>
+
+            </div>
+
+            <div class="boot-splash__bar" aria-hidden="true">
+
+                <span class="boot-splash__bar-fill kanjo-progress-bar"></span>
 
             </div>
 
@@ -871,45 +888,67 @@
 
             <div class="space-y-3">
 
-                <button id="exportBtn" onclick="openGeneralExportFromProducts()" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير البيانات العامة (Excel)</button>
-
                 <div id="catalogExportSection" class="hidden space-y-3">
 
-                    <select id="merchantExportFilter" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
+                    <div class="kws-export-searchwrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" id="kanjoExportMerchantSearch" placeholder="ابحث عن تاجر..." autocomplete="off" oninput="window.kanjoFilterExportMerchants && window.kanjoFilterExportMerchants(this.value)">
+                    </div>
+
+                    <select id="merchantExportFilter" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" onchange="window.kanjoSyncExportCardBtn && window.kanjoSyncExportCardBtn()" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
 
                         <option value="" disabled selected>اختر التاجر للتصدير...</option>
 
                     </select>
+
+                    <button id="kanjoExportMerchantCardBtn" type="button" disabled onclick="window.kanjoOpenSelectedMerchantCard && window.kanjoOpenSelectedMerchantCard()" class="w-full bg-white text-[#230535] border-2 border-[#230535]/20 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-id-card"></i> إظهار بطاقة التاجر</button>
 
                     <label for="exportIncludePending" class="flex items-center gap-3 p-3.5 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer select-none hover:bg-[#230535]/5 transition">
                         <input type="checkbox" id="exportIncludePending" class="w-5 h-5 shrink-0 accent-[#230535]">
                         <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
                     </label>
 
-                    <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel (Products + Variants)</button>
+                    <!-- Smart delta export: appears only when the selected merchant has
+                         products edited AFTER it was published (dashboardUploaded). -->
+                    <div id="kanjoDeltaExportBox" class="hidden rounded-2xl border-2 border-[#E57723]/50 bg-[#E57723]/5 p-3 space-y-2">
+                        <button id="kanjoDeltaExportBtn" type="button" onclick="window.kanjoExportMerchantDelta && window.kanjoExportMerchantDelta()" class="w-full bg-gradient-to-l from-[#E57723] to-[#f59e0b] text-white py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-file-circle-plus"></i> تحميل تحديثات المنتجات فقط
+                        </button>
+                        <p id="kanjoDeltaExportSummary" class="text-[11px] font-black text-[#E57723] text-center"></p>
+                    </div>
 
-                    <button id="catalogTemplateExportBtn" type="button" onclick="document.getElementById('kanjoTemplateFileInput').click()" class="w-full bg-[#FFD700] text-[#230535] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-import"></i> تعبئة قالب التاجر (Excel)</button>
-                    <input type="file" id="kanjoTemplateFileInput" accept=".xlsx,.xls" class="sr-only">
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel</button>
 
-                    <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
+                        <button id="catalogTemplateExportBtn" type="button" onclick="document.getElementById('kanjoTemplateFileInput').click()" class="w-full bg-[#FFD700] text-[#230535] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-import"></i> تعبئة قالب التاجر</button>
+                        <input type="file" id="kanjoTemplateFileInput" accept=".xlsx,.xls" class="sr-only">
+                    </div>
 
-                    <button id="catalogResolveDuplicatesBtn" type="button" onclick="openCatalogDuplicatesModal()" class="w-full bg-white text-[#230535] border-2 border-[#FFD700] py-3.5 rounded-xl font-black hover:bg-[#FFD700]/10 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-clone"></i> معالجة التكرارات <span id="catalogDuplicatesBadge" class="hidden bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span></button>
+                    <details id="kanjoExportAdvanced" class="kws-advanced">
+                        <summary><i class="fa-solid fa-gear"></i> الإعدادات والأدوات المتقدمة</summary>
+                        <div class="kws-advanced-body space-y-3">
+                            <button id="exportBtn" onclick="openGeneralExportFromProducts()" class="w-full bg-emerald-600 text-white py-3.5 rounded-xl font-bold hover:bg-emerald-700 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير البيانات العامة (Excel)</button>
 
-                    <div class="pt-1 mt-1 border-t border-purple-100">
-                        <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">تصدير قاموس لوحة التحكم (Qema)</p>
-                        <div class="grid grid-cols-1 gap-2">
-                            <button id="exportTaxonomyVariantsBtn" type="button" onclick="exportQemaTaxonomyVariants()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-list"></i> تصدير جميع المتغيرات</button>
-                            <button id="exportTaxonomyCategoriesBtn" type="button" onclick="exportQemaTaxonomyCategories()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-tags"></i> تصدير جميع التصنيفات</button>
+                            <button id="catalogFixTranslationsBtn" type="button" onclick="fixCatalogProductTranslations()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3.5 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-language"></i> إصلاح ترجمة المنتجات</button>
+
+                            <button id="catalogResolveDuplicatesBtn" type="button" onclick="openCatalogDuplicatesModal()" class="w-full bg-white text-[#230535] border-2 border-[#FFD700] py-3.5 rounded-xl font-black hover:bg-[#FFD700]/10 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-clone"></i> معالجة التكرارات <span id="catalogDuplicatesBadge" class="hidden bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span></button>
+
+                            <div class="pt-1 mt-1 border-t border-purple-100">
+                                <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">تصدير قاموس لوحة التحكم (Qema)</p>
+                                <div class="grid grid-cols-1 gap-2">
+                                    <button id="exportTaxonomyVariantsBtn" type="button" onclick="exportQemaTaxonomyVariants()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-list"></i> تصدير جميع المتغيرات</button>
+                                    <button id="exportTaxonomyCategoriesBtn" type="button" onclick="exportQemaTaxonomyCategories()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-black hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-tags"></i> تصدير جميع التصنيفات</button>
+                                </div>
+                            </div>
+
+                            <div class="pt-1 mt-1 border-t border-purple-100">
+                                <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">مزامنة تصنيفات النظام</p>
+                                <button id="kanjoDynamicTaxonomyBtn" type="button" onclick="document.getElementById('kanjoDynamicTaxonomyFileInput').click()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> تحديث تصنيفات النظام (CSV)</button>
+                                <input type="file" id="kanjoDynamicTaxonomyFileInput" accept=".csv,text/csv" class="sr-only">
+                                <p id="kanjoDynamicTaxonomyStatus" class="hidden mt-2 text-[11px] font-black text-emerald-600"></p>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="pt-1 mt-1 border-t border-purple-100">
-                        <p class="text-[10px] font-black text-slate-400 mb-2 mt-3">مزامنة تصنيفات النظام</p>
-                        <button id="kanjoDynamicTaxonomyBtn" type="button" onclick="document.getElementById('kanjoDynamicTaxonomyFileInput').click()" class="w-full bg-white text-[#230535] border-2 border-[#230535] py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2"><i class="fa-solid fa-cloud-arrow-up"></i> تحديث تصنيفات النظام (CSV)</button>
-                        <input type="file" id="kanjoDynamicTaxonomyFileInput" accept=".csv,text/csv" class="sr-only">
-                        <p id="kanjoDynamicTaxonomyStatus" class="hidden mt-2 text-[11px] font-black text-emerald-600"></p>
-                    </div>
-
+                    </details>
 
                 </div>
 
@@ -1153,7 +1192,7 @@
 
                 <div id="blackBoxNavBtnWrapper" class="hidden relative mr-1">
 
-                    <button onclick="openBlackBox()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+                    <button onclick="window.kanjoOpenBlackBoxPane ? window.kanjoOpenBlackBoxPane() : openBlackBox()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
 
                         <i class="fa-solid fa-box-archive text-[#230535]"></i>
 
@@ -1195,7 +1234,7 @@
 
                 <div id="marketingNavBtnWrapper" class="hidden relative mr-1">
 
-                    <button onclick="openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+                    <button onclick="window.kanjoOpenMarketingPane ? window.kanjoOpenMarketingPane() : openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
 
                         <i class="fa-solid fa-bullhorn text-[#230535]"></i>
 
@@ -1238,20 +1277,6 @@
 
                     </button>
 
-                    <div id="notificationsDropdown" class="hidden absolute right-0 sm:right-auto sm:left-0 top-10 w-[90vw] sm:w-80 max-w-sm bg-white rounded-2xl shadow-2xl border border-purple-100 z-50 overflow-hidden flex flex-col">
-
-                        <div class="bg-kanjo-light p-3 border-b border-purple-100 flex justify-between items-center">
-
-                            <span class="font-black text-kanjo-dark">الإشعارات</span>
-
-                            <button onclick="clearNotifications()" class="text-xs text-slate-500 hover:text-red-500 font-bold">تحديد كمقروء</button>
-
-                        </div>
-
-                        <div id="notificationsList" class="max-h-80 overflow-y-auto hide-scrollbar flex-1 bg-slate-50"></div>
-
-                    </div>
-
                 </div>
 
                 <span id="userNameDisplay" class="font-bold text-xs sm:text-sm text-kanjo-dark border-r border-purple-200 pr-3"></span>
@@ -1264,19 +1289,84 @@
 
     </header>
 
+    <!-- Notifications panel (body-level fixed so it works with the desktop sidebar bell too) -->
+    <div id="notificationsDropdown" class="hidden">
+        <div class="bg-kanjo-light p-3 border-b border-purple-100 flex justify-between items-center">
+            <span class="font-black text-kanjo-dark">الإشعارات</span>
+            <button onclick="clearNotifications()" class="text-xs text-slate-500 hover:text-red-500 font-bold">تحديد كمقروء</button>
+        </div>
+        <div id="notificationsList" class="max-h-80 overflow-y-auto hide-scrollbar flex-1 bg-slate-50"></div>
+    </div>
 
+    <!-- Workspace top navigation (compact tablets only) — rendered by workspace.js -->
+    <nav id="kanjoWorkspaceNav" class="kanjo-workspace-nav hidden" aria-label="مساحات العمل"></nav>
+
+    <!-- Workspace right sidebar app shell (desktop >= 992px) — rendered by workspace.js -->
+    <aside id="kanjoWorkspaceSidebar" class="kanjo-sidebar hidden" aria-label="القائمة الجانبية">
+        <div class="ksb-brand">
+            <img src="logo.png" alt="Logo" class="ksb-logo" decoding="async">
+            <div class="ksb-brand-text">
+                <span class="ksb-brand-title">KANJO <span>OPS</span></span>
+                <span class="ksb-brand-sub" id="kanjoSidebarTeam">EXECUTIVE</span>
+            </div>
+        </div>
+        <nav id="kanjoSidebarNav" class="ksb-nav" aria-label="مساحات العمل"></nav>
+        <div class="ksb-footer">
+            <div class="ksb-user">
+                <div id="kanjoSidebarAvatar" class="ksb-avatar"></div>
+                <div class="ksb-user-meta">
+                    <span id="kanjoSidebarUserName" class="ksb-user-name"></span>
+                    <span id="kanjoSidebarUserRole" class="ksb-user-role"></span>
+                </div>
+                <div class="ksb-user-actions">
+                    <button type="button" id="kanjoSidebarNotifBtn" class="ksb-icon-btn hidden" onclick="toggleNotifications()" aria-label="الإشعارات">
+                        <i class="fa-solid fa-bell"></i>
+                        <span id="kanjoSidebarNotifBadge" class="ksb-notif-badge hidden"></span>
+                    </button>
+                    <button type="button" class="ksb-icon-btn ksb-logout" onclick="logout()" aria-label="تسجيل الخروج">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="kanjoSidebarQuick" class="ksb-quick"></div>
+        </div>
+    </aside>
 
     <main class="p-4 sm:p-6 pb-24 min-h-6xl mx-auto">
 
-        <div id="loginSection" class="max-w-md mx-auto mt-8 sm:mt-12 bg-white p-6 sm:p-10 rounded-3xl shadow-xl border border-purple-100 text-center">
+        <div id="loginSection" class="login-portal">
 
-            <img src="logo.png" alt="Logo" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6">
+            <div class="login-portal__aurora" aria-hidden="true"></div>
 
-            <h2 class="text-xl sm:text-2xl font-black mb-6 text-kanjo-dark">تسجيل الدخول</h2>
+            <div class="login-portal__card">
 
-            <input type="password" id="pinInput" placeholder="كود الدخول" autocomplete="current-password" class="w-full text-base sm:text-lg p-4 bg-white border border-purple-200 rounded-2xl mb-6 font-bold text-kanjo-dark outline-none focus:border-kanjo-dark focus:ring-2 focus:ring-kanjo-primary/30 transition-all">
+                <div class="login-portal__logo">
 
-            <button onclick="window.login ? window.login() : alert('جاري تحميل النظام، برجاء الانتظار ثانية واحدة...')" class="w-full bg-kanjo-primary text-white py-3.5 sm:py-4 rounded-2xl font-bold text-base sm:text-lg hover:bg-violet-800 transition">دخول النظام</button>
+                    <div class="login-portal__logo-glow" aria-hidden="true"></div>
+
+                    <img src="logo.png" alt="Kanjo Logo">
+
+                </div>
+
+                <h2 class="login-portal__title">تسجيل الدخول</h2>
+
+                <p class="login-portal__sub">لوحة تحكم عمليات كانجو — Kanjo OPS Center</p>
+
+                <label class="login-portal__field" for="pinInput">
+
+                    <i class="fa-solid fa-key" aria-hidden="true"></i>
+
+                    <input type="password" id="pinInput" placeholder="كود الدخول" autocomplete="current-password" inputmode="numeric" enterkeyhint="go">
+
+                </label>
+
+                <button id="loginBtn" type="button" onclick="window.login ? window.login() : alert('جاري تحميل النظام، برجاء الانتظار ثانية واحدة...')" class="login-portal__btn">
+
+                    <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i> دخول النظام
+
+                </button>
+
+            </div>
 
         </div>
 
@@ -1625,7 +1715,7 @@
 
         <!-- ═══════════ MARKETING — CAMPAIGN LEADS (integrated view) ═══════════ -->
 
-        <div id="marketingSection" class="hidden space-y-6">
+        <section id="marketingSection" data-workspace-view="marketing" class="hidden space-y-6">
 
             <div class="bg-gradient-to-l from-[#230535] to-[#4C1D95] rounded-3xl shadow-lg text-white p-4 sm:p-6 flex flex-wrap justify-between items-center gap-3">
 
@@ -1642,12 +1732,6 @@
                     </div>
 
                 </div>
-
-                <button id="marketingBack" type="button" onclick="closeMarketingDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2">
-
-                    <i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية
-
-                </button>
 
             </div>
 
@@ -1715,13 +1799,77 @@
 
             </div>
 
-        </div>
+        </section>
 
 
 
         <div id="dashboardSection" class="hidden space-y-6">
 
-            
+            <!-- ═══════════ FOUNDER COMMAND HUB (visits) ═══════════ -->
+            <div id="kanjoCommandHub" class="kws-hub-pane">
+                <div class="kws-hub-head">
+                    <div class="kws-hub-head-text">
+                        <h2 class="kws-hub-title">مركز القيادة التنفيذي</h2>
+                        <p class="kws-hub-sub">ابدأ بالبحث عن تاجر ثم اختر اليوم من الشريط الزمني لعرض زيارات الفريق.</p>
+                    </div>
+                    <button type="button" id="kanjoPharmacyPill" class="kws-pill kws-pill-corner" onclick="window.kanjoTogglePharmacy && window.kanjoTogglePharmacy()"><i class="fa-solid fa-pills"></i> أرشيف مراجعة الصيدليات</button>
+                </div>
+                <div class="kws-visits-top">
+                    <div class="kws-visits-search">
+                        <div class="kws-hub-card" id="kanjoSearchModeCard">
+                            <div class="kws-hub-ic"><i class="fa-solid fa-magnifying-glass"></i></div>
+                            <div class="kws-hub-body">
+                                <h3>البحث الشامل عن تاجر</h3>
+                                <p>ابحث باسم التاجر أو المطعم لعرض المهام وتقارير الزيارة وبطاقة التاجر مباشرة.</p>
+                                <div class="kws-hub-search">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="search" id="kanjoSpotlightInput" placeholder="اكتب اسم تاجر / مطعم..." oninput="window.kanjoSpotlightSearch && window.kanjoSpotlightSearch(this.value)" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kws-visits-dates">
+                        <div class="kws-datestrip-wrap">
+                            <div class="kws-datestrip-head">
+                                <span class="kws-datestrip-title"><i class="fa-regular fa-calendar-days"></i> جدول المهام والزيارات</span>
+                                <button type="button" class="kws-pill kws-pill-ghost" onclick="window.kanjoVisitsReset && window.kanjoVisitsReset()"><i class="fa-solid fa-rotate-left"></i> مسح البحث</button>
+                            </div>
+                            <div id="kanjoDateStrip" class="kws-datestrip" role="listbox" aria-label="شريط الأيام"></div>
+                            <div class="kws-datestrip-foot">
+                                <button type="button" class="kds-nav" data-kds-nav="-1" aria-label="الأسبوع السابق"><i class="fa-solid fa-chevron-right"></i> الأسبوع السابق</button>
+                                <button type="button" class="kds-nav kds-nav-today" data-kds-nav="0" aria-label="اليوم"><i class="fa-solid fa-crosshairs"></i> اليوم</button>
+                                <button type="button" class="kds-nav" data-kds-nav="1" aria-label="الأسبوع التالي">الأسبوع التالي <i class="fa-solid fa-chevron-left"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════ FOUNDER FINANCE HUB (admin_finance) ═══════════ -->
+            <div id="kanjoFinanceHub" class="kws-hub-pane">
+                <div class="kws-fin-grid">
+                    <div class="kws-fin-card" role="button" tabindex="0" onclick="window.showFounderPayrollDetails && window.showFounderPayrollDetails()">
+                        <div class="kws-fin-top">
+                            <span class="kws-fin-ic"><i class="fa-solid fa-wallet"></i></span>
+                            <span class="kws-fin-badge" id="kanjoFinMonth">الشهر الحالي</span>
+                        </div>
+                        <h3>💰 الرواتب والمستحقات المالية للشركة</h3>
+                        <div class="kws-fin-amount" id="kanjoFinPayrollTotal">0 ج.م</div>
+                        <p>إجمالي رواتب الشركة مبني على التعاقدات النهائية للفترة المختارة.</p>
+                        <span class="kws-cta-primary"><i class="fa-solid fa-file-invoice-dollar"></i> عرض كشف الرواتب والحسابات</span>
+                    </div>
+                    <div class="kws-fin-card" role="button" tabindex="0" onclick="window.openMerchantDocsAuditModal && window.openMerchantDocsAuditModal()">
+                        <div class="kws-fin-top">
+                            <span class="kws-fin-ic kws-fin-ic-teal"><i class="fa-solid fa-file-shield"></i></span>
+                            <span class="kws-fin-badge" id="kanjoFinAuditRatio">0 / 0</span>
+                        </div>
+                        <h3>🛡️ تدقيق ملفات التجار — الاتفاق النهائي</h3>
+                        <div class="kws-fin-amount" id="kanjoFinAuditCount">—</div>
+                        <p>راجع ملفات التجار ذوي الاتفاق النهائي واعتمد المستندات الناقصة.</p>
+                        <span class="kws-cta-primary"><i class="fa-solid fa-magnifying-glass-chart"></i> عرض غرفة تدقيق العقود</span>
+                    </div>
+                </div>
+            </div>
 
             <!-- مربع ملخص رواتب الشركة الخاص بالحساب الحالي والشهر الحالي (للمؤسسين فقط) -->
 
@@ -2323,6 +2471,20 @@
 
                 </button>
 
+                <!-- Catalog view header actions (desktop SaaS): export lives HERE, not in the visits tab -->
+                <div class="kws-catalog-actions">
+                    <div class="kws-catalog-actions-title">
+                        <i class="fa-solid fa-box-open"></i> كتالوج منتجات التجار
+                    </div>
+                    <div id="kanjoCatalogTabs" class="kws-ctabs" role="tablist" aria-label="أقسام الكتالوج">
+                        <button type="button" data-kws-ctab="browse" class="is-active"><i class="fa-solid fa-store"></i> عرض المنتجات</button>
+                        <button type="button" data-kws-ctab="export"><i class="fa-solid fa-file-export"></i> تصدير المنتجات</button>
+                    </div>
+                    <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥
+                    </button>
+                </div>
+
                 <div id="catalogAllProductsBody" class="hidden bg-slate-50 p-3 space-y-3">
 
                     <div id="catalogRepLeaderboard" class="hidden"></div>
@@ -2787,12 +2949,6 @@
 
                     </button>
 
-                    <button id="openExportProductsBtn" type="button" onclick="openExportProductsModal()" class="hidden flex-1 bg-[#230535] text-[#FFD700] py-3.5 rounded-2xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
-
-                        <i class="fa-solid fa-file-export"></i> تصدير منتجات المناديب 📥
-
-                    </button>
-
                 </div>
 
             </div>
@@ -2896,7 +3052,7 @@
 
                         <button type="button" onclick="renderKpiDashboard()" class="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-rotate"></i> تحديث</button>
 
-                        <button type="button" onclick="closeKpiDashboard()" class="bg-[#FFD700] text-[#230535] hover:opacity-90 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية</button>
+                        <button type="button" id="kpiBackToDashboardBtn" onclick="closeKpiDashboard()" class="bg-[#FFD700] text-[#230535] hover:opacity-90 px-3 py-1.5 rounded-lg text-[11px] font-black transition flex items-center gap-2"><i class="fa-solid fa-arrow-right"></i> عودة للوحة الرئيسية</button>
 
                     </div>
 
@@ -3103,6 +3259,9 @@
         </div>
 
     </main>
+
+    <!-- Workspace bottom navigation (mobile native app shell) — rendered by workspace.js -->
+    <nav id="kanjoMobileNav" class="kanjo-mobile-nav hidden" aria-label="التنقل السفلي"></nav>
 
 
 
@@ -3734,7 +3893,7 @@
 
     <!-- ═══════════ BLACK BOX — SYSTEM AUDIT LOG (founders only) ═══════════ -->
 
-    <div id="blackBoxModal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[200]">
+    <section id="blackBoxModal" data-workspace-view="blackbox" class="hidden kws-overlay-pane">
 
         <div class="bg-white rounded-3xl w-full max-w-4xl shadow-2xl max-h-[94vh] flex flex-col overflow-hidden">
 
@@ -3824,7 +3983,7 @@
 
         </div>
 
-    </div>
+    </section>
 
 
 
@@ -3936,7 +4095,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261011c"></script>
+    <script type="module" src="js/main.js?v=20261013b"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 

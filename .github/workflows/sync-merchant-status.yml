@@ -1,17 +1,11 @@
 # Denormalizes each merchant's contract status ('final'/'vip') and mapped
 # product count onto the `merchants` collection, so the isolated marketing
 # agency portal can filter and group vendors without reading operational
-# `tasks`. Runs on push to main when the script changes, daily, or manually.
+# `tasks`. Manual only: the daily cron + push triggers each re-read the whole
+# collection and were a recurring read-cost driver. Run it from the Actions
+# tab (workflow_dispatch) when a status backfill is actually needed.
 name: Sync merchant contract status
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'scripts/sync-merchant-status.mjs'
-      - '.github/workflows/sync-merchant-status.yml'
-  schedule:
-    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:

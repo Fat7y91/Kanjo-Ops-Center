@@ -1,6 +1,9 @@
 /* Kanjo Ops — Application Entry Point */
 import './utils/cache.js';
 import './config/firebase.js';
+import './services/idb.js';
+import './services/syncEngine.js';
+import './services/updatedAt.js';
 import './config/build-info.generated.js';
 import './config/qemaTaxonomy.js';
 import './services/audit.js';
@@ -15,7 +18,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
 import './services/firestore.js';
-import './services/catalog.js?v=20261011c';
+import './services/catalog.js?v=20261013b';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -29,6 +32,12 @@ import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
 import './services/marketing.js';
+import './services/workspace.js?v=20261013b';
+
+/* Start the IndexedDB delta-sync triggers (focus / visibilitychange + a 45s
+   visible-tab heartbeat). The engine is inert until a collection registers a
+   fetcher, so starting it up-front is safe. */
+if (window.kanjoSync && typeof window.kanjoSync.start === 'function') window.kanjoSync.start();
 
 /* Populate category dropdowns (build the option list once instead of
    re-serialising the whole select on every iteration). */
@@ -96,19 +105,45 @@ authReadyWithTimeout.then(() => {
     if (login) login.classList.remove('hidden');
 });
 
-/* ─── Stale-tab killer ───────────────────────────────────────────────────────
+/* ─── Stale-tab notice ───────────────────────────────────────────────────────
    A long-lived tab keeps the JS it loaded in memory, so a tab opened before a
    deploy can keep running outdated (and previously leak-prone) code even after
    the fix is live. Compare this page's build id against the freshly-served
-   `version.json` (served no-store) and force a single reload when they differ.
-   JS is served `Cache-Control: no-cache`, so the reload always lands on the new
-   build; the 60s loop guard prevents a reload storm if it ever does not.
-   Disabled for the local/emulator build ('dev'). */
+   `version.json` (served no-store) and, when they differ, offer a NON-intrusive,
+   user-initiated refresh instead of force-reloading (an automatic reload could
+   interrupt data entry and, on a load-balanced deploy, re-boot in a loop).
+   JS is served `Cache-Control: no-cache`, so a manual reload lands on the new
+   build. Disabled for the local/emulator build ('dev'). */
 (function kanjoStaleTabGuard() {
     const build = (window.KANJO_BUILD && window.KANJO_BUILD.build) || '';
     if (!build || build === 'dev') return;
-    const RELOAD_AT_KEY = 'kanjo_stale_reload_at';
+    const NOTified_AT_KEY = 'kanjo_stale_notified_at';
     let checking = false;
+    const offerReload = () => {
+        if (document.getElementById('kanjoUpdateBanner')) return;
+        const bar = document.createElement('div');
+        bar.id = 'kanjoUpdateBanner';
+        bar.setAttribute('role', 'status');
+        bar.style.cssText = 'position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));'
+            + 'transform:translateX(-50%);z-index:120;background:#230535;color:#fff;'
+            + 'border:1px solid #facc15;border-radius:9999px;box-shadow:0 8px 24px rgba(0,0,0,.35);'
+            + 'padding:10px 12px 10px 18px;display:flex;align-items:center;gap:12px;'
+            + 'font-weight:800;font-size:13px;max-width:92vw';
+        bar.innerHTML = '<span>تحديث جديد متاح</span>'
+            + '<button type="button" id="kanjoUpdateBtn" style="background:#facc15;color:#230535;'
+            + 'border:0;border-radius:9999px;padding:8px 16px;font-weight:900;cursor:pointer">'
+            + 'اضغط للتحديث</button>';
+        const dismiss = document.createElement('button');
+        dismiss.type = 'button';
+        dismiss.setAttribute('aria-label', 'إغلاق');
+        dismiss.style.cssText = 'background:transparent;border:0;color:#e9d5ff;font-size:16px;cursor:pointer;line-height:1';
+        dismiss.textContent = '\u00d7';
+        dismiss.addEventListener('click', () => bar.remove());
+        bar.appendChild(dismiss);
+        const btn = bar.querySelector('#kanjoUpdateBtn');
+        if (btn) btn.addEventListener('click', () => window.location.reload());
+        document.body.appendChild(bar);
+    };
     const checkForUpdate = async () => {
         if (checking || document.hidden) return;
         checking = true;
@@ -118,13 +153,10 @@ authReadyWithTimeout.then(() => {
             const data = await res.json().catch(() => null);
             const live = data && data.build ? String(data.build) : '';
             if (!live || live === build) return;
-            const last = Number((window.sessionStorage && sessionStorage.getItem(RELOAD_AT_KEY)) || 0);
+            const last = Number((window.sessionStorage && sessionStorage.getItem(NOTified_AT_KEY)) || 0);
             if (Date.now() - last < 60000) return;
-            try { sessionStorage.setItem(RELOAD_AT_KEY, String(Date.now())); } catch (_) {}
-            if (typeof window.showToast === 'function') {
-                window.showToast('تم تحديث التطبيق، جاري إعادة التحميل...', false);
-            }
-            setTimeout(() => window.location.reload(), 700);
+            try { sessionStorage.setItem(NOTified_AT_KEY, String(Date.now())); } catch (_) {}
+            offerReload();
         } catch (_) {
             /* Offline / transient failure: retry on the next tick. */
         } finally {
