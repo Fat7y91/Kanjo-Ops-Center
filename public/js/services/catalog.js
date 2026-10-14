@@ -241,7 +241,21 @@ window.canEditCatalogProducts = () => !!window.currentUser
    the product-audit team and the admin account 8492 may add products for any
    merchant (to cover items the delivery agents missed) and edit them + their
    variants, but never delete. */
-window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount() || window.isCatalogFounderUser();
+
+/* Catalog tools gate (admin / founder / product-audit "auditor"): the roles that
+   get the in-merchant "+ إضافة صنف جديد" button and the per-card hard-delete
+   control. Deliberately NARROWER than canCreateCatalogProducts — reps keep their
+   create + delete-request workflow and never see the hard-delete trash icon. */
+window.canManageCatalogProducts = () => window.isKanjoAdminAccount() || window.isCatalogFounderUser() || window.isProductAuditUser();
+
+/* Office roles (admin / founder / product-audit / Mahmoud-ops) add products
+   DIRECTLY to Firestore. The offline `kanjo_drafts` queue exists strictly for
+   field reps on unstable mobile connections, so it must never be used by the
+   office — they need an instant, server-written product. */
+window.isCatalogDirectCreateUser = () => !!(window.isCatalogAdminUser()
+    || window.isCatalogFounderUser() || window.isProductAuditUser()
+    || window.isMahmoudUser());
 
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
@@ -988,6 +1002,41 @@ const setCatalogMerchantInputLabel = () => {
     if (clearBtn) clearBtn.classList.toggle('hidden', !id);
 };
 window.setCatalogMerchantInputLabel = setCatalogMerchantInputLabel;
+
+/* Context lock (Bug fix): when the Add-product modal is opened from inside a
+   specific merchant's catalog view, that merchant is already known — pre-select
+   it and hide the searchable picker so the admin never has to search again. The
+   hidden #catalogMerchantSelect keeps the value every existing consumer reads. */
+const lockCatalogMerchantTo = (merchantId) => {
+    const select = document.getElementById('catalogMerchantSelect');
+    const mid = String(merchantId || '').trim();
+    const merchant = (mid && window._catalogMerchantMap) ? window._catalogMerchantMap[mid] : null;
+    if (!select || !merchant) return false;
+    select.value = mid;
+    const combo = document.getElementById('catalogMerchantCombobox');
+    if (combo) combo.classList.add('hidden');
+    let locked = document.getElementById('catalogMerchantLocked');
+    if (!locked) {
+        locked = document.createElement('div');
+        locked.id = 'catalogMerchantLocked';
+        locked.className = 'flex items-center gap-3 w-full p-3.5 pr-4 bg-[#230535]/5 border-2 border-[#230535]/20 rounded-xl';
+        if (combo && combo.parentNode) combo.parentNode.insertBefore(locked, combo.nextSibling);
+    }
+    locked.innerHTML = '<i class="fa-solid fa-store text-[#230535]"></i>'
+        + '<span class="font-black text-sm text-[#230535] truncate flex-1">' + catalogEscapeHtml(merchant.merchantName) + '</span>'
+        + '<span class="shrink-0 text-[10px] font-black text-[#230535] bg-[#FFD700] px-2 py-0.5 rounded-full">تاجر الكتالوج</span>';
+    locked.classList.remove('hidden');
+    return true;
+};
+window.lockCatalogMerchantTo = lockCatalogMerchantTo;
+
+const unlockCatalogMerchantSelector = () => {
+    const combo = document.getElementById('catalogMerchantCombobox');
+    if (combo) combo.classList.remove('hidden');
+    const locked = document.getElementById('catalogMerchantLocked');
+    if (locked) { locked.classList.add('hidden'); locked.innerHTML = ''; }
+};
+window.unlockCatalogMerchantSelector = unlockCatalogMerchantSelector;
 
 const renderCatalogMerchantSearchList = () => {
     const input = document.getElementById('catalogMerchantSearchInput');
@@ -2101,6 +2150,7 @@ const clearCatalogProductFields = (keepMerchant) => {
     if (!keepMerchant) {
         const merchantEl = document.getElementById('catalogMerchantSelect');
         if (merchantEl) merchantEl.value = '';
+        if (typeof window.unlockCatalogMerchantSelector === 'function') window.unlockCatalogMerchantSelector();
         setCatalogMerchantInputLabel();
     }
     if (typeof window.updateMasterCatalogSearchVisibility === 'function') window.updateMasterCatalogSearchVisibility();
@@ -2182,7 +2232,7 @@ window.startCatalogBarcodeScan = async () => {
     }
 };
 
-window.openCatalogProductModal = () => {
+window.openCatalogProductModal = (merchantId) => {
     if (!window.canCreateCatalogProducts()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب وفريق مراجعة المنتجات فقط', false);
         return;
@@ -2205,9 +2255,17 @@ window.openCatalogProductModal = () => {
     window.hideCatalogMerchantSearchList();
     window.setCatalogMerchantInputLabel();
     window.hideCatalogNameSuggestions();
+    /* Context-aware (Bug fix): opened from a specific merchant's catalog view →
+       pre-select and lock that merchant so the admin does not search again. */
+    if (String(merchantId || '').trim()) {
+        window.lockCatalogMerchantTo(merchantId);
+        if (typeof window.onCatalogMerchantChange === 'function') window.onCatalogMerchantChange();
+    }
     fetchCatalogAutocompleteCache();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
+    const nameEl = document.getElementById('catalogNameAr');
+    if (nameEl) nameEl.focus();
 };
 
 window.closeCatalogProductModal = () => {
@@ -2360,6 +2418,19 @@ window.submitCatalogProduct = async (event, options) => {
         const closeAfterSave = !!(options && options.closeAfterSave);
         const draft = await collectCatalogFormDraft();
         if (!draft) return;
+        /* Office roles bypass the offline draft queue entirely: translate,
+           upload any images, REST-create the document, then fold it into the
+           loaded caches + IndexedDB so it appears instantly (zero re-reads). */
+        if (window.isCatalogDirectCreateUser && window.isCatalogDirectCreateUser()) {
+            await syncOneCatalogDraft(draft, null, { direct: true });
+            window.showToast('تمت إضافة الصنف بنجاح');
+            if (closeAfterSave) {
+                window.closeCatalogProductModal();
+            } else {
+                clearCatalogProductFields(true);
+            }
+            return;
+        }
         const drafts = await readCatalogDrafts();
         drafts.push(draft);
         await writeCatalogDrafts(drafts);
@@ -2597,19 +2668,10 @@ const updateCatalogProductDirect = async () => {
                 productId: editing.id
             });
         })();
-        /* Update the rep list locally instead of re-reading the collection. */
-        if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
-        window._catalogMyProductsSignature = '';
-        if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
-        /* Audit edits live in the manager "all products" grid, which is a
-           different cache than the rep list patched above, so fold the change
-           into that cache and repaint too — still zero extra reads. */
-        if (window.isProductAuditUser()) {
-            const all = window.allCatalogProductsCache || [];
-            const auditIdx = all.findIndex((p) => p.id === editing.id);
-            if (auditIdx !== -1) { all[auditIdx] = { ...all[auditIdx], ...payload }; window.allCatalogProductsCache = all; }
-            if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
-        }
+        /* Zero-bleed instant reactivity (Task 2): fold the saved fields into
+           every ALREADY-loaded in-memory cache + IndexedDB and repaint only this
+           product's card in the DOM. No Firestore re-read is ever issued. */
+        if (window.catalogApplyProductUpdateLocally) window.catalogApplyProductUpdateLocally(editing.id, payload);
         window.showToast('تم حفظ تعديلات المنتج');
         window.closeCatalogProductModal();
     } catch (err) {
@@ -2649,6 +2711,8 @@ window.openCatalogProductEditor = (productId) => {
     if (merchantEl) merchantEl.value = product.merchantId || '';
     window.bindCatalogMerchantCombobox();
     window.setCatalogMerchantInputLabel();
+    /* Editing never changes a product's merchant: lock the picker to it. */
+    if (product.merchantId) window.lockCatalogMerchantTo(product.merchantId);
     window.bindCatalogNameAutocomplete();
     fetchCatalogAutocompleteCache();
     const nameEl = document.getElementById('catalogNameAr');
@@ -3034,18 +3098,28 @@ const renderCatalogAllProductCard = (p) => {
     const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
     const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
     const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#E57723]/15 text-[#E57723]';
+    /* Normalized haystack (Arabic-folded, spaces stripped) so the per-merchant
+       "deep search" can filter the rendered cards purely in the DOM (Task 3). */
+    const searchHay = catalogEscapeHtml(window.normalizeArabic([p.name_ar || '', p.name_en || '', p.sku || ''].join(' ')));
     const thumbHtml = catalogClickableThumbHtml(p, {
         imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100 transition-opacity duration-200 hover:opacity-75',
         boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer transition-opacity duration-200 hover:opacity-75'
     });
     /* Everybody who can edit the catalog (reps, the audit team, and the admin
-       account 8492) gets a single "تعديل" action here — and NEVER a delete
-       control. Deletion stays on the separate agent-request → Mahmoud-approval
-       workflow. */
+       account 8492) gets a "تعديل" action here. The hard-delete trash control is
+       shown ONLY to the catalog managers (admin / founder / product-audit) and
+       always demands an explicit confirmation (deleteCatalogProduct). Reps keep
+       their separate agent-request → Mahmoud-approval workflow untouched. */
     const catalogEdit = window.canEditCatalogProducts()
-        ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="w-full bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
+        ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="flex-1 bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
         : '';
-    return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
+    const catalogDelete = window.canManageCatalogProducts()
+        ? `<button type="button" onclick="deleteCatalogProduct('${pid}')" title="حذف الصنف نهائياً" aria-label="حذف الصنف نهائياً" class="shrink-0 bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-trash-can"></i></button>`
+        : '';
+    const catalogActions = (catalogEdit || catalogDelete)
+        ? `<div class="flex items-center gap-2">${catalogEdit}${catalogDelete}</div>`
+        : '';
+    return `<div class="catalog-product-card p-3 shadow-sm space-y-2" data-catalog-product-id="${pid}" data-catalog-product-search="${searchHay}">
         ${thumbHtml}
         <button type="button" onclick="openCatalogProductDetails('${pid}')" title="عرض التفاصيل الكاملة" class="block w-full text-right font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem] cursor-pointer transition-colors hover:text-[#E57723] hover:underline decoration-[#FFD700] underline-offset-2">${name}</button>
         <div class="flex flex-wrap gap-1.5">
@@ -3053,7 +3127,7 @@ const renderCatalogAllProductCard = (p) => {
             <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
             ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full truncate max-w-full">${repName}</span>` : ''}
         </div>
-        ${catalogEdit}
+        ${catalogActions}
     </div>`;
 };
 
@@ -3104,6 +3178,7 @@ window.openCatalogAllProductsMerchant = (encodedName, event) => {
 
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
     window._catalogMerchantRenderLimit = CATALOG_MERCHANT_GRID_PAGE;
+    window._catalogMerchantProductQuery = '';
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -3113,6 +3188,7 @@ window.backCatalogAllProductsMerchants = (event) => {
         event.stopPropagation();
     }
     window._catalogAllProductsSelectedMerchant = '';
+    window._catalogMerchantProductQuery = '';
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -3793,6 +3869,38 @@ window.clearCatalogGlobalSearch = () => {
     renderCatalogAllProductsList();
 };
 
+/* Per-merchant "deep search" (Task 3): filters the ALREADY-rendered product
+   cards of the opened merchant strictly in the DOM. It never re-queries
+   Firestore and never rebuilds the grid, so every keystroke is instant and
+   zero-bleed. The haystack is pre-normalized (Arabic-folded) on each card. */
+window.filterCatalogMerchantProductsDom = (query) => {
+    const q = window.normalizeArabic(String(query || ''));
+    window._catalogMerchantProductQuery = String(query || '');
+    const list = document.getElementById('catalogAllProductsList');
+    if (!list) return;
+    const cards = list.querySelectorAll('[data-catalog-product-search]');
+    let visible = 0;
+    cards.forEach((el) => {
+        const hay = el.getAttribute('data-catalog-product-search') || '';
+        const show = !q || hay.indexOf(q) !== -1;
+        el.style.display = show ? '' : 'none';
+        if (show) visible += 1;
+    });
+    let empty = document.getElementById('catalogMerchantProductNoResults');
+    if (!visible && cards.length) {
+        if (!empty) {
+            empty = document.createElement('div');
+            empty.id = 'catalogMerchantProductNoResults';
+            empty.className = 'col-span-full text-center py-8 text-slate-400 font-bold';
+            empty.innerHTML = '<i class="fa-solid fa-magnifying-glass text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مطابقة داخل هذا التاجر</div>';
+            list.appendChild(empty);
+        }
+        empty.style.display = '';
+    } else if (empty) {
+        empty.style.display = 'none';
+    }
+};
+
 const renderCatalogAllProductsListNow = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
@@ -3880,6 +3988,11 @@ const renderCatalogAllProductsListNow = () => {
     const selectedGroup = selected ? groups.find((g) => g.merchantName === selected) : null;
     if (selected && selectedGroup) {
         const counts = catalogProductStatusCounts(selectedGroup.products);
+        const merchantSearchVal = catalogEscapeHtml(String(window._catalogMerchantProductQuery || ''));
+        const contextMerchantId = catalogEscapeHtml(String(selectedGroup.merchantId || ''));
+        const addProductBtn = window.canManageCatalogProducts()
+            ? `<button type="button" onclick="openCatalogProductModal('${contextMerchantId}')" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
+            : '';
         if (toolbar) {
             toolbar.classList.remove('hidden');
             toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
@@ -3893,6 +4006,13 @@ const renderCatalogAllProductsListNow = () => {
                     <div class="font-black text-sm text-[#230535] truncate">${catalogEscapeHtml(selectedGroup.merchantName)}</div>
                     <div class="text-[10px] font-bold text-slate-500">${counts.total} منتجات — ${counts.approved} مكتمل — ${counts.pending} قيد المعالجة</div>
                 </div>
+                <div class="w-full flex flex-col sm:flex-row items-stretch gap-2 mt-1">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/50 text-xs pointer-events-none"></i>
+                        <input type="search" id="catalogMerchantProductSearch" value="${merchantSearchVal}" oninput="filterCatalogMerchantProductsDom(this.value)" placeholder="🔍 ابحث في منتجات هذا التاجر..." autocomplete="off" class="w-full bg-slate-50 border-2 border-[#230535]/15 rounded-2xl pr-10 pl-4 py-2.5 text-sm font-bold text-[#230535] placeholder:text-slate-400 outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10">
+                    </div>
+                    ${addProductBtn}
+                </div>
             </div>`;
         }
         list.className = 'catalog-card-grid catalog-product-grid';
@@ -3903,6 +4023,11 @@ const renderCatalogAllProductsListNow = () => {
             + (remainingProducts > 0
                 ? `<div class="col-span-full text-center py-4"><button type="button" onclick="showMoreCatalogMerchantProducts()" class="bg-[#230535] text-[#FFD700] px-5 py-3 rounded-xl text-xs font-black hover:opacity-90 transition inline-flex items-center gap-2"><i class="fa-solid fa-chevron-down"></i> عرض المزيد (${remainingProducts} متبقي)</button></div>`
                 : '');
+        /* Re-apply the active per-merchant filter after a fresh paint (e.g. after
+           "عرض المزيد" or an edit) so the visible cards stay consistent. */
+        if (String(window._catalogMerchantProductQuery || '').trim()) {
+            window.filterCatalogMerchantProductsDom(window._catalogMerchantProductQuery);
+        }
         return;
     }
     window._catalogAllProductsSelectedMerchant = '';
@@ -4289,7 +4414,7 @@ const catalogEnhanceTargetCount = (product) => {
     return rawCount > 0 ? rawCount : 1;
 };
 
-const syncOneCatalogDraft = async (draft, persistProgress) => {
+const syncOneCatalogDraft = async (draft, persistProgress, opts) => {
     const nameAr = String((draft && draft.name_ar) || '').trim();
     const descriptionAr = String((draft && draft.description_ar) || '').trim();
     /* Translate name + description concurrently (previously two serialized calls
@@ -4335,7 +4460,7 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
         status: 'pending',
         createdAt: new Date(),
         createdBy: draft.createdBy || ((window.currentUser && window.currentUser.name) || ''),
-        syncedFromDraft: true
+        syncedFromDraft: !(opts && opts.direct)
     };
     if (draft.product_type === 'variable' && Array.isArray(draft.variations)) {
         const variantPayload = [];
@@ -5382,12 +5507,14 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     const previous = String(select.value || '').trim();
     /* The export dropdown must never trigger the heavy done-set read on boot:
        fill it from whatever is already in memory. The server read is only
-       allowed through the explicit on-demand path (wired to the select's
-       focus), and even then it reuses the all-products cache first. */
+       allowed through the explicit on-demand path (wired to the picker's
+       focus), and it reuses the SAME unified all-products source the export
+       itself uses — so the delta detector and the exported slice can never
+       disagree about what a merchant "has". */
     let products = window.allCatalogProductsCache || [];
     if (!products.length && allowFetch) {
         try {
-            products = await fetchDoneCatalogProducts();
+            products = await fetchAllCatalogProductsForExport();
         } catch (err) {
             console.error('[catalog] merchant filter load failed:', err);
             products = [];
@@ -5402,13 +5529,38 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     }
     const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, 'ar'));
-    select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
-        const safe = catalogEscapeHtml(name);
-        return `<option value="${safe}">${safe}</option>`;
-    }).join('');
-    if (previous && names.indexOf(previous) !== -1) select.value = previous;
+    /* Publish the FULL de-duplicated list so the Export Studio searchable picker
+       can (re)build its options. Zero extra reads — pure memory. */
+    window._kanjoExportAllMerchantNames = names.slice();
+    /* Drive the shipped custom dropdown first; the datalist/select paths remain
+       defensive fallbacks for any stale markup. */
+    if (typeof window.kanjoRenderExportMerchantOptions === 'function') {
+        try { window.kanjoRenderExportMerchantOptions(''); } catch (_) { /* non-fatal */ }
+        if (typeof window.kanjoSyncExportMerchantLabel === 'function') {
+            try { window.kanjoSyncExportMerchantLabel(); } catch (_) { /* non-fatal */ }
+        }
+    }
+    const list = document.getElementById('kanjoExportMerchantList');
+    if (!list && select.tagName === 'SELECT') {
+        select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
+            const safe = catalogEscapeHtml(name);
+            return `<option value="${safe}">${safe}</option>`;
+        }).join('');
+    }
+    /* Keep the selection only while it is still a live merchant; otherwise clear
+       it so no stale name can drive a delta export. */
+    if (previous && names.indexOf(previous) === -1) select.value = '';
 };
-window.loadMerchantExportFilterFull = () => populateMerchantExportFilter(true);
+window.loadMerchantExportFilterFull = async () => {
+    await populateMerchantExportFilter(true);
+    /* Re-apply any text already typed in the picker after a repopulate. */
+    try {
+        if (typeof window.kanjoRenderExportMerchantOptions === 'function') {
+            const s = document.getElementById('kanjoExportMerchantSearch');
+            window.kanjoRenderExportMerchantOptions(s ? s.value : '');
+        }
+    } catch (_) { /* ignore */ }
+};
 
 /* ═══════════════════ Kanjo Excel bulk export engine ═══════════════════ */
 
@@ -9495,21 +9647,101 @@ window.closeKanjoVariantConflictModal = () => {
    epoch ms, or NaN when the value is unusable. */
 const catalogUpdatedAtMs = (v) => {
     if (v === null || v === undefined || v === '') return NaN;
-    if (typeof v === 'number') return v;
-    if (typeof v === 'object') {
-        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
-        if (v.seconds !== undefined) return Number(v.seconds) * 1000 + (Number(v.nanoseconds) || 0) / 1e6;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+    if (typeof v === 'string') {
+        const s = v.trim();
+        /* Numeric string (epoch ms) is resolved BEFORE Date.parse, which would
+           otherwise misread it as a year. */
+        if (/^\d{10,}$/.test(s)) return Number(s);
+        const t = Date.parse(s);
+        return Number.isFinite(t) ? t : NaN;
     }
-    const t = Date.parse(v);
-    return Number.isFinite(t) ? t : NaN;
+    if (typeof v === 'object') {
+        if (typeof v.toMillis === 'function') { try { return v.toMillis(); } catch (_) { /* fall through */ } }
+        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
+        /* Firestore SDK Timestamp (`{seconds,nanoseconds}`) AND the raw REST
+           JSON shape (`{_seconds,_nanoseconds}`, seen when a payload bypasses
+           the KanjoRestTimestamp wrapper) must both normalize to epoch ms. */
+        const secs = (v.seconds !== undefined) ? v.seconds : v._seconds;
+        if (secs !== undefined) {
+            const nanos = (v.nanoseconds !== undefined) ? v.nanoseconds : v._nanoseconds;
+            return Number(secs) * 1000 + (Number(nanos) || 0) / 1e6;
+        }
+        const epoch = new Date(v).getTime();
+        return Number.isFinite(epoch) ? epoch : NaN;
+    }
+    return NaN;
 };
 window.catalogUpdatedAtMs = catalogUpdatedAtMs;
 
-/* ── Smart delta export (updatedAt > publish time) ─────────────────────────
-   When the selected merchant was already marked `dashboardUploaded`, count its
-   products edited AFTER `dashboardSyncedAt` and surface a dedicated button that
-   exports ONLY those products. Pure in-memory (zero reads). */
-window.kanjoSyncDeltaExport = () => {
+/* Resolve the already-loaded merchant record for a selected export merchant.
+   Prefers the canonical id, then scans the directory by normalized base name so
+   a stale/renamed id can never hide the delta affordance. */
+const resolveExportMerchantRecord = (merchantName) => {
+    const name = String(merchantName || '').trim();
+    if (!name) return null;
+    const id = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(name)) || '';
+    if (id && window.merchantsById && typeof window.merchantsById.get === 'function') {
+        const rec = window.merchantsById.get(id);
+        if (rec) return rec;
+    }
+    const base = window.getBaseName ? window.getBaseName(name) : name;
+    if (window.merchantsById && typeof window.merchantsById.forEach === 'function') {
+        let fallback = null;
+        window.merchantsById.forEach((rec) => {
+            if (!rec || rec.archived === true || !rec.name) return;
+            const recBase = window.getBaseName ? window.getBaseName(rec.name) : rec.name;
+            if (recBase !== base) return;
+            if (rec.dashboardUploaded === true && !fallback) fallback = rec;
+            else if (!fallback) fallback = rec;
+        });
+        if (fallback) return fallback;
+    }
+    return null;
+};
+
+/* Epoch ms of when the merchant was published to the dashboard, tolerant of any
+   stored shape (ISO string, epoch, Firestore Timestamp). 0 when unknown. */
+const resolveDashboardPublishMs = (rec) => {
+    if (!rec) return 0;
+    const candidates = [rec.dashboardSyncedAt, rec.dashboardUploadedAt,
+        rec.dashboardPublishedAt, rec.dashboardSyncAt];
+    for (const c of candidates) {
+        const ms = catalogUpdatedAtMs(c);
+        if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+    return 0;
+};
+
+/* Earliest timestamp in the merchant's pending-change trail — the fallback
+   cutoff for legacy merchants that carry no explicit publish timestamp but
+   clearly have pending updates tracked. */
+const earliestPendingChangeMs = (rec) => {
+    const arr = rec && Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges : [];
+    let min = 0;
+    for (const e of arr) {
+        const ms = catalogUpdatedAtMs(e && e.at);
+        if (Number.isFinite(ms) && ms > 0 && (!min || ms < min)) min = ms;
+    }
+    return min;
+};
+
+/* ── Smart delta export (post-publish modifications) ─────────────────────────
+   A merchant that was already marked `dashboardUploaded` may then have had
+   products edited OR added by the desk. This detector surfaces a dedicated
+   button that exports ONLY that precise set — never the whole catalogue.
+
+   Two independent signals are unioned so the button can never silently
+   disappear for a genuinely-dirty merchant (the old bug):
+     1. Product timestamps: `updatedAt > publish` OR `createdAt > publish`
+        (brand-new rows carry only createdAt on create).
+     2. The merchant's own `pendingDashboardChanges` trail: every post-upload
+        edit/add records the exact `productId`; any such id still present in the
+        merchant's product set is included even when timestamps are missing.
+   The product pool is the SAME unified list `exportKanjoExcel` reads (cache
+   first; at most one REST read, and only after a merchant is selected). */
+let _kanjoDeltaBusy = false;
+window.kanjoSyncDeltaExport = async () => {
     const box = document.getElementById('kanjoDeltaExportBox');
     const summary = document.getElementById('kanjoDeltaExportSummary');
     const clear = () => {
@@ -9521,28 +9753,74 @@ window.kanjoSyncDeltaExport = () => {
     const select = document.getElementById('merchantExportFilter');
     const merchantName = String((select && select.value) || '').trim();
     if (!merchantName) return clear();
-    const mid = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(merchantName)) || '';
-    const rec = (mid && window.merchantsById && window.merchantsById.get(mid)) || null;
+    const rec = resolveExportMerchantRecord(merchantName);
     if (!rec || rec.dashboardUploaded !== true) return clear();
-    const sinceMs = catalogUpdatedAtMs(rec.dashboardSyncedAt)
-        || catalogUpdatedAtMs(rec.dashboardUploadedAt)
-        || 0;
-    if (!sinceMs) return clear();
-    const all = (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length)
-        ? window.allCatalogProductsCache
-        : [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
-    const updated = all.filter((p) => {
-        const isMerchant = mid
-            ? String(p.merchantId || '') === String(mid)
+    const mid = String(rec.id || (typeof window.findMerchantIdForBase === 'function'
+        && window.findMerchantIdForBase(merchantName)) || '');
+    /* Cache-first. When the Export Studio opened without the all-products grid,
+       the unified list is cold: load the SAME source the export itself reads so
+       detection and export can never disagree. One read at most, and only after
+       an explicit merchant selection. */
+    let all = Array.isArray(window.allCatalogProductsCache) ? window.allCatalogProductsCache : [];
+    if (!all.length && !_kanjoDeltaBusy && typeof fetchAllCatalogProductsForExport === 'function') {
+        _kanjoDeltaBusy = true;
+        try { all = await fetchAllCatalogProductsForExport(); } catch (_) { all = []; }
+        finally { _kanjoDeltaBusy = false; }
+    }
+    if (!all.length) {
+        all = [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
+    }
+    const merchantProducts = all.filter((p) => {
+        if (!p) return false;
+        return mid
+            ? String(p.merchantId || '') === mid
             : catalogProductMerchantName(p) === merchantName;
-        if (!isMerchant) return false;
-        const t = catalogUpdatedAtMs(p.updatedAt);
-        return Number.isFinite(t) && t > sinceMs;
     });
-    if (!updated.length) return clear();
-    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs, count: updated.length };
+    if (!merchantProducts.length) return clear();
+    const publishMs = resolveDashboardPublishMs(rec);
+    const pendingMs = earliestPendingChangeMs(rec);
+    let cutoff = 0;
+    if (publishMs > 0) cutoff = publishMs;
+    else if (pendingMs > 0) cutoff = pendingMs;
+    /* A product counts as modified when it was edited (updatedAt) OR created
+       (createdAt) after the publish cutoff. */
+    const afterCutoff = (p) => {
+        if (cutoff <= 0) return false;
+        const t = catalogUpdatedAtMs(p && (p.updatedAt || p.createdAt));
+        return Number.isFinite(t) && t > cutoff;
+    };
+    const idSet = new Set();
+    const presentIds = new Set();
+    for (const p of merchantProducts) {
+        const pid = String((p && p.id) || '');
+        if (!pid) continue;
+        presentIds.add(pid);
+        if (afterCutoff(p)) idSet.add(pid);
+    }
+    /* Union the merchant's own post-upload change trail (exact product ids),
+       restricted to products that still exist so deletions are never exported. */
+    const trail = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges : [];
+    trail.forEach((e) => {
+        const pid = String((e && e.productId) || '');
+        if (pid && presentIds.has(pid)) idSet.add(pid);
+    });
+    /* No cutoff AND no trail id → the delta is unknowable; stay hidden rather
+       than risk exporting everything. */
+    if (!idSet.size) return clear();
+    const ids = Array.from(idSet);
+    window._kanjoDeltaExport = {
+        merchantName,
+        merchantId: mid,
+        sinceMs: cutoff > 0 ? cutoff : 0,
+        count: ids.length,
+        ids
+    };
     box.classList.remove('hidden');
-    if (summary) summary.textContent = updated.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
+    const btn = document.getElementById('kanjoDeltaExportBtn');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-file-circle-plus"></i> تصدير التعديلات فقط (' + ids.length.toLocaleString('ar-EG') + ' منتج) 📥';
+    }
+    if (summary) summary.textContent = ids.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
 };
 window.loadDeltaExport = window.kanjoSyncDeltaExport;
 
@@ -9555,7 +9833,9 @@ window.kanjoExportMerchantDelta = async () => {
     return window.exportKanjoExcel({
         merchantName: state.merchantName,
         merchantId: state.merchantId || undefined,
-        onlyUpdatedSince: state.sinceMs
+        onlyUpdatedSince: state.sinceMs,
+        onlyIds: state.ids,
+        includePending: true
     });
 };
 
@@ -9590,9 +9870,15 @@ window.exportKanjoExcel = async (options) => {
         } else if (opts.merchantName) {
             filtered = source.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
         }
-        /* Delta export: keep only products edited AFTER the merchant was
-           published (`dashboardUploaded`), i.e. updatedAt > dashboardSyncedAt. */
-        if (opts.onlyUpdatedSince) {
+        /* Delta export: restrict to the EXACT product ids the delta button
+           counted (falling back to the updatedAt cutoff only when ids are
+           unavailable). This is intentionally NOT a truthiness check on the
+           cutoff: a resolved cutoff of 0 previously made the condition falsy and
+           silently exported the whole catalog. */
+        if (Array.isArray(opts.onlyIds) && opts.onlyIds.length) {
+            const idSet = new Set(opts.onlyIds.map((id) => String(id)));
+            filtered = filtered.filter((p) => idSet.has(String(p && p.id)));
+        } else if (Number(opts.onlyUpdatedSince) > 0) {
             filtered = filtered.filter((p) => {
                 const t = catalogUpdatedAtMs(p.updatedAt);
                 return Number.isFinite(t) && t > opts.onlyUpdatedSince;
@@ -9600,7 +9886,8 @@ window.exportKanjoExcel = async (options) => {
         }
         if (!filtered.length) {
             if (window.showToast) {
-                window.showToast(opts.onlyUpdatedSince
+                const isDelta = (Array.isArray(opts.onlyIds) && opts.onlyIds.length) || Number(opts.onlyUpdatedSince) > 0;
+                window.showToast(isDelta
                     ? 'لا توجد منتجات معدّلة بعد النشر لهذا التاجر'
                     : (includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير'), false);
             }
@@ -10023,6 +10310,13 @@ const catalogApplyCreatedProductLocally = (product) => {
         window._catalogAutocompleteCache = [];
     }
 
+    /* 6b) Persist the freshly created row to the shared delta-sync registry +
+       IndexedDB (`merchant_products`) so a reload paints it before the next
+       network reconciliation. Uses the existing sync API — additive only. */
+    if (window.kanjoSync && typeof window.kanjoSync.markWritten === 'function') {
+        try { window.kanjoSync.markWritten(CATALOG_COLLECTION, product); } catch (_) { /* ignore */ }
+    }
+
     /* 7) Repaint whatever is on screen; the export filter reads memory only. */
     if (typeof populateMerchantExportFilter === 'function') {
         try { populateMerchantExportFilter(); } catch (err) { /* non-fatal */ }
@@ -10030,6 +10324,141 @@ const catalogApplyCreatedProductLocally = (product) => {
     if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
 };
 window.catalogApplyCreatedProductLocally = catalogApplyCreatedProductLocally;
+
+/* Zero-bleed local update of a single merchant_products row (Task 2). Applies
+   the saved patch to every ALREADY-loaded in-memory cache, persists it to the
+   shared delta-sync registry + IndexedDB (via kanjoSync.markWritten), re-renders
+   only this product's card in the DOM, then repaints the active widgets — all
+   with ZERO Firestore reads. Unloaded caches are left untouched so the lazy-read
+   policy is preserved. */
+const catalogApplyProductUpdateLocally = (productId, patch) => {
+    const pid = String(productId || '');
+    if (!pid || !patch) return false;
+    const mergeInto = (cache) => {
+        if (!Array.isArray(cache)) return cache;
+        const idx = cache.findIndex((p) => p && p.id === pid);
+        if (idx === -1) return cache;
+        const next = cache.slice();
+        next[idx] = { ...next[idx], ...patch, id: pid };
+        return next;
+    };
+    window.allCatalogProductsCache = mergeInto(window.allCatalogProductsCache);
+    window.repCatalogProductsCache = mergeInto(window.repCatalogProductsCache);
+    window.merchantProductsCache = mergeInto(window.merchantProductsCache);
+    window.doneCatalogProductsCache = mergeInto(window.doneCatalogProductsCache);
+    window.catalogDeleteRequestsCache = mergeInto(window.catalogDeleteRequestsCache);
+    const merged = (window.allCatalogProductsCache || []).find((p) => p && p.id === pid)
+        || (window.repCatalogProductsCache || []).find((p) => p && p.id === pid)
+        || (window.merchantProductsCache || []).find((p) => p && p.id === pid)
+        || { ...patch, id: pid };
+    /* Persist to the shared sync registry + IndexedDB so a reload paints the new
+       values before any network reconciliation. */
+    if (window.kanjoSync && typeof window.kanjoSync.markWritten === 'function') {
+        try { window.kanjoSync.markWritten(CATALOG_COLLECTION, merged); } catch (_) { /* ignore */ }
+    }
+    /* Repaint ONLY the affected card in the merchant grid (if it is mounted). */
+    try {
+        const sel = '[data-catalog-product-id="' + ((window.CSS && window.CSS.escape) ? window.CSS.escape(pid) : pid) + '"]';
+        const card = document.querySelector(sel);
+        if (card && typeof renderCatalogAllProductCard === 'function') card.outerHTML = renderCatalogAllProductCard(merged);
+    } catch (_) { /* ignore */ }
+    window._catalogMyProductsSignature = '';
+    window._catalogAllProductsCount = (window.allCatalogProductsCache || []).length;
+    if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    if (typeof populateMerchantExportFilter === 'function') { try { populateMerchantExportFilter(); } catch (_) { /* non-fatal */ } }
+    return true;
+};
+window.catalogApplyProductUpdateLocally = catalogApplyProductUpdateLocally;
+
+/* Zero-bleed local hard-delete of a single merchant_products row (Task 1).
+   Drops the row from every loaded in-memory cache, removes it from the sync
+   registry + IndexedDB, and repaints — without re-reading the collection. */
+const catalogApplyProductDeleteLocally = (productId) => {
+    const pid = String(productId || '');
+    if (!pid) return false;
+    const drop = (cache) => Array.isArray(cache) ? cache.filter((p) => !(p && p.id === pid)) : cache;
+    window.allCatalogProductsCache = drop(window.allCatalogProductsCache);
+    window.repCatalogProductsCache = drop(window.repCatalogProductsCache);
+    window.merchantProductsCache = drop(window.merchantProductsCache);
+    window.doneCatalogProductsCache = drop(window.doneCatalogProductsCache);
+    window.catalogDeleteRequestsCache = drop(window.catalogDeleteRequestsCache);
+    /* Drop it from the delta-sync registry so a background repaint cannot
+       resurrect the row before the next reconciliation. */
+    try {
+        const e = window.kanjoSync && window.kanjoSync._registry && window.kanjoSync._registry.get(CATALOG_COLLECTION);
+        if (e && e.rows) e.rows.delete(pid);
+    } catch (_) { /* ignore */ }
+    /* Persist the deletion to IndexedDB (additive helper on the storage layer). */
+    if (window.kanjoIdb && typeof window.kanjoIdb.remove === 'function') {
+        try { Promise.resolve(window.kanjoIdb.remove(CATALOG_COLLECTION, pid)).catch(() => {}); } catch (_) { /* ignore */ }
+    }
+    window._catalogMyProductsSignature = '';
+    window._catalogAllProductsCount = (window.allCatalogProductsCache || []).length;
+    if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    try { if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget(); } catch (_) { /* ignore */ }
+    if (typeof populateMerchantExportFilter === 'function') { try { populateMerchantExportFilter(); } catch (_) { /* non-fatal */ } }
+    return true;
+};
+window.catalogApplyProductDeleteLocally = catalogApplyProductDeleteLocally;
+
+/* Strict, unmissable hard-delete entry point for the catalog managers
+   (admin / founder / product-audit). Requires an explicit confirmation before
+   any write, then performs a REST-first delete with an SDK fallback and folds
+   the removal into the local caches (zero re-reads). */
+window.deleteCatalogProduct = async (productId) => {
+    if (!window.canManageCatalogProducts()) {
+        if (window.showToast) window.showToast('حذف المنتجات متاح للإدارة والمؤسس وفريق التدقيق فقط', false);
+        return;
+    }
+    const pid = String(productId || '');
+    if (!pid) return;
+    const ctx = catalogProductMerchantContext(pid) || {};
+    const productName = ctx.name_ar || ctx.name_en || 'هذا الصنف';
+    const warning = '⚠️ تحذير: هل أنت متأكد من حذف هذا الصنف نهائياً؟ هذا الإجراء لا يمكن التراجع عنه!';
+    let confirmed = false;
+    if (window.Swal && typeof window.Swal.fire === 'function') {
+        try {
+            const res = await window.Swal.fire({
+                icon: 'warning',
+                title: 'تأكيد الحذف النهائي',
+                text: warning,
+                html: `<div style="font-weight:800;line-height:1.9"><div style="margin-bottom:6px">${catalogEscapeHtml(productName)}</div><div style="color:#dc2626">${catalogEscapeHtml(warning)}</div></div>`,
+                showCancelButton: true,
+                confirmButtonText: 'نعم، احذف نهائياً',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+                focusCancel: true
+            });
+            confirmed = !!(res && res.isConfirmed);
+        } catch (_) { confirmed = false; }
+    } else {
+        confirmed = window.confirm(warning);
+    }
+    if (!confirmed) return;
+    try {
+        if (!(await catalogRestDelete([CATALOG_COLLECTION, pid]))) {
+            await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, pid));
+        }
+        if (window.catalogApplyProductDeleteLocally) window.catalogApplyProductDeleteLocally(pid);
+        if (ctx.merchantId || ctx.merchantName) {
+            window.recordMerchantDashboardChange(ctx.merchantId, {
+                merchantName: ctx.merchantName,
+                type: 'product_delete',
+                item: ctx.name_ar || ctx.name_en || '',
+                summary: 'حذف منتج: ' + (ctx.name_ar || ctx.name_en || ''),
+                productId: pid
+            });
+        }
+        if (window.showToast) window.showToast('تم حذف الصنف نهائياً');
+    } catch (err) {
+        console.error('[catalog] delete failed:', err);
+        if (window.showToast) window.showToast('فشل حذف الصنف، حاول مرة أخرى', false);
+    }
+};
 
 /* Cheap "did this query change?" probe: an aggregation count costs ~1 read per
    1,000 matching documents (minimum 1) instead of one read per document.

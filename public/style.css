@@ -3519,3 +3519,36 @@ body.kws-view-catalog #merchantDocsAuditBanner { display: none !important; }
     box-shadow: 0 0 14px rgba(255, 215, 0, 0.7);
     animation: progressFill 0.9s linear forwards, kanjoBarShimmer 1.6s linear infinite;
 }
+
+/* ── Export Studio: premium searchable merchant dropdown (Select2-style) ── */
+.kanjo-select2 .export-merchant-opt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 0.75rem;
+    font-weight: 800;
+    font-size: 0.8125rem;
+    color: #230535;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+.kanjo-select2 .export-merchant-opt + .export-merchant-opt { margin-top: 0.125rem; }
+.kanjo-select2 .export-merchant-opt:hover,
+.kanjo-select2 .export-merchant-opt.is-active { background: rgba(35, 5, 53, 0.06); }
+.kanjo-select2 .export-merchant-opt.is-selected {
+    background: rgba(229, 119, 35, 0.12);
+    color: #b45309;
+}
+.kanjo-select2 .export-merchant-opt mark {
+    background: rgba(255, 215, 0, 0.55);
+    color: inherit;
+    border-radius: 0.25rem;
+    padding: 0 0.1rem;
+}
+.kanjo-select2 #kanjoExportMerchantMenu { animation: kanjoSelect2In 0.12s ease-out; }
+@keyframes kanjoSelect2In {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}

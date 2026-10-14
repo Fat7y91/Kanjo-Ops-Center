@@ -18,7 +18,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
 import './services/firestore.js';
-import './services/catalog.js?v=20261013b';
+import './services/catalog.js?v=20261014b';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -32,7 +32,7 @@ import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
 import './services/marketing.js';
-import './services/workspace.js?v=20261013b';
+import './services/workspace.js?v=20261014b';
 
 /* Start the IndexedDB delta-sync triggers (focus / visibilitychange + a 45s
    visible-tab heartbeat). The engine is inert until a collection registers a
@@ -108,31 +108,44 @@ authReadyWithTimeout.then(() => {
 /* ─── Stale-tab notice ───────────────────────────────────────────────────────
    A long-lived tab keeps the JS it loaded in memory, so a tab opened before a
    deploy can keep running outdated (and previously leak-prone) code even after
-   the fix is live. Compare this page's build id against the freshly-served
-   `version.json` (served no-store) and, when they differ, offer a NON-intrusive,
-   user-initiated refresh instead of force-reloading (an automatic reload could
-   interrupt data entry and, on a load-balanced deploy, re-boot in a loop).
-   JS is served `Cache-Control: no-cache`, so a manual reload lands on the new
-   build. Disabled for the local/emulator build ('dev'). */
+   the fix is live. We detect a newer deploy two ways and then offer a
+   NON-intrusive, user-initiated refresh (an automatic reload could interrupt
+   data entry and, on a load-balanced deploy, re-boot in a loop):
+     1. the freshly-served `version.json` (no-store) build id, and
+     2. the cache-buster token on the loaded `js/main.js` asset (changes on every
+        release, so it works even for the local 'dev' build whose version.json
+        does not change).
+   Runs in EVERY environment; the banner is injected into <body> with a very
+   high z-index and survives the app's own overlays. */
 (function kanjoStaleTabGuard() {
-    const build = (window.KANJO_BUILD && window.KANJO_BUILD.build) || '';
-    if (!build || build === 'dev') return;
-    const NOTified_AT_KEY = 'kanjo_stale_notified_at';
+    const build = (window.KANJO_BUILD && window.KANJO_BUILD.build) || 'dev';
+    /* The version token baked into the <script src="js/main.js?v=..."> this tab
+       loaded. A different token on disk means a newer bundle is available. */
+    const bootScript = document.querySelector('script[type="module"][src*="main.js"]');
+    const bootToken = (() => {
+        const src = (bootScript && bootScript.getAttribute('src')) || '';
+        const m = src.match(/main\.js\?v=([^&"'\s>]+)/);
+        return m ? m[1] : '';
+    })();
+    const NOTIFIED_AT_KEY = 'kanjo_stale_notified_at';
+    const HTML_CHECK_EVERY_MS = 5 * 60 * 1000;
     let checking = false;
+    let lastHtmlCheck = 0;
     const offerReload = () => {
         if (document.getElementById('kanjoUpdateBanner')) return;
+        if (!document.body) { setTimeout(offerReload, 500); return; }
         const bar = document.createElement('div');
         bar.id = 'kanjoUpdateBanner';
         bar.setAttribute('role', 'status');
         bar.style.cssText = 'position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));'
-            + 'transform:translateX(-50%);z-index:120;background:#230535;color:#fff;'
+            + 'transform:translateX(-50%);z-index:2147483000;background:#230535;color:#fff;'
             + 'border:1px solid #facc15;border-radius:9999px;box-shadow:0 8px 24px rgba(0,0,0,.35);'
             + 'padding:10px 12px 10px 18px;display:flex;align-items:center;gap:12px;'
-            + 'font-weight:800;font-size:13px;max-width:92vw';
-        bar.innerHTML = '<span>تحديث جديد متاح</span>'
+            + 'font-weight:800;font-size:13px;max-width:92vw;flex-wrap:wrap;justify-content:center';
+        bar.innerHTML = '<span>⚠️ هناك تحديث جديد للنظام! يرجى حفظ عملك الحالي، ثم</span>'
             + '<button type="button" id="kanjoUpdateBtn" style="background:#facc15;color:#230535;'
             + 'border:0;border-radius:9999px;padding:8px 16px;font-weight:900;cursor:pointer">'
-            + 'اضغط للتحديث</button>';
+            + 'اضغط هنا لتحديث الصفحة</button>';
         const dismiss = document.createElement('button');
         dismiss.type = 'button';
         dismiss.setAttribute('aria-label', 'إغلاق');
@@ -144,26 +157,50 @@ authReadyWithTimeout.then(() => {
         if (btn) btn.addEventListener('click', () => window.location.reload());
         document.body.appendChild(bar);
     };
+    const liveMainTokenFromHtml = async () => {
+        try {
+            const res = await fetch('/dashboard.html?_=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) return '';
+            const html = await res.text();
+            const m = html.match(/js\/main\.js\?v=([^"'\s>]+)/);
+            return m ? m[1] : '';
+        } catch (_) {
+            return '';
+        }
+    };
     const checkForUpdate = async () => {
         if (checking || document.hidden) return;
         checking = true;
         try {
-            const res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store' });
-            if (!res.ok) return;
-            const data = await res.json().catch(() => null);
-            const live = data && data.build ? String(data.build) : '';
-            if (!live || live === build) return;
-            const last = Number((window.sessionStorage && sessionStorage.getItem(NOTified_AT_KEY)) || 0);
+            let liveBuild = '';
+            try {
+                const res = await fetch('/version.json?_=' + Date.now(), { cache: 'no-store' });
+                if (res.ok) {
+                    const data = await res.json().catch(() => null);
+                    liveBuild = data && data.build ? String(data.build) : '';
+                }
+            } catch (_) { /* offline: retry next tick */ }
+            let liveToken = '';
+            if (Date.now() - lastHtmlCheck >= HTML_CHECK_EVERY_MS) {
+                lastHtmlCheck = Date.now();
+                liveToken = await liveMainTokenFromHtml();
+            }
+            const buildChanged = !!liveBuild && liveBuild !== build;
+            const tokenChanged = !!bootToken && !!liveToken && liveToken !== bootToken;
+            if (!buildChanged && !tokenChanged) return;
+            const last = Number((window.sessionStorage && sessionStorage.getItem(NOTIFIED_AT_KEY)) || 0);
             if (Date.now() - last < 60000) return;
-            try { sessionStorage.setItem(NOTified_AT_KEY, String(Date.now())); } catch (_) {}
+            try { sessionStorage.setItem(NOTIFIED_AT_KEY, String(Date.now())); } catch (_) {}
             offerReload();
-        } catch (_) {
-            /* Offline / transient failure: retry on the next tick. */
         } finally {
             checking = false;
         }
     };
+    /* Expose manual hooks so the banner can be verified and re-checked on demand. */
+    window.kanjoCheckForUpdate = checkForUpdate;
+    window.kanjoShowUpdateBanner = offerReload;
     setTimeout(checkForUpdate, 5000);
-    setInterval(checkForUpdate, 10 * 60 * 1000);
+    setInterval(checkForUpdate, 60 * 1000);
+    window.addEventListener('focus', () => checkForUpdate());
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 })();

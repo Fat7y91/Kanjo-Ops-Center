@@ -290,10 +290,11 @@ service cloud.firestore {
     // the catalog reference pickers keep working.
     // PEER REVIEW (2026): any signed-in session may UPDATE any product so reps can
     // fix typos/categories on colleagues' items. Creating is limited to the
-    // catalog roles plus the product-audit team, and DELETION is deliberately
-    // unchanged (privileged / Ops Manager / data-entry only) so the
-    // agent-request → Mahmoud-approval delete workflow keeps working exactly as
-    // before.
+    // catalog roles plus the product-audit team. DELETION keeps the
+    // agent-request → Mahmoud-approval workflow for reps, but the catalog-tools
+    // release (feat/catalog-tools-and-ux) additionally grants the product-audit
+    // "auditor" role a DIRECT hard-delete so the in-merchant trash control works;
+    // every such delete is still gated client-side by an explicit confirmation.
     match /merchant_products/{docId} {
       function canWriteCatalog() {
         return isPrivileged() || isOpsManager() || isDataEntry() || isRep();
@@ -301,7 +302,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if !isMarketingAgency() && (legacy() || canWriteCatalog() || isProductAudit());
       allow update: if !isMarketingAgency() && isSignedIn();
-      allow delete: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager() || isDataEntry());
+      allow delete: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager() || isDataEntry() || isProductAudit());
     }
 
     // Learned product→category taxonomy from the interactive pre-export audit.
