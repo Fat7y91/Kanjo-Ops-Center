@@ -556,48 +556,144 @@
         }
     }
 
-    /* ── Export Studio helpers (searchable merchant picker + card) ─────────── */
+    /* ── Export Studio helpers (premium searchable merchant dropdown) ────────
+       A self-contained Select2-style control: the closed trigger shows the
+       chosen merchant; clicking it opens an in-panel search box + a scrollable
+       option list; typing filters live; clicking (or Enter) selects — all one
+       fluid interaction, never the native datalist's "close on focus" dance.
+       The hidden #merchantExportFilter input stays the single source of truth
+       every other module reads (delta export, card button, Excel export). */
     function exportMerchantEsc(v) {
         return String(v == null ? '' : v)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    /* Single searchable control (Bug 3): the merchant picker is ONE text input
-       bound to a <datalist>. Typing filters the suggestion list live and the
-       value the rest of the app reads lives on the same element (#merchantExportFilter),
-       so no separate select + input dance (which closed the dropdown on focus). */
-    function filterExportMerchants(q) {
-        const input = document.getElementById('merchantExportFilter');
-        if (!input) return;
-        const all = Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
-        const normalize = (v) => (typeof window.normalizeArabic === 'function'
-            ? window.normalizeArabic(String(v || ''))
-            : String(v || '').trim().toLowerCase());
-        const term = normalize(q);
-        const list = document.getElementById('kanjoExportMerchantList');
-        if (list) {
-            const matches = all.filter((name) => !term || normalize(name).indexOf(term) !== -1);
-            list.innerHTML = matches.map((name) => `<option value="${exportMerchantEsc(name)}"></option>`).join('');
-        }
+    const exportMerchantInput = () => document.getElementById('merchantExportFilter');
+    const exportMerchantMenu = () => document.getElementById('kanjoExportMerchantMenu');
+    const exportMerchantOptions = () => document.getElementById('kanjoExportMerchantOptions');
+    const exportMerchantSearch = () => document.getElementById('kanjoExportMerchantSearch');
+
+    function exportMerchantAll() {
+        return Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
+    }
+    const exportMerchantNormalize = (v) => (typeof window.normalizeArabic === 'function'
+        ? window.normalizeArabic(String(v || ''))
+        : String(v || '').trim().toLowerCase());
+
+    /* Safe substring highlight: only when the raw (case-insensitive) term is an
+       exact substring of the label, so we never mis-map the Arabic-folded
+       normalized indices. Falls back to the plain escaped label otherwise. */
+    function exportMerchantHighlight(label, term) {
+        const raw = String(label == null ? '' : label);
+        const t = String(term || '').trim().toLowerCase();
+        if (!t) return exportMerchantEsc(raw);
+        const idx = raw.toLowerCase().indexOf(t);
+        if (idx === -1) return exportMerchantEsc(raw);
+        return exportMerchantEsc(raw.slice(0, idx))
+            + '<mark>' + exportMerchantEsc(raw.slice(idx, idx + t.length)) + '</mark>'
+            + exportMerchantEsc(raw.slice(idx + t.length));
+    }
+
+    let _exportMerchantActiveIdx = -1;
+
+    /* (Re)build the option list. `term` is the raw search-box value. Returns the
+       visible match array so callers can wire keyboard state. */
+    function renderExportMerchantOptions(term) {
+        const ul = exportMerchantOptions();
+        if (!ul) return [];
+        const all = exportMerchantAll();
+        const q = exportMerchantNormalize(term);
+        const matches = q ? all.filter((n) => exportMerchantNormalize(n).indexOf(q) !== -1) : all.slice();
+        const current = String((exportMerchantInput() || {}).value || '');
+        _exportMerchantActiveIdx = -1;
+        ul.innerHTML = matches.map((name) => {
+            const selected = name === current;
+            return '<li role="option" aria-selected="' + (selected ? 'true' : 'false') + '"'
+                + ' data-name="' + exportMerchantEsc(name) + '"'
+                + ' onclick="window.kanjoSelectExportMerchant && window.kanjoSelectExportMerchant(this.getAttribute(\'data-name\'))"'
+                + ' class="export-merchant-opt' + (selected ? ' is-selected' : '') + '">'
+                + '<span class="truncate">' + exportMerchantHighlight(name, term) + '</span>'
+                + (selected ? '<i class="fa-solid fa-check text-xs shrink-0"></i>' : '')
+                + '</li>';
+        }).join('');
+        const empty = document.getElementById('kanjoExportMerchantEmpty');
+        if (empty) empty.classList.toggle('hidden', matches.length > 0);
+        return matches;
+    }
+
+    function syncExportMerchantLabel() {
+        const val = String((exportMerchantInput() || {}).value || '').trim();
+        const label = document.getElementById('kanjoExportMerchantLabel');
         const clearBtn = document.getElementById('kanjoExportMerchantClear');
-        if (clearBtn) clearBtn.classList.toggle('hidden', !String(input.value || '').trim());
+        const chevron = document.getElementById('kanjoExportMerchantChevron');
+        if (label) {
+            label.textContent = val || 'اكتب أو اختر اسم التاجر...';
+            label.classList.toggle('text-[#230535]/45', !val);
+            label.classList.toggle('text-[#230535]', !!val);
+        }
+        if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+        if (chevron) chevron.classList.toggle('hidden', !!val);
+    }
+
+    function filterExportMerchants(q) {
+        renderExportMerchantOptions(q);
+        syncExportMerchantLabel();
+        syncExportCardBtn();
+    }
+
+    function openExportMerchantMenu() {
+        const menu = exportMerchantMenu();
+        const trigger = document.getElementById('kanjoExportMerchantTrigger');
+        if (menu) menu.classList.remove('hidden');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        const chevron = document.getElementById('kanjoExportMerchantChevron');
+        if (chevron) chevron.classList.add('rotate-180');
+        renderExportMerchantOptions('');
+        const search = exportMerchantSearch();
+        if (search) { search.value = ''; try { search.focus(); } catch (_) { /* ignore */ } }
+    }
+
+    function closeExportMerchantMenu() {
+        const menu = exportMerchantMenu();
+        const trigger = document.getElementById('kanjoExportMerchantTrigger');
+        if (menu) menu.classList.add('hidden');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        const chevron = document.getElementById('kanjoExportMerchantChevron');
+        if (chevron) chevron.classList.remove('rotate-180');
+        const search = exportMerchantSearch();
+        if (search) search.value = '';
+    }
+
+    function toggleExportMerchantMenu() {
+        const menu = exportMerchantMenu();
+        if (menu && menu.classList.contains('hidden')) openExportMerchantMenu();
+        else closeExportMerchantMenu();
+    }
+
+    function selectExportMerchant(name) {
+        const input = exportMerchantInput();
+        if (input) input.value = String(name || '');
+        closeExportMerchantMenu();
+        renderExportMerchantOptions('');
+        syncExportMerchantLabel();
         syncExportCardBtn();
     }
 
     function clearExportMerchant() {
-        const input = document.getElementById('merchantExportFilter');
+        const input = exportMerchantInput();
         if (input) input.value = '';
-        filterExportMerchants('');
+        const search = exportMerchantSearch();
+        if (search) search.value = '';
+        renderExportMerchantOptions('');
+        syncExportMerchantLabel();
         syncExportCardBtn();
-        if (input) input.focus();
     }
 
     function syncExportCardBtn() {
-        const input = document.getElementById('merchantExportFilter');
+        const val = String((exportMerchantInput() || {}).value || '').trim();
         const btn = document.getElementById('kanjoExportMerchantCardBtn');
-        const val = String((input && input.value) || '').trim();
-        const known = Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
+        const known = exportMerchantAll();
         /* Only an EXACT merchant name activates the card + delta actions, so a
            half-typed value can never export the wrong (or an empty) slice. */
         const isExact = !!val && known.indexOf(val) !== -1;
@@ -606,12 +702,55 @@
     }
 
     function openSelectedMerchantCard() {
-        const select = document.getElementById('merchantExportFilter');
-        const name = select ? String(select.value || '') : '';
+        const name = String((exportMerchantInput() || {}).value || '');
         if (!name) return;
         if (typeof window.openMerchantProfile === 'function') window.openMerchantProfile(name);
     }
 
+    /* One-time wiring: live search, keyboard navigation, outside-click close.
+       The mobile/desktop markup is static, so the nodes exist when this module
+       evaluates at the end of <body>. */
+    (function wireExportMerchantDropdown() {
+        const search = exportMerchantSearch();
+        if (search && !search._kwsWired) {
+            search._kwsWired = true;
+            search.addEventListener('input', () => renderExportMerchantOptions(search.value));
+            search.addEventListener('keydown', (e) => {
+                const ul = exportMerchantOptions();
+                const opts = ul ? Array.prototype.slice.call(ul.querySelectorAll('.export-merchant-opt')) : [];
+                if (e.key === 'Escape') { e.preventDefault(); closeExportMerchantMenu(); return; }
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    if (!opts.length) return;
+                    e.preventDefault();
+                    if (_exportMerchantActiveIdx === -1) _exportMerchantActiveIdx = (e.key === 'ArrowDown') ? 0 : opts.length - 1;
+                    else _exportMerchantActiveIdx = (_exportMerchantActiveIdx + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+                    opts.forEach((o, i) => o.classList.toggle('is-active', i === _exportMerchantActiveIdx));
+                    const act = opts[_exportMerchantActiveIdx];
+                    if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+                    return;
+                }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const act = (_exportMerchantActiveIdx >= 0) ? opts[_exportMerchantActiveIdx] : opts[0];
+                    if (act) selectExportMerchant(act.getAttribute('data-name'));
+                }
+            });
+        }
+        const trigger = document.getElementById('kanjoExportMerchantTrigger');
+        if (trigger && !trigger._kwsWired) {
+            trigger._kwsWired = true;
+            trigger.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); openExportMerchantMenu(); }
+            });
+        }
+        if (!window._kanjoExportMerchantOutsideWired) {
+            window._kanjoExportMerchantOutsideWired = true;
+            document.addEventListener('click', (e) => {
+                const combo = document.getElementById('kanjoExportMerchantCombo');
+                if (!combo || !combo.contains(e.target)) closeExportMerchantMenu();
+            });
+        }
+    })();
 
     /* ── Catalog executive sub-tabs (browse | export) ──────────────────────── */
     function wireCatalogTabs() {
@@ -847,6 +986,12 @@
     window.kanjoClearExportMerchant = clearExportMerchant;
     window.kanjoSyncExportCardBtn = syncExportCardBtn;
     window.kanjoOpenSelectedMerchantCard = openSelectedMerchantCard;
+    window.kanjoToggleExportMerchantMenu = toggleExportMerchantMenu;
+    window.kanjoOpenExportMerchantMenu = openExportMerchantMenu;
+    window.kanjoCloseExportMerchantMenu = closeExportMerchantMenu;
+    window.kanjoSelectExportMerchant = selectExportMerchant;
+    window.kanjoRenderExportMerchantOptions = renderExportMerchantOptions;
+    window.kanjoSyncExportMerchantLabel = syncExportMerchantLabel;
     window.kanjoOpenMarketingPane = openMarketingPane;
     window.kanjoOpenBlackBoxPane = openBlackBoxPane;
     window.kanjoCloseWorkspaceOverlays = hideWorkspaceOverlays;
@@ -904,8 +1049,8 @@
         window.openExportProductsModal = function () {
             const input = document.getElementById('merchantExportFilter');
             if (input) input.value = '';
-            filterExportMerchants('');
-            syncExportCardBtn();
+            closeExportMerchantMenu();
+            clearExportMerchant();
             return origOpenExport.apply(this, arguments);
         };
     }

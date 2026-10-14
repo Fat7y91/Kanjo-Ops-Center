@@ -5507,12 +5507,14 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     const previous = String(select.value || '').trim();
     /* The export dropdown must never trigger the heavy done-set read on boot:
        fill it from whatever is already in memory. The server read is only
-       allowed through the explicit on-demand path (wired to the select's
-       focus), and even then it reuses the all-products cache first. */
+       allowed through the explicit on-demand path (wired to the picker's
+       focus), and it reuses the SAME unified all-products source the export
+       itself uses — so the delta detector and the exported slice can never
+       disagree about what a merchant "has". */
     let products = window.allCatalogProductsCache || [];
     if (!products.length && allowFetch) {
         try {
-            products = await fetchDoneCatalogProducts();
+            products = await fetchAllCatalogProductsForExport();
         } catch (err) {
             console.error('[catalog] merchant filter load failed:', err);
             products = [];
@@ -5528,28 +5530,35 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, 'ar'));
     /* Publish the FULL de-duplicated list so the Export Studio searchable picker
-       can (re)build its <datalist> suggestions. Zero reads — pure memory. */
+       can (re)build its options. Zero extra reads — pure memory. */
     window._kanjoExportAllMerchantNames = names.slice();
+    /* Drive the shipped custom dropdown first; the datalist/select paths remain
+       defensive fallbacks for any stale markup. */
+    if (typeof window.kanjoRenderExportMerchantOptions === 'function') {
+        try { window.kanjoRenderExportMerchantOptions(''); } catch (_) { /* non-fatal */ }
+        if (typeof window.kanjoSyncExportMerchantLabel === 'function') {
+            try { window.kanjoSyncExportMerchantLabel(); } catch (_) { /* non-fatal */ }
+        }
+    }
     const list = document.getElementById('kanjoExportMerchantList');
-    if (list) {
-        /* Searchable <datalist> path (the shipped markup). The visible input
-           (#merchantExportFilter) is the single source of truth. */
-        list.innerHTML = names.map((name) => `<option value="${catalogEscapeHtml(name)}"></option>`).join('');
-    } else if (select.tagName === 'SELECT') {
-        /* Legacy <select> fallback, kept defensively. */
+    if (!list && select.tagName === 'SELECT') {
         select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
             const safe = catalogEscapeHtml(name);
             return `<option value="${safe}">${safe}</option>`;
         }).join('');
     }
-    if (previous && names.indexOf(previous) !== -1) select.value = previous;
+    /* Keep the selection only while it is still a live merchant; otherwise clear
+       it so no stale name can drive a delta export. */
+    if (previous && names.indexOf(previous) === -1) select.value = '';
 };
 window.loadMerchantExportFilterFull = async () => {
     await populateMerchantExportFilter(true);
     /* Re-apply any text already typed in the picker after a repopulate. */
     try {
-        const s = document.getElementById('merchantExportFilter');
-        if (typeof window.kanjoFilterExportMerchants === 'function') window.kanjoFilterExportMerchants(s ? s.value : '');
+        if (typeof window.kanjoRenderExportMerchantOptions === 'function') {
+            const s = document.getElementById('kanjoExportMerchantSearch');
+            window.kanjoRenderExportMerchantOptions(s ? s.value : '');
+        }
     } catch (_) { /* ignore */ }
 };
 
@@ -9717,14 +9726,22 @@ const earliestPendingChangeMs = (rec) => {
     return min;
 };
 
-/* ── Smart delta export (updatedAt > publish time) ─────────────────────────
-   When the selected merchant was already marked `dashboardUploaded`, count its
-   products edited AFTER it was published and surface a dedicated button that
-   exports ONLY those products. Pure in-memory (zero reads). Both sides of the
-   comparison are normalized to Unix epoch ms first. When NO publish/pending
-   timestamp can be resolved the delta is unknowable, so the button is hidden —
-   it must never fall back to "everything" (that exported the whole catalog). */
-window.kanjoSyncDeltaExport = () => {
+/* ── Smart delta export (post-publish modifications) ─────────────────────────
+   A merchant that was already marked `dashboardUploaded` may then have had
+   products edited OR added by the desk. This detector surfaces a dedicated
+   button that exports ONLY that precise set — never the whole catalogue.
+
+   Two independent signals are unioned so the button can never silently
+   disappear for a genuinely-dirty merchant (the old bug):
+     1. Product timestamps: `updatedAt > publish` OR `createdAt > publish`
+        (brand-new rows carry only createdAt on create).
+     2. The merchant's own `pendingDashboardChanges` trail: every post-upload
+        edit/add records the exact `productId`; any such id still present in the
+        merchant's product set is included even when timestamps are missing.
+   The product pool is the SAME unified list `exportKanjoExcel` reads (cache
+   first; at most one REST read, and only after a merchant is selected). */
+let _kanjoDeltaBusy = false;
+window.kanjoSyncDeltaExport = async () => {
     const box = document.getElementById('kanjoDeltaExportBox');
     const summary = document.getElementById('kanjoDeltaExportSummary');
     const clear = () => {
@@ -9740,9 +9757,19 @@ window.kanjoSyncDeltaExport = () => {
     if (!rec || rec.dashboardUploaded !== true) return clear();
     const mid = String(rec.id || (typeof window.findMerchantIdForBase === 'function'
         && window.findMerchantIdForBase(merchantName)) || '');
-    const all = (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length)
-        ? window.allCatalogProductsCache
-        : [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
+    /* Cache-first. When the Export Studio opened without the all-products grid,
+       the unified list is cold: load the SAME source the export itself reads so
+       detection and export can never disagree. One read at most, and only after
+       an explicit merchant selection. */
+    let all = Array.isArray(window.allCatalogProductsCache) ? window.allCatalogProductsCache : [];
+    if (!all.length && !_kanjoDeltaBusy && typeof fetchAllCatalogProductsForExport === 'function') {
+        _kanjoDeltaBusy = true;
+        try { all = await fetchAllCatalogProductsForExport(); } catch (_) { all = []; }
+        finally { _kanjoDeltaBusy = false; }
+    }
+    if (!all.length) {
+        all = [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
+    }
     const merchantProducts = all.filter((p) => {
         if (!p) return false;
         return mid
@@ -9750,34 +9777,50 @@ window.kanjoSyncDeltaExport = () => {
             : catalogProductMerchantName(p) === merchantName;
     });
     if (!merchantProducts.length) return clear();
-    const isAfter = (p, ms) => {
-        const t = catalogUpdatedAtMs(p && p.updatedAt);
-        return Number.isFinite(t) && t > ms;
-    };
-    /* Standardize BOTH sides to epoch ms. Prefer the explicit publish time; fall
-       back to the earliest recorded pending change (a real cutoff, never 0). */
     const publishMs = resolveDashboardPublishMs(rec);
     const pendingMs = earliestPendingChangeMs(rec);
     let cutoff = 0;
     if (publishMs > 0) cutoff = publishMs;
-    else if (pendingMs > 0) cutoff = pendingMs - 1;
-    /* No known cutoff → cannot compute a trustworthy delta; hide the button. */
-    if (cutoff <= 0) return clear();
-    const updated = merchantProducts.filter((p) => isAfter(p, cutoff));
-    if (!updated.length) return clear();
+    else if (pendingMs > 0) cutoff = pendingMs;
+    /* A product counts as modified when it was edited (updatedAt) OR created
+       (createdAt) after the publish cutoff. */
+    const afterCutoff = (p) => {
+        if (cutoff <= 0) return false;
+        const t = catalogUpdatedAtMs(p && (p.updatedAt || p.createdAt));
+        return Number.isFinite(t) && t > cutoff;
+    };
+    const idSet = new Set();
+    const presentIds = new Set();
+    for (const p of merchantProducts) {
+        const pid = String((p && p.id) || '');
+        if (!pid) continue;
+        presentIds.add(pid);
+        if (afterCutoff(p)) idSet.add(pid);
+    }
+    /* Union the merchant's own post-upload change trail (exact product ids),
+       restricted to products that still exist so deletions are never exported. */
+    const trail = Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges : [];
+    trail.forEach((e) => {
+        const pid = String((e && e.productId) || '');
+        if (pid && presentIds.has(pid)) idSet.add(pid);
+    });
+    /* No cutoff AND no trail id → the delta is unknowable; stay hidden rather
+       than risk exporting everything. */
+    if (!idSet.size) return clear();
+    const ids = Array.from(idSet);
     window._kanjoDeltaExport = {
         merchantName,
         merchantId: mid,
-        sinceMs: cutoff,
-        count: updated.length,
-        ids: updated.map((p) => String((p && p.id) || '')).filter(Boolean)
+        sinceMs: cutoff > 0 ? cutoff : 0,
+        count: ids.length,
+        ids
     };
     box.classList.remove('hidden');
     const btn = document.getElementById('kanjoDeltaExportBtn');
     if (btn) {
-        btn.innerHTML = '<i class="fa-solid fa-file-circle-plus"></i> تصدير التعديلات فقط (' + updated.length.toLocaleString('ar-EG') + ' منتج) 📥';
+        btn.innerHTML = '<i class="fa-solid fa-file-circle-plus"></i> تصدير التعديلات فقط (' + ids.length.toLocaleString('ar-EG') + ' منتج) 📥';
     }
-    if (summary) summary.textContent = updated.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
+    if (summary) summary.textContent = ids.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
 };
 window.loadDeltaExport = window.kanjoSyncDeltaExport;
 

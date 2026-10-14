@@ -42,7 +42,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-    <link rel="stylesheet" href="style.css?v=20261013b">
+    <link rel="stylesheet" href="style.css?v=20261014b">
 
     <script>
 
@@ -890,11 +890,22 @@
 
                 <div id="catalogExportSection" class="hidden space-y-3">
 
-                    <div id="kanjoExportMerchantCombo" class="relative">
-                        <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/40 text-sm pointer-events-none"></i>
-                        <input type="text" id="merchantExportFilter" list="kanjoExportMerchantList" placeholder="اكتب اسم التاجر..." autocomplete="off" oninput="window.kanjoFilterExportMerchants && window.kanjoFilterExportMerchants(this.value)" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" onchange="window.kanjoFilterExportMerchants && window.kanjoFilterExportMerchants(this.value)" class="w-full p-3.5 pr-11 pl-11 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-[#230535] outline-none focus:border-[#230535]">
-                        <button type="button" id="kanjoExportMerchantClear" onclick="window.kanjoClearExportMerchant && window.kanjoClearExportMerchant()" class="hidden absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition" aria-label="مسح التاجر"><i class="fa-solid fa-xmark text-xs"></i></button>
-                        <datalist id="kanjoExportMerchantList"></datalist>
+                    <div id="kanjoExportMerchantCombo" class="relative kanjo-select2">
+                        <input type="hidden" id="merchantExportFilter" value="">
+                        <button type="button" id="kanjoExportMerchantTrigger" aria-haspopup="listbox" aria-expanded="false" onclick="window.kanjoToggleExportMerchantMenu && window.kanjoToggleExportMerchantMenu()" onfocus="window.loadMerchantExportFilterFull && window.loadMerchantExportFilterFull()" class="w-full p-3.5 pr-11 pl-11 bg-kanjo-light border border-purple-100 rounded-xl font-black text-sm text-right outline-none focus:border-[#230535] transition flex items-center gap-2">
+                            <i class="fa-solid fa-magnifying-glass text-[#230535]/40 text-sm shrink-0"></i>
+                            <span id="kanjoExportMerchantLabel" class="flex-1 truncate text-[#230535]/45">اكتب أو اختر اسم التاجر...</span>
+                            <i id="kanjoExportMerchantChevron" class="fa-solid fa-chevron-down text-[#230535]/40 text-xs shrink-0 transition-transform"></i>
+                        </button>
+                        <button type="button" id="kanjoExportMerchantClear" onclick="window.kanjoClearExportMerchant && window.kanjoClearExportMerchant()" class="hidden absolute left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition z-10" aria-label="مسح التاجر"><i class="fa-solid fa-xmark text-xs"></i></button>
+                        <div id="kanjoExportMerchantMenu" class="hidden absolute z-[130] mt-1 w-full bg-white border border-purple-100 rounded-2xl shadow-2xl overflow-hidden">
+                            <div class="relative p-2 border-b border-purple-100 bg-white">
+                                <i class="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-[#230535]/40 text-sm pointer-events-none"></i>
+                                <input type="text" id="kanjoExportMerchantSearch" placeholder="ابحث عن تاجر..." autocomplete="off" class="w-full p-2.5 pr-10 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm text-[#230535] outline-none focus:border-[#230535]">
+                            </div>
+                            <ul id="kanjoExportMerchantOptions" role="listbox" class="max-h-64 overflow-y-auto p-1.5 hide-scrollbar"></ul>
+                            <div id="kanjoExportMerchantEmpty" class="hidden p-4 text-center text-xs font-black text-slate-400">لا توجد نتائج مطابقة</div>
+                        </div>
                     </div>
 
                     <button id="kanjoExportMerchantCardBtn" type="button" disabled onclick="window.kanjoOpenSelectedMerchantCard && window.kanjoOpenSelectedMerchantCard()" class="w-full bg-white text-[#230535] border-2 border-[#230535]/20 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-id-card"></i> إظهار بطاقة التاجر</button>
@@ -4091,7 +4102,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261014a"></script>
+    <script type="module" src="js/main.js?v=20261014b"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 
