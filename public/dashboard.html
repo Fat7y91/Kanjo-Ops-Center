@@ -903,11 +903,6 @@
 
                     <button id="kanjoExportMerchantCardBtn" type="button" disabled onclick="window.kanjoOpenSelectedMerchantCard && window.kanjoOpenSelectedMerchantCard()" class="w-full bg-white text-[#230535] border-2 border-[#230535]/20 py-3 rounded-xl font-black hover:bg-[#230535]/5 transition shadow-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"><i class="fa-solid fa-id-card"></i> إظهار بطاقة التاجر</button>
 
-                    <label for="exportIncludePending" class="flex items-center gap-3 p-3.5 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer select-none hover:bg-[#230535]/5 transition">
-                        <input type="checkbox" id="exportIncludePending" class="w-5 h-5 shrink-0 accent-[#230535]">
-                        <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
-                    </label>
-
                     <!-- Smart delta export: appears only when the selected merchant has
                          products edited AFTER it was published (dashboardUploaded). -->
                     <div id="kanjoDeltaExportBox" class="hidden rounded-2xl border-2 border-[#E57723]/50 bg-[#E57723]/5 p-3 space-y-2">
@@ -916,6 +911,11 @@
                         </button>
                         <p id="kanjoDeltaExportSummary" class="text-[11px] font-black text-[#E57723] text-center"></p>
                     </div>
+
+                    <label for="exportIncludePending" class="flex items-center gap-3 p-3.5 bg-kanjo-light border border-purple-100 rounded-xl cursor-pointer select-none hover:bg-[#230535]/5 transition">
+                        <input type="checkbox" id="exportIncludePending" class="w-5 h-5 shrink-0 accent-[#230535]">
+                        <span class="font-black text-sm text-[#230535]">تصدير جميع المنتجات (شامل قيد المراجعة)</span>
+                    </label>
 
                     <div class="grid grid-cols-1 gap-2">
                         <button id="catalogExportBtn" onclick="exportDoneCatalogProducts()" class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> تصدير Kanjo Excel</button>

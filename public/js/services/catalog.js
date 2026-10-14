@@ -249,6 +249,14 @@ window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isPr
    create + delete-request workflow and never see the hard-delete trash icon. */
 window.canManageCatalogProducts = () => window.isKanjoAdminAccount() || window.isCatalogFounderUser() || window.isProductAuditUser();
 
+/* Office roles (admin / founder / product-audit / Mahmoud-ops) add products
+   DIRECTLY to Firestore. The offline `kanjo_drafts` queue exists strictly for
+   field reps on unstable mobile connections, so it must never be used by the
+   office — they need an instant, server-written product. */
+window.isCatalogDirectCreateUser = () => !!(window.isCatalogAdminUser()
+    || window.isCatalogFounderUser() || window.isProductAuditUser()
+    || window.isMahmoudUser());
+
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
     return !!window.isMahmoudUser();
@@ -2366,6 +2374,19 @@ window.submitCatalogProduct = async (event, options) => {
         const closeAfterSave = !!(options && options.closeAfterSave);
         const draft = await collectCatalogFormDraft();
         if (!draft) return;
+        /* Office roles bypass the offline draft queue entirely: translate,
+           upload any images, REST-create the document, then fold it into the
+           loaded caches + IndexedDB so it appears instantly (zero re-reads). */
+        if (window.isCatalogDirectCreateUser && window.isCatalogDirectCreateUser()) {
+            await syncOneCatalogDraft(draft, null, { direct: true });
+            window.showToast('تمت إضافة الصنف بنجاح');
+            if (closeAfterSave) {
+                window.closeCatalogProductModal();
+            } else {
+                clearCatalogProductFields(true);
+            }
+            return;
+        }
         const drafts = await readCatalogDrafts();
         drafts.push(draft);
         await writeCatalogDrafts(drafts);
@@ -4346,7 +4367,7 @@ const catalogEnhanceTargetCount = (product) => {
     return rawCount > 0 ? rawCount : 1;
 };
 
-const syncOneCatalogDraft = async (draft, persistProgress) => {
+const syncOneCatalogDraft = async (draft, persistProgress, opts) => {
     const nameAr = String((draft && draft.name_ar) || '').trim();
     const descriptionAr = String((draft && draft.description_ar) || '').trim();
     /* Translate name + description concurrently (previously two serialized calls
@@ -4392,7 +4413,7 @@ const syncOneCatalogDraft = async (draft, persistProgress) => {
         status: 'pending',
         createdAt: new Date(),
         createdBy: draft.createdBy || ((window.currentUser && window.currentUser.name) || ''),
-        syncedFromDraft: true
+        syncedFromDraft: !(opts && opts.direct)
     };
     if (draft.product_type === 'variable' && Array.isArray(draft.variations)) {
         const variantPayload = [];
@@ -9563,20 +9584,92 @@ window.closeKanjoVariantConflictModal = () => {
    epoch ms, or NaN when the value is unusable. */
 const catalogUpdatedAtMs = (v) => {
     if (v === null || v === undefined || v === '') return NaN;
-    if (typeof v === 'number') return v;
-    if (typeof v === 'object') {
-        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
-        if (v.seconds !== undefined) return Number(v.seconds) * 1000 + (Number(v.nanoseconds) || 0) / 1e6;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+    if (typeof v === 'string') {
+        const s = v.trim();
+        /* Numeric string (epoch ms) is resolved BEFORE Date.parse, which would
+           otherwise misread it as a year. */
+        if (/^\d{10,}$/.test(s)) return Number(s);
+        const t = Date.parse(s);
+        return Number.isFinite(t) ? t : NaN;
     }
-    const t = Date.parse(v);
-    return Number.isFinite(t) ? t : NaN;
+    if (typeof v === 'object') {
+        if (typeof v.toMillis === 'function') { try { return v.toMillis(); } catch (_) { /* fall through */ } }
+        if (typeof v.toDate === 'function') { try { return v.toDate().getTime(); } catch (_) { /* fall through */ } }
+        /* Firestore SDK Timestamp (`{seconds,nanoseconds}`) AND the raw REST
+           JSON shape (`{_seconds,_nanoseconds}`, seen when a payload bypasses
+           the KanjoRestTimestamp wrapper) must both normalize to epoch ms. */
+        const secs = (v.seconds !== undefined) ? v.seconds : v._seconds;
+        if (secs !== undefined) {
+            const nanos = (v.nanoseconds !== undefined) ? v.nanoseconds : v._nanoseconds;
+            return Number(secs) * 1000 + (Number(nanos) || 0) / 1e6;
+        }
+        const epoch = new Date(v).getTime();
+        return Number.isFinite(epoch) ? epoch : NaN;
+    }
+    return NaN;
 };
 window.catalogUpdatedAtMs = catalogUpdatedAtMs;
 
+/* Resolve the already-loaded merchant record for a selected export merchant.
+   Prefers the canonical id, then scans the directory by normalized base name so
+   a stale/renamed id can never hide the delta affordance. */
+const resolveExportMerchantRecord = (merchantName) => {
+    const name = String(merchantName || '').trim();
+    if (!name) return null;
+    const id = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(name)) || '';
+    if (id && window.merchantsById && typeof window.merchantsById.get === 'function') {
+        const rec = window.merchantsById.get(id);
+        if (rec) return rec;
+    }
+    const base = window.getBaseName ? window.getBaseName(name) : name;
+    if (window.merchantsById && typeof window.merchantsById.forEach === 'function') {
+        let fallback = null;
+        window.merchantsById.forEach((rec) => {
+            if (!rec || rec.archived === true || !rec.name) return;
+            const recBase = window.getBaseName ? window.getBaseName(rec.name) : rec.name;
+            if (recBase !== base) return;
+            if (rec.dashboardUploaded === true && !fallback) fallback = rec;
+            else if (!fallback) fallback = rec;
+        });
+        if (fallback) return fallback;
+    }
+    return null;
+};
+
+/* Epoch ms of when the merchant was published to the dashboard, tolerant of any
+   stored shape (ISO string, epoch, Firestore Timestamp). 0 when unknown. */
+const resolveDashboardPublishMs = (rec) => {
+    if (!rec) return 0;
+    const candidates = [rec.dashboardSyncedAt, rec.dashboardUploadedAt,
+        rec.dashboardPublishedAt, rec.dashboardSyncAt];
+    for (const c of candidates) {
+        const ms = catalogUpdatedAtMs(c);
+        if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+    return 0;
+};
+
+/* Earliest timestamp in the merchant's pending-change trail — the fallback
+   cutoff for legacy merchants that carry no explicit publish timestamp but
+   clearly have pending updates tracked. */
+const earliestPendingChangeMs = (rec) => {
+    const arr = rec && Array.isArray(rec.pendingDashboardChanges) ? rec.pendingDashboardChanges : [];
+    let min = 0;
+    for (const e of arr) {
+        const ms = catalogUpdatedAtMs(e && e.at);
+        if (Number.isFinite(ms) && ms > 0 && (!min || ms < min)) min = ms;
+    }
+    return min;
+};
+
 /* ── Smart delta export (updatedAt > publish time) ─────────────────────────
    When the selected merchant was already marked `dashboardUploaded`, count its
-   products edited AFTER `dashboardSyncedAt` and surface a dedicated button that
-   exports ONLY those products. Pure in-memory (zero reads). */
+   products edited AFTER it was published and surface a dedicated button that
+   exports ONLY those products. Pure in-memory (zero reads). Both sides of the
+   comparison are normalized to Unix epoch ms first, and a pending-change-trail
+   fallback guarantees the button is never hidden for a merchant that clearly
+   has pending updates even when a stored timestamp is missing/unparseable. */
 window.kanjoSyncDeltaExport = () => {
     const box = document.getElementById('kanjoDeltaExportBox');
     const summary = document.getElementById('kanjoDeltaExportSummary');
@@ -9589,26 +9682,44 @@ window.kanjoSyncDeltaExport = () => {
     const select = document.getElementById('merchantExportFilter');
     const merchantName = String((select && select.value) || '').trim();
     if (!merchantName) return clear();
-    const mid = (typeof window.findMerchantIdForBase === 'function' && window.findMerchantIdForBase(merchantName)) || '';
-    const rec = (mid && window.merchantsById && window.merchantsById.get(mid)) || null;
+    const rec = resolveExportMerchantRecord(merchantName);
     if (!rec || rec.dashboardUploaded !== true) return clear();
-    const sinceMs = catalogUpdatedAtMs(rec.dashboardSyncedAt)
-        || catalogUpdatedAtMs(rec.dashboardUploadedAt)
-        || 0;
-    if (!sinceMs) return clear();
+    const mid = String(rec.id || (typeof window.findMerchantIdForBase === 'function'
+        && window.findMerchantIdForBase(merchantName)) || '');
     const all = (Array.isArray(window.allCatalogProductsCache) && window.allCatalogProductsCache.length)
         ? window.allCatalogProductsCache
         : [].concat(window.merchantProductsCache || [], window.repCatalogProductsCache || [], window.catalogDeleteRequestsCache || []);
-    const updated = all.filter((p) => {
-        const isMerchant = mid
-            ? String(p.merchantId || '') === String(mid)
+    const merchantProducts = all.filter((p) => {
+        if (!p) return false;
+        return mid
+            ? String(p.merchantId || '') === mid
             : catalogProductMerchantName(p) === merchantName;
-        if (!isMerchant) return false;
-        const t = catalogUpdatedAtMs(p.updatedAt);
-        return Number.isFinite(t) && t > sinceMs;
     });
+    const isAfter = (p, ms) => {
+        const t = catalogUpdatedAtMs(p && p.updatedAt);
+        return Number.isFinite(t) && t > ms;
+    };
+    /* Standardize BOTH sides to epoch ms, then compare. */
+    const publishMs = resolveDashboardPublishMs(rec);
+    const pendingMs = earliestPendingChangeMs(rec);
+    const hasPendingTrail = rec.hasPendingDashboardUpdates === true
+        || (Array.isArray(rec.pendingDashboardChanges) && rec.pendingDashboardChanges.length > 0);
+    const cutoffs = [];
+    if (publishMs > 0) cutoffs.push(publishMs);
+    if (pendingMs > 0) cutoffs.push(pendingMs - 1);
+    /* The EARLIEST known cutoff yields the broadest correct "after publish"
+       window (publish time whenever available). */
+    let cutoff = cutoffs.length ? Math.min.apply(null, cutoffs) : 0;
+    let updated = cutoff > 0 ? merchantProducts.filter((p) => isAfter(p, cutoff)) : [];
+    /* Visibility guarantee: a merchant flagged with pending updates must always
+       expose the delta button, even if every product lacks a parseable
+       `updatedAt`. Falling back to the whole merchant is a safe superset. */
+    if (!updated.length && hasPendingTrail && merchantProducts.length) {
+        updated = merchantProducts;
+        cutoff = 0;
+    }
     if (!updated.length) return clear();
-    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs, count: updated.length };
+    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs: cutoff, count: updated.length };
     box.classList.remove('hidden');
     const btn = document.getElementById('kanjoDeltaExportBtn');
     if (btn) {
@@ -10093,6 +10204,13 @@ const catalogApplyCreatedProductLocally = (product) => {
        the next modal open refetches it lazily (never on the create path). */
     if (window._catalogAutocompleteCategory === product.category) {
         window._catalogAutocompleteCache = [];
+    }
+
+    /* 6b) Persist the freshly created row to the shared delta-sync registry +
+       IndexedDB (`merchant_products`) so a reload paints it before the next
+       network reconciliation. Uses the existing sync API — additive only. */
+    if (window.kanjoSync && typeof window.kanjoSync.markWritten === 'function') {
+        try { window.kanjoSync.markWritten(CATALOG_COLLECTION, product); } catch (_) { /* ignore */ }
     }
 
     /* 7) Repaint whatever is on screen; the export filter reads memory only. */
