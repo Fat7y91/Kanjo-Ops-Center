@@ -59,6 +59,7 @@
             async getAll(store) { return Array.from((maps[store] || new Map()).values()); },
             async count(store) { return (maps[store] || new Map()).size; },
             async clear(store) { maps[store] = new Map(); },
+            async remove(store, key) { const m = maps[store]; if (!m) return false; return m.delete(String(key)); },
             async getMeta(key) { return Object.prototype.hasOwnProperty.call(meta, key) ? meta[key] : null; },
             async setMeta(key, value) { meta[key] = value; return true; },
             close() { /* nothing to close */ }
@@ -191,6 +192,23 @@
         }
     }
 
+    async function remove(store, key) {
+        const d = await db();
+        if (d.kind === 'memory') return d.remove(store, key);
+        try {
+            return await new Promise((resolve, reject) => {
+                const t = tx(d, [store], 'readwrite');
+                t.objectStore(store).delete(key);
+                t.oncomplete = () => resolve(true);
+                t.onerror = () => reject(t.error);
+                t.onabort = () => reject(t.error || new Error('idb abort'));
+            });
+        } catch (err) {
+            console.warn('[kanjoIdb] remove failed, switching to memory:', err && err.message);
+            return markBroken(err && err.message).remove(store, key);
+        }
+    }
+
     async function getMeta(key) {
         const d = await db();
         if (d.kind === 'memory') return d.getMeta(key);
@@ -228,6 +246,7 @@
         getAll,
         count,
         clear,
+        remove,
         getMeta,
         setMeta,
         isFallback: () => !!memFallback,

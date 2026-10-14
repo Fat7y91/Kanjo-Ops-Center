@@ -125,14 +125,14 @@ authReadyWithTimeout.then(() => {
         bar.id = 'kanjoUpdateBanner';
         bar.setAttribute('role', 'status');
         bar.style.cssText = 'position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));'
-            + 'transform:translateX(-50%);z-index:120;background:#230535;color:#fff;'
+            + 'transform:translateX(-50%);z-index:9999;background:#230535;color:#fff;'
             + 'border:1px solid #facc15;border-radius:9999px;box-shadow:0 8px 24px rgba(0,0,0,.35);'
             + 'padding:10px 12px 10px 18px;display:flex;align-items:center;gap:12px;'
-            + 'font-weight:800;font-size:13px;max-width:92vw';
-        bar.innerHTML = '<span>تحديث جديد متاح</span>'
+            + 'font-weight:800;font-size:13px;max-width:92vw;flex-wrap:wrap;justify-content:center';
+        bar.innerHTML = '<span>⚠️ هناك تحديث جديد للنظام! يرجى حفظ عملك الحالي، ثم</span>'
             + '<button type="button" id="kanjoUpdateBtn" style="background:#facc15;color:#230535;'
             + 'border:0;border-radius:9999px;padding:8px 16px;font-weight:900;cursor:pointer">'
-            + 'اضغط للتحديث</button>';
+            + 'اضغط هنا لتحديث الصفحة</button>';
         const dismiss = document.createElement('button');
         dismiss.type = 'button';
         dismiss.setAttribute('aria-label', 'إغلاق');

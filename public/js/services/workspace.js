@@ -559,14 +559,29 @@
     /* ── Export Studio helpers (searchable merchant picker + card) ─────────── */
     function filterExportMerchants(q) {
         const select = document.getElementById('merchantExportFilter');
-        if (!select || !select.options) return;
-        const term = String(q || '').trim().toLowerCase();
-        Array.prototype.forEach.call(select.options, (o) => {
-            if (!o.value) { o.hidden = false; o.style.display = ''; return; } // placeholder
-            const match = !term || String(o.textContent || '').toLowerCase().indexOf(term) !== -1;
-            o.hidden = !match;
-            o.style.display = match ? '' : 'none';
-        });
+        if (!select) return;
+        /* The search box must REBUILD the option list, because a native <select>
+           ignores `display:none`/`hidden` on <option> in most browsers (which is
+           why the old toggle never appeared to filter anything). We rebuild from
+           the cached FULL merchant list published by populateMerchantExportFilter
+           — pure in-memory, zero Firestore reads. */
+        const all = Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
+        const source = all.length
+            ? all
+            : Array.prototype.map.call(select.options, (o) => String(o.value || '')).filter(Boolean);
+        const previous = String(select.value || '');
+        const normalize = (v) => (typeof window.normalizeArabic === 'function'
+            ? window.normalizeArabic(String(v || ''))
+            : String(v || '').trim().toLowerCase());
+        const term = normalize(q);
+        const esc = (v) => String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const matches = source.filter((name) => !term || normalize(name).indexOf(term) !== -1);
+        select.innerHTML = '<option value="" disabled>اختر التاجر للتصدير...</option>'
+            + matches.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
+        if (previous && matches.indexOf(previous) !== -1) select.value = previous;
+        else select.value = '';
         syncExportCardBtn();
     }
 

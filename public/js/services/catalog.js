@@ -241,7 +241,13 @@ window.canEditCatalogProducts = () => !!window.currentUser
    the product-audit team and the admin account 8492 may add products for any
    merchant (to cover items the delivery agents missed) and edit them + their
    variants, but never delete. */
-window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount() || window.isCatalogFounderUser();
+
+/* Catalog tools gate (admin / founder / product-audit "auditor"): the roles that
+   get the in-merchant "+ إضافة صنف جديد" button and the per-card hard-delete
+   control. Deliberately NARROWER than canCreateCatalogProducts — reps keep their
+   create + delete-request workflow and never see the hard-delete trash icon. */
+window.canManageCatalogProducts = () => window.isKanjoAdminAccount() || window.isCatalogFounderUser() || window.isProductAuditUser();
 
 window.isDesoukOpsManager = () => {
     if (typeof window.isMahmoudOpsUser === 'function') return !!window.isMahmoudOpsUser();
@@ -2597,19 +2603,10 @@ const updateCatalogProductDirect = async () => {
                 productId: editing.id
             });
         })();
-        /* Update the rep list locally instead of re-reading the collection. */
-        if (window.patchRepCatalogProductLocally) window.patchRepCatalogProductLocally(editing.id, payload);
-        window._catalogMyProductsSignature = '';
-        if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
-        /* Audit edits live in the manager "all products" grid, which is a
-           different cache than the rep list patched above, so fold the change
-           into that cache and repaint too — still zero extra reads. */
-        if (window.isProductAuditUser()) {
-            const all = window.allCatalogProductsCache || [];
-            const auditIdx = all.findIndex((p) => p.id === editing.id);
-            if (auditIdx !== -1) { all[auditIdx] = { ...all[auditIdx], ...payload }; window.allCatalogProductsCache = all; }
-            if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
-        }
+        /* Zero-bleed instant reactivity (Task 2): fold the saved fields into
+           every ALREADY-loaded in-memory cache + IndexedDB and repaint only this
+           product's card in the DOM. No Firestore re-read is ever issued. */
+        if (window.catalogApplyProductUpdateLocally) window.catalogApplyProductUpdateLocally(editing.id, payload);
         window.showToast('تم حفظ تعديلات المنتج');
         window.closeCatalogProductModal();
     } catch (err) {
@@ -3034,18 +3031,28 @@ const renderCatalogAllProductCard = (p) => {
     const repName = catalogEscapeHtml(p.createdBy || p.deleteRequestedBy || '');
     const status = String(p.status || '') === 'done' ? 'مكتمل' : 'قيد المعالجة';
     const statusClass = String(p.status || '') === 'done' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#E57723]/15 text-[#E57723]';
+    /* Normalized haystack (Arabic-folded, spaces stripped) so the per-merchant
+       "deep search" can filter the rendered cards purely in the DOM (Task 3). */
+    const searchHay = catalogEscapeHtml(window.normalizeArabic([p.name_ar || '', p.name_en || '', p.sku || ''].join(' ')));
     const thumbHtml = catalogClickableThumbHtml(p, {
         imgClass: 'w-full h-36 rounded-xl object-cover border border-[#230535]/10 cursor-pointer bg-slate-100 transition-opacity duration-200 hover:opacity-75',
         boxClass: 'w-full h-36 rounded-xl grid place-items-center text-slate-400 bg-slate-100 border border-dashed border-[#FFD700]/60 cursor-pointer transition-opacity duration-200 hover:opacity-75'
     });
     /* Everybody who can edit the catalog (reps, the audit team, and the admin
-       account 8492) gets a single "تعديل" action here — and NEVER a delete
-       control. Deletion stays on the separate agent-request → Mahmoud-approval
-       workflow. */
+       account 8492) gets a "تعديل" action here. The hard-delete trash control is
+       shown ONLY to the catalog managers (admin / founder / product-audit) and
+       always demands an explicit confirmation (deleteCatalogProduct). Reps keep
+       their separate agent-request → Mahmoud-approval workflow untouched. */
     const catalogEdit = window.canEditCatalogProducts()
-        ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="w-full bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
+        ? `<button type="button" onclick="openCatalogProductEditor('${pid}')" class="flex-1 bg-[#230535] text-[#FFD700] px-3 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-pen-to-square"></i> تعديل</button>`
         : '';
-    return `<div class="catalog-product-card p-3 shadow-sm space-y-2">
+    const catalogDelete = window.canManageCatalogProducts()
+        ? `<button type="button" onclick="deleteCatalogProduct('${pid}')" title="حذف الصنف نهائياً" aria-label="حذف الصنف نهائياً" class="shrink-0 bg-red-600 text-white px-3 py-2 rounded-xl text-[11px] font-black hover:bg-red-700 transition flex items-center justify-center gap-1.5"><i class="fa-solid fa-trash-can"></i></button>`
+        : '';
+    const catalogActions = (catalogEdit || catalogDelete)
+        ? `<div class="flex items-center gap-2">${catalogEdit}${catalogDelete}</div>`
+        : '';
+    return `<div class="catalog-product-card p-3 shadow-sm space-y-2" data-catalog-product-id="${pid}" data-catalog-product-search="${searchHay}">
         ${thumbHtml}
         <button type="button" onclick="openCatalogProductDetails('${pid}')" title="عرض التفاصيل الكاملة" class="block w-full text-right font-black text-sm text-[#230535] line-clamp-2 min-h-[2.5rem] cursor-pointer transition-colors hover:text-[#E57723] hover:underline decoration-[#FFD700] underline-offset-2">${name}</button>
         <div class="flex flex-wrap gap-1.5">
@@ -3053,7 +3060,7 @@ const renderCatalogAllProductCard = (p) => {
             <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
             ${repName ? `<span class="text-[10px] font-black bg-[#230535]/10 text-[#230535] px-2 py-0.5 rounded-full truncate max-w-full">${repName}</span>` : ''}
         </div>
-        ${catalogEdit}
+        ${catalogActions}
     </div>`;
 };
 
@@ -3104,6 +3111,7 @@ window.openCatalogAllProductsMerchant = (encodedName, event) => {
 
     window._catalogAllProductsSelectedMerchant = decodeURIComponent(String(encodedName || ''));
     window._catalogMerchantRenderLimit = CATALOG_MERCHANT_GRID_PAGE;
+    window._catalogMerchantProductQuery = '';
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -3113,6 +3121,7 @@ window.backCatalogAllProductsMerchants = (event) => {
         event.stopPropagation();
     }
     window._catalogAllProductsSelectedMerchant = '';
+    window._catalogMerchantProductQuery = '';
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -3793,6 +3802,38 @@ window.clearCatalogGlobalSearch = () => {
     renderCatalogAllProductsList();
 };
 
+/* Per-merchant "deep search" (Task 3): filters the ALREADY-rendered product
+   cards of the opened merchant strictly in the DOM. It never re-queries
+   Firestore and never rebuilds the grid, so every keystroke is instant and
+   zero-bleed. The haystack is pre-normalized (Arabic-folded) on each card. */
+window.filterCatalogMerchantProductsDom = (query) => {
+    const q = window.normalizeArabic(String(query || ''));
+    window._catalogMerchantProductQuery = String(query || '');
+    const list = document.getElementById('catalogAllProductsList');
+    if (!list) return;
+    const cards = list.querySelectorAll('[data-catalog-product-search]');
+    let visible = 0;
+    cards.forEach((el) => {
+        const hay = el.getAttribute('data-catalog-product-search') || '';
+        const show = !q || hay.indexOf(q) !== -1;
+        el.style.display = show ? '' : 'none';
+        if (show) visible += 1;
+    });
+    let empty = document.getElementById('catalogMerchantProductNoResults');
+    if (!visible && cards.length) {
+        if (!empty) {
+            empty = document.createElement('div');
+            empty.id = 'catalogMerchantProductNoResults';
+            empty.className = 'col-span-full text-center py-8 text-slate-400 font-bold';
+            empty.innerHTML = '<i class="fa-solid fa-magnifying-glass text-3xl text-[#230535]/30 mb-2"></i><div>لا توجد منتجات مطابقة داخل هذا التاجر</div>';
+            list.appendChild(empty);
+        }
+        empty.style.display = '';
+    } else if (empty) {
+        empty.style.display = 'none';
+    }
+};
+
 const renderCatalogAllProductsListNow = () => {
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
@@ -3880,6 +3921,10 @@ const renderCatalogAllProductsListNow = () => {
     const selectedGroup = selected ? groups.find((g) => g.merchantName === selected) : null;
     if (selected && selectedGroup) {
         const counts = catalogProductStatusCounts(selectedGroup.products);
+        const merchantSearchVal = catalogEscapeHtml(String(window._catalogMerchantProductQuery || ''));
+        const addProductBtn = window.canManageCatalogProducts()
+            ? `<button type="button" onclick="openCatalogProductModal()" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
+            : '';
         if (toolbar) {
             toolbar.classList.remove('hidden');
             toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
@@ -3893,6 +3938,13 @@ const renderCatalogAllProductsListNow = () => {
                     <div class="font-black text-sm text-[#230535] truncate">${catalogEscapeHtml(selectedGroup.merchantName)}</div>
                     <div class="text-[10px] font-bold text-slate-500">${counts.total} منتجات — ${counts.approved} مكتمل — ${counts.pending} قيد المعالجة</div>
                 </div>
+                <div class="w-full flex flex-col sm:flex-row items-stretch gap-2 mt-1">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-magnifying-glass absolute right-3.5 top-1/2 -translate-y-1/2 text-[#230535]/50 text-xs pointer-events-none"></i>
+                        <input type="search" id="catalogMerchantProductSearch" value="${merchantSearchVal}" oninput="filterCatalogMerchantProductsDom(this.value)" placeholder="🔍 ابحث في منتجات هذا التاجر..." autocomplete="off" class="w-full bg-slate-50 border-2 border-[#230535]/15 rounded-2xl pr-10 pl-4 py-2.5 text-sm font-bold text-[#230535] placeholder:text-slate-400 outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10">
+                    </div>
+                    ${addProductBtn}
+                </div>
             </div>`;
         }
         list.className = 'catalog-card-grid catalog-product-grid';
@@ -3903,6 +3955,11 @@ const renderCatalogAllProductsListNow = () => {
             + (remainingProducts > 0
                 ? `<div class="col-span-full text-center py-4"><button type="button" onclick="showMoreCatalogMerchantProducts()" class="bg-[#230535] text-[#FFD700] px-5 py-3 rounded-xl text-xs font-black hover:opacity-90 transition inline-flex items-center gap-2"><i class="fa-solid fa-chevron-down"></i> عرض المزيد (${remainingProducts} متبقي)</button></div>`
                 : '');
+        /* Re-apply the active per-merchant filter after a fresh paint (e.g. after
+           "عرض المزيد" or an edit) so the visible cards stay consistent. */
+        if (String(window._catalogMerchantProductQuery || '').trim()) {
+            window.filterCatalogMerchantProductsDom(window._catalogMerchantProductQuery);
+        }
         return;
     }
     window._catalogAllProductsSelectedMerchant = '';
@@ -5402,13 +5459,24 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     }
     const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, 'ar'));
+    /* Publish the FULL de-duplicated list so the Export Studio search box can
+       rebuild the <option> set as the user types (toggling option display is
+       ignored by most browsers). Zero reads — pure memory. */
+    window._kanjoExportAllMerchantNames = names.slice();
     select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
         const safe = catalogEscapeHtml(name);
         return `<option value="${safe}">${safe}</option>`;
     }).join('');
     if (previous && names.indexOf(previous) !== -1) select.value = previous;
 };
-window.loadMerchantExportFilterFull = () => populateMerchantExportFilter(true);
+window.loadMerchantExportFilterFull = async () => {
+    await populateMerchantExportFilter(true);
+    /* Re-apply any text already typed in the search box after a repopulate. */
+    try {
+        const s = document.getElementById('kanjoExportMerchantSearch');
+        if (typeof window.kanjoFilterExportMerchants === 'function') window.kanjoFilterExportMerchants(s ? s.value : '');
+    } catch (_) { /* ignore */ }
+};
 
 /* ═══════════════════ Kanjo Excel bulk export engine ═══════════════════ */
 
@@ -9542,6 +9610,10 @@ window.kanjoSyncDeltaExport = () => {
     if (!updated.length) return clear();
     window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs, count: updated.length };
     box.classList.remove('hidden');
+    const btn = document.getElementById('kanjoDeltaExportBtn');
+    if (btn) {
+        btn.innerHTML = '<i class="fa-solid fa-file-circle-plus"></i> تصدير التعديلات فقط (' + updated.length.toLocaleString('ar-EG') + ' منتج) 📥';
+    }
     if (summary) summary.textContent = updated.length.toLocaleString('ar-EG') + ' منتجات تم تعديلها بعد النشر';
 };
 window.loadDeltaExport = window.kanjoSyncDeltaExport;
@@ -10030,6 +10102,141 @@ const catalogApplyCreatedProductLocally = (product) => {
     if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
 };
 window.catalogApplyCreatedProductLocally = catalogApplyCreatedProductLocally;
+
+/* Zero-bleed local update of a single merchant_products row (Task 2). Applies
+   the saved patch to every ALREADY-loaded in-memory cache, persists it to the
+   shared delta-sync registry + IndexedDB (via kanjoSync.markWritten), re-renders
+   only this product's card in the DOM, then repaints the active widgets — all
+   with ZERO Firestore reads. Unloaded caches are left untouched so the lazy-read
+   policy is preserved. */
+const catalogApplyProductUpdateLocally = (productId, patch) => {
+    const pid = String(productId || '');
+    if (!pid || !patch) return false;
+    const mergeInto = (cache) => {
+        if (!Array.isArray(cache)) return cache;
+        const idx = cache.findIndex((p) => p && p.id === pid);
+        if (idx === -1) return cache;
+        const next = cache.slice();
+        next[idx] = { ...next[idx], ...patch, id: pid };
+        return next;
+    };
+    window.allCatalogProductsCache = mergeInto(window.allCatalogProductsCache);
+    window.repCatalogProductsCache = mergeInto(window.repCatalogProductsCache);
+    window.merchantProductsCache = mergeInto(window.merchantProductsCache);
+    window.doneCatalogProductsCache = mergeInto(window.doneCatalogProductsCache);
+    window.catalogDeleteRequestsCache = mergeInto(window.catalogDeleteRequestsCache);
+    const merged = (window.allCatalogProductsCache || []).find((p) => p && p.id === pid)
+        || (window.repCatalogProductsCache || []).find((p) => p && p.id === pid)
+        || (window.merchantProductsCache || []).find((p) => p && p.id === pid)
+        || { ...patch, id: pid };
+    /* Persist to the shared sync registry + IndexedDB so a reload paints the new
+       values before any network reconciliation. */
+    if (window.kanjoSync && typeof window.kanjoSync.markWritten === 'function') {
+        try { window.kanjoSync.markWritten(CATALOG_COLLECTION, merged); } catch (_) { /* ignore */ }
+    }
+    /* Repaint ONLY the affected card in the merchant grid (if it is mounted). */
+    try {
+        const sel = '[data-catalog-product-id="' + ((window.CSS && window.CSS.escape) ? window.CSS.escape(pid) : pid) + '"]';
+        const card = document.querySelector(sel);
+        if (card && typeof renderCatalogAllProductCard === 'function') card.outerHTML = renderCatalogAllProductCard(merged);
+    } catch (_) { /* ignore */ }
+    window._catalogMyProductsSignature = '';
+    window._catalogAllProductsCount = (window.allCatalogProductsCache || []).length;
+    if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    if (typeof populateMerchantExportFilter === 'function') { try { populateMerchantExportFilter(); } catch (_) { /* non-fatal */ } }
+    return true;
+};
+window.catalogApplyProductUpdateLocally = catalogApplyProductUpdateLocally;
+
+/* Zero-bleed local hard-delete of a single merchant_products row (Task 1).
+   Drops the row from every loaded in-memory cache, removes it from the sync
+   registry + IndexedDB, and repaints — without re-reading the collection. */
+const catalogApplyProductDeleteLocally = (productId) => {
+    const pid = String(productId || '');
+    if (!pid) return false;
+    const drop = (cache) => Array.isArray(cache) ? cache.filter((p) => !(p && p.id === pid)) : cache;
+    window.allCatalogProductsCache = drop(window.allCatalogProductsCache);
+    window.repCatalogProductsCache = drop(window.repCatalogProductsCache);
+    window.merchantProductsCache = drop(window.merchantProductsCache);
+    window.doneCatalogProductsCache = drop(window.doneCatalogProductsCache);
+    window.catalogDeleteRequestsCache = drop(window.catalogDeleteRequestsCache);
+    /* Drop it from the delta-sync registry so a background repaint cannot
+       resurrect the row before the next reconciliation. */
+    try {
+        const e = window.kanjoSync && window.kanjoSync._registry && window.kanjoSync._registry.get(CATALOG_COLLECTION);
+        if (e && e.rows) e.rows.delete(pid);
+    } catch (_) { /* ignore */ }
+    /* Persist the deletion to IndexedDB (additive helper on the storage layer). */
+    if (window.kanjoIdb && typeof window.kanjoIdb.remove === 'function') {
+        try { Promise.resolve(window.kanjoIdb.remove(CATALOG_COLLECTION, pid)).catch(() => {}); } catch (_) { /* ignore */ }
+    }
+    window._catalogMyProductsSignature = '';
+    window._catalogAllProductsCount = (window.allCatalogProductsCache || []).length;
+    if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
+    try { if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget(); } catch (_) { /* ignore */ }
+    if (typeof populateMerchantExportFilter === 'function') { try { populateMerchantExportFilter(); } catch (_) { /* non-fatal */ } }
+    return true;
+};
+window.catalogApplyProductDeleteLocally = catalogApplyProductDeleteLocally;
+
+/* Strict, unmissable hard-delete entry point for the catalog managers
+   (admin / founder / product-audit). Requires an explicit confirmation before
+   any write, then performs a REST-first delete with an SDK fallback and folds
+   the removal into the local caches (zero re-reads). */
+window.deleteCatalogProduct = async (productId) => {
+    if (!window.canManageCatalogProducts()) {
+        if (window.showToast) window.showToast('حذف المنتجات متاح للإدارة والمؤسس وفريق التدقيق فقط', false);
+        return;
+    }
+    const pid = String(productId || '');
+    if (!pid) return;
+    const ctx = catalogProductMerchantContext(pid) || {};
+    const productName = ctx.name_ar || ctx.name_en || 'هذا الصنف';
+    const warning = '⚠️ تحذير: هل أنت متأكد من حذف هذا الصنف نهائياً؟ هذا الإجراء لا يمكن التراجع عنه!';
+    let confirmed = false;
+    if (window.Swal && typeof window.Swal.fire === 'function') {
+        try {
+            const res = await window.Swal.fire({
+                icon: 'warning',
+                title: 'تأكيد الحذف النهائي',
+                text: warning,
+                html: `<div style="font-weight:800;line-height:1.9"><div style="margin-bottom:6px">${catalogEscapeHtml(productName)}</div><div style="color:#dc2626">${catalogEscapeHtml(warning)}</div></div>`,
+                showCancelButton: true,
+                confirmButtonText: 'نعم، احذف نهائياً',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+                focusCancel: true
+            });
+            confirmed = !!(res && res.isConfirmed);
+        } catch (_) { confirmed = false; }
+    } else {
+        confirmed = window.confirm(warning);
+    }
+    if (!confirmed) return;
+    try {
+        if (!(await catalogRestDelete([CATALOG_COLLECTION, pid]))) {
+            await window.deleteDoc(window.doc(window.db, CATALOG_COLLECTION, pid));
+        }
+        if (window.catalogApplyProductDeleteLocally) window.catalogApplyProductDeleteLocally(pid);
+        if (ctx.merchantId || ctx.merchantName) {
+            window.recordMerchantDashboardChange(ctx.merchantId, {
+                merchantName: ctx.merchantName,
+                type: 'product_delete',
+                item: ctx.name_ar || ctx.name_en || '',
+                summary: 'حذف منتج: ' + (ctx.name_ar || ctx.name_en || ''),
+                productId: pid
+            });
+        }
+        if (window.showToast) window.showToast('تم حذف الصنف نهائياً');
+    } catch (err) {
+        console.error('[catalog] delete failed:', err);
+        if (window.showToast) window.showToast('فشل حذف الصنف، حاول مرة أخرى', false);
+    }
+};
 
 /* Cheap "did this query change?" probe: an aggregation count costs ~1 read per
    1,000 matching documents (minimum 1) instead of one read per document.
