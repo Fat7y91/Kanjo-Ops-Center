@@ -1003,6 +1003,41 @@ const setCatalogMerchantInputLabel = () => {
 };
 window.setCatalogMerchantInputLabel = setCatalogMerchantInputLabel;
 
+/* Context lock (Bug fix): when the Add-product modal is opened from inside a
+   specific merchant's catalog view, that merchant is already known — pre-select
+   it and hide the searchable picker so the admin never has to search again. The
+   hidden #catalogMerchantSelect keeps the value every existing consumer reads. */
+const lockCatalogMerchantTo = (merchantId) => {
+    const select = document.getElementById('catalogMerchantSelect');
+    const mid = String(merchantId || '').trim();
+    const merchant = (mid && window._catalogMerchantMap) ? window._catalogMerchantMap[mid] : null;
+    if (!select || !merchant) return false;
+    select.value = mid;
+    const combo = document.getElementById('catalogMerchantCombobox');
+    if (combo) combo.classList.add('hidden');
+    let locked = document.getElementById('catalogMerchantLocked');
+    if (!locked) {
+        locked = document.createElement('div');
+        locked.id = 'catalogMerchantLocked';
+        locked.className = 'flex items-center gap-3 w-full p-3.5 pr-4 bg-[#230535]/5 border-2 border-[#230535]/20 rounded-xl';
+        if (combo && combo.parentNode) combo.parentNode.insertBefore(locked, combo.nextSibling);
+    }
+    locked.innerHTML = '<i class="fa-solid fa-store text-[#230535]"></i>'
+        + '<span class="font-black text-sm text-[#230535] truncate flex-1">' + catalogEscapeHtml(merchant.merchantName) + '</span>'
+        + '<span class="shrink-0 text-[10px] font-black text-[#230535] bg-[#FFD700] px-2 py-0.5 rounded-full">تاجر الكتالوج</span>';
+    locked.classList.remove('hidden');
+    return true;
+};
+window.lockCatalogMerchantTo = lockCatalogMerchantTo;
+
+const unlockCatalogMerchantSelector = () => {
+    const combo = document.getElementById('catalogMerchantCombobox');
+    if (combo) combo.classList.remove('hidden');
+    const locked = document.getElementById('catalogMerchantLocked');
+    if (locked) { locked.classList.add('hidden'); locked.innerHTML = ''; }
+};
+window.unlockCatalogMerchantSelector = unlockCatalogMerchantSelector;
+
 const renderCatalogMerchantSearchList = () => {
     const input = document.getElementById('catalogMerchantSearchInput');
     const box = document.getElementById('catalogMerchantSearchList');
@@ -2115,6 +2150,7 @@ const clearCatalogProductFields = (keepMerchant) => {
     if (!keepMerchant) {
         const merchantEl = document.getElementById('catalogMerchantSelect');
         if (merchantEl) merchantEl.value = '';
+        if (typeof window.unlockCatalogMerchantSelector === 'function') window.unlockCatalogMerchantSelector();
         setCatalogMerchantInputLabel();
     }
     if (typeof window.updateMasterCatalogSearchVisibility === 'function') window.updateMasterCatalogSearchVisibility();
@@ -2196,7 +2232,7 @@ window.startCatalogBarcodeScan = async () => {
     }
 };
 
-window.openCatalogProductModal = () => {
+window.openCatalogProductModal = (merchantId) => {
     if (!window.canCreateCatalogProducts()) {
         if (window.showToast) window.showToast('هذه الشاشة متاحة للمناديب وفريق مراجعة المنتجات فقط', false);
         return;
@@ -2219,9 +2255,17 @@ window.openCatalogProductModal = () => {
     window.hideCatalogMerchantSearchList();
     window.setCatalogMerchantInputLabel();
     window.hideCatalogNameSuggestions();
+    /* Context-aware (Bug fix): opened from a specific merchant's catalog view →
+       pre-select and lock that merchant so the admin does not search again. */
+    if (String(merchantId || '').trim()) {
+        window.lockCatalogMerchantTo(merchantId);
+        if (typeof window.onCatalogMerchantChange === 'function') window.onCatalogMerchantChange();
+    }
     fetchCatalogAutocompleteCache();
     const modal = document.getElementById('catalogProductModal');
     if (modal) modal.classList.remove('hidden');
+    const nameEl = document.getElementById('catalogNameAr');
+    if (nameEl) nameEl.focus();
 };
 
 window.closeCatalogProductModal = () => {
@@ -2667,6 +2711,8 @@ window.openCatalogProductEditor = (productId) => {
     if (merchantEl) merchantEl.value = product.merchantId || '';
     window.bindCatalogMerchantCombobox();
     window.setCatalogMerchantInputLabel();
+    /* Editing never changes a product's merchant: lock the picker to it. */
+    if (product.merchantId) window.lockCatalogMerchantTo(product.merchantId);
     window.bindCatalogNameAutocomplete();
     fetchCatalogAutocompleteCache();
     const nameEl = document.getElementById('catalogNameAr');
@@ -3943,8 +3989,9 @@ const renderCatalogAllProductsListNow = () => {
     if (selected && selectedGroup) {
         const counts = catalogProductStatusCounts(selectedGroup.products);
         const merchantSearchVal = catalogEscapeHtml(String(window._catalogMerchantProductQuery || ''));
+        const contextMerchantId = catalogEscapeHtml(String(selectedGroup.merchantId || ''));
         const addProductBtn = window.canManageCatalogProducts()
-            ? `<button type="button" onclick="openCatalogProductModal()" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
+            ? `<button type="button" onclick="openCatalogProductModal('${contextMerchantId}')" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
             : '';
         if (toolbar) {
             toolbar.classList.remove('hidden');
@@ -5480,21 +5527,28 @@ const populateMerchantExportFilter = async (allowFetch = false) => {
     }
     const names = Array.from(new Set(products.map(catalogProductMerchantName).filter(Boolean)))
         .sort((a, b) => a.localeCompare(b, 'ar'));
-    /* Publish the FULL de-duplicated list so the Export Studio search box can
-       rebuild the <option> set as the user types (toggling option display is
-       ignored by most browsers). Zero reads — pure memory. */
+    /* Publish the FULL de-duplicated list so the Export Studio searchable picker
+       can (re)build its <datalist> suggestions. Zero reads — pure memory. */
     window._kanjoExportAllMerchantNames = names.slice();
-    select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
-        const safe = catalogEscapeHtml(name);
-        return `<option value="${safe}">${safe}</option>`;
-    }).join('');
+    const list = document.getElementById('kanjoExportMerchantList');
+    if (list) {
+        /* Searchable <datalist> path (the shipped markup). The visible input
+           (#merchantExportFilter) is the single source of truth. */
+        list.innerHTML = names.map((name) => `<option value="${catalogEscapeHtml(name)}"></option>`).join('');
+    } else if (select.tagName === 'SELECT') {
+        /* Legacy <select> fallback, kept defensively. */
+        select.innerHTML = '<option value="" disabled selected>اختر التاجر للتصدير...</option>' + names.map((name) => {
+            const safe = catalogEscapeHtml(name);
+            return `<option value="${safe}">${safe}</option>`;
+        }).join('');
+    }
     if (previous && names.indexOf(previous) !== -1) select.value = previous;
 };
 window.loadMerchantExportFilterFull = async () => {
     await populateMerchantExportFilter(true);
-    /* Re-apply any text already typed in the search box after a repopulate. */
+    /* Re-apply any text already typed in the picker after a repopulate. */
     try {
-        const s = document.getElementById('kanjoExportMerchantSearch');
+        const s = document.getElementById('merchantExportFilter');
         if (typeof window.kanjoFilterExportMerchants === 'function') window.kanjoFilterExportMerchants(s ? s.value : '');
     } catch (_) { /* ignore */ }
 };
@@ -9667,9 +9721,9 @@ const earliestPendingChangeMs = (rec) => {
    When the selected merchant was already marked `dashboardUploaded`, count its
    products edited AFTER it was published and surface a dedicated button that
    exports ONLY those products. Pure in-memory (zero reads). Both sides of the
-   comparison are normalized to Unix epoch ms first, and a pending-change-trail
-   fallback guarantees the button is never hidden for a merchant that clearly
-   has pending updates even when a stored timestamp is missing/unparseable. */
+   comparison are normalized to Unix epoch ms first. When NO publish/pending
+   timestamp can be resolved the delta is unknowable, so the button is hidden —
+   it must never fall back to "everything" (that exported the whole catalog). */
 window.kanjoSyncDeltaExport = () => {
     const box = document.getElementById('kanjoDeltaExportBox');
     const summary = document.getElementById('kanjoDeltaExportSummary');
@@ -9695,31 +9749,29 @@ window.kanjoSyncDeltaExport = () => {
             ? String(p.merchantId || '') === mid
             : catalogProductMerchantName(p) === merchantName;
     });
+    if (!merchantProducts.length) return clear();
     const isAfter = (p, ms) => {
         const t = catalogUpdatedAtMs(p && p.updatedAt);
         return Number.isFinite(t) && t > ms;
     };
-    /* Standardize BOTH sides to epoch ms, then compare. */
+    /* Standardize BOTH sides to epoch ms. Prefer the explicit publish time; fall
+       back to the earliest recorded pending change (a real cutoff, never 0). */
     const publishMs = resolveDashboardPublishMs(rec);
     const pendingMs = earliestPendingChangeMs(rec);
-    const hasPendingTrail = rec.hasPendingDashboardUpdates === true
-        || (Array.isArray(rec.pendingDashboardChanges) && rec.pendingDashboardChanges.length > 0);
-    const cutoffs = [];
-    if (publishMs > 0) cutoffs.push(publishMs);
-    if (pendingMs > 0) cutoffs.push(pendingMs - 1);
-    /* The EARLIEST known cutoff yields the broadest correct "after publish"
-       window (publish time whenever available). */
-    let cutoff = cutoffs.length ? Math.min.apply(null, cutoffs) : 0;
-    let updated = cutoff > 0 ? merchantProducts.filter((p) => isAfter(p, cutoff)) : [];
-    /* Visibility guarantee: a merchant flagged with pending updates must always
-       expose the delta button, even if every product lacks a parseable
-       `updatedAt`. Falling back to the whole merchant is a safe superset. */
-    if (!updated.length && hasPendingTrail && merchantProducts.length) {
-        updated = merchantProducts;
-        cutoff = 0;
-    }
+    let cutoff = 0;
+    if (publishMs > 0) cutoff = publishMs;
+    else if (pendingMs > 0) cutoff = pendingMs - 1;
+    /* No known cutoff → cannot compute a trustworthy delta; hide the button. */
+    if (cutoff <= 0) return clear();
+    const updated = merchantProducts.filter((p) => isAfter(p, cutoff));
     if (!updated.length) return clear();
-    window._kanjoDeltaExport = { merchantName, merchantId: mid, sinceMs: cutoff, count: updated.length };
+    window._kanjoDeltaExport = {
+        merchantName,
+        merchantId: mid,
+        sinceMs: cutoff,
+        count: updated.length,
+        ids: updated.map((p) => String((p && p.id) || '')).filter(Boolean)
+    };
     box.classList.remove('hidden');
     const btn = document.getElementById('kanjoDeltaExportBtn');
     if (btn) {
@@ -9738,7 +9790,9 @@ window.kanjoExportMerchantDelta = async () => {
     return window.exportKanjoExcel({
         merchantName: state.merchantName,
         merchantId: state.merchantId || undefined,
-        onlyUpdatedSince: state.sinceMs
+        onlyUpdatedSince: state.sinceMs,
+        onlyIds: state.ids,
+        includePending: true
     });
 };
 
@@ -9773,9 +9827,15 @@ window.exportKanjoExcel = async (options) => {
         } else if (opts.merchantName) {
             filtered = source.filter((p) => catalogProductMerchantName(p) === opts.merchantName);
         }
-        /* Delta export: keep only products edited AFTER the merchant was
-           published (`dashboardUploaded`), i.e. updatedAt > dashboardSyncedAt. */
-        if (opts.onlyUpdatedSince) {
+        /* Delta export: restrict to the EXACT product ids the delta button
+           counted (falling back to the updatedAt cutoff only when ids are
+           unavailable). This is intentionally NOT a truthiness check on the
+           cutoff: a resolved cutoff of 0 previously made the condition falsy and
+           silently exported the whole catalog. */
+        if (Array.isArray(opts.onlyIds) && opts.onlyIds.length) {
+            const idSet = new Set(opts.onlyIds.map((id) => String(id)));
+            filtered = filtered.filter((p) => idSet.has(String(p && p.id)));
+        } else if (Number(opts.onlyUpdatedSince) > 0) {
             filtered = filtered.filter((p) => {
                 const t = catalogUpdatedAtMs(p.updatedAt);
                 return Number.isFinite(t) && t > opts.onlyUpdatedSince;
@@ -9783,7 +9843,8 @@ window.exportKanjoExcel = async (options) => {
         }
         if (!filtered.length) {
             if (window.showToast) {
-                window.showToast(opts.onlyUpdatedSince
+                const isDelta = (Array.isArray(opts.onlyIds) && opts.onlyIds.length) || Number(opts.onlyUpdatedSince) > 0;
+                window.showToast(isDelta
                     ? 'لا توجد منتجات معدّلة بعد النشر لهذا التاجر'
                     : (includePending ? 'لا توجد منتجات للتصدير' : 'لا توجد منتجات مكتملة للتصدير'), false);
             }

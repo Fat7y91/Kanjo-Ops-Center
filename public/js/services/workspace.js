@@ -557,40 +557,51 @@
     }
 
     /* ── Export Studio helpers (searchable merchant picker + card) ─────────── */
+    function exportMerchantEsc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /* Single searchable control (Bug 3): the merchant picker is ONE text input
+       bound to a <datalist>. Typing filters the suggestion list live and the
+       value the rest of the app reads lives on the same element (#merchantExportFilter),
+       so no separate select + input dance (which closed the dropdown on focus). */
     function filterExportMerchants(q) {
-        const select = document.getElementById('merchantExportFilter');
-        if (!select) return;
-        /* The search box must REBUILD the option list, because a native <select>
-           ignores `display:none`/`hidden` on <option> in most browsers (which is
-           why the old toggle never appeared to filter anything). We rebuild from
-           the cached FULL merchant list published by populateMerchantExportFilter
-           — pure in-memory, zero Firestore reads. */
+        const input = document.getElementById('merchantExportFilter');
+        if (!input) return;
         const all = Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
-        const source = all.length
-            ? all
-            : Array.prototype.map.call(select.options, (o) => String(o.value || '')).filter(Boolean);
-        const previous = String(select.value || '');
         const normalize = (v) => (typeof window.normalizeArabic === 'function'
             ? window.normalizeArabic(String(v || ''))
             : String(v || '').trim().toLowerCase());
         const term = normalize(q);
-        const esc = (v) => String(v == null ? '' : v)
-            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-        const matches = source.filter((name) => !term || normalize(name).indexOf(term) !== -1);
-        select.innerHTML = '<option value="" disabled>اختر التاجر للتصدير...</option>'
-            + matches.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
-        if (previous && matches.indexOf(previous) !== -1) select.value = previous;
-        else select.value = '';
+        const list = document.getElementById('kanjoExportMerchantList');
+        if (list) {
+            const matches = all.filter((name) => !term || normalize(name).indexOf(term) !== -1);
+            list.innerHTML = matches.map((name) => `<option value="${exportMerchantEsc(name)}"></option>`).join('');
+        }
+        const clearBtn = document.getElementById('kanjoExportMerchantClear');
+        if (clearBtn) clearBtn.classList.toggle('hidden', !String(input.value || '').trim());
         syncExportCardBtn();
     }
 
+    function clearExportMerchant() {
+        const input = document.getElementById('merchantExportFilter');
+        if (input) input.value = '';
+        filterExportMerchants('');
+        syncExportCardBtn();
+        if (input) input.focus();
+    }
+
     function syncExportCardBtn() {
-        const select = document.getElementById('merchantExportFilter');
+        const input = document.getElementById('merchantExportFilter');
         const btn = document.getElementById('kanjoExportMerchantCardBtn');
-        if (btn) btn.disabled = !(select && select.value);
-        /* Smart delta export: refresh the "updated-after-publish" affordance for
-           the newly selected merchant (pure in-memory). */
+        const val = String((input && input.value) || '').trim();
+        const known = Array.isArray(window._kanjoExportAllMerchantNames) ? window._kanjoExportAllMerchantNames : [];
+        /* Only an EXACT merchant name activates the card + delta actions, so a
+           half-typed value can never export the wrong (or an empty) slice. */
+        const isExact = !!val && known.indexOf(val) !== -1;
+        if (btn) btn.disabled = !isExact;
         try { if (typeof window.kanjoSyncDeltaExport === 'function') window.kanjoSyncDeltaExport(); } catch (_) { /* ignore */ }
     }
 
@@ -833,6 +844,7 @@
     window.kanjoVisitsReset = visitsReset;
     window.kanjoSyncFinanceHub = syncFinanceHub;
     window.kanjoFilterExportMerchants = filterExportMerchants;
+    window.kanjoClearExportMerchant = clearExportMerchant;
     window.kanjoSyncExportCardBtn = syncExportCardBtn;
     window.kanjoOpenSelectedMerchantCard = openSelectedMerchantCard;
     window.kanjoOpenMarketingPane = openMarketingPane;
@@ -890,8 +902,8 @@
     if (typeof window.openExportProductsModal === 'function') {
         const origOpenExport = window.openExportProductsModal;
         window.openExportProductsModal = function () {
-            const search = document.getElementById('kanjoExportMerchantSearch');
-            if (search) search.value = '';
+            const input = document.getElementById('merchantExportFilter');
+            if (input) input.value = '';
             filterExportMerchants('');
             syncExportCardBtn();
             return origOpenExport.apply(this, arguments);
