@@ -424,6 +424,12 @@ function applyThemeAndShowDashboard() {
     if (window.kanjoWorkspace && typeof window.kanjoWorkspace.refresh === 'function') {
         try { window.kanjoWorkspace.refresh(); } catch (err) { console.error('[workspace] refresh failed', err); }
     }
+
+    /* Super-admin "Oval Office" VIP theme. Runs AFTER the workspace refresh so
+       the sidebar role badge is not overwritten; a no-op for every other role. */
+    if (typeof window.kanjoApplyExecutiveTheme === 'function') {
+        try { window.kanjoApplyExecutiveTheme(); } catch (_) { /* ignore */ }
+    }
     
     afterAuthReady().then(() => {
         if (window._appListenersRegistered) return;

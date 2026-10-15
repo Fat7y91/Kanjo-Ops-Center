@@ -1,0 +1,302 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   KANJO OPS — "OVAL OFFICE" EXECUTIVE VIP THEME  (super_admin only)
+   ---------------------------------------------------------------------------
+   EVERY rule in this file is scoped under `body.theme-executive-vip`, a class
+   that is ONLY ever added for a `super_admin` session (see uam.js →
+   kanjoApplyExecutiveTheme). It is therefore 100% inert for every other role:
+   reps, auditors, admins and founders keep the standard purple/light UI.
+
+   Palette: Obsidian / Midnight (`#050505` → `#111827`) + Metallic Gold
+   (`#d4af37` / `#c5a059`). Materials: dark glassmorphism. Motion: slow,
+   luxurious fades and soft gold-lift hovers.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body.theme-executive-vip {
+    --vip-obsidian: #050505;
+    --vip-midnight: #0a0a0a;
+    --vip-slate: #111827;
+    --vip-panel: rgba(17, 24, 39, 0.62);
+    --vip-panel-solid: #0d1117;
+    --vip-gold: #d4af37;
+    --vip-gold-2: #c5a059;
+    --vip-gold-bright: #f5d97a;
+    --vip-gold-soft: rgba(212, 175, 55, 0.16);
+    --vip-gold-line: rgba(212, 175, 55, 0.38);
+    --vip-text: #eceff4;
+    --vip-muted: #9aa4b2;
+    --vip-radius: 18px;
+
+    background:
+        radial-gradient(1200px 600px at 15% -10%, rgba(76, 29, 149, 0.30) 0%, transparent 55%),
+        radial-gradient(1000px 520px at 100% 0%, rgba(212, 175, 55, 0.10) 0%, transparent 50%),
+        linear-gradient(160deg, #0a0a0a 0%, #060608 45%, #020203 100%) !important;
+    background-attachment: fixed !important;
+    color: var(--vip-text) !important;
+    min-height: 100vh;
+}
+
+/* Subtle film-grain / vignette overlay for depth. */
+body.theme-executive-vip::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(1400px 900px at 50% -20%, rgba(255, 255, 255, 0.03), transparent 60%),
+        radial-gradient(1000px 700px at 50% 120%, rgba(212, 175, 55, 0.05), transparent 60%);
+}
+body.theme-executive-vip > * { position: relative; z-index: 1; }
+
+/* ── Typography: heavier, more "letterhead" presence ──────────────────── */
+body.theme-executive-vip h1,
+body.theme-executive-vip h2,
+body.theme-executive-vip h3,
+body.theme-executive-vip h4 { letter-spacing: -0.01em; }
+
+body.theme-executive-vip .text-kanjo-dark,
+body.theme-executive-vip .kws-hub-title,
+body.theme-executive-vip .kws-fin-card h3 { color: var(--vip-text) !important; }
+
+body.theme-executive-vip .text-kanjo-primary,
+body.theme-executive-vip .kws-hub-sub { color: var(--vip-gold) !important; }
+
+/* ── Header (legacy pill bar, non-shell pages & mobile) ───────────────── */
+body.theme-executive-vip > header {
+    background: rgba(6, 6, 8, 0.72) !important;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border-bottom: 1px solid var(--vip-gold-line) !important;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6) !important;
+}
+body.theme-executive-vip #userInfo {
+    background: rgba(212, 175, 55, 0.10) !important;
+    border: 1px solid var(--vip-gold-line);
+}
+body.theme-executive-vip #userNameDisplay {
+    color: var(--vip-gold-bright) !important;
+    border-color: var(--vip-gold-line) !important;
+}
+
+/* ── Boot splash ──────────────────────────────────────────────────────── */
+body.theme-executive-vip .boot-splash { background: radial-gradient(circle at 50% 40%, #12100a, #050505 70%) !important; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+body.theme-executive-vip .kanjo-sidebar {
+    background: linear-gradient(180deg, rgba(10, 10, 12, 0.92), rgba(6, 6, 8, 0.96)) !important;
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border-left: 1px solid var(--vip-gold-line) !important;
+    box-shadow: -18px 0 60px rgba(0, 0, 0, 0.65) !important;
+}
+body.theme-executive-vip .ksb-brand { border-bottom: 1px solid var(--vip-gold-line); }
+body.theme-executive-vip .ksb-brand-title { color: var(--vip-text); }
+body.theme-executive-vip .ksb-brand-title span { color: var(--vip-gold); }
+body.theme-executive-vip .ksb-brand-sub { color: var(--vip-gold-2); letter-spacing: 4px; }
+body.theme-executive-vip .ksb-logo {
+    background: #0b0b0d;
+    border: 1px solid var(--vip-gold-line);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(212, 175, 55, 0.18);
+}
+body.theme-executive-vip .ksb-footer { border-top: 1px solid var(--vip-gold-line); }
+
+/* Sidebar nav tabs */
+body.theme-executive-vip .kanjo-sidebar .kws-tab {
+    color: #cfd3db;
+    transition: background 0.25s ease, color 0.25s ease, transform 0.2s ease, box-shadow 0.25s ease;
+}
+body.theme-executive-vip .kanjo-sidebar .kws-tab:hover {
+    background: var(--vip-gold-soft);
+    color: var(--vip-gold-bright);
+    transform: translateX(-3px);
+}
+body.theme-executive-vip .kanjo-sidebar .kws-tab.is-active,
+body.theme-executive-vip .kws-tab.is-active {
+    background: linear-gradient(90deg, var(--vip-gold-2), var(--vip-gold) 45%, var(--vip-gold-bright)) !important;
+    color: #0a0a0a !important;
+    box-shadow: 0 10px 30px rgba(212, 175, 55, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+body.theme-executive-vip .kanjo-sidebar .kws-tab.is-active .kws-badge { background: #0a0a0a !important; color: var(--vip-gold) !important; }
+body.theme-executive-vip .kws-badge { background: var(--vip-gold) !important; color: #0a0a0a !important; }
+
+/* Sidebar user footer */
+body.theme-executive-vip .ksb-user-name { color: var(--vip-text); font-weight: 900; }
+body.theme-executive-vip .ksb-user-role { color: var(--vip-gold-2); }
+body.theme-executive-vip .ksb-avatar img { border-color: var(--vip-gold); box-shadow: 0 0 16px rgba(212, 175, 55, 0.45); }
+body.theme-executive-vip .ksb-icon-btn { color: var(--vip-gold-2); background: rgba(212, 175, 55, 0.08); }
+body.theme-executive-vip .ksb-icon-btn:hover { background: rgba(212, 175, 55, 0.22); color: var(--vip-gold-bright); }
+body.theme-executive-vip .ksb-quick button { color: #cfd3db; background: rgba(212, 175, 55, 0.06); }
+body.theme-executive-vip .ksb-quick button:hover { background: rgba(212, 175, 55, 0.18); color: var(--vip-gold-bright); }
+body.theme-executive-vip .ksb-quick button i { color: var(--vip-gold); }
+
+/* ── The prestigious role badge ───────────────────────────────────────── */
+.ksb-user-role-vip {
+    color: var(--vip-gold-bright) !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.02em;
+    text-shadow: 0 0 12px rgba(212, 175, 55, 0.65);
+    animation: vipGoldPulse 3.2s ease-in-out infinite;
+}
+@keyframes vipGoldPulse {
+    0%, 100% { text-shadow: 0 0 10px rgba(212, 175, 55, 0.45); }
+    50% { text-shadow: 0 0 22px rgba(245, 217, 122, 0.9); }
+}
+
+/* ── Panels, cards & bento surfaces ───────────────────────────────────── */
+body.theme-executive-vip #dashboardSection,
+body.theme-executive-vip main { background: transparent !important; }
+
+body.theme-executive-vip #dashboardSection > div,
+body.theme-executive-vip #dashboardSection > .kws-card,
+body.theme-executive-vip .kws-hub-card,
+body.theme-executive-vip .kws-fin-card,
+body.theme-executive-vip .kws-datestrip-wrap,
+body.theme-executive-vip .kanjo-workspace-pane:not(.hidden) {
+    background: var(--vip-panel) !important;
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+    border: 1px solid rgba(212, 175, 55, 0.20) !important;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    border-radius: var(--vip-radius) !important;
+    transition: transform 0.30s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.30s ease, border-color 0.30s ease !important;
+}
+body.theme-executive-vip #dashboardSection > div:hover,
+body.theme-executive-vip .kws-card:hover,
+body.theme-executive-vip .kws-hub-card:hover,
+body.theme-executive-vip .kws-fin-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--vip-gold-line) !important;
+    box-shadow: 0 28px 64px rgba(0, 0, 0, 0.6), 0 0 40px rgba(212, 175, 55, 0.14) !important;
+}
+
+/* ── Neutral Tailwind surfaces → dark glass ───────────────────────────── */
+body.theme-executive-vip .bg-white { background: var(--vip-panel) !important; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+body.theme-executive-vip .bg-slate-50,
+body.theme-executive-vip .bg-gray-50,
+body.theme-executive-vip .bg-kanjo-light,
+body.theme-executive-vip .bg-kanjo-bg { background: rgba(255, 255, 255, 0.035) !important; }
+body.theme-executive-vip .bg-slate-100,
+body.theme-executive-vip .bg-gray-100,
+body.theme-executive-vip .bg-purple-100 { background: rgba(212, 175, 55, 0.10) !important; }
+
+body.theme-executive-vip .text-slate-400,
+body.theme-executive-vip .text-slate-500,
+body.theme-executive-vip .text-gray-500,
+body.theme-executive-vip .text-slate-600 { color: var(--vip-muted) !important; }
+body.theme-executive-vip .text-slate-700,
+body.theme-executive-vip .text-slate-800,
+body.theme-executive-vip .text-slate-900 { color: var(--vip-text) !important; }
+body.theme-executive-vip .text-purple-500,
+body.theme-executive-vip .text-purple-600 { color: var(--vip-gold-2) !important; }
+
+body.theme-executive-vip .border-slate-100,
+body.theme-executive-vip .border-slate-200,
+body.theme-executive-vip .border-gray-100,
+body.theme-executive-vip .border-purple-100,
+body.theme-executive-vip .border-purple-200 { border-color: rgba(212, 175, 55, 0.20) !important; }
+body.theme-executive-vip .divide-slate-100 > * + *,
+body.theme-executive-vip .divide-y > * + * { border-color: rgba(212, 175, 55, 0.14) !important; }
+
+/* ── Buttons & accents → metallic gold ────────────────────────────────── */
+body.theme-executive-vip .bg-kanjo-primary,
+body.theme-executive-vip .bg-kanjo-dark,
+body.theme-executive-vip button[class*="bg-[#230535]"],
+body.theme-executive-vip a[class*="bg-[#230535]"],
+body.theme-executive-vip button[class*="bg-purple-"],
+body.theme-executive-vip a[class*="bg-purple-"] {
+    background: linear-gradient(135deg, var(--vip-gold-2), var(--vip-gold) 55%, var(--vip-gold-bright)) !important;
+    color: #0a0a0a !important;
+    border-color: transparent !important;
+    box-shadow: 0 10px 26px rgba(212, 175, 55, 0.28) !important;
+}
+body.theme-executive-vip button[class*="bg-[#E57723]"],
+body.theme-executive-vip button[class*="bg-orange-"] {
+    background: linear-gradient(135deg, #b8860b, var(--vip-gold)) !important;
+    color: #0a0a0a !important;
+}
+body.theme-executive-vip .text-white { color: #0a0a0a; }
+
+/* Ghost / outline pills */
+body.theme-executive-vip .kws-pill {
+    background: rgba(212, 175, 55, 0.08) !important;
+    border-color: var(--vip-gold-line) !important;
+    color: var(--vip-gold-2) !important;
+}
+body.theme-executive-vip .kws-pill:hover { background: rgba(212, 175, 55, 0.20) !important; color: var(--vip-gold-bright) !important; }
+body.theme-executive-vip .kws-pill.is-active {
+    background: linear-gradient(90deg, var(--vip-gold-2), var(--vip-gold)) !important;
+    color: #0a0a0a !important;
+}
+body.theme-executive-vip .kws-pill-ghost { background: transparent !important; color: var(--vip-muted) !important; }
+
+/* ── Inputs / selects / textareas ─────────────────────────────────────── */
+body.theme-executive-vip input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+body.theme-executive-vip select,
+body.theme-executive-vip textarea {
+    background: rgba(0, 0, 0, 0.45) !important;
+    color: var(--vip-text) !important;
+    border-color: rgba(212, 175, 55, 0.28) !important;
+}
+body.theme-executive-vip input::placeholder,
+body.theme-executive-vip textarea::placeholder { color: #6b7280 !important; }
+body.theme-executive-vip input:focus,
+body.theme-executive-vip select:focus,
+body.theme-executive-vip textarea:focus {
+    outline: none !important;
+    border-color: var(--vip-gold) !important;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18) !important;
+}
+body.theme-executive-vip option { background: #0d1117; color: var(--vip-text); }
+body.theme-executive-vip .accent-kanjo-primary { accent-color: var(--vip-gold) !important; }
+
+/* ── Modals & overlays ────────────────────────────────────────────────── */
+body.theme-executive-vip .fixed > .bg-white,
+body.theme-executive-vip [id$="Modal"] > div,
+body.theme-executive-vip [id*="Modal"] .bg-white {
+    background: rgba(13, 17, 23, 0.94) !important;
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid var(--vip-gold-line) !important;
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.75) !important;
+}
+body.theme-executive-vip #notificationsDropdown {
+    background: rgba(13, 17, 23, 0.96) !important;
+    border: 1px solid var(--vip-gold-line) !important;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+body.theme-executive-vip table thead { background: rgba(212, 175, 55, 0.08) !important; color: var(--vip-gold-2) !important; }
+body.theme-executive-vip table tbody tr { border-color: rgba(212, 175, 55, 0.12) !important; }
+body.theme-executive-vip table tbody tr:hover { background: rgba(212, 175, 55, 0.06) !important; }
+
+/* ── The UAM (User Access Management) matrix inside the theme ─────────── */
+body.theme-executive-vip #kanjoUamWidget { border-color: var(--vip-gold-line) !important; }
+body.theme-executive-vip #kanjoUamWidget > div:first-child { background: linear-gradient(120deg, #0a0a0a, #1a1408) !important; }
+body.theme-executive-vip .uam-toggle { accent-color: var(--vip-gold) !important; }
+
+/* ── Scrollbars ───────────────────────────────────────────────────────── */
+body.theme-executive-vip ::-webkit-scrollbar { width: 10px; height: 10px; }
+body.theme-executive-vip ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); }
+body.theme-executive-vip ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--vip-gold-2), #8a6d1f); border-radius: 9999px; }
+
+/* ── Luxurious micro-interactions ─────────────────────────────────────── */
+@keyframes vipFadeIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+}
+body.theme-executive-vip #dashboardSection > *,
+body.theme-executive-vip .kws-hub-pane > * {
+    animation: vipFadeIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+body.theme-executive-vip .kws-nav-inner { animation: vipFadeIn 0.45s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+    body.theme-executive-vip #dashboardSection > *,
+    body.theme-executive-vip .kws-hub-pane > *,
+    body.theme-executive-vip .kws-nav-inner,
+    .ksb-user-role-vip { animation: none !important; }
+    body.theme-executive-vip .kws-card:hover,
+    body.theme-executive-vip #dashboardSection > div:hover { transform: none !important; }
+}

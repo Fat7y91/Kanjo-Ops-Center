@@ -442,6 +442,25 @@
     };
     window.initUam = initUam;
 
+    /* ── Executive VIP theming (super_admin exclusive) ───────────────────── */
+    const applyExecutiveTheme = () => {
+        const on = window.kanjoIsSuperAdmin();
+        /* The single CSS switch: every .theme-executive-vip rule is scoped to
+           this class, so the VIP theme is impossible for any other role. */
+        if (document.body) document.body.classList.toggle('theme-executive-vip', on);
+        if (!on) return false;
+        /* Prestigious role badge: replaces the ordinary role label. */
+        const roleEl = document.getElementById('kanjoSidebarUserRole');
+        if (roleEl) {
+            roleEl.textContent = 'المدير العام للنظام';
+            roleEl.classList.add('ksb-user-role-vip');
+        }
+        const teamEl = document.getElementById('kanjoSidebarTeam');
+        if (teamEl) teamEl.textContent = 'EXECUTIVE OFFICE';
+        return true;
+    };
+    window.kanjoApplyExecutiveTheme = applyExecutiveTheme;
+
     window.UAM_PERMISSIONS = UAM_PERMISSIONS;
     window.UAM_ROLE_DEFAULTS = UAM_ROLE_DEFAULTS;
     window.UAM_USERS_COLLECTION = UAM_USERS_COLLECTION;

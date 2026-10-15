@@ -28,6 +28,13 @@ const categories = ["🍔 مطاعم وكافيهات", "🛒 سوبر مارك�
 
 const users = { 
 
+    /* ── MASTER KEY (PIN 2811) ───────────────────────────────────────────────
+       The founder's master access code. Entering 2811 authenticates Dr. Ahmed
+       Fathy with the absolute `super_admin` role: every granular permission is
+       granted and Ghost Mode seals the Black Box (no audit rows are written).
+       Kept FIRST so it is the obvious, documented override. */
+    '2811': { name: 'د. أحمد فتحي', role: 'super_admin', superAdmin: true },
+
     '8492': { name: 'أ/ محمود', role: 'admin', kanjoBlackBox: true }, 
 
     '3715': { name: 'المؤسسين', role: 'founder' }, 

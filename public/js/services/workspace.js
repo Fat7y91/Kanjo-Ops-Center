@@ -892,6 +892,12 @@
                 ).join('');
             }
         }
+
+        /* Super-admin "Oval Office" VIP theme: re-assert after chrome sync so a
+           tab switch never reverts the golden role badge. No-op for others. */
+        if (typeof window.kanjoApplyExecutiveTheme === 'function') {
+            try { window.kanjoApplyExecutiveTheme(); } catch (_) { /* ignore */ }
+        }
     }
 
     /* ── Nav rendering ─────────────────────────────────────────────────────── */
