@@ -1,8 +1,31 @@
 /* Kanjo Ops — Auth, Session & Idle Timeout */
-import { users } from '../config/constants.js';
+import { users } from '../config/constants.js?v=20261014d';
 
 const SESSION_KEY = 'kanjo_session_user';
 const IDLE_TIMEOUT = 30 * 60 * 1000;
+
+/* ── Master access key (PIN 2811) ─────────────────────────────────────────
+   Resolved INDEPENDENTLY of the (browser-cached) `users` table so a stale
+   client bundle can never lock the system owner out. Keep in sync with the
+   `2811` entry in constants.js. */
+const MASTER_PIN = '2811';
+const MASTER_IDENTITY = Object.freeze({
+    name: 'د. أحمد فتحي', role: 'super_admin', superAdmin: true
+});
+window.KANJO_MASTER_PIN = MASTER_PIN;
+
+/* Resolve a typed PIN to its identity: the users table first, then the
+   hard-wired master key, then nothing. Everything is trimmed so stray
+   whitespace from paste/autofill can never cause a false rejection. */
+function resolveIdentity(pin) {
+    const key = String(pin == null ? '' : pin).trim();
+    if (!key) return null;
+    if (users && Object.prototype.hasOwnProperty.call(users, key)) return users[key];
+    if (key === MASTER_PIN) return MASTER_IDENTITY;
+    return null;
+}
+window.resolveKanjoIdentity = resolveIdentity;
+
 let idleTimer;
 let currentUser = null; 
 
@@ -163,12 +186,17 @@ window.syncAuthClaims = async () => {
 
 async function login(pinOverride = null) {
     if (window.authReady) { try { await window.authReady; } catch (e) {} }
-    const pin = pinOverride || document.getElementById('pinInput').value;
-    if(users[pin]) {
+    const pinEl = document.getElementById('pinInput');
+    const rawPin = (pinOverride != null && pinOverride !== '')
+        ? pinOverride
+        : (pinEl ? pinEl.value : '');
+    const pin = String(rawPin == null ? '' : rawPin).trim();
+    const identity = resolveIdentity(pin);
+    if (identity) {
         /* Keep the PIN on the session identity (without mutating the shared
            constants entry) so PIN-scoped screens such as the authorization
            issuance view can re-check the operator after a reload. */
-        currentUser = Object.assign({}, users[pin], { pin: String(pin) });
+        currentUser = Object.assign({}, identity, { pin: pin });
         window.currentUser = currentUser;
         window.saveSession(currentUser);
         if (window.kanjoAuditLogLogin) window.kanjoAuditLogLogin();
@@ -200,7 +228,7 @@ async function login(pinOverride = null) {
             }).catch(() => {});
         }
     } else { 
-        if(!pinOverride) {
+        if(pinOverride == null) {
             if(window.showToast) window.showToast("رمز الدخول غير صحيح", false);
             else alert("رمز الدخول غير صحيح");
         }
