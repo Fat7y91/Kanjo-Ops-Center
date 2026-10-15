@@ -22,6 +22,32 @@ const getBaseName = (name) => {
 
 
 
+/* Shared privilege resolution. Centralised so EVERY manager-level gate stays in
+   sync as new principals are onboarded. Returns true for the manager roles
+   (admin / founder), the elevated Ghost super_admin identity, and any explicit
+   owner/elevation flag. Delegates to uam.js's `kanjoIsSuperAdmin` when present
+   (it also matches the configured principal by name/email) and never throws
+   during the brief window before uam.js evaluates. */
+window.kanjoIsSuperAdminRole = () => {
+    const u = window.currentUser;
+    if (u && (String(u.role || '') === 'super_admin' || u.superAdmin === true)) return true;
+    try {
+        if (typeof window.kanjoIsSuperAdmin === 'function') return !!window.kanjoIsSuperAdmin();
+    } catch (_) { /* ignore */ }
+    return false;
+};
+
+window.kanjoIsPrivilegedUser = () => {
+    const u = window.currentUser;
+    if (!u) return false;
+    const role = String(u.role || '');
+    if (role === 'admin' || role === 'founder') return true;
+    if (u.isFounder === true || u.kanjoFounder === true) return true;
+    return window.kanjoIsSuperAdminRole();
+};
+
+
+
 window.showToast = (message, isSuccess = true) => {
 
     const container = document.getElementById('toast-container');

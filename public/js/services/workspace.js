@@ -847,7 +847,7 @@
         /* Bug 6: the sidebar notification bell is founder/admin-only. */
         const notifBtn = document.getElementById('kanjoSidebarNotifBtn');
         if (notifBtn) {
-            const canNotif = u.role === 'admin' || u.role === 'founder';
+            const canNotif = (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser());
             notifBtn.classList.toggle('hidden', !canNotif);
         }
         const quick = document.getElementById('kanjoSidebarQuick');

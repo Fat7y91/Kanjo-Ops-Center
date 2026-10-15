@@ -7,12 +7,13 @@ service cloud.firestore {
     //
     // Identity is sourced from Firebase Auth custom claims provisioned by
     // scripts/set-auth-claims.mjs:
-    //     kanjoRole   : admin | founder | accounting | rep | data_entry | marketing | product_audit
+    //     kanjoRole   : admin | founder | accounting | rep | data_entry | marketing | product_audit | super_admin
     //     kanjoTeam   : 'Fox Team' | 'Power Team' | ''
     //     kanjoName   : the Arabic display name (matches PIN identity)
     //     kanjoRepId  : kpiRepId(kanjoName)
     //     kanjoOps    : true for the Operations Manager (محمود)
     //     kanjoContent: true for the content/image editor (يوسف)
+    //     kanjoSuperAdmin: true for the elevated Ghost / super-admin identity
     //
     // The app keeps its anonymous sign-in + client PIN UX. The Admin SDK
     // script binds each device's anonymous UID to the matching PIN identity.
@@ -54,8 +55,14 @@ service cloud.firestore {
     // denied on every collection they can reach. The portal additionally never
     // renders edit/delete/export controls and paginates at 24 items per request.
     function isMarketingAgency() { return claimRole() == 'marketing_agency'; }
+    // Super-admin (Ghost / "المدير العام للنظام"): the elevated owner identity
+    // onboarded through the UAM panel. Recognised either by the dedicated role
+    // claim or the explicit boolean claim so provisioning is unambiguous.
+    function isSuperAdmin() {
+      return isSignedIn() && (claimRole() == 'super_admin' || tok().get('kanjoSuperAdmin', false) == true);
+    }
 
-    function isPrivileged() { return isAdmin() || isFounder(); }
+    function isPrivileged() { return isAdmin() || isFounder() || isSuperAdmin(); }
     function isOpsManager() { return isSignedIn() && tok().get('kanjoOps', false) == true; }
     function isContentUser() { return isSignedIn() && tok().get('kanjoContent', false) == true; }
     function isManagerViewer() { return isPrivileged() || isOpsManager(); }
@@ -92,6 +99,25 @@ service cloud.firestore {
     match /commissions/{docId} {
       allow read: if isSignedIn() && !isMarketingAgency();
       allow write: if isAdmin();
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // User Access Management directory (`users`). Holds each operator's
+    // GRANULAR permissions + the `superAdmin` flag consumed by the UAM panel
+    // (public/js/services/uam.js). It is NOT an authorization source for these
+    // rules — enforcement is claim-based above — but it must be readable so the
+    // super-admin's matrix can populate, and writable so the panel (and the
+    // one-time `#uam-bootstrap` self-elevation) can persist.
+    //   READ : privileged managers / super-admin; legacy() keeps the founder's
+    //          claimless session working during the RBAC migration window,
+    //          exactly like every other sensitive collection above.
+    //   WRITE: privileged managers / super-admin (same migration-window escape).
+    // The PIN table is already shipped client-side in constants.js, so the
+    // directory holds no secret beyond the operators' own display identities.
+    // ───────────────────────────────────────────────────────────────
+    match /users/{docId} {
+      allow read: if !isMarketingAgency() && (legacy() || isPrivileged() || isOpsManager());
+      allow write: if !isMarketingAgency() && (legacy() || isPrivileged());
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -335,7 +361,7 @@ service cloud.firestore {
     //   is switched on, legacy() becomes false and ONLY tokens with
     //   kanjoRole == 'founder' can read (admins such as محمود stay denied).
     match /audit_logs/{docId} {
-      allow read: if !isMarketingAgency() && (legacy() || isFounder());
+      allow read: if !isMarketingAgency() && (legacy() || isFounder() || isSuperAdmin());
       allow create: if isSignedIn();
       allow update, delete: if false;
     }

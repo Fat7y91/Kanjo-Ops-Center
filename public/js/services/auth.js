@@ -247,7 +247,8 @@ function applyThemeAndShowDashboard() {
     document.getElementById('loginSection').classList.add('hidden'); 
 
     const isAccounting = (currentUser.role === 'accounting');
-    const isFounder = (currentUser.role === 'founder');
+    const isSuperAdmin = (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole());
+    const isFounder = (currentUser.role === 'founder') || isSuperAdmin;
     const isMarketing = (currentUser.role === 'marketing');
     const isProductAudit = (currentUser.role === 'product_audit');
     
@@ -297,7 +298,7 @@ function applyThemeAndShowDashboard() {
     }
     
     const isMahmoud = (window.canManageContracts ? window.canManageContracts() : false);
-    const isAdmin = (currentUser.role === 'admin');
+    const isAdmin = (currentUser.role === 'admin') || isSuperAdmin;
     const isRep = (currentUser.role === 'rep');
     const isDataEntry = (currentUser.role === 'data_entry');
     const canViewLive = !isDataEntry && (isMahmoud || isFounder);

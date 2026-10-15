@@ -20,7 +20,8 @@ window.canManageContracts = () => {
 
     const name = String(u.name || '').trim();
 
-    return !!(u.role === 'admin' || u.role === 'founder' || name.includes('محمود'));
+    return !!(name.includes('محمود')
+        || (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser()));
 
 };
 
@@ -2186,7 +2187,7 @@ const renderDashboardNow = (snapshot) => {
 
 
 
-    if(currentUser.role === 'admin' || currentUser.role === 'founder') {
+    if(typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser()) {
 
         renderAdvancedCharts(perfData, signedCatCounts);
 
@@ -2247,7 +2248,7 @@ const renderDashboardNow = (snapshot) => {
 
     }
 
-    if(currentUser.role === 'admin' || currentUser.role === 'founder') { 
+    if(typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser()) { 
 
         ['Fox Team', 'Power Team'].forEach(team => { 
 
@@ -2285,7 +2286,7 @@ const renderDashboardNow = (snapshot) => {
 
     }
 
-    const renderedTeams = (currentUser.role === 'admin' || currentUser.role === 'founder') ? ['Fox Team', 'Power Team'] : [currentUser.team];
+    const renderedTeams = (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser()) ? ['Fox Team', 'Power Team'] : [currentUser.team];
     let renderedTaskCount = 0;
     renderedTeams.forEach((team) => {
         Object.values(visibleGroupedByTeam[team] || {}).forEach((arr) => { renderedTaskCount += arr.length; });
@@ -2712,7 +2713,7 @@ window.renderTasks = (grouped) => {
 
             const visibleReports = sortedReports.filter(r => {
 
-                if (currentUser.role === 'admin' || currentUser.role === 'founder') return true;
+                if (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser()) return true;
 
                 if (currentUser.role === 'rep') {
 

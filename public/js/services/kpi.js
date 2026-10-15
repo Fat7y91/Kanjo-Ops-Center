@@ -198,6 +198,7 @@ window.canViewKpiDashboard = () => {
     const u = window.currentUser;
     if (!u) return false;
     if (u.role === 'rep' || u.role === 'data_entry' || u.role === 'accounting') return false;
+    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
     if (typeof window.isCatalogFounderUser === 'function' && window.isCatalogFounderUser()) return true;
     if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
     if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) return true;
@@ -2350,6 +2351,7 @@ window.canPreviewRepPersonalKpi = () => {
     const u = window.currentUser;
     if (!u) return false;
     if (u.role === 'admin') return true;
+    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
     if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
     if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) return true;
     return false;

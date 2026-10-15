@@ -50,7 +50,8 @@ window.marketingIsHome = () =>
 
 window.marketingCanView = () => {
     const role = String((window.currentUser && window.currentUser.role) || '');
-    return role === 'marketing' || role === 'founder' || role === 'admin';
+    return role === 'marketing'
+        || (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser());
 };
 
 /* ─── Formatting ─── */

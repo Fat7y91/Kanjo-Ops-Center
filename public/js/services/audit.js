@@ -101,6 +101,10 @@ window.kanjoAuditCanView = () => {
     if (!u) return false;
     /* Dedicated per-user Black Box grant — role-independent by design. */
     if (u.kanjoBlackBox === true) return true;
+    /* The super-admin (Ghost) is the system owner: it must be able to VIEW the
+       Black Box. Its writes stay ghosted at the write() layer, so viewing here
+       leaks nothing about its own actions. */
+    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
     /* Dedicated founder role flag is mandatory. */
     if (String(u.role || '') !== 'founder') return false;
     /* Explicit owner flag short-circuits the whitelist. */

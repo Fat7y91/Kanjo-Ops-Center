@@ -6,12 +6,13 @@
  * PIN identity by writing custom claims that firestore.rules can enforce.
  *
  * Claims written:
- *   kanjoRole    admin | founder | accounting | rep | data_entry | marketing | product_audit
+ *   kanjoRole    admin | founder | accounting | rep | data_entry | marketing | product_audit | super_admin
  *   kanjoTeam    'Fox Team' | 'Power Team' | ''
  *   kanjoName    the Arabic display name (must match the PIN identity)
  *   kanjoRepId   kpiRepId(kanjoName) — mirrors public/js/services/kpi.js
  *   kanjoOps     true for the Operations Manager (name contains محمود)
  *   kanjoContent true for the content/image editor (name contains يوسف/yousef)
+ *   kanjoSuperAdmin true for the elevated Ghost / super-admin identity
  *
  * Credentials (same convention as the other scripts):
  *   FIREBASE_SERVICE_ACCOUNT       : full service-account JSON (CI secret)
@@ -46,7 +47,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { readFileSync } from 'node:fs';
 
-const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry', 'marketing', 'product_audit', 'marketing_agency'];
+const VALID_ROLES = ['admin', 'founder', 'accounting', 'rep', 'data_entry', 'marketing', 'product_audit', 'marketing_agency', 'super_admin'];
 
 const dryRun = process.env.SYNC_DRY_RUN === '1';
 const args = process.argv.slice(2);
@@ -95,7 +96,10 @@ const buildClaims = (identity) => {
     kanjoName: name,
     kanjoRepId: kpiRepId(name),
     kanjoOps: isOpsName(name),
-    kanjoContent: isContentName(name)
+    kanjoContent: isContentName(name),
+    /* Elevated Ghost identity: recognised by firestore.rules isSuperAdmin()
+       independently of the role claim so provisioning is unambiguous. */
+    kanjoSuperAdmin: role === 'super_admin'
   };
 };
 

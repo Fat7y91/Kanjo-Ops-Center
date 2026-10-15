@@ -180,15 +180,32 @@ body.theme-executive-vip .bg-slate-100,
 body.theme-executive-vip .bg-gray-100,
 body.theme-executive-vip .bg-purple-100 { background: rgba(212, 175, 55, 0.10) !important; }
 
+body.theme-executive-vip .text-slate-300,
 body.theme-executive-vip .text-slate-400,
 body.theme-executive-vip .text-slate-500,
+body.theme-executive-vip .text-gray-400,
 body.theme-executive-vip .text-gray-500,
 body.theme-executive-vip .text-slate-600 { color: var(--vip-muted) !important; }
 body.theme-executive-vip .text-slate-700,
 body.theme-executive-vip .text-slate-800,
-body.theme-executive-vip .text-slate-900 { color: var(--vip-text) !important; }
+body.theme-executive-vip .text-slate-900,
+body.theme-executive-vip .text-gray-600,
+body.theme-executive-vip .text-gray-700,
+body.theme-executive-vip .text-gray-800,
+body.theme-executive-vip .text-gray-900 { color: var(--vip-text) !important; }
 body.theme-executive-vip .text-purple-500,
 body.theme-executive-vip .text-purple-600 { color: var(--vip-gold-2) !important; }
+
+/* Arbitrary dark-hex text utilities (the DOM uses `text-[#230535]` ~90 times,
+   plus a few `text-[#4B0082]` / `text-[#6D28D9]`). On the obsidian surface they
+   are unreadable, so lift them to the light VIP text colour — EXCEPT when the
+   same element also paints a gold/orange background, where the original dark
+   ink is required for contrast. */
+body.theme-executive-vip [class*="text-[#230535]"]:not([class*="bg-[#FFD700]"]):not([class*="bg-[#E57723]"]):not([class*="bg-[#facc15]"]):not([class*="bg-yellow"]),
+body.theme-executive-vip [class*="text-[#4B0082]"]:not([class*="bg-[#FFD700]"]):not([class*="bg-[#E57723]"]) {
+    color: var(--vip-text) !important;
+}
+body.theme-executive-vip [class*="text-[#6D28D9]"] { color: var(--vip-gold-2) !important; }
 
 body.theme-executive-vip .border-slate-100,
 body.theme-executive-vip .border-slate-200,
@@ -268,6 +285,7 @@ body.theme-executive-vip #notificationsDropdown {
 
 /* ── Tables ───────────────────────────────────────────────────────────── */
 body.theme-executive-vip table thead { background: rgba(212, 175, 55, 0.08) !important; color: var(--vip-gold-2) !important; }
+body.theme-executive-vip table tbody td { color: var(--vip-text) !important; }
 body.theme-executive-vip table tbody tr { border-color: rgba(212, 175, 55, 0.12) !important; }
 body.theme-executive-vip table tbody tr:hover { background: rgba(212, 175, 55, 0.06) !important; }
 

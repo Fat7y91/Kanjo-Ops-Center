@@ -251,6 +251,7 @@ window.founderAuditAssign = founderAuditAssign;
 window.isFounderAuditUser = () => {
     const u = window.currentUser;
     if (!u) return false;
+    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
     const role = String(u.role || '').trim();
     if (role === 'founder') return true;
     return FOUNDER_AUDIT_FOUNDERS.includes(String(u.name || '').trim());
