@@ -32,39 +32,79 @@
     /* The granular permission catalogue — the single source of truth shared by
        the matrix UI and the enforcers. `group` clusters the columns in the
        checkbox matrix so the grid stays legible. */
+    /* Exhaustive audit of every RBAC-gated surface in the app (auth element
+       gates, audit/kpi/marketing/catalog/authorization/menu-import guards).
+       Grouped so the checkbox grid stays legible. `legacy` enforcers pass the
+       pre-UAM predicate as `legacyDefault`, so a user with NO explicit override
+       keeps today's exact behaviour and only an explicit toggle changes it. */
     const UAM_PERMISSIONS = [
-        { key: 'canCreateTasks', label: 'إضافة مهام', icon: 'fa-list-check', group: 'المهام' },
-        { key: 'canApproveTasks', label: 'اعتماد المهام', icon: 'fa-check-double', group: 'المهام' },
-        { key: 'canAddProducts', label: 'إضافة منتجات', icon: 'fa-plus', group: 'المنتجات' },
-        { key: 'canEditProducts', label: 'تعديل منتجات', icon: 'fa-pen-to-square', group: 'المنتجات' },
-        { key: 'canDeleteProducts', label: 'حذف منتجات', icon: 'fa-trash-can', group: 'المنتجات' },
-        { key: 'canExportExcel', label: 'تصدير إكسل', icon: 'fa-file-excel', group: 'المنتجات' },
-        { key: 'canEditMerchant', label: 'تعديل بيانات التاجر', icon: 'fa-store', group: 'التجار' },
-        { key: 'canManageContracts', label: 'إدارة العقود', icon: 'fa-file-signature', group: 'التجار' },
-        { key: 'canViewFinance', label: 'رؤية الرواتب والماليات', icon: 'fa-coins', group: 'المالية' },
-        { key: 'canViewKpi', label: 'عرض مؤشرات الأداء', icon: 'fa-chart-line', group: 'التقارير' },
-        { key: 'canManageUsers', label: 'إدارة المستخدمين', icon: 'fa-users-gear', group: 'النظام' }
+        /* المهام والعمليات */
+        { key: 'canCreateTasks', label: 'إضافة/تعيين مهام', icon: 'fa-list-check', group: 'المهام والعمليات' },
+        { key: 'canApproveTasks', label: 'اعتماد المهام', icon: 'fa-check-double', group: 'المهام والعمليات' },
+        { key: 'canViewTasks', label: 'لوحة المهام اليومية', icon: 'fa-clipboard-list', group: 'المهام والعمليات' },
+        { key: 'canManageTransferQueue', label: 'طلبات النقل', icon: 'fa-right-left', group: 'المهام والعمليات' },
+        { key: 'canArchiveReports', label: 'أرشيف التقارير', icon: 'fa-box-archive', group: 'المهام والعمليات' },
+        /* المنتجات والكتالوج */
+        { key: 'canBrowseCatalog', label: 'تصفح منتجات الفريق', icon: 'fa-magnifying-glass', group: 'المنتجات والكتالوج' },
+        { key: 'canViewAllCatalogProducts', label: 'عرض كل المنتجات', icon: 'fa-layer-group', group: 'المنتجات والكتالوج' },
+        { key: 'canAddProducts', label: 'إضافة منتجات', icon: 'fa-plus', group: 'المنتجات والكتالوج' },
+        { key: 'canEditProducts', label: 'تعديل منتجات', icon: 'fa-pen-to-square', group: 'المنتجات والكتالوج' },
+        { key: 'canDeleteProducts', label: 'حذف منتجات', icon: 'fa-trash-can', group: 'المنتجات والكتالوج' },
+        { key: 'canExportExcel', label: 'تصدير إكسل', icon: 'fa-file-excel', group: 'المنتجات والكتالوج' },
+        { key: 'canUseDataEntryTools', label: 'أدوات إدخال البيانات', icon: 'fa-keyboard', group: 'المنتجات والكتالوج' },
+        /* التجار والعقود */
+        { key: 'canEditMerchant', label: 'تعديل بيانات التاجر', icon: 'fa-store', group: 'التجار والعقود' },
+        { key: 'canManageContracts', label: 'إدارة العقود', icon: 'fa-file-signature', group: 'التجار والعقود' },
+        /* المالية */
+        { key: 'canViewFinance', label: 'الرواتب والماليات', icon: 'fa-coins', group: 'المالية' },
+        { key: 'canViewFinancialProfile', label: 'كشف حساب مندوب', icon: 'fa-wallet', group: 'المالية' },
+        /* التقارير والمؤشرات */
+        { key: 'canViewKpi', label: 'مؤشرات الأداء', icon: 'fa-chart-line', group: 'التقارير والمؤشرات' },
+        { key: 'canViewFounderAudit', label: 'تدقيق المؤسسين', icon: 'fa-clipboard-check', group: 'التقارير والمؤشرات' },
+        { key: 'canViewAnalytics', label: 'لوحة تحليل الأداء', icon: 'fa-chart-pie', group: 'التقارير والمؤشرات' },
+        /* النظام والأمان */
+        { key: 'canViewNotifications', label: 'الإشعارات', icon: 'fa-bell', group: 'النظام والأمان' },
+        { key: 'canViewMarketing', label: 'بوابة التسويق', icon: 'fa-bullhorn', group: 'النظام والأمان' },
+        { key: 'canViewBlackBox', label: 'الصندوق الأسود', icon: 'fa-user-secret', group: 'النظام والأمان' },
+        { key: 'canIssueAuthorization', label: 'إصدار تفويض تعاقد', icon: 'fa-file-shield', group: 'النظام والأمان' },
+        { key: 'canImportMenu', label: 'استيراد المنيو', icon: 'fa-file-import', group: 'النظام والأمان' },
+        { key: 'canManageUsers', label: 'إدارة المستخدمين', icon: 'fa-users-gear', group: 'النظام والأمان' }
     ];
     const UAM_PERMISSION_KEYS = UAM_PERMISSIONS.map((p) => p.key);
     /* Legacy singular aliases (older docs / call sites) → canonical key. */
     const UAM_PERMISSION_ALIASES = {
         canAddProduct: 'canAddProducts',
         canDeleteProduct: 'canDeleteProducts',
-        canEditProduct: 'canEditProducts'
+        canEditProduct: 'canEditProducts',
+        canViewKpiDashboard: 'canViewKpi',
+        canViewPersonalKpi: 'canViewKpi',
+        canViewCatalog: 'canBrowseCatalog'
     };
 
     /* Baseline a role is assumed to hold when its `users` doc carries no explicit
        override. The admin ("Manager") role is deliberately broad — the whole
        point of the matrix is to REVOKE individual actions from it per user. */
+    /* Baseline a role is assumed to hold when its `users` doc carries no explicit
+       override. The admin ("Manager") role is deliberately broad — the whole
+       point of the matrix is to REVOKE individual actions from it per user.
+       The Black-Box / authorization / menu-import / staging caps are NOT part
+       of the admin default (they stay dedicated grants); enforcers still pass
+       the legacy predicate so nothing regresses. */
     const UAM_ROLE_DEFAULTS = {
         super_admin: UAM_PERMISSION_KEYS.slice(),
         founder: UAM_PERMISSION_KEYS.slice(),
-        admin: UAM_PERMISSION_KEYS.filter((k) => k !== 'canManageUsers'),
-        product_audit: ['canAddProducts', 'canEditProducts', 'canDeleteProducts'],
-        rep: ['canAddProducts', 'canEditProducts', 'canExportExcel'],
-        data_entry: [],
-        accounting: ['canViewFinance', 'canExportExcel'],
-        marketing: [],
+        admin: ['canCreateTasks', 'canApproveTasks', 'canViewTasks', 'canManageTransferQueue',
+            'canArchiveReports', 'canBrowseCatalog', 'canViewAllCatalogProducts', 'canAddProducts',
+            'canEditProducts', 'canDeleteProducts', 'canExportExcel', 'canEditMerchant',
+            'canManageContracts', 'canViewFinance', 'canViewFinancialProfile', 'canViewKpi',
+            'canViewAnalytics', 'canViewNotifications', 'canViewMarketing'],
+        product_audit: ['canBrowseCatalog', 'canViewAllCatalogProducts', 'canAddProducts',
+            'canEditProducts', 'canDeleteProducts'],
+        rep: ['canBrowseCatalog', 'canAddProducts', 'canEditProducts', 'canExportExcel',
+            'canViewKpi', 'canViewFinancialProfile'],
+        data_entry: ['canUseDataEntryTools', 'canImportMenu'],
+        accounting: ['canViewFinance', 'canExportExcel', 'canViewNotifications'],
+        marketing: ['canViewMarketing'],
         marketing_agency: [],
         media: []
     };
@@ -202,6 +242,53 @@
         }
     };
     window.kanjoUamLoad = loadUsers;
+
+    /* ── Registry merge (Bug 1) ──────────────────────────────────────────────
+       The authoritative roster of EXISTING users is the constants PIN table
+       (`window.users`), not the Firestore `users` collection — which is empty
+       on a fresh install. Until now the panel only listed Firestore docs, so a
+       live system looked empty. We now render the UNION: every configured
+       principal from `window.users`, enriched with its Firestore doc when one
+       exists (the doc id stays canonical so toggles persist to the right doc). */
+    /* `window.users` is a PIN-keyed registry object (`{ '2811': {...}, ... }`),
+       though an array form is tolerated for forward-compatibility. Flatten it
+       to rows and inject the map key as the `pin` so PIN-less entries survive. */
+    const rosterUsers = () => {
+        const src = window.users;
+        if (!src) return [];
+        if (Array.isArray(src)) return src;
+        if (typeof src === 'object') {
+            return Object.keys(src).map((pin) => Object.assign({ pin }, src[pin] || {}));
+        }
+        return [];
+    };
+    const mergeRosterRows = (fsRows) => {
+        const fs = Array.isArray(fsRows) ? fsRows.slice() : [];
+        const eq = (a, b) => a && b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+        const findIdx = (u) => fs.findIndex((r) => r && (
+            eq(u.email, r.email) || eq(u.uid, r.uid) || (eq(u.pin, r.pin) && eq(u.name, r.name)) || eq(u.name, r.name)
+        ));
+        const out = [];
+        rosterUsers().forEach((ru) => {
+            if (!ru) return;
+            const hit = findIdx(ru);
+            if (hit !== -1) {
+                const f = fs.splice(hit, 1)[0];
+                out.push(Object.assign({}, ru, f, { _roster: true }));
+            } else {
+                out.push({
+                    id: normalizeDocId(ru.email || ru.name || ru.pin),
+                    name: ru.name || '', email: ru.email || '', pin: ru.pin || '',
+                    role: ru.role || 'rep', _roster: true
+                });
+            }
+        });
+        fs.forEach((f) => out.push(f));
+        const isSA = (x) => (x && (x.superAdmin === true || String(x.role || '') === SUPER_ADMIN_ROLE)) ? 0 : 1;
+        out.sort((a, b) => (isSA(a) - isSA(b)) || String(a.name || a.id).localeCompare(String(b.name || b.id), 'ar'));
+        return out;
+    };
+    window.kanjoUamMergeRoster = mergeRosterRows;
 
     /* ── Write one user doc (merge) + keep the cache warm ─────────────────── */
     const saveUserDoc = async (docId, patch) => {
@@ -467,7 +554,7 @@
             body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
                 + '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري تحميل المستخدمين...</div>';
         }
-        const rows = await loadUsers({ force });
+        const rows = mergeRosterRows(await loadUsers({ force }));
         if (!body) return;
         if (!rows.length) {
             body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
@@ -512,6 +599,8 @@
                 + (isSA
                     ? '<span class="inline-block mt-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-[#230535] text-[#FFD700]">مشرف عام</span>'
                     : `<select onchange="window.kanjoUamSetRole('${id}',this.value)" class="mt-1 w-full text-[11px] font-bold rounded-lg border border-slate-200 px-1.5 py-1">${roleOptions}</select>`)
+                + (rec._roster ? ' <span class="inline-block mt-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">قائمة الدخول</span>' : '')
+                + (rec.pin ? `<div class="text-[10px] text-slate-400 mt-0.5" dir="ltr">PIN: ${escapeHtml(rec.pin)}</div>` : '')
                 + '</td>'
                 + cells
                 + '<td class="px-3 py-3 text-center align-top whitespace-nowrap">'

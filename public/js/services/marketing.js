@@ -50,8 +50,9 @@ window.marketingIsHome = () =>
 
 window.marketingCanView = () => {
     const role = String((window.currentUser && window.currentUser.role) || '');
-    return role === 'marketing'
+    const legacy = role === 'marketing'
         || (typeof window.kanjoIsPrivilegedUser === 'function' && window.kanjoIsPrivilegedUser());
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewMarketing', legacy) : legacy;
 };
 
 /* ─── Formatting ─── */

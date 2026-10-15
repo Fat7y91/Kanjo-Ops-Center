@@ -96,7 +96,7 @@ const AUDIT_FOUNDER_WHITELIST = {
 
 const auditNormalizeIdentity = (value) => String(value == null ? '' : value).trim().toLowerCase();
 
-window.kanjoAuditCanView = () => {
+const auditCanViewLegacy = () => {
     const u = window.currentUser;
     if (!u) return false;
     /* Dedicated per-user Black Box grant — role-independent by design. */
@@ -116,6 +116,13 @@ window.kanjoAuditCanView = () => {
     return inList(AUDIT_FOUNDER_WHITELIST.ids, id)
         || inList(AUDIT_FOUNDER_WHITELIST.names, name)
         || inList(AUDIT_FOUNDER_WHITELIST.emails, email);
+};
+
+/* Granular micro-RBAC: an explicit `canViewBlackBox` override (true OR false)
+   wins; otherwise the pre-UAM predicate below is preserved verbatim. */
+window.kanjoAuditCanView = () => {
+    const legacy = auditCanViewLegacy();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewBlackBox', legacy) : legacy;
 };
 
 /* ─── Value helpers ─────────────────────────────────────────────────── */

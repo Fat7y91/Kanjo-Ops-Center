@@ -12,11 +12,10 @@ window.kanjoCurrentUserPin = () => {
 window.kanjoCanIssueAuthorization = () => {
     const u = window.currentUser || {};
     const pin = window.kanjoCurrentUserPin();
-    if (pin) return pin === AUTHORIZATION_PIN;
-    /* A session restored before the PIN was attached has no pin field; fall
-       back to the unique data-entry identity so the rightful operator keeps
-       access across reloads. */
-    return u.role === 'data_entry' || String(u.name || '').trim() === 'يوزر إدخال البيانات';
+    let legacy;
+    if (pin) legacy = (pin === AUTHORIZATION_PIN);
+    else legacy = u.role === 'data_entry' || String(u.name || '').trim() === 'يوزر إدخال البيانات';
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canIssueAuthorization', legacy) : legacy;
 };
 
 const AUTHORIZATION_HTML = `

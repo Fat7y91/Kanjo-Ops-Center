@@ -251,10 +251,13 @@ window.founderAuditAssign = founderAuditAssign;
 window.isFounderAuditUser = () => {
     const u = window.currentUser;
     if (!u) return false;
-    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
-    const role = String(u.role || '').trim();
-    if (role === 'founder') return true;
-    return FOUNDER_AUDIT_FOUNDERS.includes(String(u.name || '').trim());
+    let legacy = false;
+    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) legacy = true;
+    else {
+        const role = String(u.role || '').trim();
+        legacy = (role === 'founder') || FOUNDER_AUDIT_FOUNDERS.includes(String(u.name || '').trim());
+    }
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewFounderAudit', legacy) : legacy;
 };
 
 /* Which founder's chunk is being viewed. If the logged-in identity is one of

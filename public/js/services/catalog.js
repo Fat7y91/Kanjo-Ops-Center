@@ -275,7 +275,10 @@ window.isDesoukOpsManager = () => {
     return !!window.isMahmoudUser();
 };
 
-window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager() || window.isProductAuditUser());
+window.canViewAllCatalogProducts = () => {
+    const legacy = !!(window.isCatalogFounderUser() || window.isMahmoudUser() || window.isDesoukOpsManager() || window.isProductAuditUser());
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewAllCatalogProducts', legacy) : legacy;
+};
 
 /* PEER REVIEW browse (2026): field reps may open the "all products" browser to
    find and edit colleagues' items. Deliberately SEPARATE from
@@ -283,11 +286,17 @@ window.canViewAllCatalogProducts = () => !!(window.isCatalogFounderUser() || win
    the cross-rep leaderboard, the pending-set boot read, or the global realtime
    listener. The full collection is still read only when the widget is opened
    (allowFull), never on a plain boot/refresh. */
-window.canBrowseCatalogProducts = () => window.canViewAllCatalogProducts() || window.isCatalogRepUser();
+window.canBrowseCatalogProducts = () => {
+    const legacy = window.canViewAllCatalogProducts() || window.isCatalogRepUser();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canBrowseCatalog', legacy) : legacy;
+};
 
 window.isDataEntryUser = () => !!(window.currentUser && window.currentUser.role === 'data_entry');
 
-window.canUseStagingCatalog = () => !!window.isDataEntryUser();
+window.canUseStagingCatalog = () => {
+    const legacy = !!window.isDataEntryUser();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canUseDataEntryTools', legacy) : legacy;
+};
 
 /* Ordered, de-duplicated, syntactically-valid Apps Script endpoints the upload
    pipeline may use. `window.KANJO_CATALOG_SCRIPT_URL` (runtime config) wins,

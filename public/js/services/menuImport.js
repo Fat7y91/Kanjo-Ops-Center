@@ -38,11 +38,14 @@ window.isMenuImportUser = () => {
     const u = window.currentUser;
     if (!u) return false;
     const pin = String(u.pin == null ? (u.pinCode == null ? '' : u.pinCode) : u.pin).trim();
-    if (pin) return pin === MENU_IMPORT_PIN;
-    const role = String(u.role || '').toLowerCase();
-    if (role) return role === 'data_entry';
-    if (typeof window.isDataEntryUser === 'function' && window.isDataEntryUser()) return true;
-    return false;
+    let legacy;
+    if (pin) legacy = (pin === MENU_IMPORT_PIN);
+    else {
+        const role = String(u.role || '').toLowerCase();
+        if (role) legacy = (role === 'data_entry');
+        else legacy = (typeof window.isDataEntryUser === 'function' && window.isDataEntryUser()) === true;
+    }
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canImportMenu', legacy) : legacy;
 };
 
 /* ──────────────────────────── HELPERS ──────────────────────────────── */

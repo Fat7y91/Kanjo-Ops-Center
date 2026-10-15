@@ -302,9 +302,14 @@ function applyThemeAndShowDashboard() {
     const isRep = (currentUser.role === 'rep');
     const isDataEntry = (currentUser.role === 'data_entry');
     const canViewLive = !isDataEntry && (isMahmoud || isFounder);
+    /* Granular micro-RBAC resolver: an explicit per-user override wins over the
+       legacy predicate (the 2nd arg), so pre-UAM behaviour is preserved for
+       every user who was not hand-tuned in the permission matrix. */
+    const canGate = (key, legacy) => (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan(key, legacy) : legacy;
     
     if (!isAccounting && !isMarketing) {
-        document.getElementById('advancedDashboard').classList.toggle('hidden', !canViewLive);
+        document.getElementById('advancedDashboard').classList.toggle('hidden', !canGate('canViewAnalytics', canViewLive));
         /* Compact action buttons; the bulky forms now live inside their modals.
            Granular micro-RBAC: the assign-task (create tasks) and Excel-export
            buttons honour the per-user permission matrix — an explicit override
@@ -319,10 +324,10 @@ function applyThemeAndShowDashboard() {
             : canViewLive;
         const exportProductsBtn = document.getElementById('openExportProductsBtn');
         if (exportProductsBtn) exportProductsBtn.classList.toggle('hidden', !canExportExcel);
-        document.getElementById('notificationsWrapper').classList.toggle('hidden', !canViewLive);
+        document.getElementById('notificationsWrapper').classList.toggle('hidden', !canGate('canViewNotifications', canViewLive));
         /* Data-entry and the product-audit team are not operations users: hide
            the day-task board so their screen is focused on the catalog. */
-        const hideTasks = isDataEntry || isProductAudit;
+        const hideTasks = !canGate('canViewTasks', !(isDataEntry || isProductAudit));
         const searchWrapper = document.getElementById('tasksSearchWrapper');
         if (searchWrapper) searchWrapper.classList.toggle('hidden', hideTasks);
         const tasksContainer = document.getElementById('tasksContainer');
@@ -332,22 +337,22 @@ function applyThemeAndShowDashboard() {
         
         const founderPayrollSummaryBox = document.getElementById('founderPayrollSummaryBox');
         if (founderPayrollSummaryBox) {
-            founderPayrollSummaryBox.classList.toggle('hidden', !isFounder || isDataEntry);
+            founderPayrollSummaryBox.classList.toggle('hidden', !canGate('canViewFinance', isFounder && !isDataEntry));
         }
 
         const quickLinksWalletBanner = document.getElementById('quickLinksWalletBanner');
         if (quickLinksWalletBanner) {
-            quickLinksWalletBanner.classList.toggle('hidden', !isRep || isDataEntry);
+            quickLinksWalletBanner.classList.toggle('hidden', !canGate('canViewFinancialProfile', isRep && !isDataEntry));
         }
 
         const financialProfileBtnWrapper = document.getElementById('financialProfileBtnWrapper');
         if (financialProfileBtnWrapper) {
-            financialProfileBtnWrapper.classList.toggle('hidden', !isRep || isDataEntry);
+            financialProfileBtnWrapper.classList.toggle('hidden', !canGate('canViewFinancialProfile', isRep && !isDataEntry));
         }
 
         const financialProfileBanner = document.getElementById('financialProfileBanner');
         if (financialProfileBanner) {
-            financialProfileBanner.classList.toggle('hidden', !isRep || isDataEntry);
+            financialProfileBanner.classList.toggle('hidden', !canGate('canViewFinancialProfile', isRep && !isDataEntry));
         }
 
         if (typeof window.renderCatalogWidgets === 'function') {
@@ -368,17 +373,17 @@ function applyThemeAndShowDashboard() {
 
         const adminTransferNavBtnWrapper = document.getElementById('adminTransferNavBtnWrapper');
         if (adminTransferNavBtnWrapper) {
-            adminTransferNavBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
+            adminTransferNavBtnWrapper.classList.toggle('hidden', !canGate('canManageTransferQueue', isMahmoudOps));
         }
 
         const contractsNavBtnWrapper = document.getElementById('contractsNavBtnWrapper');
         if (contractsNavBtnWrapper) {
-            contractsNavBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
+            contractsNavBtnWrapper.classList.toggle('hidden', !canGate('canManageContracts', isMahmoudOps));
         }
 
         const archivedReportsBtnWrapper = document.getElementById('archivedReportsBtnWrapper');
         if (archivedReportsBtnWrapper) {
-            archivedReportsBtnWrapper.classList.toggle('hidden', !isMahmoudOps);
+            archivedReportsBtnWrapper.classList.toggle('hidden', !canGate('canArchiveReports', isMahmoudOps));
         }
 
         const kpiNavBtnWrapper = document.getElementById('kpiNavBtnWrapper');
@@ -403,13 +408,13 @@ function applyThemeAndShowDashboard() {
            (marketing itself lands on the section, so the button is redundant). */
         const marketingNavBtnWrapper = document.getElementById('marketingNavBtnWrapper');
         if (marketingNavBtnWrapper) {
-            marketingNavBtnWrapper.classList.toggle('hidden', !(isAdmin || isFounder));
+            marketingNavBtnWrapper.classList.toggle('hidden', !canGate('canViewMarketing', isAdmin || isFounder));
         }
 
         /* Product-audit team: a one-tap jump into the all-products catalog grid. */
         const catalogAuditNavBtnWrapper = document.getElementById('catalogAuditNavBtnWrapper');
         if (catalogAuditNavBtnWrapper) {
-            catalogAuditNavBtnWrapper.classList.toggle('hidden', !isProductAudit);
+            catalogAuditNavBtnWrapper.classList.toggle('hidden', !canGate('canViewAllCatalogProducts', isProductAudit));
         }
 
         const canIssueAuthorization = (typeof window.kanjoCanIssueAuthorization === 'function')

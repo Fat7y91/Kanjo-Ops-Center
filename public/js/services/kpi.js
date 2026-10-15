@@ -194,7 +194,7 @@ const KPI_COLORS = {
 
 /* ───────────────────────────── RBAC ───────────────────────────── */
 
-window.canViewKpiDashboard = () => {
+const kpiDashboardLegacy = () => {
     const u = window.currentUser;
     if (!u) return false;
     if (u.role === 'rep' || u.role === 'data_entry' || u.role === 'accounting') return false;
@@ -203,6 +203,11 @@ window.canViewKpiDashboard = () => {
     if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
     if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) return true;
     return false;
+};
+
+window.canViewKpiDashboard = () => {
+    const legacy = kpiDashboardLegacy();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewKpi', legacy) : legacy;
 };
 
 /* Field reps (مندوب) are the primary audience of the personal performance
@@ -215,8 +220,9 @@ window.isFieldRepUser = () => {
 /* The personal screen is now LIVE for field reps, and stays available to the
    Founders / Ops Manager as a preview + admin deep-dive. */
 window.canViewPersonalKpi = () => {
-    if (typeof window.canViewKpiDashboard === 'function' && window.canViewKpiDashboard()) return true;
-    return window.isFieldRepUser();
+    const legacy = (typeof window.canViewKpiDashboard === 'function' && window.canViewKpiDashboard())
+        || window.isFieldRepUser();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewKpi', legacy) : legacy;
 };
 
 /* Resolve which rep a personal screen belongs to. Reps can only ever open
@@ -2350,11 +2356,12 @@ const kpiRenderChartsForRow = (row) => {
 window.canPreviewRepPersonalKpi = () => {
     const u = window.currentUser;
     if (!u) return false;
-    if (u.role === 'admin') return true;
-    if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) return true;
-    if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
-    if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) return true;
-    return false;
+    let legacy = false;
+    if (u.role === 'admin') legacy = true;
+    else if (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole()) legacy = true;
+    else if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) legacy = true;
+    else if (typeof window.isMahmoudOpsUser === 'function' && window.isMahmoudOpsUser()) legacy = true;
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canViewKpi', legacy) : legacy;
 };
 
 window._kpiRepPreviewMode = false;
