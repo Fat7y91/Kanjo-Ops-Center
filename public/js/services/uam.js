@@ -217,13 +217,55 @@
         }) || null;
     };
 
-    /* ── Load (cache-first, small REST list) ──────────────────────────────── */
+    /* ── Load (persistent cache-first, TTL-gated) ────────────────────────────
+       Zero-bleed: the resolved `users` docs are mirrored in localStorage so the
+       NEXT boot can fold a session's permissions with NO Firestore read at all.
+       The network is touched only when the store is missing/expired (or the
+       super-admin explicitly forces a refresh from the UAM panel). This replaces
+       the previous per-boot full-collection read that made the shell sluggish. */
     let _uamCache = null;
     let _uamCacheAt = 0;
+
+    const UAM_STORE_KEY = 'kanjo_uam_store_v1';
+    const UAM_STORE_TTL = 10 * 60 * 1000;
+
+    const readStore = () => {
+        try {
+            const raw = localStorage.getItem(UAM_STORE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            return (parsed && typeof parsed === 'object' && parsed.docs) ? parsed : { fetchedAt: 0, docs: {} };
+        } catch (_) { return { fetchedAt: 0, docs: {} }; }
+    };
+    const writeStore = (store) => {
+        try { localStorage.setItem(UAM_STORE_KEY, JSON.stringify(store)); } catch (_) { /* quota / private mode */ }
+    };
+    const persistDocs = (rows) => {
+        const store = readStore();
+        (rows || []).forEach((r) => { if (r && r.id) store.docs[r.id] = r; });
+        store.fetchedAt = Date.now();
+        writeStore(store);
+    };
+    const storeRows = () => {
+        const s = readStore();
+        return Object.keys(s.docs).map((id) => s.docs[id]);
+    };
+
+    const allTruePermissions = () => {
+        const out = {};
+        UAM_PERMISSION_KEYS.forEach((k) => { out[k] = true; });
+        return out;
+    };
 
     const loadUsers = async ({ force = false } = {}) => {
         const now = Date.now();
         if (!force && _uamCache && (now - _uamCacheAt) < UAM_CACHE_TTL) return _uamCache;
+        const store = readStore();
+        /* Cache-first: a warm store serves instantly with NO network call. */
+        if (!force && store.fetchedAt && (now - store.fetchedAt) < UAM_STORE_TTL) {
+            const rows = Object.keys(store.docs).map((id) => store.docs[id]);
+            _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
+            return rows;
+        }
         try {
             let rows = [];
             if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
@@ -232,13 +274,15 @@
                 });
             }
             if (!Array.isArray(rows)) rows = [];
-            _uamCache = rows;
-            _uamCacheAt = now;
-            window.kanjoUamUsersCache = rows;
+            persistDocs(rows);
+            _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
             return rows;
         } catch (err) {
             console.warn('[uam] users load failed:', err && err.message ? err.message : err);
-            return _uamCache || [];
+            const fallback = storeRows();
+            _uamCache = fallback.length ? fallback : (_uamCache || []);
+            window.kanjoUamUsersCache = _uamCache;
+            return _uamCache;
         }
     };
     window.kanjoUamLoad = loadUsers;
@@ -312,60 +356,70 @@
         if (idx >= 0) list[idx] = merged; else list.push(merged);
         _uamCacheAt = Date.now();
         window.kanjoUamUsersCache = list;
+        persistDocs([merged]);
         return merged;
     };
     window.kanjoUamSaveUser = saveUserDoc;
 
     /* ── Apply a user's stored permissions to the live session ────────────── */
-    const applyPermissions = async (user) => {
-        const u = user || window.currentUser;
-        if (!u) return null;
-        try {
-            const rows = await loadUsers();
-            let doc = matchUserDoc(rows, u);
-            /* Fall back to a direct id probe when the list is empty/stale. */
-            if (!doc && window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
-                for (const id of candidateDocIds(u)) {
-                    try {
-                        const hit = await window.kanjoRest.getDocument([UAM_USERS_COLLECTION, id]);
-                        if (hit) { doc = hit; break; }
-                    } catch (_) { /* keep probing */ }
-                }
+    /* Fold a resolved user doc onto the live session (mutates `u`). Returns
+       true only when the effective permissions / super-admin flag actually
+       changed, so callers repaint ONLY on a real change (no flicker). */
+    const foldDoc = (u, doc) => {
+        const before = JSON.stringify({ p: u.permissions || {}, r: u.role, s: u.superAdmin === true });
+        if (doc) {
+            if (doc.permissions && typeof doc.permissions === 'object') {
+                u.permissions = Object.assign({}, u.permissions, doc.permissions);
             }
-            if (doc) {
-                if (doc.permissions && typeof doc.permissions === 'object') {
-                    u.permissions = Object.assign({}, u.permissions, doc.permissions);
-                }
-                if (doc.superAdmin === true || String(doc.role || '') === SUPER_ADMIN_ROLE) {
-                    u.role = SUPER_ADMIN_ROLE;
-                    u.superAdmin = true;
-                }
-                if (doc.uid) u.uid = u.uid || doc.uid;
-                if (doc.email) u.email = u.email || doc.email;
-                u.uamDocId = doc.id;
-            }
-            /* Identity auto-provisioning (exact configured principal). */
-            if (isSuperAdminIdentity(u)) {
+            if (doc.superAdmin === true || String(doc.role || '') === SUPER_ADMIN_ROLE) {
                 u.role = SUPER_ADMIN_ROLE;
                 u.superAdmin = true;
-                u.permissions = Object.assign({}, u.permissions, allTruePermissions());
             }
-            window.currentUser = u;
-            if (window.saveSession) window.saveSession(u);
-            return doc;
+            if (doc.uid) u.uid = u.uid || doc.uid;
+            if (doc.email) u.email = u.email || doc.email;
+            u.uamDocId = doc.id;
+        }
+        /* Identity auto-provisioning (exact configured principal). */
+        if (isSuperAdminIdentity(u)) {
+            u.role = SUPER_ADMIN_ROLE;
+            u.superAdmin = true;
+            u.permissions = Object.assign({}, u.permissions, allTruePermissions());
+        }
+        const after = JSON.stringify({ p: u.permissions || {}, r: u.role, s: u.superAdmin === true });
+        window.currentUser = u;
+        if (window.saveSession) window.saveSession(u);
+        return after !== before;
+    };
+
+    /* SYNCHRONOUS, cache-only: fold the PERSISTED (localStorage) doc with no
+       network. Call this BEFORE the first paint so the shell renders correctly
+       in a single frame. */
+    window.kanjoUamApplyPermissionsSync = (user) => {
+        const u = user || window.currentUser;
+        if (!u) return null;
+        const doc = matchUserDoc(storeRows(), u);
+        foldDoc(u, doc);
+        return doc;
+    };
+
+    const applyPermissions = async (user) => {
+        const u = user || window.currentUser;
+        if (!u) return { doc: null, changed: false };
+        /* 1. Instant, cache-only fold (no network, no await). */
+        const doc0 = window.kanjoUamApplyPermissionsSync(u);
+        try {
+            /* 2. TTL-gated refresh — a no-op when the store is warm. */
+            const rows = await loadUsers();
+            const doc = matchUserDoc(rows, u) || doc0;
+            if (!doc) return { doc: doc0, changed: false };
+            return { doc, changed: foldDoc(u, doc) };
         } catch (err) {
             console.warn('[uam] apply permissions failed:', err && err.message ? err.message : err);
-            return null;
+            return { doc: doc0, changed: false };
         }
     };
     window.kanjoUamApplyPermissions = applyPermissions;
     window.kanjoUamRefreshSelf = () => applyPermissions();
-
-    const allTruePermissions = () => {
-        const out = {};
-        UAM_PERMISSION_KEYS.forEach((k) => { out[k] = true; });
-        return out;
-    };
 
     /* ── Effective permission (explicit → role default → false) ───────────── */
     const effectivePermission = (rec, perm) => {
@@ -693,8 +747,13 @@
         if (window.currentUser) renderCreateMatrix();
         if (typeof window.addEventListener === 'function') {
             window.addEventListener('hashchange', maybeBootstrap);
-            /* Re-apply permissions when the tab regains focus (real-time-ish). */
-            window.addEventListener('focus', () => { if (window.currentUser) applyPermissions(); });
+            /* Re-fold permissions from the PERSISTED store on focus — no
+               network read, no blocking, no full repaint (zero-bleed). */
+            window.addEventListener('focus', () => {
+                if (window.currentUser && typeof window.kanjoUamApplyPermissionsSync === 'function') {
+                    try { window.kanjoUamApplyPermissionsSync(window.currentUser); } catch (_) { /* ignore */ }
+                }
+            });
         }
     };
     window.initUam = initUam;

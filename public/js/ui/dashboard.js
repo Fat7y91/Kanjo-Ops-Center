@@ -1659,6 +1659,29 @@ const renderDashboardNow = (snapshot) => {
 
     const seenTaskCardKeys = new Set();
 
+    /* Merchant logos are sourced from the tasks cache, which may populate AFTER
+       the catalog folder grid first renders (causing blank logo slots). When the
+       available-logo set changes we nudge the catalog to repaint its merchant
+       cards — debounced to one dispatch per render tick. */
+    let _logoRepaintQueued = false;
+    const scheduleMerchantLogoRepaint = () => {
+        if (_logoRepaintQueued) return;
+        _logoRepaintQueued = true;
+        const flush = () => {
+            _logoRepaintQueued = false;
+            const sig = (window.allTasksCache || [])
+                .filter((t) => t && t.merchantLogo)
+                .map((t) => String(t.merchantId || t.merchant_id || '') + ':' + String(t.merchantLogo).length)
+                .sort().join('|');
+            if (sig && sig !== window._kanjoMerchantLogoSig) {
+                window._kanjoMerchantLogoSig = sig;
+                try { window.dispatchEvent(new CustomEvent('kanjo:tasks-updated')); } catch (_) { /* ignore */ }
+            }
+        };
+        if (typeof queueMicrotask === 'function') queueMicrotask(flush);
+        else setTimeout(flush, 0);
+    };
+
 
 
     renderSnapshot.forEach(doc => { 
@@ -1672,6 +1695,8 @@ const renderDashboardNow = (snapshot) => {
 
 
         window.allTasksCache.push({id: doc.id, ...task}); 
+
+        scheduleMerchantLogoRepaint();
 
 
 

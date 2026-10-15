@@ -16,9 +16,9 @@ import './utils/export.js';
 import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
-import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261016b';
+import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261016d';
 import './services/firestore.js?v=20261016a';
-import './services/catalog.js?v=20261016b';
+import './services/catalog.js?v=20261016d';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -28,12 +28,12 @@ import './services/pharmacyIntake.js';
 import './services/founderAudit.js?v=20261016b';
 import './ui/modals.js?v=20261016a';
 import './ui/accounting.js';
-import './ui/dashboard.js?v=20261015a';
+import './ui/dashboard.js?v=20261016d';
 import './ui/charts.js';
 import './services/kpi.js?v=20261016b';
 import './services/marketing.js?v=20261016b';
 import './services/workspace.js?v=20261016a';
-import './services/uam.js?v=20261016b';
+import './services/uam.js?v=20261016d';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
    form, and focus-triggered permission refresh. Safe when the widget is absent. */
@@ -83,12 +83,19 @@ authReadyWithTimeout.then(() => {
        only if they change the identity, so a slow token round-trip can no
        longer block the first paint. Bounded internally so a slow network
        cannot hang the boot. */
+    /* Fold the PERSISTED (localStorage) permissions synchronously BEFORE the
+       first paint, so the shell is already correct in a single frame — no
+       blocking read and no second-repaint flicker. */
+    if (typeof window.kanjoUamApplyPermissionsSync === 'function') {
+        try { window.kanjoUamApplyPermissionsSync(restoredUser); } catch (_) { /* ignore */ }
+    }
     applyThemeAndShowDashboard();
-    /* Fold any stored granular permissions / super-admin flag onto the restored
-       session (one small cache-first read), then re-render the shell so a
-       super-admin's exclusive UAM tab appears without a manual refresh. */
+    /* Then a TTL-gated, NON-blocking refresh that repaints ONLY when the
+       effective permissions / super-admin flag actually changed. A warm store
+       performs no network call at all (zero-bleed). */
     if (typeof window.kanjoUamApplyPermissions === 'function') {
-        window.kanjoUamApplyPermissions(restoredUser).then(() => {
+        window.kanjoUamApplyPermissions(restoredUser).then((res) => {
+            if (!res || !res.changed) return;
             applyThemeAndShowDashboard();
             try { if (window.kanjoWorkspace && window.kanjoWorkspace.refresh) window.kanjoWorkspace.refresh(); } catch (_) { /* ignore */ }
         }).catch(() => {});

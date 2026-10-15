@@ -4105,6 +4105,19 @@ const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAll
 window.renderCatalogAllProductsList = renderCatalogAllProductsList;
 window.renderCatalogAllProductsListNow = renderCatalogAllProductsListNow;
 
+/* When the tasks cache (the merchant-logo source) fills AFTER the folder grid
+   first painted, repaint the merchant cards so logos appear without a manual
+   refresh. The dispatcher upstream fires only when the logo set changes and is
+   debounced per render tick, so this never loops. */
+if (typeof window.addEventListener === 'function' && !window._kanjoMerchantLogoRepaintBound) {
+    window._kanjoMerchantLogoRepaintBound = true;
+    window.addEventListener('kanjo:tasks-updated', () => {
+        try {
+            if (typeof window.renderCatalogAllProductsList === 'function') window.renderCatalogAllProductsList();
+        } catch (_) { /* ignore */ }
+    });
+}
+
 window.renderCatalogAllProductsWidget = () => {
     const widget = document.getElementById('catalogAllProductsWidget');
     if (!widget) return;

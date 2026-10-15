@@ -171,7 +171,11 @@ body.theme-executive-vip .kws-fin-card:hover {
 }
 
 /* ── Neutral Tailwind surfaces → dark glass ───────────────────────────── */
-body.theme-executive-vip .bg-white { background: var(--vip-panel) !important; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+/* NOTE: `:not(img)` is critical. Merchant logos are `<img class="bg-white …">`;
+   applying `backdrop-filter` to a replaced element blanks the image in
+   Chromium/Safari (the "merchant logos disappeared" regression). */
+body.theme-executive-vip .bg-white:not(img) { background: var(--vip-panel) !important; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+body.theme-executive-vip img.bg-white { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 body.theme-executive-vip .bg-slate-50,
 body.theme-executive-vip .bg-gray-50,
 body.theme-executive-vip .bg-kanjo-light,
@@ -529,10 +533,24 @@ body.theme-executive-vip .catalog-merchant-card [class*="text-[#230535]"]:not([c
     text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 
-/* Logo frame → gold ring on deep glass. */
-body.theme-executive-vip .catalog-merchant-card img {
+/* Logo frame → gold ring on deep glass.
+   IMPORTANT: the base theme styles `img[class*="bg-white"]` with a
+   `backdrop-filter` glass effect. Applied to a *replaced element* (the logo
+   <img>) that blanks the image in Chromium/Safari — the "logos vanished"
+   regression. We keep the frame but explicitly neutralise the filter and
+   force the image to paint. */
+body.theme-executive-vip .catalog-merchant-card img,
+body.theme-executive-vip .catalog-merchant-card img.bg-white,
+body.theme-executive-vip [data-catalog-merchant] img.bg-white {
+    display: block !important;
+    object-fit: cover !important;
     background: rgba(0, 0, 0, 0.35) !important;
     border: 1px solid rgba(212, 175, 55, 0.5) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 /* Logo placeholder tile (only the grid-centering icon box, never the count chip). */
 body.theme-executive-vip .catalog-merchant-card [class*="bg-[#230535]"][class*="place-items-center"] {

@@ -200,14 +200,19 @@ async function login(pinOverride = null) {
         window.currentUser = currentUser;
         window.saveSession(currentUser);
         if (window.kanjoAuditLogLogin) window.kanjoAuditLogLogin();
-        /* Paint the dashboard and attach listeners immediately: never block the
-           UI on the token/claims round-trip. Claims reconciliation runs in the
-           background and re-applies the theme if it changes the identity. */
+        /* Fold the PERSISTED (localStorage) permissions synchronously BEFORE the
+           first paint, so the shell is already correct in a single frame — no
+           blocking read and no second-repaint flicker. */
+        if (typeof window.kanjoUamApplyPermissionsSync === 'function') {
+            try { window.kanjoUamApplyPermissionsSync(currentUser); } catch (_) { /* ignore */ }
+        }
         applyThemeAndShowDashboard();
-        /* Fold stored granular permissions / super-admin flag onto this session
-           (cache-first) and re-render the shell so the exclusive UAM tab shows. */
+        /* Then a TTL-gated, NON-blocking refresh that repaints ONLY when the
+           effective permissions / super-admin flag actually changed. A warm
+           store performs no network call at all (zero-bleed). */
         if (typeof window.kanjoUamApplyPermissions === 'function') {
-            window.kanjoUamApplyPermissions(currentUser).then(() => {
+            window.kanjoUamApplyPermissions(currentUser).then((res) => {
+                if (!res || !res.changed) return;
                 applyThemeAndShowDashboard();
                 try { if (window.kanjoWorkspace && window.kanjoWorkspace.refresh) window.kanjoWorkspace.refresh(); } catch (_) { /* ignore */ }
             }).catch(() => {});
