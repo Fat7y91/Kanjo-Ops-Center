@@ -318,3 +318,162 @@ body.theme-executive-vip .kws-nav-inner { animation: vipFadeIn 0.45s ease both; 
     body.theme-executive-vip .kws-card:hover,
     body.theme-executive-vip #dashboardSection > div:hover { transform: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STRICT HIGH-CONTRAST ENFORCEMENT  (hotfix)
+   ---------------------------------------------------------------------------
+   The base theme above inverted the Tailwind *surfaces* but missed two large
+   families of text, which the founder reported as unreadable on production:
+
+     1. Component classes DEFINED in style.css with a literal `color: #230535`
+        (e.g. .kws-datestrip-title, .kws-fin-amount, .kpi-stat-value, .kds-num).
+        A Tailwind-only override cannot reach these — they carry the colour in
+        the stylesheet, not in the class name.
+     2. Light tinted card surfaces (`bg-*-50/*`, e.g. the KPI metrics cards
+        `bg-purple-50/70`, `bg-emerald-50/70`) that stayed light while their
+        labels were lightened → light-on-light washout.
+
+   Rule of engagement: on the obsidian VIP canvas ALL dark ink is lifted to a
+   legible light tone (or gold for figures/headings); light tinted surfaces are
+   collapsed to dark glass so every card is dark-with-light-text. The few chips
+   that intentionally paint their OWN gold background keep dark ink (re-asserted
+   last). Light DOCUMENTS (the authorization letter, the contract template) are
+   deliberately excluded — they are meant to print on white.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1) Collapse light tinted utility surfaces to dark glass ───────────────
+   `~=` matches the EXACT token (`bg-purple-50`) so it never catches a solid
+   `bg-purple-500`; `*=.../`' catches the opacity variants (`bg-purple-50/70`). */
+body.theme-executive-vip [class~="bg-slate-50"], body.theme-executive-vip [class*="bg-slate-50/"],
+body.theme-executive-vip [class~="bg-gray-50"], body.theme-executive-vip [class*="bg-gray-50/"],
+body.theme-executive-vip [class~="bg-emerald-50"], body.theme-executive-vip [class*="bg-emerald-50/"],
+body.theme-executive-vip [class~="bg-blue-50"], body.theme-executive-vip [class*="bg-blue-50/"],
+body.theme-executive-vip [class~="bg-red-50"], body.theme-executive-vip [class*="bg-red-50/"],
+body.theme-executive-vip [class~="bg-amber-50"], body.theme-executive-vip [class*="bg-amber-50/"],
+body.theme-executive-vip [class~="bg-green-50"], body.theme-executive-vip [class*="bg-green-50/"],
+body.theme-executive-vip [class~="bg-orange-50"], body.theme-executive-vip [class*="bg-orange-50/"],
+body.theme-executive-vip [class~="bg-yellow-50"], body.theme-executive-vip [class*="bg-yellow-50/"],
+body.theme-executive-vip [class~="bg-indigo-50"], body.theme-executive-vip [class*="bg-indigo-50/"],
+body.theme-executive-vip [class~="bg-pink-50"], body.theme-executive-vip [class*="bg-pink-50/"],
+body.theme-executive-vip [class~="bg-teal-50"], body.theme-executive-vip [class*="bg-teal-50/"] {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(212, 175, 55, 0.18) !important;
+}
+/* KPI metric tiles keep a faint brand tint so the colour-coding survives, but
+   always on a dark, high-contrast base. Declared after the generic block so the
+   tint wins for these five hues. */
+body.theme-executive-vip [class~="bg-purple-50"], body.theme-executive-vip [class*="bg-purple-50/"] { background: rgba(139, 92, 246, 0.14) !important; }
+body.theme-executive-vip [class~="bg-emerald-50"], body.theme-executive-vip [class*="bg-emerald-50/"] { background: rgba(16, 185, 129, 0.14) !important; }
+body.theme-executive-vip [class~="bg-blue-50"], body.theme-executive-vip [class*="bg-blue-50/"] { background: rgba(59, 130, 246, 0.14) !important; }
+body.theme-executive-vip [class~="bg-amber-50"], body.theme-executive-vip [class*="bg-amber-50/"] { background: rgba(245, 158, 11, 0.14) !important; }
+body.theme-executive-vip [class~="bg-red-50"], body.theme-executive-vip [class*="bg-red-50/"] { background: rgba(239, 68, 68, 0.14) !important; }
+
+/* ── 2) style.css components with a LIGHT background but dark ink ─────────
+   These are self-contained light surfaces (not utility classes) so they must be
+   re-skinned to dark glass, otherwise lifting only their text washes out. */
+body.theme-executive-vip .kds-day:not(.is-active) {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(212, 175, 55, 0.16) !important;
+    color: var(--vip-text) !important;
+}
+body.theme-executive-vip .kds-day:not(.is-active):hover { background: rgba(212, 175, 55, 0.14) !important; border-color: var(--vip-gold-line) !important; }
+body.theme-executive-vip .kds-nav:not(.kds-nav-today) { background: rgba(212, 175, 55, 0.08) !important; color: var(--vip-text) !important; }
+body.theme-executive-vip .kds-nav:not(.kds-nav-today):hover { background: rgba(212, 175, 55, 0.18) !important; }
+body.theme-executive-vip .kpi-chip:not(.kpi-chip-gold):not(.kpi-chip-dark):not(.kpi-chip-red) {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--vip-text) !important;
+}
+body.theme-executive-vip .kpi-chip-red { background: rgba(239, 68, 68, 0.16) !important; color: #fca5a5 !important; }
+body.theme-executive-vip .kpi-rank-pill-x { background: rgba(255, 255, 255, 0.06) !important; color: var(--vip-muted) !important; }
+body.theme-executive-vip .kws-ctabs { background: rgba(255, 255, 255, 0.05) !important; }
+body.theme-executive-vip .kws-ctabs button:not(.is-active) { color: var(--vip-muted) !important; }
+body.theme-executive-vip .kws-ctabs button:not(.is-active):hover { background: rgba(212, 175, 55, 0.12) !important; color: var(--vip-text) !important; }
+body.theme-executive-vip .kws-fin-badge {
+    background: rgba(212, 175, 55, 0.16) !important;
+    border-color: var(--vip-gold-line) !important;
+    color: var(--vip-gold-bright) !important;
+}
+/* Catalog status filter chips: white pill → dark glass, gold icon; the active
+   state keeps its intentional Kanjo-purple fill with white label + gold count. */
+body.theme-executive-vip .catalog-status-chip {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(212, 175, 55, 0.22) !important;
+    color: var(--vip-text) !important;
+    box-shadow: none !important;
+}
+body.theme-executive-vip .catalog-status-chip i { color: var(--vip-gold-2) !important; }
+body.theme-executive-vip .catalog-status-chip:hover { background: rgba(212, 175, 55, 0.14) !important; border-color: var(--vip-gold) !important; }
+body.theme-executive-vip .catalog-status-chip.is-active { background: #230535 !important; border-color: var(--vip-gold-line) !important; color: #ffffff !important; }
+body.theme-executive-vip .catalog-status-chip.is-active i { color: var(--vip-gold) !important; }
+body.theme-executive-vip .catalog-status-chip.is-active .catalog-status-chip-count { color: var(--vip-gold) !important; opacity: 1 !important; }
+
+/* ── 3) style.css components with dark ink on a (themed) dark surface ─────
+   Lift the ink to light; these sit on cards whose background the base theme
+   already darkened. */
+body.theme-executive-vip .kws-datestrip-title,
+body.theme-executive-vip .kws-advanced > summary,
+body.theme-executive-vip .kws-catalog-actions-title,
+body.theme-executive-vip .kws-hub-body h3,
+body.theme-executive-vip .kws-hub-search input,
+body.theme-executive-vip .kws-export-searchwrap input,
+body.theme-executive-vip .kpi-chart-title,
+body.theme-executive-vip .kpi-mini-value,
+body.theme-executive-vip .kpi-fin-val,
+body.theme-executive-vip .kpi-score-total,
+body.theme-executive-vip .kpi-score-crit-name,
+body.theme-executive-vip .kpi-score-crit-val,
+body.theme-executive-vip .kpi-score-info-row > span:last-child,
+body.theme-executive-vip .kpi-benchmark-title,
+body.theme-executive-vip .kpi-benchmark-side-value,
+body.theme-executive-vip .kpi-detail-section-title,
+body.theme-executive-vip .kpi-detail-meta-value,
+body.theme-executive-vip .kpi-tips-head,
+body.theme-executive-vip .kpi-personal-card-value,
+body.theme-executive-vip .kpi-fix-name-btn,
+body.theme-executive-vip .kpi-fix-details-btn,
+body.theme-executive-vip .mp-dash-change-item,
+body.theme-executive-vip .audit-row-desc,
+body.theme-executive-vip .audit-row-user,
+body.theme-executive-vip .audit-diff-field {
+    color: var(--vip-text) !important;
+}
+body.theme-executive-vip .kpi-fix-name-btn i,
+body.theme-executive-vip .kpi-fix-details-btn i { color: var(--vip-gold-2) !important; }
+
+/* Large financial figures & headings → metallic gold (contrast + on-brand). */
+body.theme-executive-vip .kws-fin-amount,
+body.theme-executive-vip .kpi-stat-value,
+body.theme-executive-vip .kds-num,
+body.theme-executive-vip .kpi-rep-score {
+    color: var(--vip-gold-bright) !important;
+}
+body.theme-executive-vip .kws-datestrip-title i { color: var(--vip-gold) !important; }
+
+/* ── 4) Coloured Tailwind text scales used for money / percentages ────────
+   The -600/-700/-800 shades are near-invisible on obsidian; lift each to a
+   luminous equivalent of the same hue. */
+body.theme-executive-vip [class~="text-emerald-600"], body.theme-executive-vip [class~="text-emerald-700"], body.theme-executive-vip [class~="text-emerald-800"] { color: #34d399 !important; }
+body.theme-executive-vip [class~="text-green-600"], body.theme-executive-vip [class~="text-green-700"], body.theme-executive-vip [class~="text-green-800"] { color: #4ade80 !important; }
+body.theme-executive-vip [class~="text-blue-600"], body.theme-executive-vip [class~="text-blue-700"], body.theme-executive-vip [class~="text-blue-800"] { color: #93c5fd !important; }
+body.theme-executive-vip [class~="text-purple-700"], body.theme-executive-vip [class~="text-purple-800"], body.theme-executive-vip [class~="text-purple-900"] { color: #c4b5fd !important; }
+body.theme-executive-vip [class~="text-amber-600"], body.theme-executive-vip [class~="text-amber-700"], body.theme-executive-vip [class~="text-amber-800"] { color: #fcd34d !important; }
+body.theme-executive-vip [class~="text-red-600"], body.theme-executive-vip [class~="text-red-700"], body.theme-executive-vip [class~="text-red-800"] { color: #fca5a5 !important; }
+body.theme-executive-vip [class~="text-indigo-600"], body.theme-executive-vip [class~="text-indigo-700"] { color: #a5b4fc !important; }
+body.theme-executive-vip [class~="text-slate-900"], body.theme-executive-vip [class~="text-slate-800"] { color: #ffffff !important; }
+
+/* ── 5) Re-assert dark ink on chips that paint their OWN gold background ──
+   Declared LAST so these win over every lift above; otherwise they'd become
+   light-on-gold and unreadable. */
+body.theme-executive-vip .kpi-chip-gold,
+body.theme-executive-vip .kpi-warn-cta,
+body.theme-executive-vip .kpi-rank-pill-1,
+body.theme-executive-vip .kws-hub-ic-gold,
+body.theme-executive-vip .kpi-personal-card-gold .kpi-personal-card-icon {
+    color: #230535 !important;
+}
+/* Dark-bg / gold-ink chips must keep their gold ink. */
+body.theme-executive-vip .kpi-warn-icon-gold,
+body.theme-executive-vip .kpi-chip-dark,
+body.theme-executive-vip .kws-ctabs button.is-active,
+body.theme-executive-vip .kds-nav-today { color: var(--vip-gold) !important; }
+
