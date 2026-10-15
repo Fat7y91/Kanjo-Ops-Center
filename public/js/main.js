@@ -6,7 +6,7 @@ import './services/syncEngine.js';
 import './services/updatedAt.js';
 import './config/build-info.generated.js';
 import './config/qemaTaxonomy.js';
-import './services/audit.js';
+import './services/audit.js?v=20261014c';
 import './services/authorization.js';
 import { categories } from './config/constants.js';
 import './utils/helpers.js';
@@ -16,7 +16,7 @@ import './utils/export.js';
 import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
-import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js';
+import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261014c';
 import './services/firestore.js';
 import './services/catalog.js?v=20261014b';
 import './services/dynamicTaxonomy.js';
@@ -32,7 +32,12 @@ import './ui/dashboard.js';
 import './ui/charts.js';
 import './services/kpi.js';
 import './services/marketing.js';
-import './services/workspace.js?v=20261014b';
+import './services/workspace.js?v=20261014c';
+import './services/uam.js?v=20261014c';
+
+/* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
+   form, and focus-triggered permission refresh. Safe when the widget is absent. */
+if (typeof window.initUam === 'function') window.initUam();
 
 /* Start the IndexedDB delta-sync triggers (focus / visibilitychange + a 45s
    visible-tab heartbeat). The engine is inert until a collection registers a
@@ -79,6 +84,15 @@ authReadyWithTimeout.then(() => {
        longer block the first paint. Bounded internally so a slow network
        cannot hang the boot. */
     applyThemeAndShowDashboard();
+    /* Fold any stored granular permissions / super-admin flag onto the restored
+       session (one small cache-first read), then re-render the shell so a
+       super-admin's exclusive UAM tab appears without a manual refresh. */
+    if (typeof window.kanjoUamApplyPermissions === 'function') {
+        window.kanjoUamApplyPermissions(restoredUser).then(() => {
+            applyThemeAndShowDashboard();
+            try { if (window.kanjoWorkspace && window.kanjoWorkspace.refresh) window.kanjoWorkspace.refresh(); } catch (_) { /* ignore */ }
+        }).catch(() => {});
+    }
     const intendedIdentity = window.currentUser;
     const beforeKey = [intendedIdentity.name, intendedIdentity.role, intendedIdentity.team].join('|');
     if (typeof window.ensureAuthClaims === 'function') {

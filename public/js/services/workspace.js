@@ -44,7 +44,10 @@
         data_entry: ['masterCatalogImporterWidget', 'masterCatalogDriveLinksWidget',
             'stagingCatalogImporterWidget', 'stagingRawTextParserWidget', 'stagingCatalogExportWidget'],
         /* Personal files + payroll banners. */
-        rep_profile: ['quickLinksWalletBanner', 'financialProfileBanner']
+        rep_profile: ['quickLinksWalletBanner', 'financialProfileBanner'],
+        /* Super-admin User Access Management (RBAC matrix). Rendered by uam.js;
+           only ever reachable because the tab below is gated to super admins. */
+        system_admin: ['kanjoUamWidget']
     };
 
     /* Reverse index: element id -> group name (first group that lists it). */
@@ -66,6 +69,14 @@
         { id: 'analytics', label: 'لوحة تحليل الأداء', short: 'التحليل', icon: 'fa-chart-line', groups: ['analytics'] },
         { id: 'admin_finance', label: 'الإدارة والمالية والتدقيق', short: 'المالية', icon: 'fa-briefcase', groups: ['finance', 'data_entry'] }
     ];
+
+    /* Super-admin-only "User Access Management" tab. Appended to the admin shell
+       ONLY for a super_admin identity (see tabsFor), so no other role can even
+       see — let alone open — the RBAC matrix. */
+    const UAM_TAB = {
+        id: 'system_admin', label: 'إدارة صلاحيات النظام', short: 'الصلاحيات',
+        icon: 'fa-user-shield', groups: ['system_admin']
+    };
 
     const MOBILE_TABS_BASE = [
         { id: 'rep_work', label: 'العمل اليومي', short: 'العمل', icon: 'fa-circle-plus', groups: ['visits', 'rep_work_extra'] },
@@ -97,6 +108,8 @@
     /* Finance / payroll / audit is founder + (non-Mahmoud) admin only. */
     const canViewFinance = () => {
         const r = role();
+        if (r === 'super_admin') return true;
+        try { if (window.kanjoIsSuperAdmin && window.kanjoIsSuperAdmin()) return true; } catch (_) { /* ignore */ }
         if (r === 'founder') return true;
         if (r === 'admin') return !isMahmoudOps();
         return false;
@@ -115,7 +128,8 @@
         if (r === 'accounting' || r === 'marketing') return null;      // single-section pages
         if (r === 'rep' || r === 'media') return 'mobile';
         if (r === 'data_entry') return 'mobile';
-        if (r === 'founder' || r === 'admin' || r === 'product_audit') return 'admin';
+        if (r === 'founder' || r === 'admin' || r === 'product_audit' || r === 'super_admin') return 'admin';
+        try { if (window.kanjoIsSuperAdmin && window.kanjoIsSuperAdmin()) return 'admin'; } catch (_) { /* ignore */ }
         if (isOps()) return 'admin';
         return 'mobile'; // unknown operational role — give the mobile shell
     }
@@ -124,9 +138,14 @@
         if (shell === 'admin') {
             /* Bug 1: the finance/payroll/audit tab is strictly founder + admin
                (and never the Mahmoud operations-manager persona). */
-            return canViewFinance()
-                ? ADMIN_TABS
+            const base = canViewFinance()
+                ? ADMIN_TABS.slice()
                 : ADMIN_TABS.filter((t) => t.id !== 'admin_finance');
+            /* The RBAC matrix is a super-admin-exclusive surface. */
+            let isSA = false;
+            try { isSA = !!(window.kanjoIsSuperAdmin && window.kanjoIsSuperAdmin()); } catch (_) { isSA = false; }
+            if (isSA) base.push(UAM_TAB);
+            return base;
         }
         return role() === 'data_entry' ? MOBILE_TABS_DATA_ENTRY : MOBILE_TABS_BASE;
     }
@@ -223,6 +242,9 @@
             autoOpenCatalogForView(tab.id);
             if (tab.id === 'visits') { wireDateStrip(); renderDateStrip(); }
             if (tab.id === 'admin_finance') syncFinanceHub();
+            if (tab.id === 'system_admin' && typeof window.kanjoRenderUam === 'function') {
+                try { window.kanjoRenderUam(); } catch (_) { /* ignore */ }
+            }
         }
 
         renderNavs();

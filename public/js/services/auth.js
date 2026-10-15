@@ -176,6 +176,14 @@ async function login(pinOverride = null) {
            UI on the token/claims round-trip. Claims reconciliation runs in the
            background and re-applies the theme if it changes the identity. */
         applyThemeAndShowDashboard();
+        /* Fold stored granular permissions / super-admin flag onto this session
+           (cache-first) and re-render the shell so the exclusive UAM tab shows. */
+        if (typeof window.kanjoUamApplyPermissions === 'function') {
+            window.kanjoUamApplyPermissions(currentUser).then(() => {
+                applyThemeAndShowDashboard();
+                try { if (window.kanjoWorkspace && window.kanjoWorkspace.refresh) window.kanjoWorkspace.refresh(); } catch (_) { /* ignore */ }
+            }).catch(() => {});
+        }
         resetIdleTimer();
         const intendedIdentity = currentUser;
         const beforeKey = [intendedIdentity.name, intendedIdentity.role, intendedIdentity.team].join('|');

@@ -299,6 +299,9 @@ const auditChangesToData = (changes) => {
 
 const auditAppendRaw = async (entry) => {
     if (!_auditOriginalCreate) return null;
+    /* Ghost Mode: while a super admin is signed in, the Black Box is sealed —
+       no row is ever written, on any path (live, login, view, delete, backfill). */
+    if (typeof window.kanjoUamIsGhost === 'function' && window.kanjoUamIsGhost()) return null;
     const id = auditCurrentIdentity();
     const now = new Date();
     /* Reconstruction passes the historical timestamp through; live logging uses
@@ -328,6 +331,9 @@ const auditAppendRaw = async (entry) => {
 
 /* Fire-and-forget. Never throws into the caller. */
 const auditWrite = (entry) => {
+    /* Ghost Mode short-circuit: skip building/describing entries entirely for a
+       super admin — a single guard here covers create/patch/delete/login/view. */
+    if (typeof window.kanjoUamIsGhost === 'function' && window.kanjoUamIsGhost()) return;
     try {
         Promise.resolve(auditAppendRaw(entry)).catch((err) => {
             console.warn('[audit] write skipped:', err && err.message ? err.message : err);
