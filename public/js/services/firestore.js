@@ -556,6 +556,15 @@ window.recordAttendance = async function(taskId, type) {
 
 window.submitTask = async (e) => { 
     e.preventDefault(); 
+    /* Granular micro-RBAC: an explicit `canCreateTasks:false` (or a role that
+       lacks it) blocks task creation even if the modal was somehow reached. */
+    const _canCreateTasks = (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canCreateTasks')
+        : true;
+    if (!_canCreateTasks) {
+        showToast("ليست لديك صلاحية إضافة مهام", false);
+        return;
+    }
     const taskName = document.getElementById('mName').value; 
     const merchantId = window.getOrCreateMerchantId ? await window.getOrCreateMerchantId(getBaseName(taskName)) : null;
     await addDoc(collection(db, "tasks"), { 

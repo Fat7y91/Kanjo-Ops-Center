@@ -805,6 +805,14 @@ window.toggleMerchantVipPreContract = async (checked) => {
 
 window.saveMerchantProfile = async () => {
 
+    /* Granular micro-RBAC: `canEditMerchant` gates merchant-data edits. */
+    const _legacyMerchant = (window.canManageContracts ? window.canManageContracts() : true);
+    const _canEditMerchant = (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canEditMerchant', _legacyMerchant) : _legacyMerchant;
+    if (!_canEditMerchant) {
+        return showToast("ليست لديك صلاحية تعديل بيانات التاجر", false);
+    }
+
     const contactName = document.getElementById('mpContactName').value.trim();
 
     const contactRole = document.getElementById('mpContactRole').value.trim();
@@ -950,6 +958,14 @@ window.saveMerchantProfile = async () => {
 };
 
 window.saveMerchantNameEdit = async () => {
+
+    /* Granular micro-RBAC: `canEditMerchant` gates merchant-name edits. */
+    const _legacyName = (window.canManageContracts ? window.canManageContracts() : true);
+    const _canEditName = (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canEditMerchant', _legacyName) : _legacyName;
+    if (!_canEditName) {
+        return showToast("ليست لديك صلاحية تعديل بيانات التاجر", false);
+    }
 
     const nameEditEl = document.getElementById('mpMerchantNameEdit');
 

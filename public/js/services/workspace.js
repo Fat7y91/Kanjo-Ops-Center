@@ -105,14 +105,20 @@
         } catch (_) { /* ignore */ }
         return String((window.currentUser && window.currentUser.name) || '').includes('محمود');
     };
-    /* Finance / payroll / audit is founder + (non-Mahmoud) admin only. */
+    /* Finance / payroll / audit is founder + (non-Mahmoud) admin only — unless
+       the granular matrix explicitly grants/revokes `canViewFinance` for the
+       user, which takes priority. */
     const canViewFinance = () => {
         const r = role();
-        if (r === 'super_admin') return true;
-        try { if (window.kanjoIsSuperAdmin && window.kanjoIsSuperAdmin()) return true; } catch (_) { /* ignore */ }
-        if (r === 'founder') return true;
-        if (r === 'admin') return !isMahmoudOps();
-        return false;
+        let legacy = false;
+        if (r === 'super_admin') legacy = true;
+        else {
+            try { if (window.kanjoIsSuperAdmin && window.kanjoIsSuperAdmin()) legacy = true; } catch (_) { /* ignore */ }
+            if (!legacy && r === 'founder') legacy = true;
+            if (!legacy && r === 'admin') legacy = !isMahmoudOps();
+        }
+        return (typeof window.kanjoCan === 'function')
+            ? window.kanjoCan('canViewFinance', legacy) : legacy;
     };
     const isOps = () => {
         try {

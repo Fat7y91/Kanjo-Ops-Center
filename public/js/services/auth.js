@@ -306,12 +306,19 @@ function applyThemeAndShowDashboard() {
     if (!isAccounting && !isMarketing) {
         document.getElementById('advancedDashboard').classList.toggle('hidden', !canViewLive);
         /* Compact action buttons; the bulky forms now live inside their modals.
-           The assign-task form was only ever usable by admins, so keep the
-           exact same gate (canManageContracts && admin && not data entry). */
+           Granular micro-RBAC: the assign-task (create tasks) and Excel-export
+           buttons honour the per-user permission matrix — an explicit override
+           (true or false) wins over the base role. */
+        const canCreateTasks = (typeof window.kanjoCan === 'function')
+            ? (window.kanjoCan('canCreateTasks') && !isDataEntry)
+            : (isMahmoud && isAdmin && !isDataEntry);
         const assignTaskBtn = document.getElementById('assignTaskBtn');
-        if (assignTaskBtn) assignTaskBtn.classList.toggle('hidden', !(isMahmoud && isAdmin && !isDataEntry));
+        if (assignTaskBtn) assignTaskBtn.classList.toggle('hidden', !canCreateTasks);
+        const canExportExcel = (typeof window.kanjoCan === 'function')
+            ? window.kanjoCan('canExportExcel', canViewLive)
+            : canViewLive;
         const exportProductsBtn = document.getElementById('openExportProductsBtn');
-        if (exportProductsBtn) exportProductsBtn.classList.toggle('hidden', !canViewLive);
+        if (exportProductsBtn) exportProductsBtn.classList.toggle('hidden', !canExportExcel);
         document.getElementById('notificationsWrapper').classList.toggle('hidden', !canViewLive);
         /* Data-entry and the product-audit team are not operations users: hide
            the day-task board so their screen is focused on the catalog. */

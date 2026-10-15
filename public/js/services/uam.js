@@ -30,34 +30,57 @@
     };
 
     /* The granular permission catalogue — the single source of truth shared by
-       the matrix UI and the enforcers. */
+       the matrix UI and the enforcers. `group` clusters the columns in the
+       checkbox matrix so the grid stays legible. */
     const UAM_PERMISSIONS = [
-        { key: 'canAddProduct', label: 'إضافة منتجات', icon: 'fa-plus' },
-        { key: 'canDeleteProduct', label: 'حذف منتجات', icon: 'fa-trash' },
-        { key: 'canExportExcel', label: 'تصدير Excel', icon: 'fa-file-excel' },
-        { key: 'canViewFinance', label: 'عرض المالية', icon: 'fa-coins' },
-        { key: 'canApproveTasks', label: 'اعتماد المهام', icon: 'fa-check-double' },
-        { key: 'canManageContracts', label: 'إدارة العقود', icon: 'fa-file-signature' },
-        { key: 'canViewKpi', label: 'عرض مؤشرات الأداء', icon: 'fa-chart-line' },
-        { key: 'canManageUsers', label: 'إدارة المستخدمين', icon: 'fa-users-gear' }
+        { key: 'canCreateTasks', label: 'إضافة مهام', icon: 'fa-list-check', group: 'المهام' },
+        { key: 'canApproveTasks', label: 'اعتماد المهام', icon: 'fa-check-double', group: 'المهام' },
+        { key: 'canAddProducts', label: 'إضافة منتجات', icon: 'fa-plus', group: 'المنتجات' },
+        { key: 'canEditProducts', label: 'تعديل منتجات', icon: 'fa-pen-to-square', group: 'المنتجات' },
+        { key: 'canDeleteProducts', label: 'حذف منتجات', icon: 'fa-trash-can', group: 'المنتجات' },
+        { key: 'canExportExcel', label: 'تصدير إكسل', icon: 'fa-file-excel', group: 'المنتجات' },
+        { key: 'canEditMerchant', label: 'تعديل بيانات التاجر', icon: 'fa-store', group: 'التجار' },
+        { key: 'canManageContracts', label: 'إدارة العقود', icon: 'fa-file-signature', group: 'التجار' },
+        { key: 'canViewFinance', label: 'رؤية الرواتب والماليات', icon: 'fa-coins', group: 'المالية' },
+        { key: 'canViewKpi', label: 'عرض مؤشرات الأداء', icon: 'fa-chart-line', group: 'التقارير' },
+        { key: 'canManageUsers', label: 'إدارة المستخدمين', icon: 'fa-users-gear', group: 'النظام' }
     ];
     const UAM_PERMISSION_KEYS = UAM_PERMISSIONS.map((p) => p.key);
+    /* Legacy singular aliases (older docs / call sites) → canonical key. */
+    const UAM_PERMISSION_ALIASES = {
+        canAddProduct: 'canAddProducts',
+        canDeleteProduct: 'canDeleteProducts',
+        canEditProduct: 'canEditProducts'
+    };
 
     /* Baseline a role is assumed to hold when its `users` doc carries no explicit
-       override. Purely for UI prefill + display; enforcement always falls back to
-       the caller's own legacy expression, so this never changes behaviour. */
+       override. The admin ("Manager") role is deliberately broad — the whole
+       point of the matrix is to REVOKE individual actions from it per user. */
     const UAM_ROLE_DEFAULTS = {
         super_admin: UAM_PERMISSION_KEYS.slice(),
         founder: UAM_PERMISSION_KEYS.slice(),
-        admin: UAM_PERMISSION_KEYS.slice(),
-        product_audit: ['canAddProduct', 'canDeleteProduct'],
-        rep: ['canAddProduct'],
+        admin: UAM_PERMISSION_KEYS.filter((k) => k !== 'canManageUsers'),
+        product_audit: ['canAddProducts', 'canEditProducts', 'canDeleteProducts'],
+        rep: ['canAddProducts', 'canEditProducts', 'canExportExcel'],
         data_entry: [],
-        accounting: ['canViewFinance'],
+        accounting: ['canViewFinance', 'canExportExcel'],
         marketing: [],
         marketing_agency: [],
         media: []
     };
+
+    /* The role list surfaced in the matrix UI (value → Arabic label). */
+    const UAM_ROLES = [
+        { value: 'admin', label: 'مدير (Manager)' },
+        { value: 'founder', label: 'مؤسس' },
+        { value: 'rep', label: 'مندوب' },
+        { value: 'accounting', label: 'محاسبة' },
+        { value: 'product_audit', label: 'تدقيق منتجات' },
+        { value: 'data_entry', label: 'إدخال بيانات' },
+        { value: 'marketing', label: 'تسويق' },
+        { value: 'media', label: 'ميديا' },
+        { value: 'super_admin', label: 'مشرف عام' }
+    ];
 
     const UAM_USER_FIELDS = ['uid', 'email', 'name', 'pin', 'role', 'superAdmin',
         'permissions', 'active', 'updatedAt', 'updatedBy'];
@@ -90,13 +113,34 @@
     /* Ghost mode: a super admin leaves NO trace in any audit/history surface. */
     window.kanjoUamIsGhost = () => window.kanjoIsSuperAdmin();
 
-    /* ── Permission gate used across the app ──────────────────────────────── */
+    /* ── Permission gate used across the app ──────────────────────────────────
+       Precedence (STRICT micro-RBAC):
+         1. super_admin → always allowed.
+         2. the user's explicit `permissions[key]` (true OR false) — this
+            OVERRIDES the base role in both directions.
+         3. the caller's `legacyDefault` when supplied (keeps pre-UAM behaviour).
+         4. the base role's default (UAM_ROLE_DEFAULTS). */
+    const canonicalKey = (perm) => UAM_PERMISSION_ALIASES[perm] || perm;
+
+    window.kanjoRoleDefault = (role, perm) => {
+        const key = canonicalKey(perm);
+        const defs = UAM_ROLE_DEFAULTS[String(role || '')] || [];
+        return defs.indexOf(key) !== -1;
+    };
+
     window.kanjoCan = (perm, legacyDefault) => {
         if (window.kanjoIsSuperAdmin()) return true;
+        const key = canonicalKey(perm);
         const u = window.currentUser;
         const p = u && u.permissions;
-        if (p && typeof p[perm] === 'boolean') return p[perm];
-        return !!legacyDefault;
+        if (p && typeof p === 'object') {
+            if (typeof p[key] === 'boolean') return p[key];      /* explicit wins */
+            for (const alias in UAM_PERMISSION_ALIASES) {
+                if (UAM_PERMISSION_ALIASES[alias] === key && typeof p[alias] === 'boolean') return p[alias];
+            }
+        }
+        if (typeof legacyDefault === 'boolean') return legacyDefault;
+        return window.kanjoRoleDefault(u && u.role, key);
     };
 
     /* ── Doc-id + identity matching ───────────────────────────────────────── */
@@ -240,25 +284,63 @@
     const effectivePermission = (rec, perm) => {
         if (!rec) return false;
         if (rec.superAdmin === true || String(rec.role || '') === SUPER_ADMIN_ROLE) return true;
-        if (rec.permissions && typeof rec.permissions[perm] === 'boolean') return rec.permissions[perm];
+        const key = canonicalKey(perm);
+        const p = rec.permissions;
+        if (p && typeof p === 'object') {
+            if (typeof p[key] === 'boolean') return p[key];
+            for (const alias in UAM_PERMISSION_ALIASES) {
+                if (UAM_PERMISSION_ALIASES[alias] === key && typeof p[alias] === 'boolean') return p[alias];
+            }
+        }
         const defs = UAM_ROLE_DEFAULTS[String(rec.role || '')] || [];
-        return defs.indexOf(perm) !== -1;
+        return defs.indexOf(key) !== -1;
     };
     window.kanjoUamEffective = effectivePermission;
+
+    const roleDefaultsObject = (role) => {
+        const out = {};
+        const defs = UAM_ROLE_DEFAULTS[String(role || '')] || [];
+        UAM_PERMISSION_KEYS.forEach((k) => { out[k] = defs.indexOf(k) !== -1; });
+        return out;
+    };
+    window.kanjoUamRoleDefaults = roleDefaultsObject;
 
     /* ── Mutations ────────────────────────────────────────────────────────── */
     const setPermission = async (docId, perm, value) => {
         const id = String(docId || '');
-        if (!id || UAM_PERMISSION_KEYS.indexOf(perm) === -1) return null;
+        const key = canonicalKey(perm);
+        if (!id || UAM_PERMISSION_KEYS.indexOf(key) === -1) return null;
         const list = Array.isArray(_uamCache) ? _uamCache : (_uamCache = []);
         const rec = list.find((r) => r && r.id === id) || { id };
         const perms = Object.assign({}, rec.permissions || {});
-        perms[perm] = !!value;
+        perms[key] = !!value;
         await saveUserDoc(id, { permissions: perms });
         if (isSelfDoc(id)) await applyPermissions();
         return perms;
     };
     window.kanjoUamSetPermission = setPermission;
+
+    /* Change a user's base ROLE. Leaves their explicit permission overrides in
+       place (they keep priority), so a role switch never silently wipes a
+       hand-tuned profile. */
+    window.kanjoUamSetRole = async (docId, role) => {
+        const id = String(docId || '');
+        if (!id) return null;
+        const merged = await saveUserDoc(id, { role: String(role || 'rep') });
+        if (isSelfDoc(id)) await applyPermissions();
+        return merged;
+    };
+
+    /* Bulk-save the whole permission map for one user (from the matrix editor). */
+    window.kanjoUamSetPermissions = async (docId, permissions) => {
+        const id = String(docId || '');
+        if (!id || !permissions || typeof permissions !== 'object') return null;
+        const perms = {};
+        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = !!permissions[k]; });
+        await saveUserDoc(id, { permissions: perms });
+        if (isSelfDoc(id)) await applyPermissions();
+        return perms;
+    };
 
     window.kanjoUamSetSuperAdmin = async (docId, value) => {
         const id = String(docId || '');
@@ -277,7 +359,7 @@
         return saveUserDoc(id, { active: !!active });
     };
 
-    window.kanjoUamAddUser = async ({ email, uid, name, role, pin }) => {
+    window.kanjoUamAddUser = async ({ email, uid, name, role, pin, permissions }) => {
         const cleanEmail = String(email || '').trim();
         const cleanUid = String(uid || '').trim();
         const cleanName = String(name || '').trim();
@@ -285,9 +367,15 @@
         const docId = normalizeDocId(cleanEmail || cleanUid || cleanName || cleanPin);
         if (!docId) throw new Error('[uam] provide an email, uid, name or pin');
         const role2 = String(role || 'rep').trim() || 'rep';
-        const defs = UAM_ROLE_DEFAULTS[role2] || [];
-        const perms = {};
-        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = defs.indexOf(k) !== -1; });
+        /* Prefer the exact checkbox matrix the super admin submitted; fall back
+           to the role's baseline only when no matrix was supplied. */
+        let perms;
+        if (permissions && typeof permissions === 'object') {
+            perms = {};
+            UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = !!permissions[k]; });
+        } else {
+            perms = roleDefaultsObject(role2);
+        }
         return saveUserDoc(docId, {
             email: cleanEmail, uid: cleanUid, name: cleanName, pin: cleanPin,
             role: role2, superAdmin: false, active: true, permissions: perms
@@ -330,11 +418,50 @@
     /* ── UAM matrix UI ────────────────────────────────────────────────────── */
     const recTitle = (rec) => rec.name || rec.email || rec.uid || rec.id;
 
+    const permissionGroups = () => {
+        const groups = [];
+        UAM_PERMISSIONS.forEach((p) => {
+            const name = p.group || 'عام';
+            let last = groups[groups.length - 1];
+            if (!last || last.name !== name) { last = { name, items: [] }; groups.push(last); }
+            last.items.push(p);
+        });
+        return groups;
+    };
+
+    /* Render the create-time checkbox matrix (inside the add-user form). It is
+       prefilled from the currently selected role and is the authoritative source
+       for the new user's granular permissions. */
+    const renderCreateMatrix = () => {
+        const host = document.getElementById('kanjoUamCreateMatrix');
+        if (!host) return;
+        const roleSel = document.getElementById('kanjoUamNewRole');
+        const role = roleSel ? String(roleSel.value || 'rep') : 'rep';
+        const defs = roleDefaultsObject(role);
+        host.innerHTML = UAM_PERMISSIONS.map((p) =>
+            '<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 cursor-pointer hover:border-[#FFD700]">'
+            + `<input type="checkbox" class="uam-create-perm accent-[#230535]" data-perm="${p.key}" ${defs[p.key] ? 'checked' : ''}>`
+            + `<i class="fa-solid ${p.icon} text-[#230535] text-xs"></i>`
+            + `<span class="text-[11px] font-bold text-slate-700">${escapeHtml(p.label)}</span>`
+            + '</label>').join('');
+    };
+    window.kanjoUamRenderCreateMatrix = renderCreateMatrix;
+
+    const collectCreatePermissions = () => {
+        const out = {};
+        const nodes = document.querySelectorAll('#kanjoUamCreateMatrix .uam-create-perm');
+        if (!nodes.length) return null;
+        nodes.forEach((n) => { out[n.getAttribute('data-perm')] = !!n.checked; });
+        return out;
+    };
+    window.kanjoUamOnRoleChange = () => renderCreateMatrix();
+
     const renderUam = async ({ force = false } = {}) => {
         const root = document.getElementById('kanjoUamWidget');
         if (!root) return;
         if (!window.kanjoIsSuperAdmin()) { root.classList.add('hidden'); return; }
         root.classList.remove('hidden');
+        renderCreateMatrix();
         const body = document.getElementById('kanjoUamBody');
         if (body) {
             body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
@@ -344,46 +471,79 @@
         if (!body) return;
         if (!rows.length) {
             body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
-                + 'لا يوجد مستخدمون بعد. أضِف مستخدماً بالأعلى لتفعيل صلاحياته.</div>';
+                + '<i class="fa-solid fa-table-cells-large block text-2xl mb-2 text-[#FFD700]"></i>'
+                + 'لا يوجد مستخدمون بعد. اختر الصلاحيات في مصفوفة الأعلى ثم أضِف مستخدماً.</div>';
             return;
         }
-        const head = '<tr>'
-            + '<th class="text-right px-3 py-2">المستخدم</th>'
-            + UAM_PERMISSIONS.map((p) => `<th class="px-2 py-2 text-center"><i class="fa-solid ${p.icon}"></i><span class="block text-[10px] mt-0.5">${escapeHtml(p.label)}</span></th>`).join('')
+        const groups = permissionGroups();
+        const groupHead = '<tr class="bg-[#230535] text-[#FFD700]">'
+            + '<th class="text-right px-3 py-2">المستخدم / الدور</th>'
+            + groups.map((g) => `<th colspan="${g.items.length}" class="px-2 py-1.5 text-center text-[10px] font-black border-r border-white/10">${escapeHtml(g.name)}</th>`).join('')
             + '<th class="px-3 py-2 text-center">إجراءات</th>'
+            + '</tr>';
+        const permHead = '<tr class="bg-slate-50 text-slate-500">'
+            + '<th class="px-2 py-2"></th>'
+            + UAM_PERMISSIONS.map((p) => '<th class="px-1.5 py-2 text-center align-top border-r border-slate-100">'
+                + `<i class="fa-solid ${p.icon} text-[#230535]"></i>`
+                + `<span class="block text-[9px] mt-0.5 leading-tight max-w-[64px] mx-auto">${escapeHtml(p.label)}</span></th>`).join('')
+            + '<th class="px-2 py-2"></th>'
             + '</tr>';
         const bodyRows = rows.map((rec) => {
             const id = escapeHtml(rec.id);
+            const rawId = String(rec.id);
             const isSA = rec.superAdmin === true || String(rec.role || '') === SUPER_ADMIN_ROLE;
             const active = rec.active !== false;
-            const roleLabel = escapeHtml(rec.role || '—');
+            const roleOptions = UAM_ROLES.map((r) =>
+                `<option value="${r.value}" ${String(rec.role || '') === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('');
             const cells = UAM_PERMISSIONS.map((p) => {
                 const on = effectivePermission(rec, p.key);
-                return '<td class="px-2 py-3 text-center">'
-                    + `<input type="checkbox" class="uam-toggle" ${on ? 'checked' : ''} ${isSA ? 'disabled' : ''}`
+                const explicit = rec.permissions && typeof rec.permissions[p.key] === 'boolean';
+                return '<td class="px-1.5 py-2 text-center border-r border-slate-50">'
+                    + `<input type="checkbox" class="uam-toggle accent-[#230535]" ${on ? 'checked' : ''} ${isSA ? 'disabled' : ''}`
+                    + ` title="${escapeHtml(p.label)}${explicit ? ' (مخصص)' : ''}"`
                     + ` onchange="window.kanjoUamSetPermission('${id}','${p.key}',this.checked)">`
+                    + (explicit ? '<span class="block text-[8px] font-black text-[#E57723]">مخصص</span>' : '')
                     + '</td>';
             }).join('');
-            return '<tr class="border-t border-slate-100' + (isSA ? ' bg-[#230535]/5' : '') + (!active ? ' opacity-50' : '') + '">'
-                + '<td class="px-3 py-3">'
+            return '<tr class="border-t border-slate-100 hover:bg-slate-50/60' + (isSA ? ' bg-[#230535]/5' : '') + (!active ? ' opacity-50' : '') + '">'
+                + '<td class="px-3 py-3 align-top min-w-[190px]">'
                 + `<div class="font-black text-sm text-[#230535]">${escapeHtml(recTitle(rec))}</div>`
-                + `<div class="text-[11px] text-slate-400">${escapeHtml(rec.email || rec.uid || rec.id)}</div>`
-                + `<span class="inline-block mt-1 text-[10px] font-black px-2 py-0.5 rounded-full ${isSA ? 'bg-[#230535] text-[#FFD700]' : 'bg-slate-100 text-slate-500'}">${isSA ? 'مشرف عام' : roleLabel}</span>`
+                + `<div class="text-[11px] text-slate-400 truncate max-w-[180px]" dir="ltr">${escapeHtml(rec.email || rec.uid || rec.id)}</div>`
+                + (isSA
+                    ? '<span class="inline-block mt-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-[#230535] text-[#FFD700]">مشرف عام</span>'
+                    : `<select onchange="window.kanjoUamSetRole('${id}',this.value)" class="mt-1 w-full text-[11px] font-bold rounded-lg border border-slate-200 px-1.5 py-1">${roleOptions}</select>`)
                 + '</td>'
                 + cells
-                + '<td class="px-3 py-3 text-center whitespace-nowrap">'
+                + '<td class="px-3 py-3 text-center align-top whitespace-nowrap">'
                 + (isSA
                     ? `<button type="button" onclick="window.kanjoUamSetSuperAdmin('${id}',false);window.kanjoRenderUam()" class="text-[11px] font-black text-red-500 hover:underline">إلغاء الترقية</button>`
-                    : `<button type="button" onclick="window.kanjoUamSetSuperAdmin('${id}',true);window.kanjoRenderUam()" class="text-[11px] font-black text-[#E57723] hover:underline">ترقية كمشرف</button>`)
+                    : `<button type="button" onclick="window.kanjoUamSetSuperAdmin('${id}',true);window.kanjoRenderUam()" class="text-[11px] font-black text-[#E57723] hover:underline">ترقية كمشرف</button>`
+                      + `<div class="mt-1 flex items-center justify-center gap-2">`
+                      + `<button type="button" onclick="window.kanjoUamGrantAll('${id}')" class="text-[10px] font-black text-emerald-600 hover:underline">منح الكل</button>`
+                      + `<button type="button" onclick="window.kanjoUamRevokeAll('${id}')" class="text-[10px] font-black text-slate-400 hover:underline">إلغاء الكل</button>`
+                      + '</div>')
                 + `<button type="button" onclick="window.kanjoUamSetActive('${id}',${active ? 'false' : 'true'});window.kanjoRenderUam()" class="text-[11px] font-black text-slate-400 hover:underline block mt-1 mx-auto">${active ? 'إيقاف' : 'تفعيل'}</button>`
                 + '</td>'
                 + '</tr>';
         }).join('');
         body.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-xs">'
-            + '<thead class="bg-slate-50 text-slate-500">' + head + '</thead>'
+            + '<thead>' + groupHead + permHead + '</thead>'
             + '<tbody>' + bodyRows + '</tbody></table></div>';
     };
     window.kanjoRenderUam = renderUam;
+
+    window.kanjoUamGrantAll = async (docId) => {
+        const perms = {};
+        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = true; });
+        await window.kanjoUamSetPermissions(docId, perms);
+        await renderUam();
+    };
+    window.kanjoUamRevokeAll = async (docId) => {
+        const perms = {};
+        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = false; });
+        await window.kanjoUamSetPermissions(docId, perms);
+        await renderUam();
+    };
 
     window.kanjoUamAddUserFromForm = async () => {
         const val = (id) => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
@@ -398,11 +558,13 @@
             return;
         }
         try {
-            await window.kanjoUamAddUser({ email, uid, name, role, pin });
+            const permissions = collectCreatePermissions();
+            await window.kanjoUamAddUser({ email, uid, name, role, pin, permissions });
             ['kanjoUamNewEmail', 'kanjoUamNewUid', 'kanjoUamNewName', 'kanjoUamNewPin'].forEach((id) => {
                 const el = document.getElementById(id); if (el) el.value = '';
             });
-            if (window.showToast) window.showToast('تمت إضافة المستخدم وتطبيق الصلاحيات', true);
+            renderCreateMatrix();
+            if (window.showToast) window.showToast('تمت إضافة المستخدم وتطبيق الصلاحيات المخصصة', true);
             await renderUam({ force: true });
         } catch (err) {
             if (window.showToast) window.showToast('تعذر إضافة المستخدم', false);
@@ -433,7 +595,13 @@
             form._uamWired = true;
             form.addEventListener('submit', (e) => { e.preventDefault(); window.kanjoUamAddUserFromForm(); });
         }
+        const roleSel = document.getElementById('kanjoUamNewRole');
+        if (roleSel && !roleSel._uamWired) {
+            roleSel._uamWired = true;
+            roleSel.addEventListener('change', () => renderCreateMatrix());
+        }
         maybeBootstrap();
+        if (window.currentUser) renderCreateMatrix();
         if (typeof window.addEventListener === 'function') {
             window.addEventListener('hashchange', maybeBootstrap);
             /* Re-apply permissions when the tab regains focus (real-time-ish). */

@@ -234,20 +234,33 @@ window.recordMerchantDashboardChange = (merchantId, change) => {
    covers reps, the audit team and the admin account 8492. Creating a product
    stays gated separately by canCreateCatalogProducts below, and the deletion
    request → approval workflow is untouched. */
-window.canEditCatalogProducts = () => !!window.currentUser
-    || window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+window.canEditCatalogProducts = () => {
+    const legacy = !!window.currentUser
+        || window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount();
+    return (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canEditProducts', legacy) : legacy;
+};
 
 /* Who may ADD a brand-new product. Field reps keep their existing create flow;
    the product-audit team and the admin account 8492 may add products for any
    merchant (to cover items the delivery agents missed) and edit them + their
    variants, but never delete. */
-window.canCreateCatalogProducts = () => window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount() || window.isCatalogFounderUser();
+window.canCreateCatalogProducts = () => {
+    const legacy = window.isCatalogRepUser() || window.isProductAuditUser() || window.isKanjoAdminAccount() || window.isCatalogFounderUser();
+    return (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canAddProducts', legacy) : legacy;
+};
 
 /* Catalog tools gate (admin / founder / product-audit "auditor"): the roles that
    get the in-merchant "+ إضافة صنف جديد" button and the per-card hard-delete
    control. Deliberately NARROWER than canCreateCatalogProducts — reps keep their
-   create + delete-request workflow and never see the hard-delete trash icon. */
-window.canManageCatalogProducts = () => window.isKanjoAdminAccount() || window.isCatalogFounderUser() || window.isProductAuditUser();
+   create + delete-request workflow and never see the hard-delete trash icon.
+   Granular micro-RBAC keys this on `canDeleteProducts`. */
+window.canManageCatalogProducts = () => {
+    const legacy = window.isKanjoAdminAccount() || window.isCatalogFounderUser() || window.isProductAuditUser();
+    return (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canDeleteProducts', legacy) : legacy;
+};
 
 /* Office roles (admin / founder / product-audit / Mahmoud-ops) add products
    DIRECTLY to Firestore. The offline `kanjo_drafts` queue exists strictly for
@@ -3990,7 +4003,7 @@ const renderCatalogAllProductsListNow = () => {
         const counts = catalogProductStatusCounts(selectedGroup.products);
         const merchantSearchVal = catalogEscapeHtml(String(window._catalogMerchantProductQuery || ''));
         const contextMerchantId = catalogEscapeHtml(String(selectedGroup.merchantId || ''));
-        const addProductBtn = window.canManageCatalogProducts()
+        const addProductBtn = window.canCreateCatalogProducts()
             ? `<button type="button" onclick="openCatalogProductModal('${contextMerchantId}')" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
             : '';
         if (toolbar) {
@@ -9193,6 +9206,12 @@ const kanjoBuildExportRows = async (evaluations, selections, variantEntries, opt
 
 const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries) => {
     try {
+        /* Granular micro-RBAC gate for `canExportExcel`. */
+        const _canExport = (typeof window.kanjoCan === 'function') ? window.kanjoCan('canExportExcel', true) : true;
+        if (!_canExport) {
+            if (window.showToast) window.showToast('ليست لديك صلاحية تصدير إكسل', false);
+            return;
+        }
         const { productRows, variantRows, additionRows } = await kanjoBuildExportRows(evaluations, selections, variantEntries);
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';

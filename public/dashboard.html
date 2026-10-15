@@ -1864,6 +1864,18 @@
                     <button type="submit" class="w-full h-[38px] bg-[#E57723] hover:bg-[#c96216] text-white text-xs font-black rounded-xl">
                         <i class="fa-solid fa-user-plus ml-1"></i> إضافة مستخدم
                     </button>
+
+                    <!-- Granular micro-RBAC checkbox matrix (create-time) -->
+                    <div class="col-span-full mt-1 border-t border-slate-200 pt-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-[12px] font-black text-[#230535] flex items-center gap-1.5">
+                                <i class="fa-solid fa-table-cells-large text-[#E57723]"></i>
+                                مصفوفة الصلاحيات المخصصة — فعّل/ألغِ كل إجراء على حدة
+                            </span>
+                            <span class="text-[10px] font-bold text-slate-400">تُملأ تلقائياً حسب الدور، ويمكن تعديلها بحرية</span>
+                        </div>
+                        <div id="kanjoUamCreateMatrix" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5"></div>
+                    </div>
                 </form>
 
                 <div id="kanjoUamBody" class="p-4 sm:p-5"></div>
@@ -4159,7 +4171,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261015a"></script>
+    <script type="module" src="js/main.js?v=20261016a"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 

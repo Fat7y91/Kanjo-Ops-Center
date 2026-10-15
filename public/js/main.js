@@ -16,9 +16,9 @@ import './utils/export.js';
 import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
-import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261015a';
-import './services/firestore.js';
-import './services/catalog.js?v=20261014b';
+import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261016a';
+import './services/firestore.js?v=20261016a';
+import './services/catalog.js?v=20261016a';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -26,14 +26,14 @@ import './services/menuImport.js';
 import './services/vendorExport.js';
 import './services/pharmacyIntake.js';
 import './services/founderAudit.js?v=20261015a';
-import './ui/modals.js?v=20261011c';
+import './ui/modals.js?v=20261016a';
 import './ui/accounting.js';
 import './ui/dashboard.js?v=20261015a';
 import './ui/charts.js';
 import './services/kpi.js?v=20261015a';
 import './services/marketing.js?v=20261015a';
-import './services/workspace.js?v=20261015a';
-import './services/uam.js?v=20261014c';
+import './services/workspace.js?v=20261016a';
+import './services/uam.js?v=20261016a';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
    form, and focus-triggered permission refresh. Safe when the widget is absent. */
