@@ -477,3 +477,92 @@ body.theme-executive-vip .kpi-chip-dark,
 body.theme-executive-vip .kws-ctabs button.is-active,
 body.theme-executive-vip .kds-nav-today { color: var(--vip-gold) !important; }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXECUTIVE MERCHANT CARDS  (catalog folder view)
+   ---------------------------------------------------------------------------
+   The catalog "folder" cards (`.catalog-merchant-card`) are defined in
+   style.css with a SOLID WHITE background and harsh emerald/amber status
+   borders. On the obsidian VIP canvas they read as primitive light-mode tiles
+   rudely pasted onto a premium dashboard: the card stayed white while the
+   merchant name (`text-[#230535]`) was inverted to light grey — white-on-white,
+   completely unreadable — and the emerald/amber sync skins added cheap teal /
+   green edges that clash with the Oval Office vibe.
+   This block re-skins ONLY the merchant cards, strictly under
+   `.theme-executive-vip`, to dark glassmorphism with metallic-gold borders and
+   a soft gold-lift hover. Coloured sync state is demoted to the badge dot.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body.theme-executive-vip .catalog-merchant-card {
+    background: rgba(17, 24, 39, 0.6) !important;
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
+    border: 1px solid rgba(212, 175, 55, 0.2) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.28s ease, border-color 0.28s ease !important;
+}
+body.theme-executive-vip .catalog-merchant-card:hover {
+    border-color: rgba(212, 175, 55, 0.55) !important;
+    box-shadow: 0 8px 24px rgba(212, 175, 55, 0.15), 0 16px 40px rgba(0, 0, 0, 0.55) !important;
+    transform: translateY(-3px);
+}
+
+/* Demote the primitive emerald/amber dashboard-sync skins to the same refined
+   dark glass + gold ring (state survives on the badge dot only). */
+body.theme-executive-vip .catalog-merchant-card--dashboard-uploaded,
+body.theme-executive-vip .catalog-merchant-card--dashboard-pending {
+    background: rgba(17, 24, 39, 0.6) !important;
+    border: 1px solid rgba(212, 175, 55, 0.2) !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45) !important;
+}
+body.theme-executive-vip .catalog-merchant-card--dashboard-uploaded:hover,
+body.theme-executive-vip .catalog-merchant-card--dashboard-pending:hover {
+    border-color: rgba(212, 175, 55, 0.55) !important;
+    box-shadow: 0 8px 24px rgba(212, 175, 55, 0.15), 0 16px 40px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Merchant name: pure white, extra-bold, softly glowing — always legible.
+   Mirrors the earlier lift rule's `:not()` chain so it wins on specificity. */
+body.theme-executive-vip .catalog-merchant-card [class*="text-[#230535]"]:not([class*="bg-[#FFD700]"]):not([class*="bg-[#E57723]"]):not([class*="bg-[#facc15]"]):not([class*="bg-yellow"]) {
+    color: #ffffff !important;
+    font-weight: 900 !important;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+}
+
+/* Logo frame → gold ring on deep glass. */
+body.theme-executive-vip .catalog-merchant-card img {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(212, 175, 55, 0.5) !important;
+}
+/* Logo placeholder tile (only the grid-centering icon box, never the count chip). */
+body.theme-executive-vip .catalog-merchant-card [class*="bg-[#230535]"][class*="place-items-center"] {
+    background: linear-gradient(135deg, #1a1408, #0a0a0a) !important;
+    border: 1px solid rgba(212, 175, 55, 0.35) !important;
+    color: var(--vip-gold-bright) !important;
+}
+
+/* Sync badge → gold-tinted glass; the coloured state lives in the dot glow. */
+body.theme-executive-vip .catalog-dash-badge {
+    background: rgba(212, 175, 55, 0.12) !important;
+    border: 1px solid rgba(212, 175, 55, 0.3) !important;
+    color: var(--vip-gold-bright) !important;
+}
+body.theme-executive-vip .catalog-dash-badge__dot { box-shadow: 0 0 10px currentColor; }
+
+/* The merchant accordion (expanded folder header + body) gets the same
+   treatment so the two merchant surfaces match. */
+body.theme-executive-vip [data-catalog-merchant] {
+    background: rgba(17, 24, 39, 0.5) !important;
+    border: 1px solid rgba(212, 175, 55, 0.2) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+body.theme-executive-vip [data-catalog-merchant] > * { border-color: rgba(212, 175, 55, 0.16) !important; }
+body.theme-executive-vip [data-catalog-merchant-body] { background: rgba(0, 0, 0, 0.25) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    body.theme-executive-vip .catalog-merchant-card,
+    body.theme-executive-vip .catalog-merchant-card:hover { transform: none !important; }
+}
+
