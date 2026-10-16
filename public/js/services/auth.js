@@ -216,7 +216,6 @@ window.syncAuthClaims = async () => {
 };
 
 async function login(pinOverride = null) {
-    if (window.authReady) { try { await window.authReady; } catch (e) {} }
     const pinEl = document.getElementById('pinInput');
     const rawPin = (pinOverride != null && pinOverride !== '')
         ? pinOverride
@@ -225,8 +224,10 @@ async function login(pinOverride = null) {
     let identity = resolveIdentity(pin);
     /* Auth↔login reconnect: when the PIN is absent from the local table, query
        the live Firestore `users` directory so a UAM-created operator (dynamic
-       role / team / permissions) can authenticate. */
+       role / team / permissions) can authenticate. Only THIS path needs the
+       auth baseline, so a known PIN user logs in without waiting on Firebase. */
     if (!identity && pin) {
+        if (window.authReady) { try { await window.authReady; } catch (e) { /* ignore */ } }
         identity = await resolveIdentityFromFirestore(pin);
     }
     if (identity) {
@@ -287,6 +288,11 @@ function applyThemeAndShowDashboard() {
 
     if(currentUser.team === 'Fox Team' || currentUser.team === 'Power Team') applyTeamTheme(currentUser.team);
     document.getElementById('loginSection').classList.add('hidden'); 
+    /* Signal the boot splash that the shell is ready to be uncovered. The splash
+       must NOT wait for `DOMContentLoaded` (see dashboard.html): that only fires
+       after the entire ES-module graph + third-party libs have loaded, which is
+       exactly the multi-minute freeze users reported on slow links. */
+    try { window.dispatchEvent(new Event('kanjo:ready')); } catch (_) { /* ignore */ }
 
     const isAccounting = (currentUser.role === 'accounting');
     const isSuperAdmin = (typeof window.kanjoIsSuperAdminRole === 'function' && window.kanjoIsSuperAdminRole());

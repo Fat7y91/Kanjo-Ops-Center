@@ -98,6 +98,22 @@ const centerLogoPlugin = {
 
 function renderAdvancedCharts(perfData, catCounts) {
 
+    /* Chart.js is loaded asynchronously (it is NOT needed for first paint), so on
+       a very fast first dashboard render it may not have arrived yet. Retry on
+       the next frames instead of throwing a ReferenceError that would abort the
+       whole dashboard render. Bounded so a blocked CDN cannot loop forever. */
+    if (typeof Chart === 'undefined') {
+        const attempts = (window._kanjoChartRetries || 0) + 1;
+        window._kanjoChartRetries = attempts;
+        if (attempts <= 20) {
+            setTimeout(() => {
+                try { renderAdvancedCharts(perfData, catCounts); } catch (_) { /* ignore */ }
+            }, 250);
+        }
+        return;
+    }
+    window._kanjoChartRetries = 0;
+
     const ctxPerf = document.getElementById('chartPerformance');
 
     const ctxCat = document.getElementById('chartCategories');

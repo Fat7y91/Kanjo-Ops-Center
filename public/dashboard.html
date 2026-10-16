@@ -24,23 +24,23 @@
 
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script async src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <link rel="stylesheet" href="style.css?v=20261014c">
     <!-- Super-admin "Oval Office" VIP theme. Inert unless <body> carries
@@ -55,23 +55,55 @@
 
     <script>
 
+        /* Boot splash lifecycle.
+
+           Deliberately NOT tied to `DOMContentLoaded`: the ES-module graph and
+           third-party libraries can take minutes on a slow link, and
+           DOMContentLoaded only fires AFTER all of them finish — that is exactly
+           the multi-minute boot freeze users reported. Instead:
+             1. Fresh visitor (no saved session): the login portal is static HTML,
+                so uncover it immediately.
+             2. Returning user: hide the splash the moment the shell signals
+                ready (`kanjo:ready`), with a bounded fallback so a stalled
+                script/CDN can never trap the user behind the splash. */
+        window.kanjoHideSplash = function () {
+            const splash = document.getElementById('kanjoLoadingSplash');
+            if (!splash) return;
+            splash.style.opacity = '0';
+            splash.style.pointerEvents = 'none';
+            setTimeout(() => splash.remove(), 400);
+        };
+
+        (function () {
+            let hasSavedSession = false;
+            try { hasSavedSession = !!localStorage.getItem('kanjo_session_user'); } catch (_) { /* ignore */ }
+
+            if (!hasSavedSession) {
+                /* The splash element is further down the body and is not parsed
+                   yet at this point, so wait (cheaply) until it exists. */
+                (function hideWhenParsed() {
+                    if (document.getElementById('kanjoLoadingSplash')) { window.kanjoHideSplash(); return; }
+                    if (document.readyState === 'loading') requestAnimationFrame(hideWhenParsed);
+                })();
+            } else {
+                window.addEventListener('kanjo:ready', function () { window.kanjoHideSplash(); }, { once: true });
+                /* Bounded fallback: generously finite, never infinite. */
+                setTimeout(function () { window.kanjoHideSplash(); }, 12000);
+            }
+        })();
+
+        /* Enter key submits the login form like clicking the button. Delegated on
+           `document` so it works before/without the module graph executing. */
+        document.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            const pin = document.getElementById('pinInput');
+            if (!pin || document.activeElement !== pin) return;
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            if (btn) btn.click();
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
-
-            setTimeout(() => {
-
-                const splash = document.getElementById('kanjoLoadingSplash');
-
-                if (splash) {
-
-                    splash.style.opacity = '0';
-
-                    splash.style.pointerEvents = 'none';
-
-                    setTimeout(() => splash.remove(), 400);
-
-                }
-
-            }, 800);
 
             /* Enter key submits the login form just like clicking the button. */
             const pin = document.getElementById('pinInput');
@@ -4127,7 +4159,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261017d"></script>
+    <script type="module" src="js/main.js?v=20261017e"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 
