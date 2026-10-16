@@ -117,6 +117,17 @@ window.isCatalogContentUser = () => {
     return name.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
 };
 
+/* Who may open the product image-review / "منتجاتي" workspace. The capability
+   is `canEditProducts` (edit/review product data + images). The base-role and
+   name checks stay ONLY as the legacy fallback so existing reps and the content
+   editor keep today's behaviour; an explicit UAM grant (e.g. a Manager whose
+   permissions were cloned from a rep) always wins. UI visibility MUST go
+   through the kanjoCan() capability layer, never the base role alone. */
+window.canReviewProductImages = () => {
+    const legacy = window.isCatalogRepUser() || window.isCatalogContentUser();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canEditProducts', legacy) : legacy;
+};
+
 window.isCatalogAdminUser = () => {
     const u = window.currentUser;
     if (!u) return false;
@@ -2986,8 +2997,8 @@ const renderCatalogMyProductsList = () => {
 window.renderCatalogMyProductsWidget = () => {
     const widget = document.getElementById('catalogMyProductsWidget');
     if (!widget) return;
-    const isRep = window.isCatalogRepUser();
-    widget.classList.toggle('hidden', !isRep);
+    const canReview = window.canReviewProductImages();
+    widget.classList.toggle('hidden', !canReview);
     const countEl = document.getElementById('catalogMyProductsCount');
     if (countEl) {
         countEl.textContent = window._catalogMyProductsLoaded
@@ -2995,7 +3006,7 @@ window.renderCatalogMyProductsWidget = () => {
             : '—';
     }
     const body = document.getElementById('catalogMyProductsBody');
-    if (isRep && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
+    if (canReview && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
 };
 
 window.toggleCatalogAllProductsWidget = () => {
@@ -4836,7 +4847,7 @@ window.onCatalogDescriptionInput = () => {
 };
 
 window.triggerCatalogEnhancedSlot = (productId, imageIndex, mode) => {
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewProductImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -4981,7 +4992,7 @@ const catalogConfirmDirectApproval = async (product) => {
    the final/enhanced field and mark the product done — no edit, no upload. The
    button is only ever rendered when a raw image exists. */
 window.catalogDirectApproveProduct = async (productId) => {
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewProductImages()) {
         if (window.showToast) window.showToast('الاعتماد المباشر متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -5021,7 +5032,7 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
     const input = event && event.target;
     const file = input && input.files && input.files[0];
     if (!file || !productId) return;
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewProductImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         input.value = '';
         return;
@@ -5337,7 +5348,7 @@ window.viewCatalogEnhancedImage = (productId, imageIndex) => {
 };
 
 window.loadDoneCatalogProducts = async () => {
-    if (!window.isCatalogContentUser()) return;
+    if (!window.canReviewProductImages()) return;
     /* Strict cache-first: the "done" set is already in memory (from the content
        "done" tab, the export dropdown, or a prior export) — reuse it instead of
        issuing another one-read-per-document query. */
@@ -5371,7 +5382,7 @@ window.loadDoneCatalogProducts = async () => {
 };
 
 window.switchCatalogContentTab = async (tab) => {
-    if (!window.isCatalogContentUser()) return;
+    if (!window.canReviewProductImages()) return;
     const target = tab === 'done' ? 'done' : 'pending';
     window._catalogContentTab = target;
     const pendingList = document.getElementById('catalogPendingList');
@@ -5397,7 +5408,7 @@ window.toggleCatalogContentWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogContentWidgetOpen = willOpen;
-    if (willOpen && window.isCatalogContentUser()) {
+    if (willOpen && window.canReviewProductImages()) {
         if (catalogActiveTab() === 'done') window.switchCatalogContentTab('done');
         else renderCatalogPendingCards();
     }
@@ -5422,7 +5433,7 @@ window.renderCatalogWidgets = () => {
     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
 
     const contentWidget = document.getElementById('catalogContentWidget');
-    if (contentWidget) contentWidget.classList.toggle('hidden', !window.isCatalogContentUser());
+    if (contentWidget) contentWidget.classList.toggle('hidden', !window.canReviewProductImages());
 
     const exportSection = document.getElementById('catalogExportSection');
     const isAdmin = window.isCatalogAdminUser();
@@ -5441,7 +5452,7 @@ window.renderCatalogWidgets = () => {
         mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
     }
 
-    if (window.isCatalogContentUser()) {
+    if (window.canReviewProductImages()) {
         const body = document.getElementById('catalogContentBody');
         if (body && !body.classList.contains('hidden')) {
             if (catalogActiveTab() === 'done') {
@@ -10220,7 +10231,7 @@ if (typeof window.addEventListener === 'function') {
    repainted the same list continuously and made the rep dashboard blink.
    Reads go over direct REST first so they survive a blocked SDK transport. */
 window.loadMyCatalogProducts = async (force = false) => {
-    if (!window.isCatalogRepUser()) return;
+    if (!window.canReviewProductImages()) return;
     const createdBy = (window.currentUser && window.currentUser.name) || '';
     if (!createdBy) return;
     try {
@@ -10582,7 +10593,7 @@ window.startCatalogListeners = () => {
                loads the full collection on demand via the "all products"
                widget, so it is deliberately excluded from the boot/periodic
                pending read to keep its idle cost at zero reads. */
-            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.isCatalogContentUser();
+            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.canReviewProductImages();
             const isMahmoud = window.isMahmoudUser();
             /* The full-collection read is by far the most expensive one (one
                read per document — 4,000+ today). It is therefore NEVER issued by
