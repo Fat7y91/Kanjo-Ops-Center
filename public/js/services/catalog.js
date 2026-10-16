@@ -2961,7 +2961,7 @@ const renderCatalogMyProductCard = (p) => {
     return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
         ${thumbHtml}
         <div class="min-w-0 flex-1">
-            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+            <button type="button" onclick="catalogOpenProductQuickView('${id}')" class="block w-full text-start font-black text-sm text-[#230535] truncate hover:text-[#E57723] hover:underline decoration-2 underline-offset-2 transition-colors cursor-pointer" title="عرض تفاصيل المنتج">${name}</button>
             <div class="flex flex-wrap gap-1.5 mt-1">
                 <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                 <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
@@ -5253,7 +5253,7 @@ const renderCatalogProductCard = (p, mode) => {
     const cardId = (isDone ? 'catalogDoneCard-' : 'catalogPendingCard-') + id;
     return `<div id="${cardId}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
         <div class="min-w-0">
-            <div class="font-black text-sm text-[#230535]">${name}</div>
+            <button type="button" onclick="catalogOpenProductQuickView('${id}')" class="block w-full text-start font-black text-sm text-[#230535] hover:text-[#E57723] hover:underline decoration-2 underline-offset-2 transition-colors cursor-pointer" title="عرض تفاصيل المنتج">${name}</button>
             <div class="flex flex-wrap gap-1.5 mt-1.5">
                 <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                 ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
@@ -5336,6 +5336,137 @@ const renderCatalogDoneCards = () => {
         return;
     }
     list.innerHTML = buildCatalogGroupedMerchantsHtml(done, 'done');
+};
+
+/* ─── Contextual product details ("Quick View") ───────────────────────────
+   From the image-review / منتجاتي cards the reviewer opens the full product
+   context WITHOUT leaving the tab. Editing is gated purely by the granular
+   `canEditProducts` capability (canEditCatalogProducts): without it every
+   field renders read-only text. */
+const catalogFindProductById = (productId) => {
+    const id = String(productId || '');
+    if (!id) return null;
+    return (window.repCatalogProductsCache || []).find((p) => p && p.id === id)
+        || (window.merchantProductsCache || []).find((p) => p && p.id === id)
+        || (window.doneCatalogProductsCache || []).find((p) => p && p.id === id)
+        || (window.allCatalogProductsCache || []).find((p) => p && p.id === id)
+        || null;
+};
+
+const CATALOG_QUICKVIEW_MODAL_ID = 'catalogQuickViewModal';
+
+window.catalogCloseProductQuickView = () => {
+    const el = document.getElementById(CATALOG_QUICKVIEW_MODAL_ID);
+    if (el) el.remove();
+    window._catalogQuickViewProduct = null;
+};
+
+window.catalogOpenProductQuickView = (productId) => {
+    const product = catalogFindProductById(productId);
+    if (!product) {
+        if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
+        return;
+    }
+    const esc = catalogEscapeHtml;
+    const canEdit = !!(typeof window.canEditCatalogProducts === 'function' && window.canEditCatalogProducts());
+    window._catalogQuickViewProduct = product;
+    const id = esc(product.id);
+    const statusDone = String(product.status || '') === 'done';
+    const statusHtml = product.deleteRequested
+        ? '<span class="text-[10px] font-black bg-red-50 text-red-700 px-2 py-0.5 rounded-full">بانتظار الموافقة على الحذف</span>'
+        : (statusDone
+            ? '<span class="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">مكتمل</span>'
+            : '<span class="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">قيد المعالجة</span>');
+    const merchant = esc(catalogResolveMerchantName(product) || product.merchantName || '');
+    const inputCls = 'w-full rounded-xl border border-[#230535]/20 p-2.5 text-sm font-bold text-[#230535] bg-white focus:outline-none focus:border-[#7c3aed]';
+    const field = (label, fieldId, value, type) => {
+        const safe = esc(value == null ? '' : value);
+        const control = !canEdit
+            ? `<div class="text-sm font-bold text-[#230535] whitespace-pre-wrap break-words">${safe || '<span class="text-slate-400">—</span>'}</div>`
+            : (type === 'textarea'
+                ? `<textarea id="${fieldId}" rows="3" class="${inputCls}">${safe}</textarea>`
+                : `<input id="${fieldId}" type="${type === 'number' ? 'number' : 'text'}"${type === 'number' ? ' step="any" inputmode="decimal"' : ''} class="${inputCls}" value="${safe}">`);
+        return `<label class="block space-y-1"><span class="text-[11px] font-black text-slate-500">${label}</span>${control}</label>`;
+    };
+    const old = document.getElementById(CATALOG_QUICKVIEW_MODAL_ID);
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = CATALOG_QUICKVIEW_MODAL_ID;
+    wrap.className = 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[140]';
+    wrap.innerHTML = `
+        <div class="bg-white rounded-3xl shadow-xl border border-[#FFD700]/40 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3 p-4 bg-[#230535] rounded-t-3xl">
+                <div class="min-w-0">
+                    <h3 class="font-black text-base text-[#FFD700]">تفاصيل المنتج</h3>
+                    <p class="text-[11px] font-bold text-white/70 truncate">${merchant}</p>
+                </div>
+                <button type="button" onclick="catalogCloseProductQuickView()" class="text-white/80 hover:text-white text-lg shrink-0 leading-none" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 space-y-3">
+                <div class="flex flex-wrap gap-1.5">
+                    ${statusHtml}
+                    ${product.category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${esc(product.category)}</span>` : ''}
+                </div>
+                ${field('اسم المنتج', 'cqName', product.name_ar || '', 'text')}
+                ${field('الوصف', 'cqDesc', product.description_ar || '', 'textarea')}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${field('السعر (ج.م)', 'cqPrice', product.base_price == null ? '' : product.base_price, 'number')}
+                    ${field('SKU', 'cqSku', product.sku || '', 'text')}
+                </div>
+                ${field('القسم', 'cqCategory', product.category || '', 'text')}
+                ${canEdit ? '' : '<p class="text-[11px] font-bold text-slate-400 flex items-center gap-1"><i class="fa-solid fa-lock"></i> عرض فقط — لا تملك صلاحية تعديل المنتجات</p>'}
+            </div>
+            <div class="flex items-center justify-end gap-2 p-4 border-t border-[#230535]/10">
+                <button type="button" onclick="catalogCloseProductQuickView()" class="bg-white border border-[#230535]/15 text-[#230535] px-4 py-2 rounded-xl text-xs font-black hover:bg-[#230535]/5 transition">إغلاق</button>
+                ${canEdit ? `<button type="button" id="cqSaveBtn" onclick="catalogQuickViewSave('${id}')" class="bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-xs font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات</button>` : ''}
+            </div>
+        </div>`;
+    wrap.addEventListener('click', (event) => { if (event.target === wrap) window.catalogCloseProductQuickView(); });
+    document.body.appendChild(wrap);
+};
+
+window.catalogQuickViewSave = async (productId) => {
+    if (!(typeof window.canEditCatalogProducts === 'function' && window.canEditCatalogProducts())) {
+        if (window.showToast) window.showToast('ليست لديك صلاحية تعديل المنتجات', false);
+        return;
+    }
+    const readVal = (fieldId) => { const el = document.getElementById(fieldId); return el ? String(el.value == null ? '' : el.value).trim() : ''; };
+    const name = readVal('cqName');
+    if (!name) { if (window.showToast) window.showToast('اسم المنتج مطلوب', false); return; }
+    const priceRaw = readVal('cqPrice');
+    const parsedPrice = priceRaw === '' ? '' : Number(priceRaw);
+    if (priceRaw !== '' && (isNaN(parsedPrice) || parsedPrice < 0)) {
+        if (window.showToast) window.showToast('السعر غير صالح', false);
+        return;
+    }
+    /* Text-only edit — deliberately NEVER touches status / images so the item
+       stays in the image-review queue (same smart-edit routing as the editor). */
+    const patch = {
+        name_ar: name,
+        description_ar: readVal('cqDesc'),
+        category: readVal('cqCategory'),
+        sku: readVal('cqSku'),
+        base_price: parsedPrice,
+        updatedAt: new Date().toISOString(),
+        updatedBy: (window.currentUser && window.currentUser.name) || ''
+    };
+    const btn = document.getElementById('cqSaveBtn');
+    const prev = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; }
+    try {
+        if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], patch))) {
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
+        }
+        if (typeof window.catalogApplyProductUpdateLocally === 'function') window.catalogApplyProductUpdateLocally(productId, patch);
+        if (window.showToast) window.showToast('تم حفظ تعديلات المنتج', true);
+        window.catalogCloseProductQuickView();
+        renderCatalogMyProductsList();
+        if (window.canReviewImages()) renderCatalogPendingCards();
+    } catch (err) {
+        console.error('[catalog] quick-view save failed:', err);
+        if (window.showToast) window.showToast('فشل حفظ التعديلات، حاول مرة أخرى', false);
+        if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+    }
 };
 
 window.viewCatalogEnhancedImage = (productId, imageIndex) => {

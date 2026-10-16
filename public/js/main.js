@@ -18,7 +18,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017a';
 import './services/firestore.js?v=20261016a';
-import './services/catalog.js?v=20261017c';
+import './services/catalog.js?v=20261017d';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
