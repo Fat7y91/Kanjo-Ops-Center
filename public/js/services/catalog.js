@@ -669,6 +669,73 @@ const listFinalizedMerchants = () => {
    so its pharmacy picker reuses the exact same eligibility rules as the catalog. */
 window.listFinalizedMerchants = listFinalizedMerchants;
 
+/* ALL merchants from the loaded directory (`merchants` collection), shaped like
+   a `listFinalizedMerchants()` entry. Lets managers/admins add a product to ANY
+   catalog merchant — not only those tied to an assigned rep task. The directory
+   is already cached in memory (`window.merchantsById`), so this costs ZERO reads. */
+const listDirectoryMerchants = () => {
+    const out = [];
+    if (!window.merchantsById || typeof window.merchantsById.forEach !== 'function') return out;
+    window.merchantsById.forEach((rec, mid) => {
+        if (!rec || rec.archived === true) return;
+        const rawName = String(rec.name || rec.merchantName || '').trim();
+        if (!rawName) return;
+        const merchantName = window.getBaseName ? window.getBaseName(rawName) : rawName;
+        if (!merchantName) return;
+        out.push({
+            merchantId: String(mid),
+            merchantName,
+            category: String(rec.cat || rec.category || '').trim(),
+            team: String(rec.team || '').trim(),
+            vipPreContract: rec.vipPreContract === true
+        });
+    });
+    return out;
+};
+window.listDirectoryMerchants = listDirectoryMerchants;
+
+/* Who may add a product for ANY catalog merchant (not only their assigned rep
+   tasks): office/manager roles or an explicit privileged grant. Field reps keep
+   the assigned-merchant scope so their workflow is unchanged. */
+const catalogCanAddForAnyMerchant = () => {
+    if (typeof window.isCatalogDirectCreateUser === 'function' && window.isCatalogDirectCreateUser()) return true;
+    if (typeof window.isCatalogAdminUser === 'function' && window.isCatalogAdminUser()) return true;
+    if (typeof window.isMahmoudUser === 'function' && window.isMahmoudUser()) return true;
+    if (typeof window.canManageCatalogProducts === 'function' && window.canManageCatalogProducts()) return true;
+    return false;
+};
+
+/* Resolve a merchant for the Add-product context lock even when it is absent
+   from the picker's eligible list (e.g. a manager viewing a catalog merchant
+   with no assigned task). Prefers the directory record, then the name stashed
+   on `window._catalogContextMerchant`, then an explicit fallback name. */
+const catalogResolveContextMerchant = (merchantId, fallbackName) => {
+    const mid = String(merchantId || '').trim();
+    if (!mid) return null;
+    if (window.merchantsById && typeof window.merchantsById.get === 'function' && window.merchantsById.has(mid)) {
+        const rec = window.merchantsById.get(mid);
+        const rawName = String((rec && (rec.name || rec.merchantName)) || '').trim();
+        let name = rawName ? (window.getBaseName ? window.getBaseName(rawName) : rawName) : '';
+        if (!name) {
+            const ctx = window._catalogContextMerchant;
+            if (ctx && String(ctx.merchantId) === mid) name = String(ctx.merchantName || '').trim();
+        }
+        if (!name) name = String(fallbackName || '').trim();
+        return {
+            merchantId: mid,
+            merchantName: name,
+            category: String((rec && (rec.cat || rec.category)) || '').trim(),
+            team: String((rec && rec.team) || '').trim(),
+            vipPreContract: !!(rec && rec.vipPreContract === true)
+        };
+    }
+    let name = String(fallbackName || '').trim();
+    const ctx = window._catalogContextMerchant;
+    if (!name && ctx && String(ctx.merchantId) === mid) name = String(ctx.merchantName || '').trim();
+    if (!name) return null;
+    return { merchantId: mid, merchantName: name, category: '', team: '', vipPreContract: false };
+};
+
 const resolveMerchantCategory = (merchant) => {
     const isRealCat = (value) => {
         const cat = String(value || '').trim();
@@ -899,13 +966,35 @@ let _catalogMerchantFuse = null;
 let _catalogMerchantFuseSig = '';
 
 const fillCatalogMerchantOptions = (extraMerchant) => {
-    const merchants = listFinalizedMerchants();
+    const byId = new Map();
+    const addMerchant = (m) => {
+        if (!m || !m.merchantId) return;
+        const id = String(m.merchantId);
+        const existing = byId.get(id);
+        if (existing) {
+            /* Merge the two sources so a resolved category / VIP flag from
+               either one wins over a blank. */
+            if (!existing.category && m.category) existing.category = m.category;
+            if (!existing.team && m.team) existing.team = m.team;
+            if (m.vipPreContract) existing.vipPreContract = true;
+            return;
+        }
+        byId.set(id, Object.assign({}, m, { merchantId: id }));
+    };
+    listFinalizedMerchants().forEach(addMerchant);
+    /* Managers/admins (any privileged `canAddProducts` holder) may target ANY
+       catalog merchant, so merge in the full directory — never restrict the
+       picker to assigned rep tasks. A manager with no rep tasks would otherwise
+       see an empty "لا يوجد تجار مخصصين لك" list. Zero reads: the directory is
+       already in memory. */
+    if (catalogCanAddForAnyMerchant()) {
+        listDirectoryMerchants().forEach(addMerchant);
+    }
+    if (extraMerchant && extraMerchant.merchantId) addMerchant(extraMerchant);
+    const merchants = Array.from(byId.values())
+        .sort((a, b) => String(a.merchantName).localeCompare(String(b.merchantName), 'ar'));
     window._catalogMerchantMap = {};
     merchants.forEach((m) => { window._catalogMerchantMap[m.merchantId] = m; });
-    if (extraMerchant && extraMerchant.merchantId && !window._catalogMerchantMap[extraMerchant.merchantId]) {
-        merchants.unshift(extraMerchant);
-        window._catalogMerchantMap[extraMerchant.merchantId] = extraMerchant;
-    }
     window._catalogMerchantList = merchants;
     /* Invalidate the Fuse index so the combobox rebinds to the new list. */
     _catalogMerchantFuse = null;
@@ -1045,12 +1134,19 @@ window.setCatalogMerchantInputLabel = setCatalogMerchantInputLabel;
    specific merchant's catalog view, that merchant is already known — pre-select
    it and hide the searchable picker so the admin never has to search again. The
    hidden #catalogMerchantSelect keeps the value every existing consumer reads. */
-const lockCatalogMerchantTo = (merchantId) => {
+const lockCatalogMerchantTo = (merchantId, fallbackName) => {
     const select = document.getElementById('catalogMerchantSelect');
     const mid = String(merchantId || '').trim();
-    const merchant = (mid && window._catalogMerchantMap) ? window._catalogMerchantMap[mid] : null;
-    if (!select || !merchant) return false;
-    select.value = mid;
+    let merchant = (mid && window._catalogMerchantMap) ? window._catalogMerchantMap[mid] : null;
+    /* The context merchant may be absent from the picker's eligible list (e.g. a
+       manager adding to a catalog merchant with no assigned task). Resolve it
+       from the directory / stashed context so the lock still applies and the
+       merchant search field is hidden. */
+    if (!merchant && mid) merchant = catalogResolveContextMerchant(mid, fallbackName);
+    if (!select || !merchant || !merchant.merchantName) return false;
+    /* Ensure the map + hidden select carry the value every consumer reads. */
+    if (window._catalogMerchantMap) window._catalogMerchantMap[merchant.merchantId] = merchant;
+    select.value = merchant.merchantId;
     const combo = document.getElementById('catalogMerchantCombobox');
     if (combo) combo.classList.add('hidden');
     let locked = document.getElementById('catalogMerchantLocked');
@@ -1064,6 +1160,9 @@ const lockCatalogMerchantTo = (merchantId) => {
         + '<span class="font-black text-sm text-[#230535] truncate flex-1">' + catalogEscapeHtml(merchant.merchantName) + '</span>'
         + '<span class="shrink-0 text-[10px] font-black text-[#230535] bg-[#FFD700] px-2 py-0.5 rounded-full">تاجر الكتالوج</span>';
     locked.classList.remove('hidden');
+    /* Keep the (now hidden) search input label in sync with the locked value so
+       every consumer that reads it — and the reopened modal — is consistent. */
+    setCatalogMerchantInputLabel();
     return true;
 };
 window.lockCatalogMerchantTo = lockCatalogMerchantTo;
@@ -2284,7 +2383,12 @@ window.openCatalogProductModal = (merchantId) => {
         });
     }
     resetCatalogEditState();
-    fillCatalogMerchantOptions();
+    /* Context-aware (Bug fix): opened from inside a specific merchant's catalog
+       view → the target merchant is already known. Resolve it up-front so the
+       picker includes it (even if it is not in the eligible rep-task list) and
+       the search field can be locked/hidden below. */
+    const contextMerchant = catalogResolveContextMerchant(merchantId);
+    fillCatalogMerchantOptions(contextMerchant);
     clearCatalogProductFields(false);
     setCatalogModalChrome();
     window.updateMasterCatalogSearchVisibility();
@@ -2293,10 +2397,8 @@ window.openCatalogProductModal = (merchantId) => {
     window.hideCatalogMerchantSearchList();
     window.setCatalogMerchantInputLabel();
     window.hideCatalogNameSuggestions();
-    /* Context-aware (Bug fix): opened from a specific merchant's catalog view →
-       pre-select and lock that merchant so the admin does not search again. */
     if (String(merchantId || '').trim()) {
-        window.lockCatalogMerchantTo(merchantId);
+        window.lockCatalogMerchantTo(merchantId, contextMerchant && contextMerchant.merchantName);
         if (typeof window.onCatalogMerchantChange === 'function') window.onCatalogMerchantChange();
     }
     fetchCatalogAutocompleteCache();
@@ -3227,6 +3329,7 @@ window.backCatalogAllProductsMerchants = (event) => {
     }
     window._catalogAllProductsSelectedMerchant = '';
     window._catalogMerchantProductQuery = '';
+    window._catalogContextMerchant = null;
     transitionCatalogAllProductsView(() => renderCatalogAllProductsListNow());
 };
 
@@ -4028,6 +4131,10 @@ const renderCatalogAllProductsListNow = () => {
         const counts = catalogProductStatusCounts(selectedGroup.products);
         const merchantSearchVal = catalogEscapeHtml(String(window._catalogMerchantProductQuery || ''));
         const contextMerchantId = catalogEscapeHtml(String(selectedGroup.merchantId || ''));
+        /* Remember the merchant whose catalog is open so the Add-product modal
+           can lock to it (and resolve its name even when it is not in the
+           eligible picker list). Cleared when leaving the merchant view. */
+        window._catalogContextMerchant = { merchantId: String(selectedGroup.merchantId || ''), merchantName: String(selectedGroup.merchantName || '') };
         const addProductBtn = window.canCreateCatalogProducts()
             ? `<button type="button" onclick="openCatalogProductModal('${contextMerchantId}')" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
             : '';
@@ -10815,11 +10922,28 @@ window.startCatalogListeners = () => {
                merchant_products collection into IndexedDB, so this boot/reload
                pays only for the `updatedAt > since` delta (~1 read when idle)
                instead of re-reading the whole (or pending) set. Manager-scoped
-               so a plain rep's boot cost stays zero. */
+               so a plain rep's boot cost stays zero.
+               Hydrate FIRST (IDB-only, no network): `getLastSyncedAt`/`size`
+               only reflect the cache once hydrated, so checking them before
+               hydration always looked "cold" and forced the slow network path. */
+            if (window.kanjoSync && window.kanjoIdb) {
+                try { await window.kanjoSync.hydrate(CATALOG_COLLECTION); } catch (_) { /* ignore */ }
+            }
             const idbReady = !!(window.kanjoSync && window.kanjoIdb
                 && window.kanjoSync.getLastSyncedAt(CATALOG_COLLECTION)
                 && window.kanjoSync.size(CATALOG_COLLECTION) > 0);
             if (idbReady && (canViewPending || isMahmoud)) {
+                /* INSTANT cached render: paint the hydrated IndexedDB snapshot in
+                   this frame so the grid fills immediately, then the unified
+                   (delta-merged) list repaints when its one cheap delta read
+                   resolves. A warm reload therefore never waits on the network
+                   before showing the ~7.9k cached catalog. */
+                try {
+                    const cachedRows = window.kanjoSync.getRows(CATALOG_COLLECTION);
+                    if (cachedRows && cachedRows.length) {
+                        applyUnifiedCatalogCaches(sortCatalogProductsByCreatedAt(cachedRows.slice()), isMahmoud);
+                    }
+                } catch (_) { /* ignore */ }
                 jobs.push((async () => {
                     try {
                         const items = await catalogUnifiedFullList();

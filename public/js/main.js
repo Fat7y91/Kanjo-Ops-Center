@@ -1,7 +1,7 @@
 /* Kanjo Ops — Application Entry Point */
 import './utils/cache.js';
 import './config/firebase.js';
-import './services/idb.js';
+import './services/idb.js?v=20261017a';
 import './services/syncEngine.js';
 import './services/updatedAt.js';
 import './config/build-info.generated.js';
@@ -18,7 +18,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017b';
 import './services/firestore.js?v=20261016a';
-import './services/catalog.js?v=20261017e';
+import './services/catalog.js?v=20261017f';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
