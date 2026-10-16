@@ -5130,8 +5130,20 @@ window.toggleCatalogMerchantAccordion = (domId, mode) => {
     const willOpen = body.classList.contains('hidden');
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
-    if (willOpen) openMap[merchantName] = true;
-    else delete openMap[merchantName];
+    if (willOpen) {
+        openMap[merchantName] = true;
+        /* Lazy materialization: a collapsed merchant contributes only a header
+           to the DOM. The heavy per-image cards (each card carries up to N
+           image slots with buttons + file inputs) are built here on first
+           expand, then paginated so one giant merchant can never paint its
+           whole card set synchronously. */
+        if (body.getAttribute('data-content-lazy') === '1') {
+            body.innerHTML = buildCatalogContentMerchantBody(mode, merchantName);
+            body.setAttribute('data-content-lazy', '0');
+        }
+    } else {
+        delete openMap[merchantName];
+    }
     window[mapKey] = openMap;
 };
 
@@ -5266,6 +5278,55 @@ const renderCatalogProductCard = (p, mode) => {
     </div>`;
 };
 
+/* Page size for a single merchant's pending/done card list. Collapsed groups
+   never render cards; an expanded group renders only the first page and the
+   remainder is revealed through "عرض المزيد". Mirrors the my-products
+   accordion cap so a content editor with thousands of queued images pays for
+   a handful of headers + one page of cards on mount instead of every card. */
+const CATALOG_CONTENT_MERCHANT_PAGE = 50;
+
+const catalogContentMerchantLimitKey = (mode, merchantName) => mode + '|' + merchantName;
+
+const catalogContentMerchantLimit = (mode, merchantName) => {
+    window._catalogContentMerchantLimits = window._catalogContentMerchantLimits || {};
+    return Number(window._catalogContentMerchantLimits[catalogContentMerchantLimitKey(mode, merchantName)])
+        || CATALOG_CONTENT_MERCHANT_PAGE;
+};
+
+/* Build the card HTML for one merchant's accordion body (paginated) from the
+   lazy registry populated by buildCatalogGroupedMerchantsHtml. */
+const buildCatalogContentMerchantBody = (mode, merchantName) => {
+    const registry = window._catalogContentAccordionRegistry
+        && window._catalogContentAccordionRegistry[mode];
+    const items = (registry && registry.groups && registry.groups[merchantName]) || [];
+    if (!items.length) return '';
+    const limit = catalogContentMerchantLimit(mode, merchantName);
+    const shown = items.slice(0, limit);
+    const remaining = items.length - shown.length;
+    let html = shown.map((item) => renderCatalogProductCard(item, mode)).join('');
+    if (remaining > 0) {
+        const encodedName = encodeURIComponent(merchantName).replace(/'/g, '%27');
+        html += `<div class="text-center py-3"><button type="button" onclick="showMoreCatalogContentProducts('${mode}', '${encodedName}')" class="bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition inline-flex items-center gap-2"><i class="fa-solid fa-chevron-down"></i> عرض المزيد (${remaining} متبقي)</button></div>`;
+    }
+    return html;
+};
+
+window.showMoreCatalogContentProducts = (mode, encodedName) => {
+    const merchantName = decodeURIComponent(String(encodedName || ''));
+    window._catalogContentMerchantLimits = window._catalogContentMerchantLimits || {};
+    const key = catalogContentMerchantLimitKey(mode, merchantName);
+    window._catalogContentMerchantLimits[key] = catalogContentMerchantLimit(mode, merchantName)
+        + CATALOG_CONTENT_MERCHANT_PAGE;
+    const isDone = mode === 'done';
+    const accordionId = (isDone ? 'd-' : '') + catalogMerchantDomId(merchantName);
+    const prefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    const accordion = document.getElementById(prefix + accordionId);
+    const body = accordion && accordion.querySelector('[data-catalog-merchant-body]');
+    if (body && !body.classList.contains('hidden')) {
+        body.innerHTML = buildCatalogContentMerchantBody(mode, merchantName);
+    }
+};
+
 const buildCatalogGroupedMerchantsHtml = (products, mode) => {
     const isDone = mode === 'done';
     const grouped = products.reduce((acc, p) => {
@@ -5279,12 +5340,20 @@ const buildCatalogGroupedMerchantsHtml = (products, mode) => {
     window[mapKey] = openMap;
     const merchantNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar'));
     const accordionPrefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    /* Lazy registry: collapsed merchants contribute ONLY their header to the
+       DOM; their per-image cards are materialized on first expand (see
+       toggleCatalogMerchantAccordion). Rebuilt on every render so the group
+       payload is always current. */
+    window._catalogContentAccordionRegistry = window._catalogContentAccordionRegistry || {};
+    const registry = { mode, groups: {} };
+    window._catalogContentAccordionRegistry[mode] = registry;
     return merchantNames.map((merchantName) => {
         const items = grouped[merchantName];
         const safeName = catalogEscapeHtml(merchantName);
         const accordionId = (isDone ? 'd-' : '') + catalogMerchantDomId(merchantName);
         const isOpen = !!openMap[merchantName];
-        const cards = items.map((item) => renderCatalogProductCard(item, mode)).join('');
+        registry.groups[merchantName] = items;
+        const cards = isOpen ? buildCatalogContentMerchantBody(mode, merchantName) : '';
         return `<div id="${accordionPrefix}${accordionId}" data-catalog-merchant="${safeName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
             <button type="button" onclick="toggleCatalogMerchantAccordion('${accordionId}', '${mode}')" class="w-full ${isDone ? 'bg-emerald-700' : 'bg-[#230535]'} text-white px-4 py-3 flex items-center justify-between gap-3">
                 <span class="font-black text-sm truncate">${safeName}</span>
@@ -5293,7 +5362,7 @@ const buildCatalogGroupedMerchantsHtml = (products, mode) => {
                     <i data-catalog-merchant-chevron class="fa-solid fa-chevron-down ${isDone ? 'text-emerald-100' : 'text-[#FFD700]'} text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
                 </span>
             </button>
-            <div data-catalog-merchant-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
+            <div data-catalog-merchant-body data-content-lazy="${isOpen ? '0' : '1'}" class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
         </div>`;
     }).join('');
 };
