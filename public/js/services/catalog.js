@@ -117,15 +117,20 @@ window.isCatalogContentUser = () => {
     return name.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
 };
 
-/* Who may open the product image-review / "منتجاتي" workspace. The capability
-   is `canEditProducts` (edit/review product data + images). The base-role and
-   name checks stay ONLY as the legacy fallback so existing reps and the content
-   editor keep today's behaviour; an explicit UAM grant (e.g. a Manager whose
-   permissions were cloned from a rep) always wins. UI visibility MUST go
-   through the kanjoCan() capability layer, never the base role alone. */
+/* The rep "منتجاتي" workspace (a rep's own uploaded products). Capability =
+   `canEditProducts`; the base-role check is only the legacy fallback so field
+   reps keep today's behaviour, while an explicit UAM grant (e.g. a Manager
+   cloned from a rep) always wins. */
 window.canReviewProductImages = () => {
-    const legacy = window.isCatalogRepUser() || window.isCatalogContentUser();
+    const legacy = window.isCatalogRepUser();
     return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canEditProducts', legacy) : legacy;
+};
+
+/* Image-processing / review tasks (مهام معالجة الصور). PURE boolean: the UAM
+   checkbox `canReviewImages` alone decides — no hardcoded name or base-role
+   check anywhere in the router or the UI rendering logic. */
+window.canReviewImages = () => {
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canReviewImages', false) : false;
 };
 
 window.isCatalogAdminUser = () => {
@@ -4847,7 +4852,7 @@ window.onCatalogDescriptionInput = () => {
 };
 
 window.triggerCatalogEnhancedSlot = (productId, imageIndex, mode) => {
-    if (!window.canReviewProductImages()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -4992,7 +4997,7 @@ const catalogConfirmDirectApproval = async (product) => {
    the final/enhanced field and mark the product done — no edit, no upload. The
    button is only ever rendered when a raw image exists. */
 window.catalogDirectApproveProduct = async (productId) => {
-    if (!window.canReviewProductImages()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('الاعتماد المباشر متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -5032,7 +5037,7 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
     const input = event && event.target;
     const file = input && input.files && input.files[0];
     if (!file || !productId) return;
-    if (!window.canReviewProductImages()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         input.value = '';
         return;
@@ -5348,7 +5353,7 @@ window.viewCatalogEnhancedImage = (productId, imageIndex) => {
 };
 
 window.loadDoneCatalogProducts = async () => {
-    if (!window.canReviewProductImages()) return;
+    if (!window.canReviewImages()) return;
     /* Strict cache-first: the "done" set is already in memory (from the content
        "done" tab, the export dropdown, or a prior export) — reuse it instead of
        issuing another one-read-per-document query. */
@@ -5382,7 +5387,7 @@ window.loadDoneCatalogProducts = async () => {
 };
 
 window.switchCatalogContentTab = async (tab) => {
-    if (!window.canReviewProductImages()) return;
+    if (!window.canReviewImages()) return;
     const target = tab === 'done' ? 'done' : 'pending';
     window._catalogContentTab = target;
     const pendingList = document.getElementById('catalogPendingList');
@@ -5408,7 +5413,7 @@ window.toggleCatalogContentWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogContentWidgetOpen = willOpen;
-    if (willOpen && window.canReviewProductImages()) {
+    if (willOpen && window.canReviewImages()) {
         if (catalogActiveTab() === 'done') window.switchCatalogContentTab('done');
         else renderCatalogPendingCards();
     }
@@ -5433,7 +5438,7 @@ window.renderCatalogWidgets = () => {
     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
 
     const contentWidget = document.getElementById('catalogContentWidget');
-    if (contentWidget) contentWidget.classList.toggle('hidden', !window.canReviewProductImages());
+    if (contentWidget) contentWidget.classList.toggle('hidden', !window.canReviewImages());
 
     const exportSection = document.getElementById('catalogExportSection');
     const isAdmin = window.isCatalogAdminUser();
@@ -5452,7 +5457,7 @@ window.renderCatalogWidgets = () => {
         mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
     }
 
-    if (window.canReviewProductImages()) {
+    if (window.canReviewImages()) {
         const body = document.getElementById('catalogContentBody');
         if (body && !body.classList.contains('hidden')) {
             if (catalogActiveTab() === 'done') {
@@ -10593,7 +10598,7 @@ window.startCatalogListeners = () => {
                loads the full collection on demand via the "all products"
                widget, so it is deliberately excluded from the boot/periodic
                pending read to keep its idle cost at zero reads. */
-            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.canReviewProductImages();
+            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.canReviewImages();
             const isMahmoud = window.isMahmoudUser();
             /* The full-collection read is by far the most expensive one (one
                read per document — 4,000+ today). It is therefore NEVER issued by
