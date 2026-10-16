@@ -45,7 +45,7 @@
     <link rel="stylesheet" href="style.css?v=20261014c">
     <!-- Super-admin "Oval Office" VIP theme. Inert unless <body> carries
          .theme-executive-vip (added only for a super_admin session). -->
-    <link rel="stylesheet" href="super-admin.css?v=20261016d">
+    <link rel="stylesheet" href="super-admin.css?v=20261017a">
 
     <script>
 
@@ -1816,68 +1816,24 @@
         <div id="dashboardSection" class="hidden space-y-6">
 
             <!-- ═══════════ USER ACCESS MANAGEMENT (super_admin only) ═══════════ -->
-            <div id="kanjoUamWidget" class="hidden bg-white rounded-3xl shadow-sm border border-[#FFD700]/50 overflow-hidden">
+            <div id="kanjoUamWidget" class="hidden rounded-3xl shadow-sm border border-[#FFD700]/50 overflow-hidden">
                 <div class="bg-[#230535] px-4 sm:px-5 py-4 flex flex-wrap items-center justify-between gap-3">
                     <div class="flex items-center gap-3">
                         <span class="w-10 h-10 rounded-2xl bg-[#FFD700] text-[#230535] flex items-center justify-center text-lg"><i class="fa-solid fa-user-shield"></i></span>
                         <div>
-                            <h2 class="text-white font-black text-base">إدارة صلاحيات النظام</h2>
-                            <p class="text-[#e9d5ff] text-[11px] font-bold">تحكم دقيق في صلاحيات كل مستخدم — للمشرف العام فقط (وضع الشبح)</p>
+                            <h2 class="text-white font-black text-base">إدارة المستخدمين والصلاحيات</h2>
+                            <p class="text-[#e9d5ff] text-[11px] font-bold">بطاقات المستخدمين + محرر صلاحيات كامل — للمشرف العام فقط (وضع الشبح)</p>
                         </div>
                     </div>
-                    <button type="button" onclick="window.kanjoUamReload && window.kanjoUamReload()" class="text-[11px] font-black text-[#230535] bg-[#FFD700] hover:bg-[#facc15] rounded-full px-4 py-2">
-                        <i class="fa-solid fa-rotate ml-1"></i> تحديث
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="window.kanjoUamOpenModal && window.kanjoUamOpenModal(null)" class="text-[11px] font-black text-white bg-[#E57723] hover:bg-[#c96216] rounded-full px-4 py-2">
+                            <i class="fa-solid fa-user-plus ml-1"></i> مستخدم جديد
+                        </button>
+                        <button type="button" onclick="window.kanjoUamReload && window.kanjoUamReload()" class="text-[11px] font-black text-[#230535] bg-[#FFD700] hover:bg-[#facc15] rounded-full px-4 py-2">
+                            <i class="fa-solid fa-rotate ml-1"></i> تحديث
+                        </button>
+                    </div>
                 </div>
-
-                <form id="kanjoUamAddForm" class="px-4 sm:px-5 py-4 bg-slate-50 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 items-end">
-                    <label class="block">
-                        <span class="block text-[11px] font-black text-slate-500 mb-1">البريد الإلكتروني</span>
-                        <input id="kanjoUamNewEmail" type="email" dir="ltr" placeholder="name@example.com" class="w-full text-xs font-bold rounded-xl border border-slate-200 px-3 py-2">
-                    </label>
-                    <label class="block">
-                        <span class="block text-[11px] font-black text-slate-500 mb-1">معرّف Firebase (UID)</span>
-                        <input id="kanjoUamNewUid" type="text" dir="ltr" placeholder="uid..." class="w-full text-xs font-bold rounded-xl border border-slate-200 px-3 py-2">
-                    </label>
-                    <label class="block">
-                        <span class="block text-[11px] font-black text-slate-500 mb-1">الاسم</span>
-                        <input id="kanjoUamNewName" type="text" placeholder="اسم المستخدم" class="w-full text-xs font-bold rounded-xl border border-slate-200 px-3 py-2">
-                    </label>
-                    <label class="block">
-                        <span class="block text-[11px] font-black text-slate-500 mb-1">رمز الدخول (PIN)</span>
-                        <input id="kanjoUamNewPin" type="text" inputmode="numeric" placeholder="1234" class="w-full text-xs font-bold rounded-xl border border-slate-200 px-3 py-2">
-                    </label>
-                    <label class="block">
-                        <span class="block text-[11px] font-black text-slate-500 mb-1">الدور</span>
-                        <select id="kanjoUamNewRole" class="w-full text-xs font-bold rounded-xl border border-slate-200 px-3 py-2">
-                            <option value="rep">مندوب</option>
-                            <option value="data_entry">إدخال بيانات</option>
-                            <option value="product_audit">تدقيق منتجات</option>
-                            <option value="accounting">محاسبة</option>
-                            <option value="marketing">تسويق</option>
-                            <option value="media">ميديا</option>
-                            <option value="admin">مدير</option>
-                            <option value="founder">مؤسس</option>
-                            <option value="super_admin">مشرف عام</option>
-                        </select>
-                    </label>
-                    <button type="submit" class="w-full h-[38px] bg-[#E57723] hover:bg-[#c96216] text-white text-xs font-black rounded-xl">
-                        <i class="fa-solid fa-user-plus ml-1"></i> إضافة مستخدم
-                    </button>
-
-                    <!-- Granular micro-RBAC checkbox matrix (create-time) -->
-                    <div class="col-span-full mt-1 border-t border-slate-200 pt-3">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-[12px] font-black text-[#230535] flex items-center gap-1.5">
-                                <i class="fa-solid fa-table-cells-large text-[#E57723]"></i>
-                                مصفوفة الصلاحيات المخصصة — فعّل/ألغِ كل إجراء على حدة
-                            </span>
-                            <span class="text-[10px] font-bold text-slate-400">تُملأ تلقائياً حسب الدور، ويمكن تعديلها بحرية</span>
-                        </div>
-                        <div id="kanjoUamCreateMatrix" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5"></div>
-                    </div>
-                </form>
-
                 <div id="kanjoUamBody" class="p-4 sm:p-5"></div>
             </div>
 
@@ -4171,7 +4127,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261016d"></script>
+    <script type="module" src="js/main.js?v=20261017a"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 

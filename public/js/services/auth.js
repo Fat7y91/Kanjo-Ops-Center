@@ -26,6 +26,37 @@ function resolveIdentity(pin) {
 }
 window.resolveKanjoIdentity = resolveIdentity;
 
+/* Resolve a typed PIN against the live Firestore `users` directory. A user
+   created in the UAM panel exists ONLY in Firestore (never in the shipped
+   constants table), so the local lookup above misses them and they were locked
+   out with "رمز الدخول غير صحيح". This query reconnects the auth path: on a PIN
+   miss we look the operator up in `users` by PIN and authenticate them with
+   their dynamic role, team and custom permissions. Returns null when no active
+   document carries that PIN. */
+async function resolveIdentityFromFirestore(pin) {
+    const key = String(pin == null ? '' : pin).trim();
+    if (!key || !window.kanjoRest || typeof window.kanjoRest.runQuery !== 'function') return null;
+    try {
+        const rows = await window.kanjoRest.runQuery('users', [['pin', 'EQUAL', key]], 5);
+        const hit = (rows || []).find((r) => r && String(r.pin == null ? '' : r.pin).trim() === key && r.active !== false);
+        if (!hit) return null;
+        return {
+            name: hit.name || ('مستخدم ' + key),
+            role: hit.role || 'rep',
+            team: hit.team || '',
+            superAdmin: hit.superAdmin === true,
+            permissions: (hit.permissions && typeof hit.permissions === 'object') ? hit.permissions : {},
+            uid: hit.uid || '',
+            email: hit.email || '',
+            pin: key
+        };
+    } catch (err) {
+        console.warn('[auth] Firestore PIN lookup failed:', err && err.message ? err.message : err);
+        return null;
+    }
+}
+window.resolveKanjoIdentityFromFirestore = resolveIdentityFromFirestore;
+
 let idleTimer;
 let currentUser = null; 
 
@@ -191,7 +222,13 @@ async function login(pinOverride = null) {
         ? pinOverride
         : (pinEl ? pinEl.value : '');
     const pin = String(rawPin == null ? '' : rawPin).trim();
-    const identity = resolveIdentity(pin);
+    let identity = resolveIdentity(pin);
+    /* Auth↔login reconnect: when the PIN is absent from the local table, query
+       the live Firestore `users` directory so a UAM-created operator (dynamic
+       role / team / permissions) can authenticate. */
+    if (!identity && pin) {
+        identity = await resolveIdentityFromFirestore(pin);
+    }
     if (identity) {
         /* Keep the PIN on the session identity (without mutating the shared
            constants entry) so PIN-scoped screens such as the authorization
