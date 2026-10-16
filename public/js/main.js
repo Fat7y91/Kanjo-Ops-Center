@@ -16,9 +16,9 @@ import './utils/export.js';
 import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
-import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261016d';
+import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017b';
 import './services/firestore.js?v=20261016a';
-import './services/catalog.js?v=20261016d';
+import './services/catalog.js?v=20261017e';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -29,11 +29,11 @@ import './services/founderAudit.js?v=20261016b';
 import './ui/modals.js?v=20261016a';
 import './ui/accounting.js';
 import './ui/dashboard.js?v=20261016d';
-import './ui/charts.js';
+import './ui/charts.js?v=20261017a';
 import './services/kpi.js?v=20261016b';
 import './services/marketing.js?v=20261016b';
 import './services/workspace.js?v=20261016a';
-import './services/uam.js?v=20261016d';
+import './services/uam.js?v=20261017c';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
    form, and focus-triggered permission refresh. Safe when the widget is absent. */
@@ -52,18 +52,16 @@ const editCat = document.getElementById('editCat');
 if (mCat) mCat.innerHTML = categoryOptionsHtml;
 if (editCat) editCat.innerHTML = categoryOptionsHtml;
 
-/* Restore session — but ONLY after the Firebase auth baseline (anonymous sign-in)
-   has resolved, so the strict Firestore rules never reject the first reads and the
-   UI never renders empty lists before data is fetched. The loading spinner
-   (injected by dashboard.js) stays visible until the first batch of Firestore
-   data arrives and renderDashboard() replaces it.
+/* Restore session and paint the shell IMMEDIATELY from localStorage — NOT gated
+   on the Firebase auth baseline. Waiting for `signInAnonymously` (an unbounded
+   network promise) before showing anything was the core cold-start regression:
+   on a slow/blocked network the user stared at the splash for minutes.
 
-   No client-side deadline: boot waits for Firebase's real auth state to settle.
-   A slow handshake keeps the spinner up instead of restoring the session while
-   Firestore is still unauthenticated (which would paint empty lists). */
-const authReadyWithTimeout = Promise.resolve(window.authReady).catch(() => null);
-
-authReadyWithTimeout.then(() => {
+   Data reads stay correct WITHOUT this gate: every Firestore read path already
+   defers itself on `window.authReady` internally (and retries on
+   permission-denied once auth settles). So the UI now renders in the first
+   frame while auth + the first data snapshot settle in the background. */
+const restoreSession = () => {
     const savedUser = localStorage.getItem(SESSION_KEY);
     if (!savedUser) return;
     let restoredUser = null;
@@ -78,11 +76,6 @@ authReadyWithTimeout.then(() => {
     if (typeof window.showDashboardLoading === 'function') {
         window.showDashboardLoading();
     }
-    /* Cache-first boot: restore the UI and attach listeners immediately.
-       RBAC claims are reconciled in the background and re-apply the theme
-       only if they change the identity, so a slow token round-trip can no
-       longer block the first paint. Bounded internally so a slow network
-       cannot hang the boot. */
     /* Fold the PERSISTED (localStorage) permissions synchronously BEFORE the
        first paint, so the shell is already correct in a single frame — no
        blocking read and no second-repaint flicker. */
@@ -100,15 +93,14 @@ authReadyWithTimeout.then(() => {
             try { if (window.kanjoWorkspace && window.kanjoWorkspace.refresh) window.kanjoWorkspace.refresh(); } catch (_) { /* ignore */ }
         }).catch(() => {});
     }
+    /* Auth↔claims reconciliation runs in the background; it only re-binds
+       listeners / repaints when the resolved identity actually changed. */
     const intendedIdentity = window.currentUser;
     const beforeKey = [intendedIdentity.name, intendedIdentity.role, intendedIdentity.team].join('|');
     if (typeof window.ensureAuthClaims === 'function') {
         window.ensureAuthClaims(intendedIdentity).then(() => {
             const resolved = window.currentUser || {};
             const afterKey = [resolved.name, resolved.role, resolved.team].join('|');
-            /* If claims changed the person/role/team the listeners were first
-               bound to, re-bind them so the scope (e.g. team-scoped tasks) is
-               correct instead of silently showing the wrong slice. */
             if (afterKey !== beforeKey && typeof window.detachAppListeners === 'function') {
                 window.detachAppListeners();
             }
@@ -118,13 +110,17 @@ authReadyWithTimeout.then(() => {
             }
         }).catch(() => {});
     }
-}).catch((err) => {
-    /* A failed auth baseline must not leave the boot chain rejected with an
-       unhandled error and the spinner stuck forever. */
+};
+
+try {
+    restoreSession();
+} catch (err) {
+    /* A failed restore must not leave the boot chain rejected with an unhandled
+       error and the login hidden. */
     console.error('[boot] session restore failed:', err);
     const login = document.getElementById('loginSection');
     if (login) login.classList.remove('hidden');
-});
+}
 
 /* ─── Stale-tab notice ───────────────────────────────────────────────────────
    A long-lived tab keeps the JS it loaded in memory, so a tab opened before a

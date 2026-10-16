@@ -117,6 +117,22 @@ window.isCatalogContentUser = () => {
     return name.includes('يوسف') || lower.includes('youssef') || lower.includes('yousef');
 };
 
+/* The rep "منتجاتي" workspace (a rep's own uploaded products). Capability =
+   `canEditProducts`; the base-role check is only the legacy fallback so field
+   reps keep today's behaviour, while an explicit UAM grant (e.g. a Manager
+   cloned from a rep) always wins. */
+window.canReviewProductImages = () => {
+    const legacy = window.isCatalogRepUser();
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canEditProducts', legacy) : legacy;
+};
+
+/* Image-processing / review tasks (مهام معالجة الصور). PURE boolean: the UAM
+   checkbox `canReviewImages` alone decides — no hardcoded name or base-role
+   check anywhere in the router or the UI rendering logic. */
+window.canReviewImages = () => {
+    return (typeof window.kanjoCan === 'function') ? window.kanjoCan('canReviewImages', false) : false;
+};
+
 window.isCatalogAdminUser = () => {
     const u = window.currentUser;
     if (!u) return false;
@@ -2945,7 +2961,7 @@ const renderCatalogMyProductCard = (p) => {
     return `<div class="bg-white border border-purple-100 rounded-2xl p-3 shadow-sm flex items-center gap-3">
         ${thumbHtml}
         <div class="min-w-0 flex-1">
-            <div class="font-black text-sm text-[#230535] truncate">${name}</div>
+            <button type="button" onclick="catalogOpenProductQuickView('${id}')" class="block w-full text-start font-black text-sm text-[#230535] truncate hover:text-[#E57723] hover:underline decoration-2 underline-offset-2 transition-colors cursor-pointer" title="عرض تفاصيل المنتج">${name}</button>
             <div class="flex flex-wrap gap-1.5 mt-1">
                 <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                 <span class="text-[10px] font-black ${statusClass} px-2 py-0.5 rounded-full">${status}</span>
@@ -2986,8 +3002,8 @@ const renderCatalogMyProductsList = () => {
 window.renderCatalogMyProductsWidget = () => {
     const widget = document.getElementById('catalogMyProductsWidget');
     if (!widget) return;
-    const isRep = window.isCatalogRepUser();
-    widget.classList.toggle('hidden', !isRep);
+    const canReview = window.canReviewProductImages();
+    widget.classList.toggle('hidden', !canReview);
     const countEl = document.getElementById('catalogMyProductsCount');
     if (countEl) {
         countEl.textContent = window._catalogMyProductsLoaded
@@ -2995,7 +3011,7 @@ window.renderCatalogMyProductsWidget = () => {
             : '—';
     }
     const body = document.getElementById('catalogMyProductsBody');
-    if (isRep && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
+    if (canReview && body && !body.classList.contains('hidden')) renderCatalogMyProductsList();
 };
 
 window.toggleCatalogAllProductsWidget = () => {
@@ -4836,7 +4852,7 @@ window.onCatalogDescriptionInput = () => {
 };
 
 window.triggerCatalogEnhancedSlot = (productId, imageIndex, mode) => {
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -4981,7 +4997,7 @@ const catalogConfirmDirectApproval = async (product) => {
    the final/enhanced field and mark the product done — no edit, no upload. The
    button is only ever rendered when a raw image exists. */
 window.catalogDirectApproveProduct = async (productId) => {
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('الاعتماد المباشر متاح لفريق المحتوى فقط', false);
         return;
     }
@@ -5021,7 +5037,7 @@ window.handleCatalogEnhancedFile = async (event, productId, imageIndex, mode) =>
     const input = event && event.target;
     const file = input && input.files && input.files[0];
     if (!file || !productId) return;
-    if (!window.isCatalogContentUser()) {
+    if (!window.canReviewImages()) {
         if (window.showToast) window.showToast('رفع الصورة المحسّنة متاح لفريق المحتوى فقط', false);
         input.value = '';
         return;
@@ -5114,8 +5130,20 @@ window.toggleCatalogMerchantAccordion = (domId, mode) => {
     const willOpen = body.classList.contains('hidden');
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
-    if (willOpen) openMap[merchantName] = true;
-    else delete openMap[merchantName];
+    if (willOpen) {
+        openMap[merchantName] = true;
+        /* Lazy materialization: a collapsed merchant contributes only a header
+           to the DOM. The heavy per-image cards (each card carries up to N
+           image slots with buttons + file inputs) are built here on first
+           expand, then paginated so one giant merchant can never paint its
+           whole card set synchronously. */
+        if (body.getAttribute('data-content-lazy') === '1') {
+            body.innerHTML = buildCatalogContentMerchantBody(mode, merchantName);
+            body.setAttribute('data-content-lazy', '0');
+        }
+    } else {
+        delete openMap[merchantName];
+    }
     window[mapKey] = openMap;
 };
 
@@ -5237,7 +5265,7 @@ const renderCatalogProductCard = (p, mode) => {
     const cardId = (isDone ? 'catalogDoneCard-' : 'catalogPendingCard-') + id;
     return `<div id="${cardId}" class="bg-white border border-purple-100 rounded-2xl p-4 shadow-sm space-y-3">
         <div class="min-w-0">
-            <div class="font-black text-sm text-[#230535]">${name}</div>
+            <button type="button" onclick="catalogOpenProductQuickView('${id}')" class="block w-full text-start font-black text-sm text-[#230535] hover:text-[#E57723] hover:underline decoration-2 underline-offset-2 transition-colors cursor-pointer" title="عرض تفاصيل المنتج">${name}</button>
             <div class="flex flex-wrap gap-1.5 mt-1.5">
                 <span class="text-[10px] font-black bg-[#FFD700]/20 text-[#230535] px-2 py-0.5 rounded-full">${price} ج.م</span>
                 ${category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${category}</span>` : ''}
@@ -5248,6 +5276,55 @@ const renderCatalogProductCard = (p, mode) => {
         </div>
         <div class="grid grid-cols-1 gap-2">${slots}</div>
     </div>`;
+};
+
+/* Page size for a single merchant's pending/done card list. Collapsed groups
+   never render cards; an expanded group renders only the first page and the
+   remainder is revealed through "عرض المزيد". Mirrors the my-products
+   accordion cap so a content editor with thousands of queued images pays for
+   a handful of headers + one page of cards on mount instead of every card. */
+const CATALOG_CONTENT_MERCHANT_PAGE = 50;
+
+const catalogContentMerchantLimitKey = (mode, merchantName) => mode + '|' + merchantName;
+
+const catalogContentMerchantLimit = (mode, merchantName) => {
+    window._catalogContentMerchantLimits = window._catalogContentMerchantLimits || {};
+    return Number(window._catalogContentMerchantLimits[catalogContentMerchantLimitKey(mode, merchantName)])
+        || CATALOG_CONTENT_MERCHANT_PAGE;
+};
+
+/* Build the card HTML for one merchant's accordion body (paginated) from the
+   lazy registry populated by buildCatalogGroupedMerchantsHtml. */
+const buildCatalogContentMerchantBody = (mode, merchantName) => {
+    const registry = window._catalogContentAccordionRegistry
+        && window._catalogContentAccordionRegistry[mode];
+    const items = (registry && registry.groups && registry.groups[merchantName]) || [];
+    if (!items.length) return '';
+    const limit = catalogContentMerchantLimit(mode, merchantName);
+    const shown = items.slice(0, limit);
+    const remaining = items.length - shown.length;
+    let html = shown.map((item) => renderCatalogProductCard(item, mode)).join('');
+    if (remaining > 0) {
+        const encodedName = encodeURIComponent(merchantName).replace(/'/g, '%27');
+        html += `<div class="text-center py-3"><button type="button" onclick="showMoreCatalogContentProducts('${mode}', '${encodedName}')" class="bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-[11px] font-black hover:opacity-90 transition inline-flex items-center gap-2"><i class="fa-solid fa-chevron-down"></i> عرض المزيد (${remaining} متبقي)</button></div>`;
+    }
+    return html;
+};
+
+window.showMoreCatalogContentProducts = (mode, encodedName) => {
+    const merchantName = decodeURIComponent(String(encodedName || ''));
+    window._catalogContentMerchantLimits = window._catalogContentMerchantLimits || {};
+    const key = catalogContentMerchantLimitKey(mode, merchantName);
+    window._catalogContentMerchantLimits[key] = catalogContentMerchantLimit(mode, merchantName)
+        + CATALOG_CONTENT_MERCHANT_PAGE;
+    const isDone = mode === 'done';
+    const accordionId = (isDone ? 'd-' : '') + catalogMerchantDomId(merchantName);
+    const prefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    const accordion = document.getElementById(prefix + accordionId);
+    const body = accordion && accordion.querySelector('[data-catalog-merchant-body]');
+    if (body && !body.classList.contains('hidden')) {
+        body.innerHTML = buildCatalogContentMerchantBody(mode, merchantName);
+    }
 };
 
 const buildCatalogGroupedMerchantsHtml = (products, mode) => {
@@ -5263,12 +5340,20 @@ const buildCatalogGroupedMerchantsHtml = (products, mode) => {
     window[mapKey] = openMap;
     const merchantNames = Object.keys(grouped).sort((a, b) => a.localeCompare(b, 'ar'));
     const accordionPrefix = isDone ? 'catalogDoneMerchantAccordion-' : 'catalogMerchantAccordion-';
+    /* Lazy registry: collapsed merchants contribute ONLY their header to the
+       DOM; their per-image cards are materialized on first expand (see
+       toggleCatalogMerchantAccordion). Rebuilt on every render so the group
+       payload is always current. */
+    window._catalogContentAccordionRegistry = window._catalogContentAccordionRegistry || {};
+    const registry = { mode, groups: {} };
+    window._catalogContentAccordionRegistry[mode] = registry;
     return merchantNames.map((merchantName) => {
         const items = grouped[merchantName];
         const safeName = catalogEscapeHtml(merchantName);
         const accordionId = (isDone ? 'd-' : '') + catalogMerchantDomId(merchantName);
         const isOpen = !!openMap[merchantName];
-        const cards = items.map((item) => renderCatalogProductCard(item, mode)).join('');
+        registry.groups[merchantName] = items;
+        const cards = isOpen ? buildCatalogContentMerchantBody(mode, merchantName) : '';
         return `<div id="${accordionPrefix}${accordionId}" data-catalog-merchant="${safeName}" class="rounded-2xl overflow-hidden border border-[#230535]/20 shadow-sm">
             <button type="button" onclick="toggleCatalogMerchantAccordion('${accordionId}', '${mode}')" class="w-full ${isDone ? 'bg-emerald-700' : 'bg-[#230535]'} text-white px-4 py-3 flex items-center justify-between gap-3">
                 <span class="font-black text-sm truncate">${safeName}</span>
@@ -5277,7 +5362,7 @@ const buildCatalogGroupedMerchantsHtml = (products, mode) => {
                     <i data-catalog-merchant-chevron class="fa-solid fa-chevron-down ${isDone ? 'text-emerald-100' : 'text-[#FFD700]'} text-xs transition-transform ${isOpen ? 'rotate-180' : ''}"></i>
                 </span>
             </button>
-            <div data-catalog-merchant-body class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
+            <div data-catalog-merchant-body data-content-lazy="${isOpen ? '0' : '1'}" class="${isOpen ? '' : 'hidden'} bg-slate-50 p-3 space-y-3">${cards}</div>
         </div>`;
     }).join('');
 };
@@ -5322,6 +5407,137 @@ const renderCatalogDoneCards = () => {
     list.innerHTML = buildCatalogGroupedMerchantsHtml(done, 'done');
 };
 
+/* ─── Contextual product details ("Quick View") ───────────────────────────
+   From the image-review / منتجاتي cards the reviewer opens the full product
+   context WITHOUT leaving the tab. Editing is gated purely by the granular
+   `canEditProducts` capability (canEditCatalogProducts): without it every
+   field renders read-only text. */
+const catalogFindProductById = (productId) => {
+    const id = String(productId || '');
+    if (!id) return null;
+    return (window.repCatalogProductsCache || []).find((p) => p && p.id === id)
+        || (window.merchantProductsCache || []).find((p) => p && p.id === id)
+        || (window.doneCatalogProductsCache || []).find((p) => p && p.id === id)
+        || (window.allCatalogProductsCache || []).find((p) => p && p.id === id)
+        || null;
+};
+
+const CATALOG_QUICKVIEW_MODAL_ID = 'catalogQuickViewModal';
+
+window.catalogCloseProductQuickView = () => {
+    const el = document.getElementById(CATALOG_QUICKVIEW_MODAL_ID);
+    if (el) el.remove();
+    window._catalogQuickViewProduct = null;
+};
+
+window.catalogOpenProductQuickView = (productId) => {
+    const product = catalogFindProductById(productId);
+    if (!product) {
+        if (window.showToast) window.showToast('تعذر العثور على المنتج', false);
+        return;
+    }
+    const esc = catalogEscapeHtml;
+    const canEdit = !!(typeof window.canEditCatalogProducts === 'function' && window.canEditCatalogProducts());
+    window._catalogQuickViewProduct = product;
+    const id = esc(product.id);
+    const statusDone = String(product.status || '') === 'done';
+    const statusHtml = product.deleteRequested
+        ? '<span class="text-[10px] font-black bg-red-50 text-red-700 px-2 py-0.5 rounded-full">بانتظار الموافقة على الحذف</span>'
+        : (statusDone
+            ? '<span class="text-[10px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded-full">مكتمل</span>'
+            : '<span class="text-[10px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">قيد المعالجة</span>');
+    const merchant = esc(catalogResolveMerchantName(product) || product.merchantName || '');
+    const inputCls = 'w-full rounded-xl border border-[#230535]/20 p-2.5 text-sm font-bold text-[#230535] bg-white focus:outline-none focus:border-[#7c3aed]';
+    const field = (label, fieldId, value, type) => {
+        const safe = esc(value == null ? '' : value);
+        const control = !canEdit
+            ? `<div class="text-sm font-bold text-[#230535] whitespace-pre-wrap break-words">${safe || '<span class="text-slate-400">—</span>'}</div>`
+            : (type === 'textarea'
+                ? `<textarea id="${fieldId}" rows="3" class="${inputCls}">${safe}</textarea>`
+                : `<input id="${fieldId}" type="${type === 'number' ? 'number' : 'text'}"${type === 'number' ? ' step="any" inputmode="decimal"' : ''} class="${inputCls}" value="${safe}">`);
+        return `<label class="block space-y-1"><span class="text-[11px] font-black text-slate-500">${label}</span>${control}</label>`;
+    };
+    const old = document.getElementById(CATALOG_QUICKVIEW_MODAL_ID);
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = CATALOG_QUICKVIEW_MODAL_ID;
+    wrap.className = 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[140]';
+    wrap.innerHTML = `
+        <div class="bg-white rounded-3xl shadow-xl border border-[#FFD700]/40 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex items-start justify-between gap-3 p-4 bg-[#230535] rounded-t-3xl">
+                <div class="min-w-0">
+                    <h3 class="font-black text-base text-[#FFD700]">تفاصيل المنتج</h3>
+                    <p class="text-[11px] font-bold text-white/70 truncate">${merchant}</p>
+                </div>
+                <button type="button" onclick="catalogCloseProductQuickView()" class="text-white/80 hover:text-white text-lg shrink-0 leading-none" aria-label="إغلاق"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 space-y-3">
+                <div class="flex flex-wrap gap-1.5">
+                    ${statusHtml}
+                    ${product.category ? `<span class="text-[10px] font-bold bg-purple-50 text-kanjo-primary px-2 py-0.5 rounded-full">${esc(product.category)}</span>` : ''}
+                </div>
+                ${field('اسم المنتج', 'cqName', product.name_ar || '', 'text')}
+                ${field('الوصف', 'cqDesc', product.description_ar || '', 'textarea')}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    ${field('السعر (ج.م)', 'cqPrice', product.base_price == null ? '' : product.base_price, 'number')}
+                    ${field('SKU', 'cqSku', product.sku || '', 'text')}
+                </div>
+                ${field('القسم', 'cqCategory', product.category || '', 'text')}
+                ${canEdit ? '' : '<p class="text-[11px] font-bold text-slate-400 flex items-center gap-1"><i class="fa-solid fa-lock"></i> عرض فقط — لا تملك صلاحية تعديل المنتجات</p>'}
+            </div>
+            <div class="flex items-center justify-end gap-2 p-4 border-t border-[#230535]/10">
+                <button type="button" onclick="catalogCloseProductQuickView()" class="bg-white border border-[#230535]/15 text-[#230535] px-4 py-2 rounded-xl text-xs font-black hover:bg-[#230535]/5 transition">إغلاق</button>
+                ${canEdit ? `<button type="button" id="cqSaveBtn" onclick="catalogQuickViewSave('${id}')" class="bg-[#230535] text-[#FFD700] px-4 py-2 rounded-xl text-xs font-black hover:opacity-90 transition flex items-center gap-1.5"><i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات</button>` : ''}
+            </div>
+        </div>`;
+    wrap.addEventListener('click', (event) => { if (event.target === wrap) window.catalogCloseProductQuickView(); });
+    document.body.appendChild(wrap);
+};
+
+window.catalogQuickViewSave = async (productId) => {
+    if (!(typeof window.canEditCatalogProducts === 'function' && window.canEditCatalogProducts())) {
+        if (window.showToast) window.showToast('ليست لديك صلاحية تعديل المنتجات', false);
+        return;
+    }
+    const readVal = (fieldId) => { const el = document.getElementById(fieldId); return el ? String(el.value == null ? '' : el.value).trim() : ''; };
+    const name = readVal('cqName');
+    if (!name) { if (window.showToast) window.showToast('اسم المنتج مطلوب', false); return; }
+    const priceRaw = readVal('cqPrice');
+    const parsedPrice = priceRaw === '' ? '' : Number(priceRaw);
+    if (priceRaw !== '' && (isNaN(parsedPrice) || parsedPrice < 0)) {
+        if (window.showToast) window.showToast('السعر غير صالح', false);
+        return;
+    }
+    /* Text-only edit — deliberately NEVER touches status / images so the item
+       stays in the image-review queue (same smart-edit routing as the editor). */
+    const patch = {
+        name_ar: name,
+        description_ar: readVal('cqDesc'),
+        category: readVal('cqCategory'),
+        sku: readVal('cqSku'),
+        base_price: parsedPrice,
+        updatedAt: new Date().toISOString(),
+        updatedBy: (window.currentUser && window.currentUser.name) || ''
+    };
+    const btn = document.getElementById('cqSaveBtn');
+    const prev = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; }
+    try {
+        if (!(await catalogRestMerge([CATALOG_COLLECTION, productId], patch))) {
+            await window.updateDoc(window.doc(window.db, CATALOG_COLLECTION, productId), patch);
+        }
+        if (typeof window.catalogApplyProductUpdateLocally === 'function') window.catalogApplyProductUpdateLocally(productId, patch);
+        if (window.showToast) window.showToast('تم حفظ تعديلات المنتج', true);
+        window.catalogCloseProductQuickView();
+        renderCatalogMyProductsList();
+        if (window.canReviewImages()) renderCatalogPendingCards();
+    } catch (err) {
+        console.error('[catalog] quick-view save failed:', err);
+        if (window.showToast) window.showToast('فشل حفظ التعديلات، حاول مرة أخرى', false);
+        if (btn) { btn.disabled = false; btn.innerHTML = prev; }
+    }
+};
+
 window.viewCatalogEnhancedImage = (productId, imageIndex) => {
     const product = (window.doneCatalogProductsCache || []).find((p) => p.id === productId)
         || (window.merchantProductsCache || []).find((p) => p.id === productId);
@@ -5337,7 +5553,7 @@ window.viewCatalogEnhancedImage = (productId, imageIndex) => {
 };
 
 window.loadDoneCatalogProducts = async () => {
-    if (!window.isCatalogContentUser()) return;
+    if (!window.canReviewImages()) return;
     /* Strict cache-first: the "done" set is already in memory (from the content
        "done" tab, the export dropdown, or a prior export) — reuse it instead of
        issuing another one-read-per-document query. */
@@ -5371,7 +5587,7 @@ window.loadDoneCatalogProducts = async () => {
 };
 
 window.switchCatalogContentTab = async (tab) => {
-    if (!window.isCatalogContentUser()) return;
+    if (!window.canReviewImages()) return;
     const target = tab === 'done' ? 'done' : 'pending';
     window._catalogContentTab = target;
     const pendingList = document.getElementById('catalogPendingList');
@@ -5397,7 +5613,7 @@ window.toggleCatalogContentWidget = () => {
     body.classList.toggle('hidden', !willOpen);
     if (chevron) chevron.classList.toggle('rotate-180', willOpen);
     window._catalogContentWidgetOpen = willOpen;
-    if (willOpen && window.isCatalogContentUser()) {
+    if (willOpen && window.canReviewImages()) {
         if (catalogActiveTab() === 'done') window.switchCatalogContentTab('done');
         else renderCatalogPendingCards();
     }
@@ -5422,7 +5638,7 @@ window.renderCatalogWidgets = () => {
     if (typeof window.renderCatalogDeleteRequestsWidget === 'function') window.renderCatalogDeleteRequestsWidget();
 
     const contentWidget = document.getElementById('catalogContentWidget');
-    if (contentWidget) contentWidget.classList.toggle('hidden', !window.isCatalogContentUser());
+    if (contentWidget) contentWidget.classList.toggle('hidden', !window.canReviewImages());
 
     const exportSection = document.getElementById('catalogExportSection');
     const isAdmin = window.isCatalogAdminUser();
@@ -5441,7 +5657,7 @@ window.renderCatalogWidgets = () => {
         mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
     }
 
-    if (window.isCatalogContentUser()) {
+    if (window.canReviewImages()) {
         const body = document.getElementById('catalogContentBody');
         if (body && !body.classList.contains('hidden')) {
             if (catalogActiveTab() === 'done') {
@@ -10220,7 +10436,7 @@ if (typeof window.addEventListener === 'function') {
    repainted the same list continuously and made the rep dashboard blink.
    Reads go over direct REST first so they survive a blocked SDK transport. */
 window.loadMyCatalogProducts = async (force = false) => {
-    if (!window.isCatalogRepUser()) return;
+    if (!window.canReviewProductImages()) return;
     const createdBy = (window.currentUser && window.currentUser.name) || '';
     if (!createdBy) return;
     try {
@@ -10582,7 +10798,7 @@ window.startCatalogListeners = () => {
                loads the full collection on demand via the "all products"
                widget, so it is deliberately excluded from the boot/periodic
                pending read to keep its idle cost at zero reads. */
-            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.isCatalogContentUser();
+            const canViewPending = (canViewAll && !window.isProductAuditUser()) || window.canReviewImages();
             const isMahmoud = window.isMahmoudUser();
             /* The full-collection read is by far the most expensive one (one
                read per document — 4,000+ today). It is therefore NEVER issued by

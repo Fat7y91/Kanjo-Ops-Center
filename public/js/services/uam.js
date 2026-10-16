@@ -49,6 +49,7 @@
         { key: 'canViewAllCatalogProducts', label: 'عرض كل المنتجات', icon: 'fa-layer-group', group: 'المنتجات والكتالوج' },
         { key: 'canAddProducts', label: 'إضافة منتجات', icon: 'fa-plus', group: 'المنتجات والكتالوج' },
         { key: 'canEditProducts', label: 'تعديل منتجات', icon: 'fa-pen-to-square', group: 'المنتجات والكتالوج' },
+        { key: 'canReviewImages', label: 'مهام معالجة الصور', icon: 'fa-image', group: 'المنتجات والكتالوج' },
         { key: 'canDeleteProducts', label: 'حذف منتجات', icon: 'fa-trash-can', group: 'المنتجات والكتالوج' },
         { key: 'canExportExcel', label: 'تصدير إكسل', icon: 'fa-file-excel', group: 'المنتجات والكتالوج' },
         { key: 'canUseDataEntryTools', label: 'أدوات إدخال البيانات', icon: 'fa-keyboard', group: 'المنتجات والكتالوج' },
@@ -100,7 +101,7 @@
             'canViewAnalytics', 'canViewNotifications', 'canViewMarketing'],
         product_audit: ['canBrowseCatalog', 'canViewAllCatalogProducts', 'canAddProducts',
             'canEditProducts', 'canDeleteProducts'],
-        rep: ['canBrowseCatalog', 'canAddProducts', 'canEditProducts', 'canExportExcel',
+        rep: ['canBrowseCatalog', 'canAddProducts', 'canEditProducts',
             'canViewKpi', 'canViewFinancialProfile'],
         data_entry: ['canUseDataEntryTools', 'canImportMenu'],
         accounting: ['canViewFinance', 'canExportExcel', 'canViewNotifications'],
@@ -122,7 +123,7 @@
         { value: 'super_admin', label: 'مشرف عام' }
     ];
 
-    const UAM_USER_FIELDS = ['uid', 'email', 'name', 'pin', 'role', 'superAdmin',
+    const UAM_USER_FIELDS = ['uid', 'email', 'name', 'pin', 'role', 'team', 'superAdmin',
         'permissions', 'active', 'updatedAt', 'updatedBy'];
 
     const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
@@ -377,6 +378,9 @@
             }
             if (doc.uid) u.uid = u.uid || doc.uid;
             if (doc.email) u.email = u.email || doc.email;
+            /* Team assignment (reps) travels with the doc so a reassigned rep
+               lands on the right team without a local-table edit. */
+            if (doc.team) u.team = doc.team;
             u.uamDocId = doc.id;
         }
         /* Identity auto-provisioning (exact configured principal). */
@@ -500,7 +504,7 @@
         return saveUserDoc(id, { active: !!active });
     };
 
-    window.kanjoUamAddUser = async ({ email, uid, name, role, pin, permissions }) => {
+    window.kanjoUamAddUser = async ({ email, uid, name, role, pin, team, permissions }) => {
         const cleanEmail = String(email || '').trim();
         const cleanUid = String(uid || '').trim();
         const cleanName = String(name || '').trim();
@@ -508,8 +512,8 @@
         const docId = normalizeDocId(cleanEmail || cleanUid || cleanName || cleanPin);
         if (!docId) throw new Error('[uam] provide an email, uid, name or pin');
         const role2 = String(role || 'rep').trim() || 'rep';
-        /* Prefer the exact checkbox matrix the super admin submitted; fall back
-           to the role's baseline only when no matrix was supplied. */
+        /* Prefer the exact checkbox set the super admin submitted; fall back
+           to the role's baseline only when no set was supplied. */
         let perms;
         if (permissions && typeof permissions === 'object') {
             perms = {};
@@ -519,7 +523,7 @@
         }
         return saveUserDoc(docId, {
             email: cleanEmail, uid: cleanUid, name: cleanName, pin: cleanPin,
-            role: role2, superAdmin: false, active: true, permissions: perms
+            role: role2, team: String(team || '').trim(), superAdmin: false, active: true, permissions: perms
         });
     };
 
@@ -556,9 +560,73 @@
         return candidateDocIds(u).indexOf(String(docId)) !== -1;
     };
 
-    /* ── UAM matrix UI ────────────────────────────────────────────────────── */
-    const recTitle = (rec) => rec.name || rec.email || rec.uid || rec.id;
+    /* ── Teams (rep assignment) ───────────────────────────────────────────── */
+    const DEFAULT_TEAMS = [
+        { name: 'Fox Team', logo: 'Fox Team.png' },
+        { name: 'Power Team', logo: 'Power Team.png' }
+    ];
+    const TEAMS_STORE_KEY = 'kanjo_teams_v1';
+    let _teamsCache = null;
+    const readTeamsStore = () => {
+        try {
+            const raw = localStorage.getItem(TEAMS_STORE_KEY);
+            const parsed = raw ? JSON.parse(raw) : null;
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) { return []; }
+    };
+    const writeTeamsStore = (list) => {
+        try { localStorage.setItem(TEAMS_STORE_KEY, JSON.stringify(list)); } catch (_) { /* ignore */ }
+    };
+    const mergeTeams = (a, b) => {
+        const out = [];
+        const seen = {};
+        (a || []).concat(b || []).forEach((t) => {
+            if (!t) return;
+            const name = String(t.name || t || '').trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            if (seen[key]) return;
+            seen[key] = true;
+            out.push({ name, logo: String(t.logo || t.logoUrl || '').trim() });
+        });
+        return out;
+    };
+    const loadTeams = async ({ force = false } = {}) => {
+        if (_teamsCache && !force) return _teamsCache;
+        let stored = readTeamsStore();
+        try {
+            if (window.kanjoRest && typeof window.kanjoRest.getDocument === 'function') {
+                const doc = await window.kanjoRest.getDocument(['system_config', 'teams']);
+                if (doc && Array.isArray(doc.list) && doc.list.length) {
+                    stored = mergeTeams(doc.list, stored);
+                    writeTeamsStore(stored);
+                }
+            }
+        } catch (_) { /* remote sync is optional; defaults + local cache always work */ }
+        _teamsCache = mergeTeams(DEFAULT_TEAMS, stored);
+        return _teamsCache;
+    };
+    const saveTeam = async (name, logo) => {
+        const clean = String(name || '').trim();
+        if (!clean) throw new Error('[uam] team name required');
+        const list = mergeTeams(await loadTeams(), [{ name: clean, logo: String(logo || '').trim() }]);
+        _teamsCache = list;
+        writeTeamsStore(list);
+        try {
+            if (window.kanjoRest && typeof window.kanjoRest.patch === 'function') {
+                await window.kanjoRest.patch(['system_config', 'teams'], { list });
+            }
+        } catch (err) { console.warn('[uam] team persist failed:', err && err.message ? err.message : err); }
+        return list;
+    };
+    window.kanjoUamLoadTeams = loadTeams;
 
+    /* ── UAM card grid + user-management modal ────────────────────────────── */
+    const recTitle = (rec) => (rec && (rec.name || rec.email || rec.uid || rec.id)) || '';
+    const roleLabel = (role) => {
+        const hit = UAM_ROLES.find((r) => r.value === String(role || ''));
+        return hit ? hit.label : (role || '—');
+    };
     const permissionGroups = () => {
         const groups = [];
         UAM_PERMISSIONS.forEach((p) => {
@@ -569,149 +637,246 @@
         });
         return groups;
     };
+    const countPermissions = (rec) => UAM_PERMISSION_KEYS.filter((k) => effectivePermission(rec, k)).length;
 
-    /* Render the create-time checkbox matrix (inside the add-user form). It is
-       prefilled from the currently selected role and is the authoritative source
-       for the new user's granular permissions. */
-    const renderCreateMatrix = () => {
-        const host = document.getElementById('kanjoUamCreateMatrix');
-        if (!host) return;
-        const roleSel = document.getElementById('kanjoUamNewRole');
-        const role = roleSel ? String(roleSel.value || 'rep') : 'rep';
-        const defs = roleDefaultsObject(role);
-        host.innerHTML = UAM_PERMISSIONS.map((p) =>
-            '<label class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 cursor-pointer hover:border-[#FFD700]">'
-            + `<input type="checkbox" class="uam-create-perm accent-[#230535]" data-perm="${p.key}" ${defs[p.key] ? 'checked' : ''}>`
-            + `<i class="fa-solid ${p.icon} text-[#230535] text-xs"></i>`
-            + `<span class="text-[11px] font-bold text-slate-700">${escapeHtml(p.label)}</span>`
-            + '</label>').join('');
+    const renderUserCard = (rec) => {
+        const id = escapeHtml(rec.id);
+        const isSA = rec.superAdmin === true || String(rec.role || '') === SUPER_ADMIN_ROLE;
+        const active = rec.active !== false;
+        const permCount = countPermissions(rec);
+        return '<article class="uam-user-card' + (isSA ? ' uam-user-card--sa' : '') + (!active ? ' uam-user-card--off' : '') + '">'
+            + '<div class="uam-user-card__head">'
+            + '<span class="uam-user-card__avatar"><i class="fa-solid fa-user"></i></span>'
+            + '<div class="uam-user-card__ident">'
+            + '<div class="uam-user-card__name">' + escapeHtml(recTitle(rec)) + '</div>'
+            + '<div class="uam-user-card__sub" dir="ltr">' + escapeHtml(rec.email || rec.uid || '') + '</div>'
+            + '</div></div>'
+            + '<div class="uam-user-card__meta">'
+            + '<span class="uam-chip">' + (isSA ? 'مشرف عام' : escapeHtml(roleLabel(rec.role))) + '</span>'
+            + '<span class="uam-chip uam-chip--gold" dir="ltr">PIN: ' + escapeHtml(rec.pin || '—') + '</span>'
+            + (rec.team ? '<span class="uam-chip">' + escapeHtml(rec.team) + '</span>' : '')
+            + (rec._roster ? '<span class="uam-chip uam-chip--muted">قائمة الدخول</span>' : '')
+            + (!active ? '<span class="uam-chip uam-chip--red">موقوف</span>' : '')
+            + '</div>'
+            + '<div class="uam-user-card__perms"><i class="fa-solid fa-key"></i> ' + permCount + ' / ' + UAM_PERMISSION_KEYS.length + ' صلاحية</div>'
+            + '<div class="uam-user-card__actions">'
+            + '<button type="button" class="uam-btn uam-btn--gold" onclick="window.kanjoUamOpenModal(\'' + id + '\')"><i class="fa-solid fa-pen-to-square ml-1"></i> تعديل</button>'
+            + '</div></article>';
     };
-    window.kanjoUamRenderCreateMatrix = renderCreateMatrix;
-
-    const collectCreatePermissions = () => {
-        const out = {};
-        const nodes = document.querySelectorAll('#kanjoUamCreateMatrix .uam-create-perm');
-        if (!nodes.length) return null;
-        nodes.forEach((n) => { out[n.getAttribute('data-perm')] = !!n.checked; });
-        return out;
-    };
-    window.kanjoUamOnRoleChange = () => renderCreateMatrix();
 
     const renderUam = async ({ force = false } = {}) => {
         const root = document.getElementById('kanjoUamWidget');
         if (!root) return;
         if (!window.kanjoIsSuperAdmin()) { root.classList.add('hidden'); return; }
         root.classList.remove('hidden');
-        renderCreateMatrix();
         const body = document.getElementById('kanjoUamBody');
-        if (body) {
-            body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
-                + '<i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري تحميل المستخدمين...</div>';
-        }
+        if (body) body.innerHTML = '<div class="uam-loading"><i class="fa-solid fa-circle-notch fa-spin ml-1"></i> جاري تحميل المستخدمين...</div>';
+        await loadTeams();
         const rows = mergeRosterRows(await loadUsers({ force }));
         if (!body) return;
         if (!rows.length) {
-            body.innerHTML = '<div class="p-6 text-center text-sm font-black text-slate-400">'
-                + '<i class="fa-solid fa-table-cells-large block text-2xl mb-2 text-[#FFD700]"></i>'
-                + 'لا يوجد مستخدمون بعد. اختر الصلاحيات في مصفوفة الأعلى ثم أضِف مستخدماً.</div>';
+            body.innerHTML = '<div class="uam-empty"><i class="fa-solid fa-users"></i>'
+                + '<p>لا يوجد مستخدمون بعد. اضغط «مستخدم جديد» لإضافة أول مستخدم.</p></div>';
             return;
         }
-        const groups = permissionGroups();
-        const groupHead = '<tr class="bg-[#230535] text-[#FFD700]">'
-            + '<th class="text-right px-3 py-2">المستخدم / الدور</th>'
-            + groups.map((g) => `<th colspan="${g.items.length}" class="px-2 py-1.5 text-center text-[10px] font-black border-r border-white/10">${escapeHtml(g.name)}</th>`).join('')
-            + '<th class="px-3 py-2 text-center">إجراءات</th>'
-            + '</tr>';
-        const permHead = '<tr class="bg-slate-50 text-slate-500">'
-            + '<th class="px-2 py-2"></th>'
-            + UAM_PERMISSIONS.map((p) => '<th class="px-1.5 py-2 text-center align-top border-r border-slate-100">'
-                + `<i class="fa-solid ${p.icon} text-[#230535]"></i>`
-                + `<span class="block text-[9px] mt-0.5 leading-tight max-w-[64px] mx-auto">${escapeHtml(p.label)}</span></th>`).join('')
-            + '<th class="px-2 py-2"></th>'
-            + '</tr>';
-        const bodyRows = rows.map((rec) => {
-            const id = escapeHtml(rec.id);
-            const rawId = String(rec.id);
-            const isSA = rec.superAdmin === true || String(rec.role || '') === SUPER_ADMIN_ROLE;
-            const active = rec.active !== false;
-            const roleOptions = UAM_ROLES.map((r) =>
-                `<option value="${r.value}" ${String(rec.role || '') === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('');
-            const cells = UAM_PERMISSIONS.map((p) => {
-                const on = effectivePermission(rec, p.key);
-                const explicit = rec.permissions && typeof rec.permissions[p.key] === 'boolean';
-                return '<td class="px-1.5 py-2 text-center border-r border-slate-50">'
-                    + `<input type="checkbox" class="uam-toggle accent-[#230535]" ${on ? 'checked' : ''} ${isSA ? 'disabled' : ''}`
-                    + ` title="${escapeHtml(p.label)}${explicit ? ' (مخصص)' : ''}"`
-                    + ` onchange="window.kanjoUamSetPermission('${id}','${p.key}',this.checked)">`
-                    + (explicit ? '<span class="block text-[8px] font-black text-[#E57723]">مخصص</span>' : '')
-                    + '</td>';
-            }).join('');
-            return '<tr class="border-t border-slate-100 hover:bg-slate-50/60' + (isSA ? ' bg-[#230535]/5' : '') + (!active ? ' opacity-50' : '') + '">'
-                + '<td class="px-3 py-3 align-top min-w-[190px]">'
-                + `<div class="font-black text-sm text-[#230535]">${escapeHtml(recTitle(rec))}</div>`
-                + `<div class="text-[11px] text-slate-400 truncate max-w-[180px]" dir="ltr">${escapeHtml(rec.email || rec.uid || rec.id)}</div>`
-                + (isSA
-                    ? '<span class="inline-block mt-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-[#230535] text-[#FFD700]">مشرف عام</span>'
-                    : `<select onchange="window.kanjoUamSetRole('${id}',this.value)" class="mt-1 w-full text-[11px] font-bold rounded-lg border border-slate-200 px-1.5 py-1">${roleOptions}</select>`)
-                + (rec._roster ? ' <span class="inline-block mt-1 text-[9px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">قائمة الدخول</span>' : '')
-                + (rec.pin ? `<div class="text-[10px] text-slate-400 mt-0.5" dir="ltr">PIN: ${escapeHtml(rec.pin)}</div>` : '')
-                + '</td>'
-                + cells
-                + '<td class="px-3 py-3 text-center align-top whitespace-nowrap">'
-                + (isSA
-                    ? `<button type="button" onclick="window.kanjoUamSetSuperAdmin('${id}',false);window.kanjoRenderUam()" class="text-[11px] font-black text-red-500 hover:underline">إلغاء الترقية</button>`
-                    : `<button type="button" onclick="window.kanjoUamSetSuperAdmin('${id}',true);window.kanjoRenderUam()" class="text-[11px] font-black text-[#E57723] hover:underline">ترقية كمشرف</button>`
-                      + `<div class="mt-1 flex items-center justify-center gap-2">`
-                      + `<button type="button" onclick="window.kanjoUamGrantAll('${id}')" class="text-[10px] font-black text-emerald-600 hover:underline">منح الكل</button>`
-                      + `<button type="button" onclick="window.kanjoUamRevokeAll('${id}')" class="text-[10px] font-black text-slate-400 hover:underline">إلغاء الكل</button>`
-                      + '</div>')
-                + `<button type="button" onclick="window.kanjoUamSetActive('${id}',${active ? 'false' : 'true'});window.kanjoRenderUam()" class="text-[11px] font-black text-slate-400 hover:underline block mt-1 mx-auto">${active ? 'إيقاف' : 'تفعيل'}</button>`
-                + '</td>'
-                + '</tr>';
-        }).join('');
-        body.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-xs">'
-            + '<thead>' + groupHead + permHead + '</thead>'
-            + '<tbody>' + bodyRows + '</tbody></table></div>';
+        body.innerHTML = '<div class="uam-card-grid">' + rows.map(renderUserCard).join('') + '</div>';
     };
     window.kanjoRenderUam = renderUam;
 
-    window.kanjoUamGrantAll = async (docId) => {
-        const perms = {};
-        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = true; });
-        await window.kanjoUamSetPermissions(docId, perms);
-        await renderUam();
+    /* ── Modal ────────────────────────────────────────────────────────────── */
+    let _uamEditingId = '';
+
+    const modalVal = (id) => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+    const permCheckbox = (p, checked) =>
+        '<label class="uam-perm">'
+        + '<input type="checkbox" class="uam-modal-perm accent-[#FFD700]" data-perm="' + p.key + '"' + (checked ? ' checked' : '') + '>'
+        + '<i class="fa-solid ' + p.icon + '"></i>'
+        + '<span>' + escapeHtml(p.label) + '</span>'
+        + '</label>';
+
+    const syncTeamSection = () => {
+        const roleEl = document.getElementById('uamFieldRole');
+        const section = document.getElementById('uamTeamSection');
+        if (!roleEl || !section) return;
+        section.classList.toggle('hidden', String(roleEl.value) !== 'rep');
     };
-    window.kanjoUamRevokeAll = async (docId) => {
-        const perms = {};
-        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = false; });
-        await window.kanjoUamSetPermissions(docId, perms);
-        await renderUam();
+    window.kanjoUamSyncTeam = syncTeamSection;
+
+    const collectModalPermissions = () => {
+        const out = {};
+        document.querySelectorAll('#kanjoUamModal .uam-modal-perm').forEach((n) => {
+            out[n.getAttribute('data-perm')] = !!n.checked;
+        });
+        return out;
     };
 
-    window.kanjoUamAddUserFromForm = async () => {
-        const val = (id) => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
-        const email = val('kanjoUamNewEmail');
-        const uid = val('kanjoUamNewUid');
-        const name = val('kanjoUamNewName');
-        const pin = val('kanjoUamNewPin');
-        const roleSel = document.getElementById('kanjoUamNewRole');
-        const role = roleSel ? String(roleSel.value || 'rep') : 'rep';
-        if (!email && !uid && !name && !pin) {
-            if (window.showToast) window.showToast('أدخل البريد أو UID أو الاسم على الأقل', false);
+    const openUserModal = async (docId) => {
+        if (!window.kanjoIsSuperAdmin()) return;
+        const teams = await loadTeams();
+        const rows = mergeRosterRows(await loadUsers());
+        const rec = docId ? (rows.find((r) => String(r.id) === String(docId)) || null) : null;
+        _uamEditingId = rec ? String(rec.id) : '';
+        const isNew = !rec;
+        const permGroups = permissionGroups();
+        const permsHost = permGroups.map((g) =>
+            '<section class="uam-perm-group"><h4>' + escapeHtml(g.name) + '</h4><div class="uam-perm-grid">'
+            + g.items.map((p) => permCheckbox(p, effectivePermission(rec, p.key))).join('')
+            + '</div></section>').join('');
+        const teamOptions = teams.map((t) =>
+            '<option value="' + escapeHtml(t.name) + '"' + (rec && rec.team === t.name ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>').join('');
+        const cloneOptions = '<option value="">— اختر مستخدماً —</option>'
+            + rows.filter((r) => r && String(r.id) !== _uamEditingId).map((r) =>
+                '<option value="' + escapeHtml(r.id) + '">' + escapeHtml(recTitle(r)) + '</option>').join('');
+
+        let modal = document.getElementById('kanjoUamModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'kanjoUamModal';
+            modal.className = 'uam-modal hidden';
+            document.body.appendChild(modal);
+        }
+        modal.innerHTML =
+            '<div class="uam-modal__backdrop" onclick="window.kanjoUamCloseModal()"></div>'
+            + '<div class="uam-modal__panel" role="dialog" aria-modal="true">'
+            + '<header class="uam-modal__head"><h3>' + (isNew ? 'مستخدم جديد' : 'تعديل: ' + escapeHtml(recTitle(rec))) + '</h3>'
+            + '<button type="button" class="uam-modal__x" onclick="window.kanjoUamCloseModal()"><i class="fa-solid fa-xmark"></i></button></header>'
+            + '<div class="uam-modal__body">'
+            + '<div class="uam-field-grid">'
+            + '<label class="uam-field"><span>الاسم</span><input id="uamFieldName" type="text" value="' + escapeHtml(rec ? rec.name || '' : '') + '" placeholder="اسم المستخدم"></label>'
+            + '<label class="uam-field"><span>البريد الإلكتروني</span><input id="uamFieldEmail" type="email" dir="ltr" value="' + escapeHtml(rec ? rec.email || '' : '') + '" placeholder="name@example.com"></label>'
+            + '<label class="uam-field"><span>رمز الدخول (PIN)</span><input id="uamFieldPin" type="text" inputmode="numeric" dir="ltr" value="' + escapeHtml(rec ? rec.pin || '' : '') + '" placeholder="1234"></label>'
+            + '<label class="uam-field"><span>معرّف Firebase (UID)</span><input id="uamFieldUid" type="text" dir="ltr" value="' + escapeHtml(rec ? rec.uid || '' : '') + '" placeholder="uid..."></label>'
+            + '<label class="uam-field"><span>الدور</span><select id="uamFieldRole">'
+            + UAM_ROLES.map((r) => '<option value="' + r.value + '"' + (rec && String(rec.role) === r.value ? ' selected' : '') + '>' + escapeHtml(r.label) + '</option>').join('')
+            + '</select></label></div>'
+            + '<div id="uamTeamSection" class="uam-team-section">'
+            + '<div class="uam-team-row">'
+            + '<label class="uam-field"><span>الفريق (للمناديب)</span><select id="uamFieldTeam">' + teamOptions + '</select></label>'
+            + '<button type="button" class="uam-btn uam-btn--ghost" onclick="window.kanjoUamToggleTeamForm()"><i class="fa-solid fa-plus ml-1"></i> إضافة فريق</button>'
+            + '</div>'
+            + '<div id="uamTeamForm" class="uam-team-form hidden">'
+            + '<input id="uamNewTeamName" type="text" placeholder="اسم الفريق">'
+            + '<input id="uamNewTeamLogo" type="text" dir="ltr" placeholder="رابط شعار الفريق (اختياري)">'
+            + '<button type="button" class="uam-btn uam-btn--gold" onclick="window.kanjoUamCreateTeam()">حفظ الفريق</button>'
+            + '</div></div>'
+            + '<div class="uam-clone-row"><i class="fa-solid fa-copy"></i>'
+            + '<label class="uam-field"><span>نسخ صلاحيات من...</span><select id="uamCloneFrom" onchange="window.kanjoUamClonePermissions(this.value)">' + cloneOptions + '</select></label></div>'
+            + '<div class="uam-perms-wrap">' + permsHost + '</div>'
+            + '</div>'
+            + '<footer class="uam-modal__foot">'
+            + (isNew ? '' : '<button type="button" class="uam-btn uam-btn--danger" onclick="window.kanjoUamDeleteUser()"><i class="fa-solid fa-trash-can ml-1"></i> حذف المستخدم</button>')
+            + '<div class="uam-foot-spacer"></div>'
+            + '<button type="button" class="uam-btn uam-btn--ghost" onclick="window.kanjoUamCloseModal()">إلغاء</button>'
+            + '<button type="button" class="uam-btn uam-btn--gold" onclick="window.kanjoUamSaveUser()"><i class="fa-solid fa-floppy-disk ml-1"></i> حفظ</button>'
+            + '</footer></div>';
+
+        window._uamModalRows = rows;
+        modal.classList.remove('hidden');
+        document.body.classList.add('uam-modal-open');
+        const roleEl = document.getElementById('uamFieldRole');
+        if (roleEl) roleEl.addEventListener('change', syncTeamSection);
+        syncTeamSection();
+    };
+    window.kanjoUamOpenModal = openUserModal;
+
+    window.kanjoUamCloseModal = () => {
+        const modal = document.getElementById('kanjoUamModal');
+        if (modal) modal.classList.add('hidden');
+        document.body.classList.remove('uam-modal-open');
+        _uamEditingId = '';
+    };
+
+    window.kanjoUamToggleTeamForm = () => {
+        const f = document.getElementById('uamTeamForm');
+        if (f) f.classList.toggle('hidden');
+    };
+
+    window.kanjoUamCreateTeam = async () => {
+        const name = modalVal('uamNewTeamName');
+        const logo = modalVal('uamNewTeamLogo');
+        if (!name) { if (window.showToast) window.showToast('اكتب اسم الفريق', false); return; }
+        try {
+            const teams = await saveTeam(name, logo);
+            const sel = document.getElementById('uamFieldTeam');
+            if (sel) sel.innerHTML = teams.map((t) => '<option value="' + escapeHtml(t.name) + '"' + (t.name === name ? ' selected' : '') + '>' + escapeHtml(t.name) + '</option>').join('');
+            const nEl = document.getElementById('uamNewTeamName'); if (nEl) nEl.value = '';
+            const lEl = document.getElementById('uamNewTeamLogo'); if (lEl) lEl.value = '';
+            window.kanjoUamToggleTeamForm();
+            if (window.showToast) window.showToast('تم إنشاء الفريق «' + name + '»', true);
+        } catch (err) {
+            if (window.showToast) window.showToast('تعذر إنشاء الفريق', false);
+        }
+    };
+
+    window.kanjoUamClonePermissions = (fromId) => {
+        if (!fromId) return;
+        const src = (window._uamModalRows || []).find((r) => String(r.id) === String(fromId));
+        if (!src) return;
+        document.querySelectorAll('#kanjoUamModal .uam-modal-perm').forEach((n) => {
+            n.checked = effectivePermission(src, n.getAttribute('data-perm'));
+        });
+        if (window.showToast) window.showToast('تم نسخ الصلاحيات من «' + recTitle(src) + '»', true);
+    };
+
+    /* Persist a full user profile (core info + team + permissions) to Firestore. */
+    window.kanjoUamSaveProfile = async ({ id, name, email, pin, uid, role, team, permissions }) => {
+        const cleanName = String(name || '').trim();
+        const cleanEmail = String(email || '').trim();
+        const cleanPin = String(pin || '').trim();
+        const cleanUid = String(uid || '').trim();
+        const cleanRole = String(role || 'rep').trim() || 'rep';
+        const docId = id ? normalizeDocId(id) : normalizeDocId(cleanEmail || cleanUid || cleanName || cleanPin);
+        if (!docId) throw new Error('[uam] provide a name, email, uid or pin');
+        const perms = {};
+        UAM_PERMISSION_KEYS.forEach((k) => { perms[k] = !!(permissions && permissions[k]); });
+        const patch = {
+            name: cleanName, email: cleanEmail, pin: cleanPin, uid: cleanUid,
+            role: cleanRole, team: String(team || '').trim(), active: true, permissions: perms
+        };
+        if (cleanRole === SUPER_ADMIN_ROLE) { patch.superAdmin = true; patch.permissions = allTruePermissions(); }
+        return saveUserDoc(docId, patch);
+    };
+
+    window.kanjoUamSaveUser = async () => {
+        const name = modalVal('uamFieldName');
+        const email = modalVal('uamFieldEmail');
+        const pin = modalVal('uamFieldPin');
+        const uid = modalVal('uamFieldUid');
+        const role = modalVal('uamFieldRole') || 'rep';
+        const team = role === 'rep' ? modalVal('uamFieldTeam') : '';
+        if (!name && !email && !pin && !uid) {
+            if (window.showToast) window.showToast('أدخل الاسم أو البريد أو الرمز على الأقل', false);
             return;
         }
         try {
-            const permissions = collectCreatePermissions();
-            await window.kanjoUamAddUser({ email, uid, name, role, pin, permissions });
-            ['kanjoUamNewEmail', 'kanjoUamNewUid', 'kanjoUamNewName', 'kanjoUamNewPin'].forEach((id) => {
-                const el = document.getElementById(id); if (el) el.value = '';
-            });
-            renderCreateMatrix();
-            if (window.showToast) window.showToast('تمت إضافة المستخدم وتطبيق الصلاحيات المخصصة', true);
+            await window.kanjoUamSaveProfile({ id: _uamEditingId || '', name, email, pin, uid, role, team, permissions: collectModalPermissions() });
+            if (window.showToast) window.showToast('تم حفظ بيانات المستخدم وصلاحياته', true);
+            window.kanjoUamCloseModal();
             await renderUam({ force: true });
         } catch (err) {
-            if (window.showToast) window.showToast('تعذر إضافة المستخدم', false);
-            console.warn('[uam] add user failed:', err);
+            if (window.showToast) window.showToast('تعذر حفظ المستخدم', false);
+            console.warn('[uam] save profile failed:', err && err.message ? err.message : err);
+        }
+    };
+
+    window.kanjoUamDeleteUser = async () => {
+        const id = _uamEditingId;
+        if (!id) return;
+        const rec = (window._uamModalRows || []).find((r) => String(r.id) === String(id));
+        if (!window.confirm('حذف المستخدم «' + recTitle(rec || { id }) + '» نهائياً؟')) return;
+        const normId = normalizeDocId(id);
+        try {
+            if (window.kanjoRest && typeof window.kanjoRest.remove === 'function') {
+                await window.kanjoRest.remove([UAM_USERS_COLLECTION, normId]);
+            }
+            if (Array.isArray(_uamCache)) _uamCache = _uamCache.filter((r) => String(r.id) !== normId);
+            window.kanjoUamUsersCache = _uamCache || [];
+            const store = readStore(); if (store.docs[normId]) { delete store.docs[normId]; writeStore(store); }
+            if (window.showToast) window.showToast('تم حذف المستخدم', true);
+            window.kanjoUamCloseModal();
+            await renderUam({ force: true });
+        } catch (err) {
+            if (window.showToast) window.showToast('تعذر حذف المستخدم', false);
         }
     };
 
@@ -733,18 +898,8 @@
     };
 
     const initUam = () => {
-        const form = document.getElementById('kanjoUamAddForm');
-        if (form && !form._uamWired) {
-            form._uamWired = true;
-            form.addEventListener('submit', (e) => { e.preventDefault(); window.kanjoUamAddUserFromForm(); });
-        }
-        const roleSel = document.getElementById('kanjoUamNewRole');
-        if (roleSel && !roleSel._uamWired) {
-            roleSel._uamWired = true;
-            roleSel.addEventListener('change', () => renderCreateMatrix());
-        }
         maybeBootstrap();
-        if (window.currentUser) renderCreateMatrix();
+        if (window.currentUser && window.kanjoIsSuperAdmin()) renderUam();
         if (typeof window.addEventListener === 'function') {
             window.addEventListener('hashchange', maybeBootstrap);
             /* Re-fold permissions from the PERSISTED store on focus — no
@@ -753,6 +908,11 @@
                 if (window.currentUser && typeof window.kanjoUamApplyPermissionsSync === 'function') {
                     try { window.kanjoUamApplyPermissionsSync(window.currentUser); } catch (_) { /* ignore */ }
                 }
+            });
+            window.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape') return;
+                const modal = document.getElementById('kanjoUamModal');
+                if (modal && !modal.classList.contains('hidden')) window.kanjoUamCloseModal();
             });
         }
     };
