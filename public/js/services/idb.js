@@ -10,13 +10,15 @@
  *     in-memory Map with the SAME async API, so callers never branch.
  *   - Additive only: nothing here mutates app DOM or existing globals.
  *
- * Schema (db `kanjo_idb_v1`, v2):
+ * Schema (db `kanjo_idb_v1`, v3):
  *   store  merchant_products  keyPath id
  *   store  merchants          keyPath id
  *   store  tasks              keyPath id
+ *   store  contract_projection keyPath id  -> lightweight signed-contract rows
  *   store  kanjo_meta         keyPath key   -> { key, value } (lastSyncedAt etc.)
  *
- * NOTE: DB_VERSION was bumped 1 -> 2. Clients that opened v1 BEFORE the
+ * NOTE: DB_VERSION was bumped 1 -> 2, then 2 -> 3 for the lightweight
+ * `contract_projection` store. Clients that opened an older version BEFORE the
  * `merchants`/`tasks` stores were added kept a v1 database WITHOUT those object
  * stores; the browser never fires `onupgradeneeded` for an equal version, so
  * `putAll('merchants', ...)` threw "One of the specified object stores was not
@@ -27,9 +29,9 @@
     'use strict';
 
     const DB_NAME = 'kanjo_idb_v1';
-    const DB_VERSION = 2;
+    const DB_VERSION = 3;
     const META_STORE = 'kanjo_meta';
-    const DATA_STORES = ['merchant_products', 'merchants', 'tasks'];
+    const DATA_STORES = ['merchant_products', 'merchants', 'tasks', 'contract_projection'];
 
     let dbPromise = null;
     let memFallback = null; // set if IDB is unavailable/broken
@@ -48,6 +50,13 @@
                 const m = maps[store] || (maps[store] = new Map());
                 let n = 0;
                 (rows || []).forEach((r) => { if (r && r.id != null) { m.set(String(r.id), r); n++; } });
+                return n;
+            },
+            async replaceAll(store, rows) {
+                const m = new Map();
+                let n = 0;
+                (rows || []).forEach((r) => { if (r && r.id != null) { m.set(String(r.id), r); n++; } });
+                maps[store] = m;
                 return n;
             },
             async put(store, row) {
@@ -187,6 +196,21 @@
         });
     }
 
+    /* Atomically replace a store's contents (one transaction). Used by the
+       contract projection so a repaint never leaves a half-written cache. */
+    function replaceRows(d, store, rows) {
+        return new Promise((resolve, reject) => {
+            const t = tx(d, [store], 'readwrite');
+            const os = t.objectStore(store);
+            os.clear();
+            let n = 0;
+            (rows || []).forEach((r) => { if (r && r.id != null) { os.put(r); n++; } });
+            t.oncomplete = () => resolve(n);
+            t.onerror = () => reject(t.error);
+            t.onabort = () => reject(t.error || new Error('idb abort'));
+        });
+    }
+
     function readCursor(d, store) {
         return new Promise((resolve, reject) => {
             const t = tx(d, [store], 'readonly');
@@ -240,6 +264,19 @@
         } catch (err) {
             console.warn('[kanjoIdb] putAll failed, switching to memory:', err && err.message);
             return markBroken(err && err.message).putAll(store, rows);
+        }
+    }
+
+    /* Replace the whole store in a single transaction. */
+    async function replaceAll(store, rows) {
+        const d = await db();
+        if (d.kind === 'memory') return d.replaceAll(store, rows);
+        try {
+            const { result } = await runWithRepair(d, 'replaceAll', (conn) => replaceRows(conn, store, rows));
+            return result;
+        } catch (err) {
+            console.warn('[kanjoIdb] replaceAll failed, switching to memory:', err && err.message);
+            return markBroken(err && err.message).replaceAll(store, rows);
         }
     }
 
@@ -341,6 +378,7 @@
         DATA_STORES,
         metaKey,
         putAll,
+        replaceAll,
         put,
         getAll,
         count,

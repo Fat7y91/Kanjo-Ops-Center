@@ -1,7 +1,7 @@
 /* Kanjo Ops — Application Entry Point */
 import './utils/cache.js';
 import './config/firebase.js';
-import './services/idb.js?v=20261017a';
+import './services/idb.js?v=20261018a';
 import './services/syncEngine.js';
 import './services/updatedAt.js';
 import './config/build-info.generated.js';
@@ -12,12 +12,13 @@ import { categories } from './config/constants.js?v=20261014d';
 import './utils/helpers.js?v=20261015a';
 import './utils/exportWorker.js';
 import './services/aggregates.js';
-import './utils/export.js';
+import './utils/export.js?v=20261018a';
+import './services/contractProjection.js?v=20261018a';
 import './services/contracts.js';
 import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017b';
-import './services/firestore.js?v=20261016a';
+import './services/firestore.js?v=20261018a';
 import './services/catalog.js?v=20261017f';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
@@ -26,14 +27,14 @@ import './services/menuImport.js?v=20261016b';
 import './services/vendorExport.js';
 import './services/pharmacyIntake.js';
 import './services/founderAudit.js?v=20261016b';
-import './ui/modals.js?v=20261016a';
+import './ui/modals.js?v=20261018a';
 import './ui/accounting.js';
 import './ui/dashboard.js?v=20261016d';
 import './ui/charts.js?v=20261017a';
 import './services/kpi.js?v=20261016b';
 import './services/marketing.js?v=20261016b';
 import './services/workspace.js?v=20261016a';
-import './services/uam.js?v=20261017c';
+import './services/uam.js?v=20261018a';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
    form, and focus-triggered permission refresh. Safe when the widget is absent. */

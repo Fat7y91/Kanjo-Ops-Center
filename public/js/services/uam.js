@@ -229,6 +229,21 @@
 
     const UAM_STORE_KEY = 'kanjo_uam_store_v1';
     const UAM_STORE_TTL = 10 * 60 * 1000;
+    const UAM_LOAD_RETRY_MS = 60 * 1000;
+
+    let _uamLoadPromise = null;
+    let _uamLoadFailedAt = 0;
+
+    /* The `users` collection is readable by super_admins only. Everyone else
+       folds the persisted roster/local store — attempting the list for a
+       manager produced a 403 on every boot (session restore + PIN login). */
+    const canListUsers = () => {
+        try {
+            return typeof window.kanjoIsSuperAdmin === 'function' && !!window.kanjoIsSuperAdmin();
+        } catch (_) {
+            return false;
+        }
+    };
 
     const readStore = () => {
         try {
@@ -267,24 +282,45 @@
             _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
             return rows;
         }
-        try {
-            let rows = [];
-            if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
-                rows = await window.kanjoRest.list([UAM_USERS_COLLECTION], {
-                    pageSize: 500, maxPages: 5, select: UAM_USER_FIELDS
-                });
-            }
-            if (!Array.isArray(rows)) rows = [];
-            persistDocs(rows);
+        /* Authorization gate: never issue a read the rules will deny. */
+        if (!canListUsers()) {
+            const rows = storeRows();
             _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
             return rows;
-        } catch (err) {
-            console.warn('[uam] users load failed:', err && err.message ? err.message : err);
-            const fallback = storeRows();
-            _uamCache = fallback.length ? fallback : (_uamCache || []);
-            window.kanjoUamUsersCache = _uamCache;
-            return _uamCache;
         }
+        /* Collapse the duplicate boot callers (session restore + PIN login). */
+        if (!force && _uamLoadPromise) return _uamLoadPromise;
+        /* Short negative cache: do not hammer the same transient failure. */
+        if (!force && _uamLoadFailedAt && (now - _uamLoadFailedAt) < UAM_LOAD_RETRY_MS) {
+            const rows = storeRows();
+            _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
+            return rows;
+        }
+        _uamLoadPromise = (async () => {
+            try {
+                let rows = [];
+                if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+                    rows = await window.kanjoRest.list([UAM_USERS_COLLECTION], {
+                        pageSize: 500, maxPages: 5, select: UAM_USER_FIELDS
+                    });
+                }
+                if (!Array.isArray(rows)) rows = [];
+                persistDocs(rows);
+                _uamCache = rows; _uamCacheAt = Date.now(); window.kanjoUamUsersCache = rows;
+                _uamLoadFailedAt = 0;
+                return rows;
+            } catch (err) {
+                console.warn('[uam] users load failed:', err && err.message ? err.message : err);
+                _uamLoadFailedAt = Date.now();
+                const fallback = storeRows();
+                _uamCache = fallback.length ? fallback : (_uamCache || []);
+                window.kanjoUamUsersCache = _uamCache;
+                return _uamCache;
+            } finally {
+                _uamLoadPromise = null;
+            }
+        })();
+        return _uamLoadPromise;
     };
     window.kanjoUamLoad = loadUsers;
 

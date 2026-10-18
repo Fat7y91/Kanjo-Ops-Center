@@ -1964,6 +1964,25 @@ window.refreshContractPreview = () => {
 
 window.searchContracts = () => window.openContractsManagerModal();
 
+/* Live refresh while the Contracts Manager is open. The archive (or a live
+   signed-task update) can land after the modal first paints; re-rendering from
+   the current source keeps the list and serials in sync without reopening. */
+let _contractsEventsAttached = false;
+let _contractsRerenderTimer = null;
+const attachContractsEvents = () => {
+    if (_contractsEventsAttached) return;
+    _contractsEventsAttached = true;
+    window.addEventListener('kanjo:tasks-updated', () => {
+        const modal = document.getElementById('contractsManagerModal');
+        if (!modal || modal.classList.contains('hidden')) return;
+        if (_contractsRerenderTimer) clearTimeout(_contractsRerenderTimer);
+        _contractsRerenderTimer = setTimeout(() => {
+            _contractsRerenderTimer = null;
+            if (typeof window.openContractsManagerModal === 'function') window.openContractsManagerModal();
+        }, 150);
+    });
+};
+
 window.openContractsManagerModal = () => {
 
     if (!(typeof window.isMahmoudOpsUser === 'function' ? window.isMahmoudOpsUser() : String((window.currentUser && window.currentUser.name) || '').includes('محمود'))) {
@@ -1978,6 +1997,8 @@ window.openContractsManagerModal = () => {
 
     if (!modal) return;
 
+    attachContractsEvents();
+
     const filterEl = document.getElementById('contractTeamFilter');
 
     const listEl = document.getElementById('contractsManagerList');
@@ -1988,7 +2009,24 @@ window.openContractsManagerModal = () => {
 
     const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
 
-    const allTasks = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
+    /* Warm paint: when the full archive is resident use it; otherwise use the
+       lightweight IndexedDB projection and kick the archive in the background.
+       A pending archive must never be rendered as "no matching contracts". */
+    const archiveLoaded = window._taskArchiveLoaded === true;
+    const projection = (window.koContractProjection && typeof window.koContractProjection.get === 'function')
+        ? window.koContractProjection.get()
+        : [];
+    /* `tasksMemory` is updated synchronously by the archive merge, whereas
+       `allTasksCache` is rebuilt on the next animation frame. Read memory so a
+       modal opened/resumed right after the archive lands never paints a stale
+       day-only list. */
+    const archivedTasks = (window.tasksMemory && typeof window.tasksMemory.entries === 'function')
+        ? Array.from(window.tasksMemory.entries()).map(([id, data]) => Object.assign({ id }, data))
+        : (Array.isArray(window.allTasksCache) ? window.allTasksCache : []);
+    const allTasks = archiveLoaded
+        ? archivedTasks
+        : (Array.isArray(projection) ? projection : []);
+    const contractsPending = !archiveLoaded;
 
     const uniqueMap = new Map();
 
@@ -2046,7 +2084,7 @@ window.openContractsManagerModal = () => {
 
             const base = window.getBaseName ? window.getBaseName(t.name) : t.name;
 
-            const serial = String(window.getContractSerialNumber ? window.getContractSerialNumber(t) : '');
+            const serial = String(window.getContractSerialNumber ? window.getContractSerialNumber(t, allTasks) : '');
 
             const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
 
@@ -2072,11 +2110,21 @@ window.openContractsManagerModal = () => {
 
     if (statsEl) {
 
-        const allUnique = window.buildUniqueSignedMerchants ? window.buildUniqueSignedMerchants() : [];
+        const allUnique = window.buildUniqueSignedMerchantsFrom
+            ? window.buildUniqueSignedMerchantsFrom(allTasks)
+            : (window.buildUniqueSignedMerchants ? window.buildUniqueSignedMerchants() : []);
 
         const filteredUnique = uniqueTasks.length;
 
-        const serialEnd = 1001 + allUnique.length - 1;
+        /* The range is anchored to the frozen baseline (#1001 → #1093) and
+           extended by any post-baseline merchants, never recomputed from a
+           partial cache. */
+        const serialEnd = allUnique.length > 0
+            ? Math.max(
+                (window.CONTRACT_SERIAL_NEXT || 1094) - 1,
+                ...allUnique.map(t => Number(window.getContractSerialNumber ? window.getContractSerialNumber(t, allTasks) : 0) || 0)
+            )
+            : 0;
 
         const serialRange = allUnique.length > 0 ? `#1001 → #${serialEnd}` : '—';
 
@@ -2102,18 +2150,34 @@ window.openContractsManagerModal = () => {
 
     if (uniqueTasks.length === 0) {
 
-        listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-file-circle-minus text-4xl mb-3"></i><p class="font-bold">لا توجد عقود مطابقة</p></div>';
+        if (contractsPending && !window._taskArchiveFailed) {
+
+            listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-spinner fa-spin text-4xl mb-3"></i><p class="font-bold">جارٍ تحميل العقود…</p></div>';
+
+        } else if (window._taskArchiveFailed && !archiveLoaded) {
+
+            listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-triangle-exclamation text-4xl mb-3"></i><p class="font-bold">تعذر تحميل قائمة العقود</p><button onclick="window.retryTaskArchive && window.retryTaskArchive().then(() => window.openContractsManagerModal())" class="mt-3 bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold">إعادة المحاولة</button></div>';
+
+        } else {
+
+            listEl.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-file-circle-minus text-4xl mb-3"></i><p class="font-bold">لا توجد عقود مطابقة</p></div>';
+
+        }
 
     } else {
 
         /* Only the designated issuer (Mahmoud) gets the per-row action. */
-        const canIssueContract = window.canGenerateContracts ? window.canGenerateContracts() : false;
+        const canIssueContract = !contractsPending && (window.canGenerateContracts ? window.canGenerateContracts() : false);
 
-        listEl.innerHTML = uniqueTasks.map(t => {
+        const pendingHint = contractsPending
+            ? '<div class="text-xs text-slate-400 font-bold mb-2"><i class="fa-solid fa-spinner fa-spin ml-1"></i>جارٍ تحديث القائمة…</div>'
+            : '';
+
+        listEl.innerHTML = pendingHint + uniqueTasks.map(t => {
 
             const achieved = Number(t.achieved) || 0;
 
-            const serial = window.getContractSerialNumber ? window.getContractSerialNumber(t) : '';
+            const serial = window.getContractSerialNumber ? window.getContractSerialNumber(t, allTasks) : '';
 
             const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
 
@@ -2135,11 +2199,50 @@ window.openContractsManagerModal = () => {
 
                 </div>
 
-                ${canIssueContract ? `<button onclick="openContractPreview('${t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>` : ''}
+                ${canIssueContract ? `<button onclick="openContractPreview('${t.taskId || t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>` : ''}
 
             </div>`;
 
         }).join('');
+
+    }
+
+    /* If the archive is not resident, fetch it once (idempotent) and re-render
+       when it lands. On a warm boot the IDB projection already painted the 93
+       rows above, so this only reconciles live data in the background. */
+    if (contractsPending) {
+
+        if (allTasks.length === 0 && window.koContractProjection && typeof window.koContractProjection.ready === 'function') {
+
+            window.koContractProjection.ready().then((rows) => {
+
+                if (modal.classList.contains('hidden')) return;
+
+                if (!window._taskArchiveLoaded && Array.isArray(rows) && rows.length) {
+
+                    window.openContractsManagerModal();
+
+                }
+
+            }).catch(() => {});
+
+        }
+
+        if (typeof window.ensureTaskArchiveLoaded === 'function') {
+
+            window.ensureTaskArchiveLoaded().then(() => {
+
+                if (modal.classList.contains('hidden')) return;
+
+                if (window._taskArchiveLoaded || window._taskArchiveFailed) {
+
+                    window.openContractsManagerModal();
+
+                }
+
+            }).catch(() => {});
+
+        }
 
     }
 

@@ -1236,6 +1236,9 @@ window.listenToTasks = () => {
     window.tasksMemory.clear();
     /* Reset the lazy-archive guard so this session can trigger its own read. */
     window._taskArchivePromise = null;
+    window._taskArchiveLoaded = false;
+    window._taskArchiveFailed = false;
+    window._taskArchiveSkipped = false;
     /* A new session/window must invalidate the memoized full-memory scans so the
        first render rebuilds from this listener's data, not a previous login. */
     window.tasksMemoryVersion = tasksMemoryVersion() + 1;
@@ -1349,12 +1352,24 @@ window.listenToTasks = () => {
         return mutated;
     };
 
+    /* `tasksMemory` keys are the canonical task ids; some merge paths store the
+       value WITHOUT an `id` field. Re-attach it before handing rows to the
+       contract projection so the issue button always has a task id. */
+    const memoryTasksWithIds = () => Array.from(window.tasksMemory.entries())
+        .map(([id, data]) => Object.assign({ id }, data));
+
     const commitRenderIfNeeded = (mutated) => {
         if (window._tasksPage !== sessionPage) return;
         if (mutated || firstSnapshot) {
             if (mutated) window.tasksMemoryVersion = tasksMemoryVersion() + 1;
             firstSnapshot = false;
             scheduleTaskSync();
+            /* Keep the lightweight contract projection warm after live task
+               changes once the full archive is resident. Debounced locally. */
+            if (window._taskArchiveLoaded && window.koContractProjection
+                && typeof window.koContractProjection.scheduleSave === 'function') {
+                window.koContractProjection.scheduleSave(memoryTasksWithIds());
+            }
         }
         /* The selected day is painted above. The full archive is no longer
            streamed automatically: a feature that spans all dates (global
@@ -1613,9 +1628,26 @@ window.listenToTasks = () => {
         historyStarted = true;
         if (!canLoadTaskArchive()) {
             console.log('[KANJO-DIAGNOSTIC] Archive fetch skipped for role:', window.currentUser && window.currentUser.role);
+            /* No archive is expected for this role: unblock any consumer that
+               waits for the archive promise so it can paint the day data. */
+            window._taskArchiveSkipped = true;
+            window._taskArchiveLoaded = true;
             return Promise.resolve();
         }
         const page = window._tasksPage;
+        /* A successful full archive load is the authoritative contract source:
+           mark it resident and refresh the lightweight IDB projection. */
+        const markArchiveComplete = () => {
+            window._taskArchiveLoaded = true;
+            window._taskArchiveFailed = false;
+            try {
+                if (window.koContractProjection && typeof window.koContractProjection.saveFromTasks === 'function') {
+                    window.koContractProjection.saveFromTasks(memoryTasksWithIds());
+                }
+            } catch (err) {
+                console.warn('[tasks] contract projection save failed (non-fatal):', err && err.message);
+            }
+        };
         const mergeDocs = (snapshot) => {
             let mutated = false;
             snapshot.docs.forEach((docSnap) => {
@@ -1631,14 +1663,18 @@ window.listenToTasks = () => {
         const applyHistory = (snapshot) => {
             /* Drop a fetch that belongs to a previous session/identity. */
             if (window._tasksPage !== page) return;
-            if (mergeDocs(snapshot)) {
+            const mutated = mergeDocs(snapshot);
+            markArchiveComplete();
+            if (mutated) {
                 window.tasksMemoryVersion = tasksMemoryVersion() + 1;
                 scheduleTaskSync();
             }
         };
         const applyHistoryDocs = (docs) => {
             if (window._tasksPage !== page) return;
-            if (mergeRestDocsToMemory(docs)) {
+            const mutated = mergeRestDocsToMemory(docs);
+            markArchiveComplete();
+            if (mutated) {
                 window.tasksMemoryVersion = tasksMemoryVersion() + 1;
                 scheduleTaskSync();
             }
@@ -1665,11 +1701,15 @@ window.listenToTasks = () => {
                 applyHistory(await getDocs(buildHistoryQuery()));
             } catch (error) {
                 console.error("Firestore history fetch error:", error);
-                if (!isMissingIndex(error)) return;
+                if (!isMissingIndex(error)) {
+                    window._taskArchiveFailed = true;
+                    return;
+                }
                 try {
                     applyHistory(await getDocs(buildHistoryFallback()));
                 } catch (fallbackError) {
                     console.error("Firestore history fallback fetch error:", fallbackError);
+                    window._taskArchiveFailed = true;
                 }
             }
         })();
@@ -1688,6 +1728,18 @@ window.listenToTasks = () => {
         return window._taskArchivePromise;
     };
     window.startHistoricalListener = startHistoricalListener;
+
+    /* Explicit retry for a failed archive read (used by the Contracts modal).
+       Resets the one-shot guard and the status flags, then re-runs the read. */
+    window.retryTaskArchive = () => {
+        historyStarted = false;
+        historyPromise = null;
+        window._taskArchivePromise = null;
+        window._taskArchiveLoaded = false;
+        window._taskArchiveFailed = false;
+        window._taskArchiveSkipped = false;
+        return window.ensureTaskArchiveLoaded();
+    };
 
     /* ─── Hybrid bootstrap: fast day paint first, full archive in background ───
        1) A direct REST runQuery paints TODAY in under a second. It is a plain

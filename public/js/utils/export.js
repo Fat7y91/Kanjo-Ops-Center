@@ -951,17 +951,138 @@ const ARABIC_CLAUSE_NUMBERS = ['الأول', 'الثاني', 'الثالث', 'ا
 
 const CONTRACT_SERIAL_START = 1001;
 
-const buildUniqueSignedMerchants = () => {
+/* ─── Immutable contract serial baseline ──────────────────────────────────────
+ * FROZEN on 2026-10-18 from the 93 signed merchants in production Desouk, in
+ * exactly the order the previous alphabetical assignment produced
+ * (#1001 → #1093). DO NOT REORDER, REMOVE, OR RENAME ANY ENTRY: these numbers
+ * are already printed on issued contracts. New merchants always append after
+ * this baseline (#1094, #1095, …) ordered by their signing timestamp, so a new
+ * merchant can never shift an existing merchant's contract number. */
+const CONTRACT_SERIAL_BASELINE = Object.freeze([
+    '212 Cosmetics',
+    '212 Perfume',
+    '3 Doctors',
+    '50 فاكهة ش السينما',
+    'ابن البحر دسوق',
+    'ابن حميدو',
+    'أبو أيه',
+    'ابو سعده',
+    'أجبان حكاية',
+    'أسواق حكاية',
+    'الاسكندراني مسمط و مشويات',
+    'البركة',
+    'الجزايرلي',
+    'الحيطاوي',
+    'الحيطاوى جزارة و مشويات',
+    'الخالة نوسة',
+    'الرحمة للمخبوزات الفلاحي بدسوق',
+    'السلطان ايوب',
+    'الشرقاوي',
+    'الطيبات بدسوق',
+    'العبسى',
+    'العبسي',
+    'العسكري',
+    'العناني',
+    'الغلبان',
+    'القزاز',
+    'المصرى',
+    'المقدم للتجارة و التوزيع',
+    'باندا',
+    'بانز برجر',
+    'بركات',
+    'بن ربيع',
+    'بن سليمان',
+    'بندق',
+    'بيتزا ميكس توب',
+    'توتي و المستشفي البيطري د.أيمن الشرقاوي Vet Care Hospital )',
+    'ثلاجة أسماك بحري',
+    'جاويش',
+    'حلويات عبير مكي',
+    'حواوشي اسكندراني',
+    'خالتي',
+    'د محمد التهامي',
+    'درويش فون',
+    'دكتوره جيهان عزت',
+    'زغاوة',
+    'زيت حار و طحينة أبو حسين',
+    'سفير السعاده',
+    'سلامة ابو حمر',
+    'سندوتش فول أبو أيمن',
+    'شابلن',
+    'شاورما أفضل',
+    'طازة',
+    'طاسة كبدة',
+    'عروس الشام',
+    'عمو مسعد',
+    'قراقيش',
+    'كاندي لاند',
+    'كريبيانو',
+    'كشري الزعيم دسوق',
+    'كشري باب الحارة',
+    'كلاسيك - Classic',
+    'لذيذ',
+    'ليالي الشرق',
+    'مستر بن',
+    'مسمط الضنس',
+    'مسمط الميدان',
+    'مكانك',
+    'مولتن اضافي',
+    'هالك',
+    'وش البن',
+    'ويسكي',
+    'يومي طازه لمنتجات الالبان والجبن',
+    'Apple بلبل',
+    'BOOM STORE',
+    'Doppio',
+    'Ez sweet mood',
+    'Farahat phone',
+    'Farha Store',
+    'Happy',
+    'Hooligans Club',
+    'Khabza-خبزة',
+    'Mira.Metro',
+    "MORELL's GeLato",
+    'Mr Molten',
+    'MR.K',
+    'Needs',
+    'pizza prego_ بيتزا بريجو',
+    'Pizzanine',
+    'Smile Market',
+    'SOO',
+    'Toma cosmetics',
+    'Tulip flowers',
+    'XO Cosmetics'
+]);
+const CONTRACT_SERIAL_BASELINE_SET = new Set(CONTRACT_SERIAL_BASELINE);
+const CONTRACT_SERIAL_NEXT = CONTRACT_SERIAL_START + CONTRACT_SERIAL_BASELINE.length;
 
-    const source = Array.isArray(window.allTasksCache) ? window.allTasksCache : [];
+const contractBaseName = (task) => {
+    const name = task ? task.name : '';
+    return window.getBaseName ? window.getBaseName(name) : String(name || '').trim();
+};
+
+/* Stable append key for merchants signed AFTER the frozen baseline. The signing
+   timestamp is preferred; the merchant/task id is a deterministic tie-breaker. */
+const contractSigningKey = (task) => String(
+    (task && (task.signedAt || task.contractSignedAt || task.time || task.createdAt || task.created_at)) || ''
+);
+const contractMerchantKey = (task) => String(
+    (task && (task.merchantId || task.merchant_id || task.id)) || contractBaseName(task)
+);
+
+/* Shared dedupe: one row per base name. A follow-up visit never replaces the
+   original merchant card; otherwise the highest achieved rate wins. */
+const buildUniqueSignedMerchantsFrom = (source) => {
+
+    const list = Array.isArray(source) ? source : [];
 
     const uniqueMap = new Map();
 
-    source.forEach(t => {
+    list.forEach(t => {
 
         if (!t || t.isSigned !== true || Number(t.achieved) <= 0) return;
 
-        const base = window.getBaseName ? window.getBaseName(t.name) : t.name;
+        const base = contractBaseName(t);
 
         if (!base) return;
 
@@ -992,28 +1113,56 @@ const buildUniqueSignedMerchants = () => {
     });
 
     return Array.from(uniqueMap.values()).sort((a, b) => {
-
-        const na = window.getBaseName ? window.getBaseName(a.name) : a.name;
-
-        const nb = window.getBaseName ? window.getBaseName(b.name) : b.name;
-
-        return String(na).localeCompare(String(nb), 'ar');
-
+        return contractBaseName(a).localeCompare(contractBaseName(b), 'ar');
     });
 
 };
 
-window.getContractSerialNumber = (task) => {
+window.buildUniqueSignedMerchantsFrom = buildUniqueSignedMerchantsFrom;
 
-    const merchants = buildUniqueSignedMerchants();
+const buildUniqueSignedMerchants = () => {
 
-    const base = task ? (window.getBaseName ? window.getBaseName(task.name) : task.name) : '';
-
-    const idx = merchants.findIndex(t => (window.getBaseName ? window.getBaseName(t.name) : t.name) === base);
-
-    return idx >= 0 ? CONTRACT_SERIAL_START + idx : CONTRACT_SERIAL_START;
+    return buildUniqueSignedMerchantsFrom(window.allTasksCache);
 
 };
+
+/* Immutable serial resolution.
+ *   1. The frozen baseline (93 merchants) always returns its original number.
+ *   2. Merchants signed after the baseline append in signing-time order, so a
+ *      new merchant never shifts a prior contract.
+ * `source` lets the Contracts modal resolve against the lightweight projection
+ * before the full archive lands; exports omit it and use `allTasksCache`. */
+window.getContractSerialNumber = (task, source) => {
+
+    const base = contractBaseName(task);
+
+    const baselineIdx = CONTRACT_SERIAL_BASELINE.indexOf(base);
+
+    if (baselineIdx >= 0) return CONTRACT_SERIAL_START + baselineIdx;
+
+    const list = Array.isArray(source) ? source : (window.allTasksCache || []);
+
+    const newcomers = buildUniqueSignedMerchantsFrom(list)
+        .filter(t => !CONTRACT_SERIAL_BASELINE_SET.has(contractBaseName(t)))
+        .sort((a, b) => {
+            const ka = contractSigningKey(a);
+            const kb = contractSigningKey(b);
+            if (ka !== kb) {
+                if (!ka) return 1;
+                if (!kb) return -1;
+                return ka < kb ? -1 : 1;
+            }
+            return contractMerchantKey(a).localeCompare(contractMerchantKey(b));
+        });
+
+    const idx = newcomers.findIndex(t => contractBaseName(t) === base);
+
+    return CONTRACT_SERIAL_NEXT + (idx >= 0 ? idx : 0);
+
+};
+
+window.CONTRACT_SERIAL_BASELINE = CONTRACT_SERIAL_BASELINE;
+window.CONTRACT_SERIAL_NEXT = CONTRACT_SERIAL_NEXT;
 
 window.buildUniqueSignedMerchants = buildUniqueSignedMerchants;
 
