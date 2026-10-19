@@ -8572,6 +8572,41 @@ const kanjoVendorAllowedCategories = (vendorType) => {
     return list.length ? list : KANJO_PRODUCT_CATEGORIES;
 };
 
+/* Smart auto-categorizer (ZERO reads): maps a free-text product name to the
+   official Arabic category name used by the export. Ordered rules: specific
+   flavour/compound phrases first, generic single words later. Pure in-memory
+   string matching with the same Arabic normaliser as the matcher, so spelling
+   variants (قهوه/قهوة, ايس/آيس) resolve identically. Returns the exact category
+   name, or null when nothing matches (caller falls back to the manual audit). */
+const KANJO_AUTO_CATEGORY_RULES = [
+    ['قهوة أطعمة', ['قهوة شوكولاته', 'قهوة فانيليا', 'قهوة كارميل', 'قهوة توت', 'قهوة مانجو', 'قهوة فراولة', 'قهوة موز', 'قهوة لوز']],
+    ['قهوة', ['قهوة تركي', 'العميد', 'فرنساوي', 'بندق']],
+    ['الاسبرسو', ['اسبرسو', 'سبرسو', 'ميكاتو', 'امريكان كوفي', 'كابتشينو', 'كورتادو', 'فلات وايت', 'لاتيه', 'موكا', 'بونبون']],
+    ['الفرابيه', ['فرابيه']],
+    ['فرابتشينو', ['فرابتشينو']],
+    ['الموهيتو', ['موهيتو', 'بلو سكاي']],
+    ['سموزي', ['سموزي']],
+    ['ميلك شيك', ['ميلك شيك']],
+    ['الساخن', ['هوت', 'سيدر', 'قرفه', 'نسكافيه', 'جنزبيل', 'سحلب']],
+    ['الشاي', ['شاي', 'ينسون', 'كركديه', 'أعشاب']],
+    ['باردة', ['ايس', 'آيس', 'أيس']]
+].map(([category, keywords]) => [category, keywords.map((k) => normalizeArabic(k))]);
+
+const autoDetectCategoryByName = (productName) => {
+    const hay = normalizeArabic(productName);
+    if (!hay) return null;
+    for (const [category, keywords] of KANJO_AUTO_CATEGORY_RULES) {
+        if (keywords.some((k) => k && hay.includes(k))) return category;
+    }
+    /* Generic fallback: the category's own name appearing in the product name
+       (e.g. "القهوه" / "قهوه دبل محوج" -> "قهوة"). Keeps the exact-name contract
+       while covering plain names the keyword lists intentionally omit. */
+    for (const [category] of KANJO_AUTO_CATEGORY_RULES) {
+        if (hay.includes(normalizeArabic(category))) return category;
+    }
+    return null;
+};
+
 /* Multi-category matcher, scoped to a vendor type. Every allowed category whose
    keyword (or synonym) appears in the product name OR description is collected,
    ranked (earliest keyword, owning word, boundary hit, longer name/keyword,
@@ -9557,7 +9592,12 @@ const kanjoFinalizeExport = async (evaluations, selections, opts, variantEntries
             if (window.showToast) window.showToast('ليست لديك صلاحية تصدير إكسل', false);
             return;
         }
-        const { productRows, variantRows, additionRows } = await kanjoBuildExportRows(evaluations, selections, variantEntries);
+        const { productRows, variantRows, additionRows } = await kanjoBuildExportRows(
+            evaluations,
+            selections,
+            variantEntries,
+            (opts && typeof opts.categoryResolver === 'function') ? { categoryResolver: opts.categoryResolver } : undefined
+        );
         const merchantName = String((opts && opts.merchantName) || '').trim();
         const safeName = merchantName ? ('_' + merchantName.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 40)) : '';
         const fileName = 'Kanjo_Products_Export' + safeName + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
@@ -10279,13 +10319,37 @@ window.exportKanjoExcel = async (options) => {
            error (the seven strict vendors only; others keep the audit modal). */
         const strictIssues = kanjoStrictMappingIssues(evaluations, vendorTypeOf);
         if (strictIssues.length) { kanjoHaltStrictMapping(strictIssues); return; }
-        const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, opts);
+        /* Smart auto-categorizer: before a product is queued for manual
+           selection, try the ordered name dictionary. A hit is assigned
+           in-memory for THIS run (no Firestore write, no taxonomy mutation) and
+           the row bypasses the audit. Only a null result stays manual. */
+        const autoDetectedById = new Map();
+        evaluations.forEach((e) => {
+            if (e.match && e.match.status === 'matched') return;
+            const detected = autoDetectCategoryByName(e.product && e.product.name_ar);
+            if (!detected) return;
+            e.match = { status: 'matched', category: detected, categories: [detected], primary: detected, options: [] };
+            e.autoDetectedCategory = detected;
+            autoDetectedById.set(String((e.product && e.product.id) || ''), detected);
+        });
+        const proceed = (selections) => kanjoStartVariantPhase(evaluations, selections || {}, Object.assign({}, opts, {
+            /* Auto-detected names are authoritative for this run even when the
+               static Qema scope has not been synced yet: emit the exact Arabic
+               name instead of letting the scope filter blank the cell. */
+            categoryResolver: (vendorType, assigned, product) => {
+                const auto = autoDetectedById.get(String((product && product.id) || ''));
+                if (auto) return auto;
+                const qema = kanjoQemaResolveCategory(vendorType, assigned);
+                return qema.available ? qema.cell : kanjoFormatExportCategory(assigned);
+            }
+        }));
         /* Intercept: any product the smart matcher cannot classify, OR whose
            matched categories are not legal for its Qema vendor type, PAUSES the
            export behind the interactive audit modal. The operator must pick a
            valid category (scoped to the vendor's static taxonomy) before the
-           file is built. */
+           file is built. Auto-detected rows are already resolved above. */
         const needsAudit = (e) => {
+            if (e.autoDetectedCategory) return false;
             const assigned = kanjoQemaAssignedFor(e.product, e.match, null);
             const qema = kanjoQemaResolveCategory(vendorTypeOf(e.product), assigned);
             return qema.available ? !qema.cell : e.match.status !== 'matched';
@@ -11878,6 +11942,7 @@ window.addEventListener('keydown', (ev) => {
    no behaviour changes, no new Firestore reads, no touched export routes. */
  window.KanjoCatalogExportAPI = {
     buildExportRows: (evaluations, selections, variantEntries, options) => kanjoBuildExportRows(evaluations, selections, variantEntries, options),
+    autoDetectCategoryByName: (name) => autoDetectCategoryByName(name),
     matchProductCategory: (product, vendorType) => kanjoMatchProductCategory(product, vendorType),
     withNormalizedText: (product) => kanjoWithNormalizedText(product),
     fetchAllProducts: () => fetchAllCatalogProductsForExport(),
