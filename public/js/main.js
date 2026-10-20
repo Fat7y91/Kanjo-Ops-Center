@@ -19,7 +19,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017b';
 import './services/firestore.js?v=20261020d';
-import './services/catalog.js?v=20261020b';
+import './services/catalog.js?v=20261020e';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
@@ -33,8 +33,8 @@ import './ui/dashboard.js?v=20261016d';
 import './ui/charts.js?v=20261017a';
 import './services/kpi.js?v=20261016b';
 import './services/marketing.js?v=20261016b';
-import './services/workspace.js?v=20261016a';
-import './services/uam.js?v=20261018a';
+import './services/workspace.js?v=20261020e';
+import './services/uam.js?v=20261020e';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user
    form, and focus-triggered permission refresh. Safe when the widget is absent. */

@@ -266,6 +266,40 @@
         return Object.keys(s.docs).map((id) => s.docs[id]);
     };
 
+    const currentUserStoreRows = () => {
+        const u = window.currentUser;
+        if (!u) return [];
+        const hit = matchUserDoc(storeRows(), u);
+        return hit ? [hit] : [];
+    };
+
+    const loadCurrentUserRows = async () => {
+        const u = window.currentUser;
+        if (!u || !window.kanjoRest || typeof window.kanjoRest.runQuery !== 'function') return [];
+        const pin = String(u.pin == null ? (u.pinCode == null ? '' : u.pinCode) : u.pin).trim();
+        const uid = String(u.uid || u.repId || '').trim();
+        const queries = [];
+        if (pin) queries.push(['pin', pin]);
+        if (u.email) queries.push(['email', String(u.email).trim()]);
+        if (uid) queries.push(['uid', uid]);
+        if (u.name) queries.push(['name', String(u.name).trim()]);
+        for (const [field, value] of queries) {
+            if (!value) continue;
+            try {
+                const rows = await window.kanjoRest.runQuery(UAM_USERS_COLLECTION, [[field, 'EQUAL', value]], 20, { select: UAM_USER_FIELDS });
+                const hits = (rows || []).filter((row) => row && row.active !== false);
+                if (hits.length) {
+                    persistDocs(hits);
+                    return hits;
+                }
+            } catch (err) {
+                console.warn('[uam] self user read failed:', err && err.message ? err.message : err);
+                break;
+            }
+        }
+        return [];
+    };
+
     const allTruePermissions = () => {
         const out = {};
         UAM_PERMISSION_KEYS.forEach((k) => { out[k] = true; });
@@ -274,18 +308,25 @@
 
     const loadUsers = async ({ force = false } = {}) => {
         const now = Date.now();
-        if (!force && _uamCache && (now - _uamCacheAt) < UAM_CACHE_TTL) return _uamCache;
+        if (!force && Array.isArray(_uamCache) && _uamCache.length && (now - _uamCacheAt) < UAM_CACHE_TTL
+            && (canListUsers() || matchUserDoc(_uamCache, window.currentUser))) {
+            return _uamCache;
+        }
         const store = readStore();
-        /* Cache-first: a warm store serves instantly with NO network call. */
-        if (!force && store.fetchedAt && (now - store.fetchedAt) < UAM_STORE_TTL) {
+        /* Super-admin cache-first: a warm store serves instantly with NO network call. */
+        if (!force && canListUsers() && store.fetchedAt && (now - store.fetchedAt) < UAM_STORE_TTL) {
             const rows = Object.keys(store.docs).map((id) => store.docs[id]);
             _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
             return rows;
         }
-        /* Authorization gate: never issue a read the rules will deny. */
+        /* Authorization gate: never issue a full-list read the rules will deny. */
         if (!canListUsers()) {
-            const rows = storeRows();
-            _uamCache = rows; _uamCacheAt = now; window.kanjoUamUsersCache = rows;
+            let rows = await loadCurrentUserRows();
+            if (!rows.length) rows = currentUserStoreRows();
+            if (!rows.length) rows = storeRows();
+            _uamCache = rows;
+            _uamCacheAt = rows.length ? now : 0;
+            window.kanjoUamUsersCache = rows;
             return rows;
         }
         /* Collapse the duplicate boot callers (session restore + PIN login). */

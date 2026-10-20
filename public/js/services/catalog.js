@@ -6009,17 +6009,7 @@ window.toggleCatalogContentWidget = () => {
 };
 
 window.renderCatalogWidgets = () => {
-    if (window.isDataEntryUser()) {
-        ['catalogRepBanner', 'catalogDraftsWidget', 'catalogMyProductsWidget', 'catalogAllProductsWidget', 'catalogDeleteRequestsWidget', 'catalogContentWidget', 'catalogExportSection'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.classList.add('hidden');
-        });
-        if (typeof window.renderStagingCatalogWidgets === 'function') window.renderStagingCatalogWidgets();
-        return;
-    }
     const repBanner = document.getElementById('catalogRepBanner');
-    /* Reps AND the product-audit team can add products, so both see the
-       "إضافة منتج" banner (the audit team covers items the agents missed). */
     if (repBanner) repBanner.classList.toggle('hidden', !window.canCreateCatalogProducts());
     if (typeof window.renderCatalogDraftsWidget === 'function') window.renderCatalogDraftsWidget();
     if (typeof window.renderCatalogMyProductsWidget === 'function') window.renderCatalogMyProductsWidget();
@@ -6031,19 +6021,22 @@ window.renderCatalogWidgets = () => {
 
     const exportSection = document.getElementById('catalogExportSection');
     const isAdmin = window.isCatalogAdminUser();
-    if (exportSection) exportSection.classList.toggle('hidden', !isAdmin);
+    const canExport = (typeof window.kanjoCan === 'function')
+        ? window.kanjoCan('canExportExcel', isAdmin)
+        : isAdmin;
+    if (exportSection) exportSection.classList.toggle('hidden', !canExport);
     const exportBtn = document.getElementById('catalogExportBtn');
-    if (exportBtn) exportBtn.classList.toggle('hidden', !isAdmin);
+    if (exportBtn) exportBtn.classList.toggle('hidden', !canExport);
     const fixBtn = document.getElementById('catalogFixTranslationsBtn');
     if (fixBtn) fixBtn.classList.toggle('hidden', !isAdmin);
     const dupBtn = document.getElementById('catalogResolveDuplicatesBtn');
     if (dupBtn) dupBtn.classList.toggle('hidden', !isAdmin);
-    if (isAdmin) populateMerchantExportFilter();
+    if (canExport) populateMerchantExportFilter();
 
     const mpExportBtn = document.getElementById('mpCatalogExportBtn');
     const mpModal = document.getElementById('merchantProfileModal');
     if (mpExportBtn && mpModal && !mpModal.classList.contains('hidden')) {
-        mpExportBtn.classList.toggle('hidden', !window.isCatalogAdminUser());
+        mpExportBtn.classList.toggle('hidden', !isAdmin);
     }
 
     if (window.canReviewImages()) {

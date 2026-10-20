@@ -86,7 +86,7 @@
     ];
     const MOBILE_TABS_DATA_ENTRY = [
         { id: 'rep_work', label: 'إدخال البيانات', short: 'الإدخال', icon: 'fa-pen-to-square', groups: ['data_entry'] },
-        { id: 'rep_catalog', label: 'المنتجات والتجار', short: 'المنتجات', icon: 'fa-store', groups: ['my_products', 'catalog'] },
+        { id: 'rep_catalog', label: 'المنتجات والتجار', short: 'المنتجات', icon: 'fa-store', groups: ['my_products', 'catalog', 'rep_work_extra'] },
         { id: 'rep_kpi', label: 'لوحة أدائي', short: 'أدائي', icon: 'fa-trophy', kpi: true },
         { id: 'rep_profile', label: 'ملفاتي', short: 'ملفاتي', icon: 'fa-folder-open', groups: ['rep_profile'] }
     ];
