@@ -489,6 +489,17 @@ function applyThemeAndShowDashboard() {
         const menuImportModal = document.getElementById('menuImportModal');
         if (menuImportModal && !canImportMenu) menuImportModal.classList.add('hidden');
 
+        /* Standardized product Excel importer (UAM `canImportProductsExcel`,
+           default-granted to Data-Entry / PIN 2468). Same hard-close rule. */
+        const canImportProductsExcel = (typeof window.isProductImportUser === 'function')
+            ? window.isProductImportUser()
+            : false;
+        if (typeof window.renderProductImportNav === 'function') {
+            window.renderProductImportNav();
+        }
+        const productImportModal = document.getElementById('productImportModal');
+        if (productImportModal && !canImportProductsExcel) productImportModal.classList.add('hidden');
+
         if (typeof window.kpiStartActiveTracker === 'function') {
             window.kpiStartActiveTracker();
         }

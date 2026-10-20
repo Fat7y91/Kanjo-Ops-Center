@@ -53,6 +53,7 @@
         { key: 'canDeleteProducts', label: 'حذف منتجات', icon: 'fa-trash-can', group: 'المنتجات والكتالوج' },
         { key: 'canExportExcel', label: 'تصدير إكسل', icon: 'fa-file-excel', group: 'المنتجات والكتالوج' },
         { key: 'canUseDataEntryTools', label: 'أدوات إدخال البيانات', icon: 'fa-keyboard', group: 'المنتجات والكتالوج' },
+        { key: 'canImportProductsExcel', label: 'استيراد منتجات Excel', icon: 'fa-file-excel', group: 'المنتجات والكتالوج' },
         /* التجار والعقود */
         { key: 'canEditMerchant', label: 'تعديل بيانات التاجر', icon: 'fa-store', group: 'التجار والعقود' },
         { key: 'canManageContracts', label: 'إدارة العقود', icon: 'fa-file-signature', group: 'التجار والعقود' },
@@ -103,7 +104,7 @@
             'canEditProducts', 'canDeleteProducts'],
         rep: ['canBrowseCatalog', 'canAddProducts', 'canEditProducts',
             'canViewKpi', 'canViewFinancialProfile'],
-        data_entry: ['canUseDataEntryTools', 'canImportMenu'],
+        data_entry: ['canUseDataEntryTools', 'canImportMenu', 'canImportProductsExcel'],
         accounting: ['canViewFinance', 'canExportExcel', 'canViewNotifications'],
         marketing: ['canViewMarketing'],
         marketing_agency: [],

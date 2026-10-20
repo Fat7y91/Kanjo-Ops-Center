@@ -1274,6 +1274,20 @@
 
 
 
+                <div id="productImportNavBtnWrapper" class="hidden relative mr-1">
+
+                    <button onclick="openProductImportModal()" class="relative text-slate-600 hover:text-kanjo-primary transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
+
+                        <i class="fa-solid fa-file-excel text-kanjo-dark"></i>
+
+                        <span>استيراد منتجات (Excel)</span>
+
+                    </button>
+
+                </div>
+
+
+
                 <div id="marketingNavBtnWrapper" class="hidden relative mr-1">
 
                     <button onclick="window.kanjoOpenMarketingPane ? window.kanjoOpenMarketingPane() : openMarketingDashboard()" class="relative text-slate-600 hover:text-[#230535] transition-colors p-1 flex items-center gap-1 bg-white px-2.5 py-1 rounded-xl border border-purple-100 text-xs font-bold shadow-sm">
@@ -3194,6 +3208,86 @@
 
         </div>
 
+        <!-- ═══════════ STANDARDIZED PRODUCT EXCEL IMPORTER (UAM-GATED) ═══════════ -->
+
+        <div id="productImportModal" onclick="if(event.target===this)closeProductImportModal()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]">
+
+            <div class="bg-white rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+
+                <div class="flex justify-between items-center mb-4">
+
+                    <h3 class="font-black text-lg sm:text-xl text-kanjo-dark"><i class="fa-solid fa-file-excel ml-2"></i>استيراد منتجات (Excel)</h3>
+
+                    <button type="button" onclick="closeProductImportModal()" class="text-slate-400 hover:text-red-500 p-1" aria-label="إغلاق"><i class="fa-solid fa-xmark text-2xl"></i></button>
+
+                </div>
+
+                <div class="space-y-4">
+
+                    <button type="button" onclick="downloadProductImportTemplate()" class="w-full flex items-center justify-center gap-2 bg-white border-2 border-[#230535]/20 text-[#230535] py-2.5 rounded-xl font-black text-xs hover:bg-[#230535]/5 transition">
+
+                        <i class="fa-solid fa-download"></i> تنزيل القالب القياسي
+
+                    </button>
+
+                    <div>
+
+                        <label class="block font-black text-sm text-kanjo-dark mb-1.5">التاجر المستهدف</label>
+
+                        <select id="productImportMerchant" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                            <option value="">اختر التاجر...</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <label class="block font-black text-sm text-kanjo-dark mb-1.5">المندوب صاحب المجهود</label>
+
+                        <select id="productImportRep" class="w-full p-3.5 bg-kanjo-light border border-purple-100 rounded-xl font-bold text-sm outline-none focus:border-[#230535]">
+
+                            <option value="">اختر المندوب...</option>
+
+                        </select>
+
+                    </div>
+
+                    <div>
+
+                        <label for="productImportFile" class="flex flex-col items-center justify-center gap-1 w-full min-h-[64px] px-4 py-4 bg-white border-2 border-dashed border-[#230535]/30 rounded-2xl text-center cursor-pointer hover:bg-[#230535]/5 transition">
+
+                            <i class="fa-solid fa-file-excel text-2xl text-[#230535]"></i>
+
+                            <span id="productImportFileName" class="text-[11px] font-bold text-slate-500">اختر ملف المنتجات (xlsx / xls)</span>
+
+                        </label>
+
+                        <input type="file" id="productImportFile" accept=".xlsx,.xls" class="sr-only" onchange="onProductImportFileChange(event)">
+
+                    </div>
+
+                    <div id="productImportSummary" class="hidden text-xs font-bold text-slate-600 bg-kanjo-light border border-purple-100 rounded-xl p-3 space-y-1"></div>
+
+                    <div id="productImportErrors" class="hidden text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3 max-h-48 overflow-y-auto"></div>
+
+                    <div id="productImportStatus" class="text-xs font-bold text-slate-600"></div>
+
+                    <button type="button" id="productImportRunBtn" onclick="runProductImport()" disabled class="w-full bg-[#230535] text-[#FFD700] py-3.5 rounded-xl font-black hover:opacity-90 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+
+                        <i class="fa-solid fa-file-excel"></i> استيراد المنتجات
+
+                    </button>
+
+                    <p class="text-[11px] font-bold text-slate-400 leading-relaxed">الأعمدة: الصنف، الوصف، الكود، السعر، الحجم والسعر ١ إلى ٣، رابط الصورة. الصنف والسعر إلزاميان لكل منتج ولكل حجم. أي خطأ في صف واحد يرفض الملف بالكامل. تُنسب المنتجات إلى المندوب المحدد وتدخل قائمة المراجعة.</p>
+
+                </div>
+
+            </div>
+
+        </div>
+
         <!-- ═══════════ KPI — FIX FAKE DESCRIPTIONS MODAL (manager preview) ═══════════ -->
 
         <div id="kpiFixModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 z-[160]">
@@ -4159,7 +4253,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261020e"></script>
+    <script type="module" src="js/main.js?v=20261020f"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 
