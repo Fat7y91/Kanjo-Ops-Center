@@ -1182,6 +1182,12 @@ window.ensureFinalizedMerchantsLoaded = () => {
     }
     _finalizedMerchantsPromise = (async () => {
         try {
+            /* Boot paints the shell before the anonymous auth baseline settles.
+               The REST transport now waits for authReady too, but gate here as
+               well so this non-fatal sync never races the first token. */
+            if (window.authReady) {
+                try { await window.authReady; } catch (_) { /* restAuthHeaders reports the failure */ }
+            }
             /* Cross-team: the catalog picker lists eligible merchants from every
                team, so these lightweight reads are intentionally NOT team-scoped.
                Two reads: final signed agreements + admin-granted VIP pre-contract

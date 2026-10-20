@@ -358,6 +358,11 @@ window.founderAuditLoad = async (force) => {
     founderAuditState.loading = true;
     founderAuditSetStatus('جاري تحميل أصناف المراجعة...');
     try {
+        /* The widget renders during the pre-auth paint; wait for the anonymous
+           baseline so the REST reads carry an ID token instead of a 403. */
+        if (window.authReady) {
+            try { await window.authReady; } catch (_) { /* REST layer surfaces auth failure */ }
+        }
         const [products, approved] = await Promise.all([
             founderAuditFetchPending(),
             /* Approved is supplementary: if its query/index is unavailable the

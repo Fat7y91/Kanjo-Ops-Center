@@ -249,16 +249,47 @@ const restFieldsToJs = (fields) => {
 const REST_DOCUMENTS_URL = 'https://firestore.googleapis.com/v1/projects/'
     + firebaseConfig.projectId + '/databases/(default)/documents';
 
+const REST_AUTH_WAIT_MS = 15000;
+
+const restAuthNotReady = (reason) => {
+    const err = new Error('Firestore REST blocked: Firebase Auth is not ready (' + reason + ')');
+    err.code = 'AUTH_NOT_READY';
+    return err;
+};
+
+const waitForAuthBaseline = async () => {
+    const ready = window.authReady;
+    if (!ready || typeof ready.then !== 'function') return;
+    await new Promise((resolve) => {
+        const timer = setTimeout(resolve, REST_AUTH_WAIT_MS);
+        Promise.resolve(ready).catch(() => null).then(() => {
+            clearTimeout(timer);
+            resolve();
+        });
+    });
+};
+
 const restAuthHeaders = async () => {
+    /* The shell paints before signInAnonymously settles. Sending a REST request
+       in that window used to omit the Authorization header and surface a
+       misleading 403 (legacy() is false because request.auth is null). Wait for
+       the app's auth baseline, then fail closed instead of downgrading to an
+       unauthenticated request. */
+    await waitForAuthBaseline();
     const user = auth.currentUser;
+    if (!user) throw restAuthNotReady('no authenticated user');
+    if (typeof user.getIdToken !== 'function') throw restAuthNotReady('getIdToken unavailable');
     let token = '';
-    if (user && typeof user.getIdToken === 'function') {
-        try { token = await user.getIdToken(); } catch (_) { token = ''; }
+    try {
+        token = await user.getIdToken();
+    } catch (err) {
+        throw restAuthNotReady('getIdToken failed: ' + (err && err.message ? err.message : err));
     }
-    return Object.assign(
-        { 'Content-Type': 'application/json' },
-        token ? { Authorization: 'Bearer ' + token } : {}
-    );
+    if (!token) throw restAuthNotReady('empty ID token');
+    return {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+    };
 };
 
 const restDocId = (name) => String(name || '').split('/').pop();
