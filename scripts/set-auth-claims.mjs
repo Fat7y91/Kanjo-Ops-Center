@@ -245,7 +245,19 @@ const applyIdentity = async (uid, identity) => {
     console.log(`[dry-run] ${uid} <- ${JSON.stringify(claims)}`);
     return true;
   }
-  await auth.setCustomUserClaims(uid, claims);
+  try {
+    await auth.setCustomUserClaims(uid, claims);
+  } catch (err) {
+    /* Enrollment hints outlive deleted Auth users (device resets, old
+       anonymous UIDs). One stale hint must never abort the whole batch and
+       leave newer sessions — including a founder after a hard reset —
+       unprovisioned. Skip it and continue. */
+    if (err && err.code === 'auth/user-not-found') {
+      console.warn(`skip ${uid}: stale enrollment hint (auth user no longer exists)`);
+      return false;
+    }
+    throw err;
+  }
   console.log(`ok  ${uid} <- ${claims.kanjoRole} / ${claims.kanjoName}`);
   return true;
 };
