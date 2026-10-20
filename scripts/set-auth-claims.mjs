@@ -233,6 +233,20 @@ const verifyClaims = async () => {
   }
 };
 
+const claimsEqual = (a, b) => {
+  const ak = Object.keys(a || {});
+  const bk = Object.keys(b || {});
+  if (ak.length !== bk.length) return false;
+  return ak.every((key) => a[key] === b[key]);
+};
+
+/* Firebase Auth caps account-info updates, and enrollment hints accumulate one
+   document per anonymous session. Re-running `--auto` must not rewrite hundreds
+   of already-provisioned historical UIDs: read each user, skip identical claims,
+   and pace the remaining writes below the update quota. */
+const CLAIMS_WRITE_DELAY_MS = Math.max(0, Number(process.env.CLAIMS_WRITE_DELAY_MS || 120));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const applyIdentity = async (uid, identity) => {
   let claims;
   try {
@@ -245,8 +259,9 @@ const applyIdentity = async (uid, identity) => {
     console.log(`[dry-run] ${uid} <- ${JSON.stringify(claims)}`);
     return true;
   }
+  let user;
   try {
-    await auth.setCustomUserClaims(uid, claims);
+    user = await auth.getUser(uid);
   } catch (err) {
     /* Enrollment hints outlive deleted Auth users (device resets, old
        anonymous UIDs). One stale hint must never abort the whole batch and
@@ -258,6 +273,20 @@ const applyIdentity = async (uid, identity) => {
     }
     throw err;
   }
+  if (claimsEqual(user.customClaims, claims)) {
+    console.log(`skip ${uid}: claims already ${claims.kanjoRole} / ${claims.kanjoName}`);
+    return false;
+  }
+  try {
+    await auth.setCustomUserClaims(uid, claims);
+  } catch (err) {
+    if (err && err.code === 'auth/user-not-found') {
+      console.warn(`skip ${uid}: stale enrollment hint (auth user no longer exists)`);
+      return false;
+    }
+    throw err;
+  }
+  if (CLAIMS_WRITE_DELAY_MS) await sleep(CLAIMS_WRITE_DELAY_MS);
   console.log(`ok  ${uid} <- ${claims.kanjoRole} / ${claims.kanjoName}`);
   return true;
 };
