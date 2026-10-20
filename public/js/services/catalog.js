@@ -4156,7 +4156,7 @@ const renderCatalogAllProductsListNow = () => {
         /* Secondary CSV import: rendered ONLY for the Data-Entry operator
            (PIN/ID 2468) and only inside an open merchant catalog. */
         const csvImportBtn = catalogIsCsvImportOperator()
-            ? `<button type="button" id="btn-import-csv" onclick="document.getElementById('csv-file-input').click()" class="bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-sm flex items-center justify-center gap-2 shrink-0">📥 رفع شيت (CSV)</button><input type="file" id="csv-file-input" accept=".csv" style="display: none;" onchange="window.importMerchantCsvProducts(this)">`
+            ? `<button type="button" id="btn-import-csv" onclick="document.getElementById('csv-file-input').click()" class="bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-file-csv"></i> رفع شيت (CSV)</button><input type="file" id="csv-file-input" accept=".csv" style="display: none;" onchange="window.importMerchantCsvProducts(this)">`
             : '';
         if (toolbar) {
             toolbar.classList.remove('hidden');

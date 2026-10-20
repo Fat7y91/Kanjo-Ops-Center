@@ -19,7 +19,7 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261017b';
 import './services/firestore.js?v=20261018a';
-import './services/catalog.js?v=20261020a';
+import './services/catalog.js?v=20261020b';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
