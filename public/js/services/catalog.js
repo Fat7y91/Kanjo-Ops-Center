@@ -15,6 +15,10 @@ const CATALOG_DRAFTS_KEY = 'kanjo_drafts';
    "expected images" denominator (see kpi.js). */
 const CATALOG_MENU_IMPORT_SOURCE = 'menu_excel_import';
 const CATALOG_PHARMACY_INTAKE_SOURCE = 'pharmacy_inventory_intake';
+/* CSV bulk import from the open merchant catalog (Data-Entry operator only).
+   Kept as its own source so the rows remain traceable without changing any of
+   the existing rep-KPI attribution rules. */
+const CATALOG_CSV_IMPORT_SOURCE = 'csv_bulk_import';
 
 /* Tag describing HOW the media editor completed an image task. Persisted on the
    product (`edit_type`) so the analytics breakdown can split the editor's
@@ -108,6 +112,17 @@ const catalogEscapeHtml = (value) => String(value == null ? '' : value)
     .replace(/'/g, '&#39;');
 
 window.isCatalogRepUser = () => !!(window.currentUser && window.currentUser.role === 'rep' && window.currentUser.role !== 'data_entry');
+
+/* CSV bulk import is restricted to the Data-Entry operator whose PIN/ID is
+   2468. Checked both when rendering the button and again when the handler runs,
+   so the utility cannot be invoked from the console by another account. */
+const catalogIsCsvImportOperator = () => {
+    const u = window.kanjoCurrentUser || window.currentUser || {};
+    const pin = String(u.pin == null ? (u.pinCode == null ? '' : u.pinCode) : u.pin).trim();
+    const id = String(u.id == null ? '' : u.id).trim();
+    return pin === '2468' || id === '2468';
+};
+window.catalogIsCsvImportOperator = catalogIsCsvImportOperator;
 
 window.isCatalogContentUser = () => {
     const u = window.currentUser;
@@ -4138,6 +4153,11 @@ const renderCatalogAllProductsListNow = () => {
         const addProductBtn = window.canCreateCatalogProducts()
             ? `<button type="button" onclick="openCatalogProductModal('${contextMerchantId}')" class="bg-[#FFD700] text-[#230535] px-4 py-2.5 rounded-2xl font-black text-xs hover:bg-yellow-300 transition shadow-sm flex items-center justify-center gap-2 shrink-0"><i class="fa-solid fa-plus"></i> إضافة صنف جديد</button>`
             : '';
+        /* Secondary CSV import: rendered ONLY for the Data-Entry operator
+           (PIN/ID 2468) and only inside an open merchant catalog. */
+        const csvImportBtn = catalogIsCsvImportOperator()
+            ? `<button type="button" id="btn-import-csv" onclick="document.getElementById('csv-file-input').click()" class="bg-[#230535] text-[#FFD700] px-4 py-2.5 rounded-2xl font-black text-xs hover:opacity-90 transition shadow-sm flex items-center justify-center gap-2 shrink-0">📥 رفع شيت (CSV)</button><input type="file" id="csv-file-input" accept=".csv" style="display: none;" onchange="window.importMerchantCsvProducts(this)">`
+            : '';
         if (toolbar) {
             toolbar.classList.remove('hidden');
             toolbar.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2 bg-white border border-[#230535]/10 rounded-2xl px-3 py-2.5">
@@ -4157,6 +4177,7 @@ const renderCatalogAllProductsListNow = () => {
                         <input type="search" id="catalogMerchantProductSearch" value="${merchantSearchVal}" oninput="filterCatalogMerchantProductsDom(this.value)" placeholder="🔍 ابحث في منتجات هذا التاجر..." autocomplete="off" class="w-full bg-slate-50 border-2 border-[#230535]/15 rounded-2xl pr-10 pl-4 py-2.5 text-sm font-bold text-[#230535] placeholder:text-slate-400 outline-none transition-all duration-200 focus:border-[#230535] focus:ring-4 focus:ring-[#230535]/10">
                     </div>
                     ${addProductBtn}
+                    ${csvImportBtn}
                 </div>
             </div>`;
         }
@@ -4664,6 +4685,267 @@ const syncOneCatalogDraft = async (draft, persistProgress, opts) => {
         summary: 'إضافة منتج جديد: ' + nameAr,
         productId: created && created.id
     });
+};
+
+/* ===== CSV bulk import for the open merchant catalog (Data-Entry only) =====
+   Standalone additive utility. Reads the founder's Arabic sheet
+   (الكود, الصنف, سعر الكيلو, نص كيلو, ربع كيلو, تمن (125جم), 100 جرام),
+   auto-detects each product's category with the SAME in-memory dictionary the
+   export uses, attributes every created row to the field rep named by the
+   operator, and writes standard `merchant_products` documents. `category`
+   remains the merchant's activity (the export's vendor scope); the detected
+   product category is preserved as additive metadata. No existing form, state
+   or Firestore read path is touched. */
+const CATALOG_CSV_VARIANT_SPECS = [
+    { header: 'نص كيلو', name: 'نص كيلو' },
+    { header: 'ربع كيلو', name: 'ربع كيلو' },
+    { header: 'تمن (125جم)', name: 'ثمن كيلو' },
+    { header: '100 جرام', name: '100 جرام' }
+];
+
+const catalogCsvHeaderKey = (value) => normalizeArabic(value)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/* RFC-4180-style reader: quotes, escaped quotes, embedded commas and CRLF. */
+const catalogCsvParseRows = (text) => {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let quoted = false;
+    const pushRow = () => {
+        row.push(field);
+        if (row.some((value) => String(value).trim())) rows.push(row);
+        row = [];
+        field = '';
+    };
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (quoted) {
+            if (ch === '"') {
+                if (text[i + 1] === '"') { field += '"'; i++; }
+                else quoted = false;
+            } else field += ch;
+        } else if (ch === '"') quoted = true;
+        else if (ch === ',') { row.push(field); field = ''; }
+        else if (ch === '\n') pushRow();
+        else if (ch === '\r') { if (text[i + 1] === '\n') i++; pushRow(); }
+        else field += ch;
+    }
+    if (field.length || row.length) pushRow();
+    return rows;
+};
+
+const catalogCsvNumber = (value) => {
+    const normalized = String(value == null ? '' : value)
+        .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+        .replace(/[\u06F0-\u06F9]/g, (d) => String(d.charCodeAt(0) - 0x06F0))
+        .replace(/[٫,]/g, '.')
+        .replace(/[^\d.]/g, '');
+    const num = Number(normalized);
+    return Number.isFinite(num) ? num : null;
+};
+
+const catalogCsvBuildVariant = (label, rawPrice) => {
+    const price = catalogCsvNumber(rawPrice);
+    if (price == null || price <= 0) return null;
+    /* Reuse the existing Dashboard-Template mapper so the stored option carries
+       the same `kanjo_value` / `kanjo_attribute` as the menu importer. */
+    const mapped = (typeof window.kanjoMapVariantToKanjo === 'function')
+        ? window.kanjoMapVariantToKanjo(label, label)
+        : null;
+    const first = Array.isArray(mapped) ? mapped[0] : null;
+    return {
+        name: label,
+        price,
+        image_url: '',
+        kanjo_value: first ? first.value : '',
+        kanjo_attribute: first ? first.name : ''
+    };
+};
+
+window.importMerchantCsvProducts = async (inputEl) => {
+    const input = inputEl || document.getElementById('csv-file-input');
+    const clearInput = () => { try { if (input) input.value = ''; } catch (_) { /* ignore */ } };
+    if (!catalogIsCsvImportOperator()) {
+        if (window.showToast) window.showToast('هذه الأداة متاحة لمستخدم إدخال البيانات فقط (2468)', false);
+        clearInput();
+        return;
+    }
+    const file = input && input.files && input.files[0];
+    if (!file) return;
+    const Swal = window.Swal;
+    if (!Swal || typeof Swal.fire !== 'function') {
+        if (window.showToast) window.showToast('مكتبة التنبيهات غير محمّلة', false);
+        clearInput();
+        return;
+    }
+    const ctx = window._catalogContextMerchant || {};
+    const merchantId = String(ctx.merchantId || '').trim();
+    const merchantName = String(ctx.merchantName || '').trim();
+    if (!merchantId) {
+        if (window.showToast) window.showToast('افتح كتالوج تاجر أولاً', false);
+        clearInput();
+        return;
+    }
+    let repName = '';
+    try {
+        const prompt = await Swal.fire({
+            title: 'اسم المندوب صاحب المجهود',
+            text: 'لمن تنسب إضافة هذه المنتجات؟ (ستُحفظ باسمه لحفظ حقوقه)',
+            input: 'text',
+            inputValue: 'مصطفى',
+            showCancelButton: true,
+            confirmButtonText: 'رفع المنتجات',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#230535',
+            inputValidator: (value) => (String(value || '').trim() ? null : 'اكتب اسم المندوب')
+        });
+        if (!prompt || !prompt.isConfirmed) { clearInput(); return; }
+        repName = String(prompt.value || '').trim();
+    } catch (_) { clearInput(); return; }
+    let text = '';
+    try { text = await file.text(); } catch (err) {
+        console.error('[catalog] CSV read failed:', err);
+        if (window.showToast) window.showToast('تعذّر قراءة ملف CSV', false);
+        clearInput();
+        return;
+    }
+    text = text.replace(/^\uFEFF/, '').replace(/^sep=,\r?\n/i, '');
+    const matrix = catalogCsvParseRows(text);
+    if (matrix.length < 2) {
+        if (window.showToast) window.showToast('ملف CSV فارغ أو بلا صفوف', false);
+        clearInput();
+        return;
+    }
+    const headers = matrix[0].map((header) => catalogCsvHeaderKey(header));
+    const cell = (row, header) => {
+        const idx = headers.indexOf(catalogCsvHeaderKey(header));
+        return idx === -1 ? '' : String(row[idx] == null ? '' : row[idx]).trim();
+    };
+    if (headers.indexOf(catalogCsvHeaderKey('الصنف')) === -1) {
+        if (window.showToast) window.showToast('العمود «الصنف» غير موجود في الملف', false);
+        clearInput();
+        return;
+    }
+    const merchant = (window._catalogMerchantMap && window._catalogMerchantMap[merchantId]) || null;
+    const cachedProduct = (window.allCatalogProductsCache || [])
+        .find((product) => product && String(product.merchantId || '') === merchantId);
+    const merchantActivity = resolveMerchantCategory(merchant)
+        || String((cachedProduct && cachedProduct.category) || '').trim();
+    const entries = [];
+    for (let r = 1; r < matrix.length; r++) {
+        const row = matrix[r] || [];
+        const nameAr = cell(row, 'الصنف');
+        if (!nameAr) continue;
+        const code = cell(row, 'الكود');
+        const kiloPrice = catalogCsvNumber(cell(row, 'سعر الكيلو'));
+        const variations = CATALOG_CSV_VARIANT_SPECS
+            .map((spec) => catalogCsvBuildVariant(spec.name, cell(row, spec.header)))
+            .filter(Boolean);
+        /* The export auto-categorizer runs the same dictionary; storing the
+           detected name keeps the import auditable without changing `category`
+           (which must stay the merchant activity for vendor-scoped exports). */
+        const detectedCategory = autoDetectCategoryByName(nameAr) || '';
+        const basePrice = kiloPrice != null
+            ? kiloPrice
+            : (variations.length ? Math.min(...variations.map((variant) => variant.price)) : 0);
+        const now = new Date().toISOString();
+        const payload = {
+            merchantId,
+            merchantName,
+            name: nameAr,
+            name_ar: nameAr,
+            name_en: '',
+            description_ar: '',
+            description_en: '',
+            sku: code || generateCatalogSku(),
+            barcode: code,
+            product_type: variations.length ? 'variable' : 'simple',
+            base_price: basePrice,
+            category: merchantActivity,
+            rawImageUrl: '',
+            rawImageUrls: [],
+            enhancedImageUrl: '',
+            enhancedImageUrls: [],
+            status: 'pending',
+            is_active: true,
+            createdBy: repName,
+            addedBy: repName,
+            createdAt: now,
+            updatedAt: now,
+            importSource: CATALOG_CSV_IMPORT_SOURCE,
+            detectedCategory
+        };
+        if (variations.length) payload.variations = variations;
+        entries.push(payload);
+    }
+    if (!entries.length) {
+        if (window.showToast) window.showToast('لا توجد صفوف صالحة للاستيراد', false);
+        clearInput();
+        return;
+    }
+    let saved = 0;
+    const failed = [];
+    Swal.fire({
+        title: 'جارٍ رفع المنتجات الذكي...',
+        html: '0 / ' + entries.length,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        didOpen: () => { if (typeof Swal.showLoading === 'function') Swal.showLoading(); }
+    });
+    try {
+        for (let i = 0; i < entries.length; i++) {
+            try {
+                const payload = entries[i];
+                let created = await catalogRestCreate(CATALOG_COLLECTION, payload);
+                if (!created) {
+                    const ref = await window.addDoc(window.collection(window.db, CATALOG_COLLECTION), payload);
+                    created = { id: ref && ref.id, ...payload };
+                }
+                if (created && created.id && typeof window.catalogApplyCreatedProductLocally === 'function') {
+                    window.catalogApplyCreatedProductLocally(created, { silent: true });
+                }
+                saved++;
+            } catch (err) {
+                console.error('[catalog] CSV row upload failed:', err);
+                failed.push(i + 2);
+            }
+            if (typeof Swal.update === 'function') {
+                Swal.update({ html: (saved + failed.length) + ' / ' + entries.length });
+            }
+            if (typeof window.kanjoYieldToMain === 'function') await window.kanjoYieldToMain();
+        }
+    } finally {
+        clearInput();
+    }
+    try { Swal.close(); } catch (_) { /* ignore */ }
+    if (saved) {
+        await Swal.fire({
+            icon: 'success',
+            title: 'تم رفع المنتجات',
+            html: 'تم رفع <b>' + saved + '</b> منتج باسم <b>' + catalogEscapeHtml(repName) + '</b>'
+                + (failed.length
+                    ? '<div style="margin-top:8px;color:#b91c1c">تعذّر رفع ' + failed.length + ' صف (السطور: ' + failed.join('، ') + ')</div>'
+                    : ''),
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#230535'
+        });
+    } else {
+        await Swal.fire({
+            icon: 'error',
+            title: 'فشل الرفع',
+            text: 'لم يتم رفع أي منتج. تحقق من الاتصال وحاول مرة أخرى.',
+            confirmButtonText: 'حسناً',
+            confirmButtonColor: '#230535'
+        });
+    }
+    if (typeof window.renderCatalogWidgets === 'function') window.renderCatalogWidgets();
+    /* Repaint the merchant catalog last so a data-entry operator (whose global
+       renderer hides the all-products widget) keeps the list they imported into. */
+    if (typeof window.renderCatalogAllProductsWidget === 'function') window.renderCatalogAllProductsWidget();
 };
 
 window.syncAllCatalogDrafts = async () => {
@@ -10672,7 +10954,7 @@ window.patchRepCatalogProductLocally = patchRepCatalogProductLocally;
    that would defeat the deferred lazy-read policy — instead its loaded flag and
    its count baseline are cleared so the next open reconciles from the server
    exactly once. */
-const catalogApplyCreatedProductLocally = (product) => {
+const catalogApplyCreatedProductLocally = (product, options = {}) => {
     if (!product || !product.id) return;
     const status = String(product.status || 'pending');
     const insertUnique = (cache) => {
@@ -10744,6 +11026,10 @@ const catalogApplyCreatedProductLocally = (product) => {
     if (window.kanjoSync && typeof window.kanjoSync.markWritten === 'function') {
         try { window.kanjoSync.markWritten(CATALOG_COLLECTION, product); } catch (_) { /* ignore */ }
     }
+
+    /* Bulk creators pass `silent` so N inserts don't trigger N full repaints;
+       they repaint once after the batch. */
+    if (options && options.silent === true) return;
 
     /* 7) Repaint whatever is on screen; the export filter reads memory only. */
     if (typeof populateMerchantExportFilter === 'function') {
