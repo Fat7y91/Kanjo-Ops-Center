@@ -10,31 +10,36 @@
  *     in-memory Map with the SAME async API, so callers never branch.
  *   - Additive only: nothing here mutates app DOM or existing globals.
  *
- * Schema (db `kanjo_idb_v1`, v3):
+ * Schema (db `kanjo_idb_v1`, v4):
  *   store  merchant_products  keyPath id
  *   store  merchants          keyPath id
  *   store  tasks              keyPath id
  *   store  contract_projection keyPath id  -> lightweight signed-contract rows
  *   store  kanjo_meta         keyPath key   -> { key, value } (lastSyncedAt etc.)
  *
- * NOTE: DB_VERSION was bumped 1 -> 2, then 2 -> 3 for the lightweight
- * `contract_projection` store. Clients that opened an older version BEFORE the
- * `merchants`/`tasks` stores were added kept a v1 database WITHOUT those object
- * stores; the browser never fires `onupgradeneeded` for an equal version, so
- * `putAll('merchants', ...)` threw "One of the specified object stores was not
- * found" and silently degraded to the in-memory fallback. Raising the version
- * guarantees a single upgrade pass that creates every missing store in place.
+ * NOTE: DB_VERSION was bumped 1 -> 2, 2 -> 3, and now 3 -> 4. Clients that
+ * opened an older version BEFORE the `merchants`/`tasks`/`contract_projection`
+ * stores were added kept a database WITHOUT those object stores; the browser
+ * never fires `onupgradeneeded` for an equal version, so `putAll(...)` threw
+ * "One of the specified object stores was not found" and silently degraded to
+ * the in-memory fallback. Raising the version guarantees a single upgrade pass
+ * that creates every missing store in place. If a transaction still hits a
+ * missing store (an already-corrupt equal/higher version), we delete the local
+ * database and reload instead of falling back to memory — memory causes every
+ * client to re-download the full catalog from Firestore.
  */
 (function () {
     'use strict';
 
     const DB_NAME = 'kanjo_idb_v1';
-    const DB_VERSION = 3;
+    const DB_VERSION = 4;
     const META_STORE = 'kanjo_meta';
     const DATA_STORES = ['merchant_products', 'merchants', 'tasks', 'contract_projection'];
 
     let dbPromise = null;
-    let memFallback = null; // set if IDB is unavailable/broken
+    let currentConn = null;
+    let memFallback = null; // set if IDB is genuinely unavailable/broken
+    let recoveryStarted = false;
 
     const metaKey = (k) => 'lastSyncedAt:' + k;
 
@@ -112,7 +117,13 @@
                 resolve(opened);
             };
             req.onerror = () => reject(req.error || new Error('idb open failed'));
-            req.onblocked = () => reject(new Error('idb blocked'));
+            /* Do NOT reject: another tab may still hold the old connection.
+               Rejecting here used to fall back to the volatile memory store,
+               which forced a full Firebase re-download. Wait for the other
+               connection to close and the upgrade to finish. */
+            req.onblocked = () => {
+                console.warn('[kanjoIdb] schema upgrade blocked by another tab; waiting for it to release the database');
+            };
         });
     }
 
@@ -125,6 +136,42 @@
             req.onerror = () => resolve(false);
             req.onblocked = () => resolve(false);
         });
+    }
+
+    function isMissingStoreError(err) {
+        if (!err) return false;
+        if (err.name === 'NotFoundError') return true;
+        const message = String(err.message || err);
+        return /one of the specified object stores was not found|object store .* was not found|no objectstore named/i.test(message);
+    }
+
+    /* A transaction kept hitting a store that the open connection does not have.
+       Memory fallback is NOT an option here: callers would treat it as a cache
+       miss and re-download every collection from Firestore (the 1.3M-read
+       regression). Close the connection, delete the local database, and reload
+       so the next boot rebuilds the schema cleanly at DB_VERSION. */
+    function recoverFromMissingStore(err) {
+        if (recoveryStarted) return;
+        recoveryStarted = true;
+        console.error('[kanjoIdb] schema mismatch; deleting local cache and reloading:', err && err.message);
+        const conn = currentConn;
+        currentConn = null;
+        dbPromise = null;
+        memFallback = null;
+        try { if (conn && typeof conn.close === 'function') conn.close(); } catch (_) { /* ignore */ }
+        deleteDatabase().finally(() => {
+            if (typeof window !== 'undefined' && window.location && typeof window.location.reload === 'function') {
+                window.location.reload();
+            }
+        });
+    }
+
+    /* Stop the caller until the reload above takes over. Returning an empty
+       memory result here would re-trigger the full Firebase re-download. */
+    function recoverAndHalt(err, opName) {
+        console.error('[kanjoIdb] ' + opName + ' hit a missing object store; recovering local cache');
+        recoverFromMissingStore(err);
+        return new Promise(() => {});
     }
 
     /* Self-healing open.
@@ -145,26 +192,45 @@
             throw new Error('indexedDB unavailable');
         }
         let db = await openAt(null);
+        if (db.version < DB_VERSION) {
+            console.warn('[kanjoIdb] upgrading schema from v' + db.version + ' to v' + DB_VERSION);
+            try { db.close(); } catch (_) { /* ignore */ }
+            db = await openAt(DB_VERSION);
+        }
         if (!missingStores(db).length) return db;
         const nextVersion = (db.version || 1) + 1;
         console.warn('[kanjoIdb] missing object stores; self-repairing schema at version ' + nextVersion);
         try { db.close(); } catch (_) { /* ignore */ }
-        db = await openAt(nextVersion);
-        if (!missingStores(db).length) return db;
+        try {
+            db = await openAt(nextVersion);
+            if (!missingStores(db).length) return db;
+        } catch (err) {
+            console.warn('[kanjoIdb] schema upgrade failed; recreating database:', err && err.message);
+        }
         console.warn('[kanjoIdb] schema repair incomplete; recreating database');
         try { db.close(); } catch (_) { /* ignore */ }
         await deleteDatabase();
-        db = await openAt(DB_VERSION);
+        try {
+            db = await openAt(DB_VERSION);
+        } catch (err) {
+            const schemaErr = new Error('idb schema could not be repaired: ' + (err && err.message));
+            schemaErr.name = 'NotFoundError';
+            throw schemaErr;
+        }
         if (!missingStores(db).length) return db;
         try { db.close(); } catch (_) { /* ignore */ }
-        throw new Error('idb schema could not be repaired');
+        const schemaErr = new Error('idb schema could not be repaired');
+        schemaErr.name = 'NotFoundError';
+        throw schemaErr;
     }
 
     /* Drop the cached connection and re-run the self-healing open. Used to
        recover from a transaction-time NotFoundError (schema changed under us). */
     async function resetConnection() {
+        const conn = currentConn;
+        currentConn = null;
         try {
-            const d = dbPromise ? await dbPromise : null;
+            const d = conn || (dbPromise ? await dbPromise : null);
             if (d && d.kind !== 'memory' && typeof d.close === 'function') d.close();
         } catch (_) { /* ignore */ }
         dbPromise = null;
@@ -224,33 +290,43 @@
         });
     }
 
-    /* Run `runner(db)`; on a transaction-time NotFoundError (the schema missing
-       a store under us) repair the connection once and retry before degrading. */
+    /* Run `runner(db)`; on a transaction-time missing-store error repair the
+       connection once and retry. If the store is still missing, delete the
+       database and reload instead of degrading to the volatile memory cache. */
     async function runWithRepair(d, opName, runner) {
         if (d.kind === 'memory') return { d, result: await runner(d) };
         try {
             return { d, result: await runner(d) };
         } catch (err) {
-            if (err && err.name === 'NotFoundError') {
-                console.warn('[kanjoIdb] ' + opName + ' hit a missing store; self-repairing connection');
-                const repaired = await resetConnection().catch(() => null);
-                if (repaired && repaired.kind !== 'memory') {
-                    try { return { d: repaired, result: await runner(repaired) }; }
-                    catch (_) { /* fall through */ }
+            if (!isMissingStoreError(err)) throw err;
+            console.warn('[kanjoIdb] ' + opName + ' hit a missing store; self-repairing connection');
+            const repaired = await resetConnection().catch(() => null);
+            if (repaired && repaired.kind !== 'memory') {
+                try { return { d: repaired, result: await runner(repaired) }; }
+                catch (retryErr) {
+                    if (!isMissingStoreError(retryErr)) throw retryErr;
+                    err = retryErr;
                 }
             }
-            throw err;
+            return recoverAndHalt(err, opName);
         }
     }
 
     /* ── Public API ────────────────────────────────────────────────────────── */
     async function db() {
+        if (recoveryStarted) return new Promise(() => {});
         if (memFallback) return markBroken(memFallback.reason);
         if (!dbPromise) {
-            dbPromise = openReal().catch((err) => {
-                console.warn('[kanjoIdb] falling back to memory store:', err && err.message);
-                return markBroken(err && err.message);
-            });
+            dbPromise = openReal()
+                .then((d) => {
+                    if (d && d.kind !== 'memory') currentConn = d;
+                    return d;
+                })
+                .catch((err) => {
+                    if (isMissingStoreError(err)) return recoverAndHalt(err, 'open');
+                    console.warn('[kanjoIdb] falling back to memory store:', err && err.message);
+                    return markBroken(err && err.message);
+                });
         }
         return dbPromise;
     }
@@ -262,6 +338,7 @@
             const { result } = await runWithRepair(d, 'putAll', (conn) => writeRows(conn, store, rows));
             return result;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'putAll');
             console.warn('[kanjoIdb] putAll failed, switching to memory:', err && err.message);
             return markBroken(err && err.message).putAll(store, rows);
         }
@@ -275,6 +352,7 @@
             const { result } = await runWithRepair(d, 'replaceAll', (conn) => replaceRows(conn, store, rows));
             return result;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'replaceAll');
             console.warn('[kanjoIdb] replaceAll failed, switching to memory:', err && err.message);
             return markBroken(err && err.message).replaceAll(store, rows);
         }
@@ -292,6 +370,7 @@
             const { result } = await runWithRepair(d, 'getAll', (conn) => readCursor(conn, store));
             return result;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'getAll');
             console.warn('[kanjoIdb] getAll failed, switching to memory:', err && err.message);
             return markBroken(err && err.message).getAll(store);
         }
@@ -308,6 +387,7 @@
                 req.onerror = () => reject(req.error);
             });
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'count');
             return markBroken(err && err.message).count(store);
         }
     }
@@ -324,6 +404,7 @@
             });
             return true;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'clear');
             return markBroken(err && err.message).clear(store);
         }
     }
@@ -340,6 +421,7 @@
                 t.onabort = () => reject(t.error || new Error('idb abort'));
             });
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'remove');
             console.warn('[kanjoIdb] remove failed, switching to memory:', err && err.message);
             return markBroken(err && err.message).remove(store, key);
         }
@@ -352,6 +434,7 @@
             const row = await reqToPromise(tx(d, [META_STORE], 'readonly').objectStore(META_STORE).get(key));
             return row ? row.value : null;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'getMeta');
             return markBroken(err && err.message).getMeta(key);
         }
     }
@@ -368,6 +451,7 @@
             });
             return true;
         } catch (err) {
+            if (isMissingStoreError(err)) return recoverAndHalt(err, 'setMeta');
             return markBroken(err && err.message).setMeta(key, value);
         }
     }
@@ -387,6 +471,12 @@
         getMeta,
         setMeta,
         isFallback: () => !!memFallback,
-        resetForTests: () => { dbPromise = null; memFallback = null; }
+        resetForTests: () => {
+            try { if (currentConn && typeof currentConn.close === 'function') currentConn.close(); } catch (_) { /* ignore */ }
+            currentConn = null;
+            dbPromise = null;
+            memFallback = null;
+            recoveryStarted = false;
+        }
     };
 })();

@@ -1,7 +1,7 @@
 /* Kanjo Ops — Application Entry Point */
 import './utils/cache.js';
 import './config/firebase.js';
-import './services/idb.js?v=20261018a';
+import './services/idb.js?v=20261020c';
 import './services/syncEngine.js';
 import './services/updatedAt.js';
 import './config/build-info.generated.js';
