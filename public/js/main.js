@@ -19,12 +19,12 @@ import './services/geolocation.js';
 import './services/merchantDocs.js';
 import { SESSION_KEY, applyThemeAndShowDashboard } from './services/auth.js?v=20261020f';
 import './services/firestore.js?v=20261020d';
-import './services/catalog.js?v=20261020e';
+import './services/catalog.js?v=20261021a';
 import './services/dynamicTaxonomy.js';
 import './services/catalogDuplicates.js';
 import './services/templateExport.js';
 import './services/menuImport.js?v=20261016b';
-import './services/productImport.js?v=20261020f';
+import './services/productImport.js?v=20261021a';
 import './services/vendorExport.js';
 import './services/pharmacyIntake.js';
 import './services/founderAudit.js?v=20261020d';
@@ -34,7 +34,7 @@ import './ui/dashboard.js?v=20261016d';
 import './ui/charts.js?v=20261017a';
 import './services/kpi.js?v=20261016b';
 import './services/marketing.js?v=20261016b';
-import './services/workspace.js?v=20261020e';
+import './services/workspace.js?v=20261021a';
 import './services/uam.js?v=20261020f';
 
 /* User Access Management wiring: hash bootstrap (`#uam-bootstrap`), the add-user

@@ -41,7 +41,7 @@
         /* Finance / audit banners. */
         finance: ['founderPayrollSummaryBox', 'merchantDocsAuditBanner'],
         /* Data-entry staging tools. */
-        data_entry: ['masterCatalogImporterWidget', 'masterCatalogDriveLinksWidget',
+        data_entry: ['productExcelImportWidget', 'masterCatalogImporterWidget', 'masterCatalogDriveLinksWidget',
             'stagingCatalogImporterWidget', 'stagingRawTextParserWidget', 'stagingCatalogExportWidget'],
         /* Personal files + payroll banners. */
         rep_profile: ['quickLinksWalletBanner', 'financialProfileBanner'],
@@ -889,6 +889,15 @@
             }
             if (visible('blackBoxNavBtnWrapper')) {
                 wants.push({ label: 'Black Box', icon: 'fa-box-archive', fn: 'kanjoOpenBlackBoxPane()' });
+            }
+            /* Excel importers live in the legacy top header (hidden at >=992px),
+               so mirror them into the desktop sidebar. Their wrappers are
+               RBAC-toggled by auth.js. */
+            if (visible('menuImportNavBtnWrapper')) {
+                wants.push({ label: 'استيراد منيو (Excel)', icon: 'fa-file-import', fn: 'openMenuImportModal()' });
+            }
+            if (visible('productImportNavBtnWrapper')) {
+                wants.push({ label: 'استيراد منتجات (Excel)', icon: 'fa-file-excel', fn: 'openProductImportModal()' });
             }
             const sig = wants.map((w) => w.fn).join('|');
             if (quick._kwsSig !== sig) {

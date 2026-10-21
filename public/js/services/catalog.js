@@ -11519,11 +11519,20 @@ window.renderStagingCatalogWidgets = () => {
     const parser = document.getElementById('stagingRawTextParserWidget');
     const master = document.getElementById('masterCatalogImporterWidget');
     const driveLinks = document.getElementById('masterCatalogDriveLinksWidget');
+    const productExcel = document.getElementById('productExcelImportWidget');
     if (importer) importer.classList.toggle('hidden', !canUse);
     if (exporter) exporter.classList.toggle('hidden', !canUse);
     if (parser) parser.classList.toggle('hidden', !canUse);
     if (master) master.classList.toggle('hidden', !canUse);
     if (driveLinks) driveLinks.classList.toggle('hidden', !canUse);
+    /* The standardized product importer is its own UAM grant, independent of
+       the legacy data-entry staging tools. */
+    if (productExcel) {
+        const canProductImport = (typeof window.isProductImportUser === 'function')
+            ? window.isProductImportUser()
+            : false;
+        productExcel.classList.toggle('hidden', !canProductImport);
+    }
     if (typeof window.renderPharmacyIntakeWidget === 'function') window.renderPharmacyIntakeWidget();
 };
 

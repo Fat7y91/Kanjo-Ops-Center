@@ -2011,6 +2011,46 @@
 
 
 
+            <!-- استيراد منتجات Excel (قالب قياسي — صلاحية UAM) -->
+
+            <div id="productExcelImportWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border-2 border-[#230535]/20 space-y-4">
+
+                <div class="flex items-center gap-3">
+
+                    <div class="bg-[#230535] text-[#FFD700] p-3 rounded-2xl text-xl"><i class="fa-solid fa-file-excel"></i></div>
+
+                    <div>
+
+                        <h4 class="font-black text-base text-[#230535]">استيراد منتجات Excel (قالب قياسي)</h4>
+
+                        <p class="text-xs text-slate-500 font-bold">نزّل القالب، املأ الصنف والسعر، ثم ارفعه مع اختيار التاجر والمندوب.</p>
+
+                    </div>
+
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-2">
+
+                    <button type="button" onclick="downloadProductImportTemplate()" class="flex-1 bg-white text-[#230535] border-2 border-[#230535]/25 py-3 rounded-xl font-black text-xs hover:bg-[#230535]/5 transition flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-download"></i> تنزيل القالب القياسي
+
+                    </button>
+
+                    <button type="button" onclick="openProductImportModal()" class="flex-1 bg-[#230535] text-[#FFD700] py-3 rounded-xl font-black text-xs hover:opacity-90 transition shadow-md flex items-center justify-center gap-2">
+
+                        <i class="fa-solid fa-file-excel"></i> فتح أداة الاستيراد
+
+                    </button>
+
+                </div>
+
+                <p class="text-[11px] font-bold text-slate-500 leading-relaxed">الصنف والسعر إلزاميان لكل منتج ولكل حجم. أي خطأ في صف واحد يرفض الملف بالكامل ولا يتم استيراد أي منتج.</p>
+
+            </div>
+
+
+
             <!-- رفع الكتالوج الرئيسي (لإدخال البيانات فقط) -->
 
             <div id="masterCatalogImporterWidget" class="hidden bg-white p-4 sm:p-5 rounded-3xl shadow-sm border border-[#FFD700]/50 space-y-4">
@@ -4253,7 +4293,7 @@
 
 
 
-    <script type="module" src="js/main.js?v=20261020f"></script>
+    <script type="module" src="js/main.js?v=20261021a"></script>
 
     <div id="taskQuickViewModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[150]" onclick="if(event.target===this) closeTaskQuickView()">
 
