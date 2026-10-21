@@ -1288,7 +1288,7 @@ const kpiSummaryPayload = (row) => {
 
 const kpiPublishSummary = async (row) => {
     const payload = kpiSummaryPayload(row);
-    if (!payload) return;
+    if (!payload || !(Number(payload.publicTotalProducts) > 0)) return;
     const period = kpiNormalizeMonthKey(payload.publicPeriod);
     if (!KPI_MONTH_RE.test(period)) return;
     try {
@@ -1316,6 +1316,9 @@ const kpiPublishSummary = async (row) => {
    board is populated even for reps who have not opened their screen. */
 const kpiPublishSummaries = (rows) => {
     const list = Array.isArray(rows) ? rows : [];
+    const storeSize = window.kanjoSync && typeof window.kanjoSync.size === 'function'
+        ? window.kanjoSync.size('merchant_products') : 0;
+    if (!list.length || storeSize === 0) return Promise.resolve();
     const isRep = window.isFieldRepUser();
     const ownId = isRep ? window.kpiResolvePersonalRepId('') : '';
     const targets = isRep ? list.filter((r) => r.repId === ownId) : list;
