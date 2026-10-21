@@ -679,6 +679,7 @@ window.detachAppListeners = () => {
     window._appListenerUnsubscribers = [];
     window._appListenersRegistered = false;
     window._catalogListenerStarted = false;
+    window._catalogBootStarted = false;
     window._tasksListenerStarted = false;
     window._financialProfilesListenerStarted = false;
     if (typeof window.resetMarketingDashboard === 'function') window.resetMarketingDashboard();

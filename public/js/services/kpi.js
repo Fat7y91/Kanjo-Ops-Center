@@ -879,23 +879,10 @@ window.calculateHistoricalTime = async () => {
     if (window._kpiHistoricalRunning) return null;
     window._kpiHistoricalRunning = true;
     try {
-        /* REST-first with an explicit field mask: the historical audit only
-           needs the compact KPI product fields, never the SDK's full-document
-           payload. The SDK is a last resort (its streaming transport can be
-           blocked on strict networks). */
-        let products = null;
-        if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-            try {
-                products = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });
-            } catch (restErr) {
-                console.warn('[kpi] historical REST fetch failed; trying SDK:', restErr);
-            }
-        }
-        if (!products) {
-            products = [];
-            const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
-            snap.forEach((d) => products.push({ id: d.id, ...(d.data() || {}) }));
-        }
+        /* Derive from the shared delta store: the historical audit needs the
+           compact product fields only, and every one of them is already in the
+           baseline captured by catalog.js — zero extra reads. */
+        const products = await kpiSharedProducts();
         const byRep = new Map();
         let enhancedCount = 0;
         const editedStamps = [];   // timestamps of every enhanced image, globally
@@ -1028,68 +1015,42 @@ window._kpiLatestReport = window._kpiLatestReport || null;
 window._kpiSelectedRepId = window._kpiSelectedRepId || null;
 window._kpiCharts = window._kpiCharts || {};
 
-const kpiFetchAllProductsUncached = async () => {
-    /* Zero-bleed boot: catalog.js captures the ENTIRE merchant_products
-       collection into the shared IndexedDB store (same field union incl.
-       KPI_PRODUCT_FIELDS). Reuse it so the manager dashboard never issues a
-       second full-collection read in parallel with the catalog boot. */
+const kpiIsDeletedProduct = (p) => !!(p && (p.deletedAt || p.deleted_at || p.isDeleted === true));
+const kpiVisibleProducts = (rows) => (rows || []).filter((p) => p && !kpiIsDeletedProduct(p));
+
+/* ONE shared product source for every role: the delta-backed merchant_products
+   store maintained by catalog.js/syncEngine.js. No KPI path ever issues a full
+   collection query; a cold cache is filled once by ensureBaseline. */
+const kpiSharedProducts = async () => {
     try {
-        if (window.kanjoSync && window.kanjoSync.getLastSyncedAt(KPI_PRODUCTS_COLLECTION)
-            && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) > 0) {
-            const shared = window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION);
-            if (shared.length) return shared;
-        }
-        /* No baseline in memory yet (cold boot): await the catalog's coalesced
-           loader so we join its single in-flight read instead of racing it with
-           a second full-collection query. */
         if (typeof window.kanjoUnifiedCatalogProducts === 'function') {
             const unified = await window.kanjoUnifiedCatalogProducts();
-            if (unified && unified.length) return unified;
+            if (Array.isArray(unified)) return kpiVisibleProducts(unified);
         }
-    } catch (_) { /* fall through to the dedicated query */ }
-    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-        try {
-            return await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [], null, { select: KPI_PRODUCT_FIELDS });
-        } catch (restErr) {
-            console.warn('[kpi] REST products fetch failed; trying SDK:', restErr);
-        }
+    } catch (err) {
+        console.warn('[kpi] shared product store unavailable:', err);
     }
-    const snap = await window.getDocs(window.collection(window.db, KPI_PRODUCTS_COLLECTION));
-    const items = [];
-    snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-    return items;
+    try {
+        if (window.kanjoSync) return kpiVisibleProducts(window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION));
+    } catch (_) { /* ignore */ }
+    return [];
 };
+
+const kpiFetchAllProductsUncached = async () => kpiSharedProducts();
 
 /* Memoized full-product read: the manager dashboard reuses the same rows for a
    TTL window instead of re-reading the collection on every render. */
 const kpiFetchAllProducts = () => kpiCacheGet('kpi:products:all', kpiFetchAllProductsUncached);
 
-/* Secure, rep-scoped product fetch. A field rep only ever loads the products
-   they personally added (queries are scoped by the logged-in User ID via the
-   common author fields). Managers keep the full view. */
+/* Secure, rep-scoped product slice derived locally from the shared store. */
 const kpiFetchProductsForRepUncached = async (repName) => {
     const name = String(repName || '').trim();
     if (!name) return [];
-    const found = new Map();
-    const authorFields = ['added_by', 'createdBy'];
-    const useRest = !!(window.kanjoRest && typeof window.kanjoRest.runQuery === 'function');
-    /* Query both author aliases concurrently instead of serially. */
-    const results = await Promise.all(authorFields.map((field) => {
-        if (useRest) {
-            return window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [[field, '==', name]], null, { select: KPI_PRODUCT_FIELDS }).catch(() => null);
-        }
-        if (typeof window.query !== 'function' || typeof window.where !== 'function') return Promise.resolve(null);
-        return window.getDocs(window.query(
-            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
-            window.where(field, '==', name)
-        )).then((snap) => {
-            const items = [];
-            snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-            return items;
-        }).catch(() => null);
-    }));
-    results.forEach((items) => { if (items) items.forEach((it) => found.set(it.id, it)); });
-    return Array.from(found.values());
+    const all = await kpiSharedProducts();
+    return all.filter((p) => {
+        const author = String(p.createdBy || p.created_by || p.added_by || '');
+        return author === name;
+    });
 };
 
 const kpiFetchProductsForRep = (repName) => {
@@ -1098,86 +1059,30 @@ const kpiFetchProductsForRep = (repName) => {
 };
 
 /* Imported (menu-import) products that still lack an image — the shared pool a
-   field rep may claim. Cached so repeated modal opens cost nothing. */
+   field rep may claim. Derived from the shared store; zero network. */
 const kpiFetchImportedMissingUncached = async () => {
-    let items = null;
-    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-        try {
-            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['importSource', '==', 'menu_excel_import']], null, { select: KPI_PRODUCT_FIELDS });
-        } catch (restErr) { console.warn('[kpi] REST imported fetch failed; trying SDK:', restErr); }
-    }
-    if (!items && typeof window.getDocs === 'function' && window.db) {
-        const ref = window.query(
-            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
-            window.where('importSource', '==', 'menu_excel_import')
-        );
-        const snap = await window.getDocs(ref);
-        items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-    }
-    return (items || []).filter((p) => kpiProductNeedsRawImage(p));
+    const items = await kpiSharedProducts();
+    return items.filter((p) => p.importSource === 'menu_excel_import' && kpiProductNeedsRawImage(p));
 };
 const kpiFetchImportedMissingProducts = () => kpiCacheGet('kpi:products:imported-missing', kpiFetchImportedMissingUncached);
 
-/* Imported products a rep has already claimed/uploaded — credits their image
-   numerator and locates the row during the upload write. */
+/* Imported products a rep has already claimed/uploaded. Derived locally. */
 const kpiFetchImportedUploadsForRepUncached = async (repName) => {
     const name = String(repName || '').trim();
     if (!name) return [];
-    let items = null;
-    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-        try {
-            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['image_uploaded_by', '==', name]], null, { select: KPI_PRODUCT_FIELDS });
-        } catch (restErr) { console.warn('[kpi] REST import-uploads fetch failed; trying SDK:', restErr); }
-    }
-    if (!items && typeof window.getDocs === 'function' && window.db) {
-        const ref = window.query(
-            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
-            window.where('image_uploaded_by', '==', name)
-        );
-        const snap = await window.getDocs(ref);
-        items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-    }
-    return items || [];
+    const items = await kpiSharedProducts();
+    return items.filter((p) => String(p.image_uploaded_by || '') === name);
 };
 const kpiFetchImportedUploadsForRep = (repName) => kpiCacheGet(
     'kpi:products:impupload:' + String(repName || '').trim(),
     () => kpiFetchImportedUploadsForRepUncached(repName)
 );
 
-/* The media editor's processed set: every completed (done) product. Editor
-   accounts are field-rep scoped, so this grants the editor a true global total
-   without pulling the entire collection. */
+/* The media editor's processed set: every completed (done) product, derived
+   from the same shared store. */
 const kpiFetchEditorProcessedUncached = async () => {
-    /* Part 1: when catalog.js has already captured the full merchant_products
-       collection into the shared IndexedDB store, derive the editor's "done"
-       set from it in memory — ZERO extra reads. Only fall back to the dedicated
-       full-collection query when no complete baseline exists yet. */
-    try {
-        if (window.kanjoSync && window.kanjoSync.getLastSyncedAt(KPI_PRODUCTS_COLLECTION)
-            && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) > 0) {
-            const shared = window.kanjoSync.getRows(KPI_PRODUCTS_COLLECTION)
-                .filter((p) => p && p.status === 'done');
-            if (shared.length) return shared;
-        }
-    } catch (_) { /* fall through to the dedicated query */ }
-    let items = null;
-    if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
-        try {
-            items = await window.kanjoRest.runQuery(KPI_PRODUCTS_COLLECTION, [['status', '==', 'done']], null, { select: KPI_PRODUCT_FIELDS });
-        } catch (restErr) { console.warn('[kpi] REST editor-processed fetch failed; trying SDK:', restErr); }
-    }
-    if (!items && typeof window.getDocs === 'function' && window.db) {
-        const ref = window.query(
-            window.collection(window.db, KPI_PRODUCTS_COLLECTION),
-            window.where('status', '==', 'done')
-        );
-        const snap = await window.getDocs(ref);
-        items = [];
-        snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
-    }
-    return items || [];
+    const items = await kpiSharedProducts();
+    return items.filter((p) => p.status === 'done');
 };
 const kpiFetchEditorProcessedProducts = () => kpiCacheGet('kpi:products:editor-processed', kpiFetchEditorProcessedUncached);
 
@@ -3483,3 +3388,29 @@ window.closeKpiDashboard = () => {
     if (dashboard) dashboard.classList.remove('hidden');
     try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
 };
+
+/* ─── Live delta fan-out ─────────────────────────────────────────────────────
+   Product deltas are merged into the shared store by syncEngine; KPI derives
+   every slice from that store. Dropping the memoized product slices here costs
+   ZERO reads (the loaders re-derive locally) and keeps an open KPI dashboard
+   truthful when another rep edits/uploads without a reload. */
+let _kpiDeltaRenderTimer = null;
+if (typeof window.addEventListener === 'function') {
+    window.addEventListener('kanjo:synced', (event) => {
+        const detail = event && event.detail;
+        if (!detail || detail.store !== KPI_PRODUCTS_COLLECTION || !detail.count) return;
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+            window.kanjoCache.invalidatePrefix('kpi:products');
+        }
+        if (_kpiDeltaRenderTimer) clearTimeout(_kpiDeltaRenderTimer);
+        _kpiDeltaRenderTimer = setTimeout(() => {
+            _kpiDeltaRenderTimer = null;
+            const view = document.getElementById('kpiAnalyticsView');
+            if (!view || view.classList.contains('hidden')) return;
+            if (typeof window.renderKpiDashboard === 'function') {
+                Promise.resolve(window.renderKpiDashboard()).catch(() => { /* non-fatal */ });
+            }
+        }, 600);
+    });
+}

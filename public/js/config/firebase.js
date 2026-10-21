@@ -249,6 +249,9 @@ const restFieldsToJs = (fields) => {
 const REST_DOCUMENTS_URL = 'https://firestore.googleapis.com/v1/projects/'
     + firebaseConfig.projectId + '/databases/(default)/documents';
 
+const restDocPath = (collectionId, id) => 'projects/' + firebaseConfig.projectId
+    + '/databases/(default)/documents/' + collectionId + '/' + id;
+
 const REST_AUTH_WAIT_MS = 15000;
 
 const restAuthNotReady = (reason) => {
@@ -433,6 +436,19 @@ const restRunQuery = async (collectionId, filters = [], limit = null, options = 
         const fullName = 'projects/' + firebaseConfig.projectId
             + '/databases/(default)/documents/' + collectionId + '/' + options.startAfterId;
         structuredQuery.startAt = { values: [{ referenceValue: fullName }], before: false };
+    }
+    /* Multi-field keyset cursor (used by the updatedAt delta reader). Values are
+       ordered exactly like `orderBy`; `{ kind: 'reference', value }` builds a
+       document-resource reference. `before: true` makes the cursor EXCLUSIVE. */
+    if (Array.isArray(options.startAfterValues) && options.startAfterValues.length) {
+        structuredQuery.startAt = {
+            values: options.startAfterValues.map((entry) => {
+                if (entry && entry.kind === 'reference') return { referenceValue: entry.value };
+                if (entry && entry.kind === 'raw') return entry.value;
+                return restJsToRestValue(entry && entry.value !== undefined ? entry.value : entry);
+            }),
+            before: true
+        };
     }
     /* Optional field mask: without it runQuery returns every field of every
        document (including large Base64 blobs such as tasks.merchantLogo). */
@@ -719,6 +735,7 @@ window.kanjoRest = {
     count: restCount,
     list: restListCollection,
     getDocument: restGetDocument,
+    docPath: restDocPath,
     patch: restPatchDocument,
     create: restCreateDocument,
     remove: restDeleteDocument,
