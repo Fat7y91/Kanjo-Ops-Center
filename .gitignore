@@ -67,3 +67,12 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Next.js (V2 app)
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# Local env overrides for the V2 app
+.env*.local
