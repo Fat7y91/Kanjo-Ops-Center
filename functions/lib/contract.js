@@ -653,6 +653,12 @@ ${fontFaces}
             vertical-align: middle;
         }
     }
+
+    @page :first {
+        @bottom-center {
+            content: none;
+        }
+    }
 </style>
 </head>
 <body>
