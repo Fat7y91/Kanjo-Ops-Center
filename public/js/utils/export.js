@@ -1921,17 +1921,13 @@ window.buildContractHTML = (task) => {
     const coverMerchantName = coverEscape(merchantName);
     const coverMerchantInitial = coverEscape(Array.from(String(merchantName || '').trim())[0] || 'ك');
     const coverMerchantLogo = window.currentMerchantLogoBase64 ? coverEscape(window.currentMerchantLogoBase64) : '';
+    const coverPartnerCardStyle = 'width: 40mm; height: 40mm; border-radius: 16px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 12px 34px rgba(75, 0, 130, 0.13); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 5mm; box-sizing: border-box;';
+    const coverKanjoMark = `<div style="${coverPartnerCardStyle}"><img src="logo.png" alt="Kanjo" style="max-width: 32mm; max-height: 24mm; object-fit: contain; display: block;"></div>`;
     const coverMerchantMark = coverMerchantLogo
-        ? `<div style="width: 38mm; height: 38mm; border-radius: 50%; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 10px 30px rgba(75, 0, 130, 0.14); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 5mm; box-sizing: border-box;"><img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;"></div>`
-        : `<div style="width: 38mm; height: 38mm; border-radius: 50%; background: linear-gradient(145deg, #4B0082, #6B21A8); border: 3px solid #F59E0B; box-shadow: 0 10px 30px rgba(75, 0, 130, 0.18); display: flex; align-items: center; justify-content: center; color: #ffffff; font-size: 34px; font-weight: 900;">${coverMerchantInitial}</div>`;
-    const coverCoBrandMark = coverMerchantLogo
-        ? `<img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-height: 16mm; max-width: 34mm; object-fit: contain; display: block;">`
-        : `<span style="font-size: 14px; font-weight: 900; color: #4B0082;">${coverMerchantName}</span>`;
+        ? `<div style="${coverPartnerCardStyle}"><img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-width: 30mm; max-height: 30mm; object-fit: contain; display: block;"></div>`
+        : `<div style="${coverPartnerCardStyle} background: linear-gradient(145deg, #4B0082, #6B21A8); border-color: #F59E0B;"><span style="color: #ffffff; font-size: 34px; font-weight: 900; line-height: 1;">${coverMerchantInitial}</span></div>`;
     const coverPage = `
         <section class="contract-cover" style="position: relative; width: 100%; height: 260mm; min-height: 260mm; max-height: 260mm; box-sizing: border-box; padding: 24mm 20mm 16mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-            <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-                <img src="logo.png" alt="" style="width: 82%; max-width: 170mm; height: auto; opacity: 0.045; filter: grayscale(100%); display: block;">
-            </div>
             <div style="position: absolute; top: 0; left: 0; right: 0; height: 9px; background: linear-gradient(90deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></div>
             <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #F59E0B 0%, #4B0082 50%, #F59E0B 100%);"></div>
             <div style="position: relative; z-index: 1; width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -1939,22 +1935,25 @@ window.buildContractHTML = (task) => {
                 <div style="width: 24mm; height: 3px; background: #F59E0B; border-radius: 999px; margin: 9mm auto 7mm;"></div>
                 <div style="font-size: 40px; line-height: 1.35; font-weight: 900; color: #4B0082; letter-spacing: -0.5px;">عقد شراكة نجاح</div>
                 <div style="font-size: 15px; line-height: 1.8; font-weight: 700; color: #6B21A8; margin-top: 4mm;">إطار تعاقدي رسمي لشراكة النجاح</div>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 11mm 0 8mm;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 10mm 0 8mm;">
                     <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, rgba(245, 158, 11, 0), #F59E0B);"></span>
                     <span style="width: 7px; height: 7px; background: #F59E0B; transform: rotate(45deg); display: inline-block;"></span>
                     <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
                 </div>
-                <div style="font-size: 12px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 5mm;">مُبرم مع</div>
-                ${coverMerchantMark}
-                <div style="font-size: 28px; line-height: 1.55; font-weight: 900; color: #4B0082; margin-top: 6mm; max-width: 150mm; word-break: break-word;">${coverMerchantName}</div>
-                <div style="font-size: 11px; line-height: 1.6; letter-spacing: 3px; font-weight: 800; color: #B45309; margin-top: 2mm; direction: ltr;">PARTNER MERCHANT</div>
+                <div style="font-size: 12px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 6mm;">شراكة رسمية</div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6mm; width: 100%;">
+                    ${coverKanjoMark}
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3mm; min-width: 12mm; height: 40mm;">
+                        <span style="width: 1px; height: 11mm; background: linear-gradient(180deg, rgba(245, 158, 11, 0), #F59E0B);"></span>
+                        <span style="width: 8mm; height: 8mm; border: 1.5px solid #F59E0B; border-radius: 50%; background: #ffffff; color: #B45309; font-size: 13px; line-height: 1; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.18);">×</span>
+                        <span style="width: 1px; height: 11mm; background: linear-gradient(180deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
+                    </div>
+                    ${coverMerchantMark}
+                </div>
+                <div style="font-size: 28px; line-height: 1.55; font-weight: 900; color: #4B0082; margin-top: 8mm; max-width: 150mm; word-break: break-word;">${coverMerchantName}</div>
+                <div style="font-size: 11px; line-height: 1.6; letter-spacing: 3px; font-weight: 800; color: #B45309; margin-top: 2mm; direction: ltr;">MERCHANT PARTNER</div>
             </div>
-            <div style="position: relative; z-index: 1; width: 100%; margin-top: auto; padding-top: 8mm; border-top: 1px solid #E9D5FF; display: flex; align-items: center; justify-content: center; gap: 9mm;">
-                <img src="logo.png" alt="Kanjo" style="max-height: 17mm; max-width: 42mm; object-fit: contain; display: block;">
-                <span style="font-size: 18px; line-height: 1; font-weight: 900; color: #F59E0B;">×</span>
-                ${coverCoBrandMark}
-            </div>
-            <div style="position: relative; z-index: 1; margin-top: 6mm; font-size: 10px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانجو — نسخة أصلية</div>
+            <div style="position: relative; z-index: 1; width: 100%; margin-top: auto; padding-top: 7mm; border-top: 1px solid #E9D5FF; font-size: 10px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانجو — نسخة أصلية</div>
         </section>
     `;
 
