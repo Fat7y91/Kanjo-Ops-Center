@@ -3263,8 +3263,11 @@ const renderCatalogMerchantFolderCard = (group) => {
         : (dashState === 'pending'
             ? `<span class="catalog-dash-badge catalog-dash-badge--pending" role="button" tabindex="0" onclick="event.stopPropagation(); openDashboardSyncChangesModal('${catalogEscapeHtml(dashMid)}');" onkeydown="if(event.key==='Enter'||event.key===' '){event.stopPropagation();event.preventDefault();openDashboardSyncChangesModal('${catalogEscapeHtml(dashMid)}');}"><span class="catalog-dash-badge__dot"></span>تحديثات معلّقة (${catalogGroupDashboardPendingCount(group)})</span>`
             : '');
+    const vipBadge = catalogMerchantIsVip(group)
+        ? '<span class="catalog-dash-badge catalog-dash-badge--vip"><i class="fa-solid fa-crown" aria-hidden="true"></i> تحت التعاقد (VIP)</span>'
+        : '';
     return `<button type="button" onclick="openCatalogAllProductsMerchant('${encoded}', event)" class="catalog-merchant-card${dashClass}">
-        ${dashBadge}
+        ${vipBadge}${dashBadge}
         <div class="flex justify-center mb-3">${logoHtml}</div>
         <div class="font-black text-sm text-[#230535] leading-snug line-clamp-2 min-h-[2.5rem]">${name}</div>
         <div class="mt-3 flex flex-wrap items-center justify-center gap-1.5">
@@ -3622,6 +3625,48 @@ const catalogMerchantIsRecent = (group) => {
 const catalogMerchantHasDeleteRequest = (group) => (group && group.products || [])
     .some((p) => !!(p && (p.deleteRequested || p.deleteRequestedBy)));
 
+/* VIP / pre-contract flag. It lives on the merchant's task docs (and on the
+   lightweight finalizedMerchantsCache for reps), not on merchant_products, so
+   resolve it from the already-loaded in-memory sources. Zero reads. The index
+   is built once per render (see catalogInvalidateVipIndex) so filtering and
+   badge painting stay O(merchants + tasks) instead of O(merchants * tasks). */
+let _catalogVipIndex = null;
+
+const catalogBuildVipIndex = () => {
+    const byId = new Set();
+    const byName = new Set();
+    const add = (t) => {
+        if (!t || t.vipPreContract !== true) return;
+        const id = String(t.merchantId || t.merchant_id || '').trim();
+        if (id) byId.add(id);
+        const base = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '').trim();
+        if (base) byName.add(base);
+    };
+    if (Array.isArray(window.allTasksCache)) window.allTasksCache.forEach(add);
+    if (Array.isArray(window.finalizedMerchantsCache)) window.finalizedMerchantsCache.forEach(add);
+    if (window.tasksMemory && typeof window.tasksMemory.forEach === 'function') window.tasksMemory.forEach(add);
+    if (window.merchantsById && typeof window.merchantsById.forEach === 'function') {
+        window.merchantsById.forEach((rec, mid) => {
+            if (rec && rec.vipPreContract === true) byId.add(String(mid).trim());
+        });
+    }
+    return { byId, byName };
+};
+
+const catalogInvalidateVipIndex = () => { _catalogVipIndex = null; };
+window.catalogInvalidateVipIndex = catalogInvalidateVipIndex;
+
+const catalogMerchantIsVip = (group) => {
+    if (!group) return false;
+    const idx = _catalogVipIndex || (_catalogVipIndex = catalogBuildVipIndex());
+    const mid = String(group.merchantId || '').trim();
+    if (mid && idx.byId.has(mid)) return true;
+    const name = String(group.merchantName || '').trim();
+    const baseName = window.getBaseName ? window.getBaseName(name) : name;
+    return !!(baseName && idx.byName.has(baseName));
+};
+window.catalogMerchantIsVip = catalogMerchantIsVip;
+
 /* ─── Laravel Dashboard Sync state on the merchant folder cards ───
    Resolves the merchant's already-loaded record from the shared cache (0 reads)
    and derives the sync badge state. */
@@ -3645,6 +3690,7 @@ window.catalogGroupDashboardState = catalogGroupDashboardState;
 
 const catalogMerchantStatusFilters = [
     { key: '', label: 'الكل', icon: 'fa-layer-group' },
+    { key: 'vip', label: 'تحت التعاقد (VIP)', icon: 'fa-crown' },
     { key: 'full_done', label: 'مكتمل بالكامل', icon: 'fa-circle-check' },
     { key: 'full_pending', label: 'قيد المعالجة بالكامل', icon: 'fa-hourglass-half' },
     { key: 'partial', label: 'مكتمل جزئي', icon: 'fa-circle-half-stroke' },
@@ -3658,6 +3704,7 @@ const catalogMerchantStatusFilters = [
 const catalogMerchantGroupsByStatus = (groups, status) => {
     const key = String(status || '');
     if (!key) return groups || [];
+    if (key === 'vip') return (groups || []).filter(catalogMerchantIsVip);
     if (key === 'recent') return (groups || []).filter(catalogMerchantIsRecent);
     if (key === 'delete') return (groups || []).filter(catalogMerchantHasDeleteRequest);
     if (key === 'dashboard_uploaded') return (groups || []).filter((g) => catalogGroupDashboardState(g) === 'synced');
@@ -3666,10 +3713,11 @@ const catalogMerchantGroupsByStatus = (groups, status) => {
 };
 
 const catalogMerchantStatusCounts = (groups) => {
-    const counts = { '': (groups || []).length, full_done: 0, full_pending: 0, partial: 0, empty: 0, recent: 0, delete: 0, dashboard_uploaded: 0, dashboard_pending: 0 };
+    const counts = { '': (groups || []).length, vip: 0, full_done: 0, full_pending: 0, partial: 0, empty: 0, recent: 0, delete: 0, dashboard_uploaded: 0, dashboard_pending: 0 };
     (groups || []).forEach((g) => {
         const key = catalogMerchantStatusKey(g);
         counts[key] = (counts[key] || 0) + 1;
+        if (catalogMerchantIsVip(g)) counts.vip += 1;
         if (catalogMerchantIsRecent(g)) counts.recent += 1;
         if (catalogMerchantHasDeleteRequest(g)) counts.delete += 1;
         const dash = catalogGroupDashboardState(g);
@@ -4088,6 +4136,9 @@ window.filterCatalogMerchantProductsDom = (query) => {
 };
 
 const renderCatalogAllProductsListNow = () => {
+    /* VIP flags may have flipped since the last paint; rebuild the lookup once
+       per render so every card/filter/chip sees the same fresh snapshot. */
+    catalogInvalidateVipIndex();
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
@@ -10718,10 +10769,12 @@ const catalogVisibleRows = (rows) => (rows || []).filter((p) => p && !catalogIsD
    sync engine's baseline loader and runs at most once per empty local cache. */
 const catalogColdFullCollectionRead = async () => {
     const fields = catalogFullFields();
+    let restError = null;
     if (window.kanjoRest && typeof window.kanjoRest.runQuery === 'function') {
         try {
             return (await window.kanjoRest.runQuery(CATALOG_COLLECTION, [], null, { select: fields })) || [];
         } catch (err) {
+            restError = err;
             console.warn('[catalog] cold baseline REST read failed; trying SDK:', err);
         }
     }
@@ -10731,7 +10784,10 @@ const catalogColdFullCollectionRead = async () => {
         snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
         return items;
     }
-    return [];
+    /* No usable transport: this is a FAILED read, not an empty collection.
+       Throw so the sync engine never records "0 rows" as a valid baseline
+       (which would advance the delta cursor and permanently hide history). */
+    throw (restError || new Error('catalog cold read unavailable'));
 };
 
 /* Delta reader: ONLY documents newer than the local baseline, in keyset pages

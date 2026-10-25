@@ -45,6 +45,12 @@
     const fetchers = new Map();     // store -> fetcher(sinceIso)
     const baselineLoaders = new Map(); // store -> one-shot full loader
     const baselinePromises = new Map();
+    /* A zero-row full read is treated as a failed read (never stamped). For a
+       genuinely empty collection this in-memory cooldown keeps the retry from
+       turning into a full read on every heartbeat; it is intentionally NOT
+       persisted, so a reload probes the collection once more. */
+    const emptyBaselineRetryAt = new Map();
+    const EMPTY_BASELINE_RETRY_MS = 60000;
     let heartbeatTimer = null;
     let debounceTimer = null;
     let started = false;
@@ -186,11 +192,27 @@
         }
         const loader = loaderOverride || baselineLoaders.get(store);
         if (typeof loader !== 'function') return { rows: [], source: 'none' };
+        if (!loaderOverride && (emptyBaselineRetryAt.get(store) || 0) > now()) {
+            return { rows: [], source: 'empty-cooldown' };
+        }
         if (!baselinePromises.has(store)) {
             const p = Promise.resolve()
                 .then(() => loader())
                 .then(async (rows) => {
                     const clean = Array.isArray(rows) ? rows.filter((r) => r && r.id != null) : [];
+                    /* A full read that returns ZERO rows is indistinguishable from
+                       a failed read on a store that is known to be populated
+                       (offline SDK cache, aborted REST, reset stream). Never stamp
+                       it as a baseline: a stamped empty baseline moves the delta
+                       cursor to "now", so the real historical rows can never be
+                       fetched again on this device. Leave the baseline unset so
+                       the next ensureBaseline() retries the full read. */
+                    if (!clean.length) {
+                        emptyBaselineRetryAt.set(store, now() + EMPTY_BASELINE_RETRY_MS);
+                        console.warn('[kanjoSync] empty full read for', store, '— baseline NOT recorded; will retry');
+                        return { rows: [], source: 'empty' };
+                    }
+                    emptyBaselineRetryAt.delete(store);
                     await captureFullLoad(store, clean);
                     console.log('[kanjoSync] baseline captured for', store, '(' + clean.length + ' rows)');
                     return { rows: clean, source: 'full' };
@@ -199,6 +221,13 @@
             baselinePromises.set(store, p);
         }
         return baselinePromises.get(store);
+    }
+
+    /* Force an immediate baseline re-attempt after an empty/failed full read
+       (the KPI cold-boot heal uses this). In-flight reads are still shared. */
+    function retryBaseline(store) {
+        emptyBaselineRetryAt.delete(store);
+        return ensureBaseline(store);
     }
 
     /* ── Delta fetch ───────────────────────────────────────────────────────── */
@@ -461,7 +490,7 @@
         DEBOUNCE_MS: config.DEBOUNCE_MS,
         config,
         hydrate, getRows, getLastSyncedAt, size, sinceFor,
-        registerFetcher, registerBaselineLoader, ensureBaseline, captureFullLoad,
+        registerFetcher, registerBaselineLoader, ensureBaseline, retryBaseline, captureFullLoad,
         sync, syncAll, markWritten, notify, stats,
         requestSync: (store, opts) => (store
             ? sync(store, Object.assign({ force: true }, opts || {}))
@@ -469,6 +498,6 @@
         start, stop,
         _registry: registry,
         _fetchers: fetchers,
-        _resetForTests: () => { registry.clear(); fetchers.clear(); baselineLoaders.clear(); baselinePromises.clear(); started = false; }
+        _resetForTests: () => { registry.clear(); fetchers.clear(); baselineLoaders.clear(); baselinePromises.clear(); emptyBaselineRetryAt.clear(); started = false; }
     };
 })();

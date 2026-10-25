@@ -65,6 +65,20 @@ window.buildContractCallablePayload = (task) => {
         contactPhone = lastRep.contactPhone || '';
     }
 
+    /* Logo resolution order: the explicitly chosen/uploaded preview logo, then
+       any task doc for the same merchant (matched by immutable merchantId), then
+       the durable field written to the merchant record by persistMerchantLogo.
+       The day-scoped task cache alone is not a reliable source: legacy merchants
+       often have no task in the current window. */
+    const taskSiblingLogo = typeof window.catalogMerchantLogoUrl === 'function'
+        ? (window.catalogMerchantLogoUrl(baseName || task.name, merchantId) || '')
+        : '';
+    const merchantRec = (merchantId && window.merchantsById && typeof window.merchantsById.get === 'function')
+        ? window.merchantsById.get(merchantId)
+        : null;
+    const storedMerchantLogo = (merchantRec && (merchantRec.merchantLogo || merchantRec.logoUrl || merchantRec.logo)) || '';
+    const merchantLogo = window.currentMerchantLogoBase64 || taskSiblingLogo || storedMerchantLogo || '';
+
     return {
         merchantId,
         merchantName: baseName || task.name,
@@ -78,7 +92,7 @@ window.buildContractCallablePayload = (task) => {
         contactRole,
         contactPhone,
         address: task.address || '',
-        merchantLogo: window.currentMerchantLogoBase64 || ''
+        merchantLogo
     };
 };
 
@@ -292,7 +306,16 @@ window.generateContractViaBackend = async () => {
         return false;
     }
 
-    const task = currentContractTask();
+    let task = currentContractTask();
+    /* The archive may still be loading (or may have been triggered by the
+       preview). Wait once rather than failing with "task not found"; this also
+       lets the logo fallbacks above resolve from the full task set. */
+    if (!task
+        && (typeof window.canLoadTaskArchive !== 'function' || window.canLoadTaskArchive())
+        && typeof window.ensureTaskArchiveLoaded === 'function') {
+        try { await window.ensureTaskArchiveLoaded(); } catch (_) { /* fall through */ }
+        task = currentContractTask();
+    }
     if (!task) {
         if (window.showToast) window.showToast('المهمة غير موجودة', false);
         return false;

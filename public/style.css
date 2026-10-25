@@ -929,6 +929,12 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     background: #F59E0B;
     animation: catalogDashDotPulse 1.6s ease-in-out infinite;
 }
+.catalog-dash-badge--vip {
+    background: linear-gradient(135deg, #4B0082, #6B21A8);
+    color: #FFD700;
+    border: 1px solid rgba(245, 158, 11, 0.55);
+}
+.catalog-dash-badge--vip i { font-size: 10px; }
 @keyframes catalogDashDotPulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.4; transform: scale(0.65); }

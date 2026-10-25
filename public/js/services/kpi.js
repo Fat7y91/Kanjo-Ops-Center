@@ -77,6 +77,20 @@ const kpiCacheGet = (key, loader, ttlMs) => {
     return Promise.resolve().then(loader);
 };
 
+/* An EMPTY product slice is the cold-boot / failed-baseline signature, never a
+   result worth memoizing. Keeping it for the 60s read TTL is what made a
+   transient empty shared store stick until the minute expired (or the user
+   reopened the screen). Drop the empty entry so the next caller re-derives from
+   the in-memory sync store — zero extra Firestore reads. */
+const kpiCacheGetProducts = async (key, loader, ttlMs) => {
+    const rows = await kpiCacheGet(key, loader, ttlMs);
+    if (Array.isArray(rows) && rows.length) return rows;
+    if (window.kanjoCache && typeof window.kanjoCache.invalidate === 'function') {
+        window.kanjoCache.invalidate(key);
+    }
+    return Array.isArray(rows) ? rows : [];
+};
+
 const kpiInvalidateProductCache = () => {
     if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
         window.kanjoCache.invalidatePrefix('kpi:products');
@@ -1040,7 +1054,7 @@ const kpiFetchAllProductsUncached = async () => kpiSharedProducts();
 
 /* Memoized full-product read: the manager dashboard reuses the same rows for a
    TTL window instead of re-reading the collection on every render. */
-const kpiFetchAllProducts = () => kpiCacheGet('kpi:products:all', kpiFetchAllProductsUncached);
+const kpiFetchAllProducts = () => kpiCacheGetProducts('kpi:products:all', kpiFetchAllProductsUncached);
 
 /* Secure, rep-scoped product slice derived locally from the shared store. */
 const kpiFetchProductsForRepUncached = async (repName) => {
@@ -1055,7 +1069,7 @@ const kpiFetchProductsForRepUncached = async (repName) => {
 
 const kpiFetchProductsForRep = (repName) => {
     const key = 'kpi:products:rep:' + String(repName || '').trim();
-    return kpiCacheGet(key, () => kpiFetchProductsForRepUncached(repName));
+    return kpiCacheGetProducts(key, () => kpiFetchProductsForRepUncached(repName));
 };
 
 /* Imported (menu-import) products that still lack an image — the shared pool a
@@ -1064,7 +1078,7 @@ const kpiFetchImportedMissingUncached = async () => {
     const items = await kpiSharedProducts();
     return items.filter((p) => p.importSource === 'menu_excel_import' && kpiProductNeedsRawImage(p));
 };
-const kpiFetchImportedMissingProducts = () => kpiCacheGet('kpi:products:imported-missing', kpiFetchImportedMissingUncached);
+const kpiFetchImportedMissingProducts = () => kpiCacheGetProducts('kpi:products:imported-missing', kpiFetchImportedMissingUncached);
 
 /* Imported products a rep has already claimed/uploaded. Derived locally. */
 const kpiFetchImportedUploadsForRepUncached = async (repName) => {
@@ -1073,7 +1087,7 @@ const kpiFetchImportedUploadsForRepUncached = async (repName) => {
     const items = await kpiSharedProducts();
     return items.filter((p) => String(p.image_uploaded_by || '') === name);
 };
-const kpiFetchImportedUploadsForRep = (repName) => kpiCacheGet(
+const kpiFetchImportedUploadsForRep = (repName) => kpiCacheGetProducts(
     'kpi:products:impupload:' + String(repName || '').trim(),
     () => kpiFetchImportedUploadsForRepUncached(repName)
 );
@@ -1084,7 +1098,7 @@ const kpiFetchEditorProcessedUncached = async () => {
     const items = await kpiSharedProducts();
     return items.filter((p) => p.status === 'done');
 };
-const kpiFetchEditorProcessedProducts = () => kpiCacheGet('kpi:products:editor-processed', kpiFetchEditorProcessedUncached);
+const kpiFetchEditorProcessedProducts = () => kpiCacheGetProducts('kpi:products:editor-processed', kpiFetchEditorProcessedUncached);
 
 /* Update the derived KPI product caches in place after a write instead of
    dropping them and paying a full re-read. Dropping `editor-processed` after
@@ -3163,15 +3177,55 @@ window.renderKpiDashboard = async () => {
     const viewTitle = document.getElementById('kpiViewTitle');
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
 
+    /* Fetch the shared product scope once here (memoized; zero reads when warm)
+       so the cold-boot emptiness check below sees the real store state before
+       any zero-valued leaderboard is painted. */
+    const scopeProducts = await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
+
     /* Default (not user-picked) view: land on the most recent month that actually
        has data instead of a still-empty current month, so a rep always sees a
        populated board and a real comparison. The product set is memoized, so the
        report build below reuses it without any extra Firestore reads. */
     if (!window._kpiReportMonthUserSet) {
-        const scopeProducts = await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
         window._kpiReportMonth = kpiLatestProductMonth(scopeProducts) || kpiCurrentMonthKey();
     } else {
         window._kpiReportMonth = kpiNormalizeMonthKey(window._kpiReportMonth);
+    }
+
+    /* Cold-boot race guard: the shared merchant_products store can still be
+       empty while its baseline is being captured (or right after a failed cold
+       read). Painting an all-zero board in that window is what made the KPI
+       screen look unstable. Show an explicit loading state and give the shared
+       store two short retries; a bounded count prevents an endless loop on a
+       genuinely empty database. */
+    const productStoreEmpty = !(scopeProducts && scopeProducts.length)
+        && !!(window.kanjoSync && typeof window.kanjoSync.size === 'function')
+        && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) === 0;
+    if (productStoreEmpty) {
+        const attempts = Number(window._kpiEmptyDataRetries) || 0;
+        if (attempts < 2) {
+            window._kpiEmptyDataRetries = attempts + 1;
+            content.innerHTML = '<div class="text-center py-16 text-slate-500 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3 text-[#4B0082]"></i><div>جاري تحميل بيانات المنتجات...</div><div class="text-xs text-slate-400 mt-2">سيتم تحديث اللوحة تلقائياً بعد اكتمال التحميل</div></div>';
+            setTimeout(async () => {
+                const view = document.getElementById('kpiAnalyticsView');
+                if (!view || view.classList.contains('hidden')) return;
+                if (window.kanjoSync && typeof window.kanjoSync.retryBaseline === 'function') {
+                    try { await window.kanjoSync.retryBaseline(KPI_PRODUCTS_COLLECTION); } catch (_) { /* retry below */ }
+                }
+                if (typeof window.kanjoUnifiedCatalogProducts === 'function') {
+                    try { await window.kanjoUnifiedCatalogProducts(); } catch (_) { /* retry below */ }
+                }
+                if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+                    window.kanjoCache.invalidatePrefix('kpi:products');
+                }
+                if (typeof window.renderKpiDashboard === 'function') {
+                    Promise.resolve(window.renderKpiDashboard()).catch(() => { /* non-fatal */ });
+                }
+            }, 2500);
+            return;
+        }
+    } else {
+        window._kpiEmptyDataRetries = 0;
     }
 
     /* Always render the period selector to the resolved state, and clamp it to
@@ -3385,6 +3439,8 @@ window.exportKpiLeaderboardCsv = () => {
 
 window.closeKpiDashboard = () => {
     kpiDestroyCharts();
+    /* A fresh open gets a fresh cold-boot retry budget. */
+    window._kpiEmptyDataRetries = 0;
     const view = document.getElementById('kpiAnalyticsView');
     const dashboard = document.getElementById('dashboardSection');
     if (view) view.classList.add('hidden');
@@ -3409,6 +3465,29 @@ if (typeof window.addEventListener === 'function') {
         if (_kpiDeltaRenderTimer) clearTimeout(_kpiDeltaRenderTimer);
         _kpiDeltaRenderTimer = setTimeout(() => {
             _kpiDeltaRenderTimer = null;
+            const view = document.getElementById('kpiAnalyticsView');
+            if (!view || view.classList.contains('hidden')) return;
+            if (typeof window.renderKpiDashboard === 'function') {
+                Promise.resolve(window.renderKpiDashboard()).catch(() => { /* non-fatal */ });
+            }
+        }, 600);
+    });
+}
+
+/* Cold-boot heal: `applyUnifiedCatalogCaches` dispatches `kanjo:catalog-ready`
+   when the shared product store finally has rows. A successful baseline capture
+   persists rows directly and never emits `kanjo:synced`, so without this the
+   KPI screen opened during the race stayed blank until a manual reopen. */
+let _kpiCatalogReadyTimer = null;
+if (typeof window.addEventListener === 'function') {
+    window.addEventListener('kanjo:catalog-ready', () => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (window.kanjoCache && typeof window.kanjoCache.invalidatePrefix === 'function') {
+            window.kanjoCache.invalidatePrefix('kpi:products');
+        }
+        if (_kpiCatalogReadyTimer) clearTimeout(_kpiCatalogReadyTimer);
+        _kpiCatalogReadyTimer = setTimeout(() => {
+            _kpiCatalogReadyTimer = null;
             const view = document.getElementById('kpiAnalyticsView');
             if (!view || view.classList.contains('hidden')) return;
             if (typeof window.renderKpiDashboard === 'function') {

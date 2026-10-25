@@ -789,6 +789,14 @@ window.toggleMerchantVipPreContract = async (checked) => {
             ? 'تم تفعيل «تحت التعاقد (VIP)» — يمكن للمندوبين الآن إضافة منتجات لعرضها'
             : 'تم إلغاء حالة «تحت التعاقد (VIP)»');
 
+        /* The catalog's VIP chip/filter reads this flag from memory and is not
+           repainted by the logo-signature event, so refresh it explicitly. */
+        if (typeof window.renderCatalogAllProductsList === 'function') {
+
+            try { window.renderCatalogAllProductsList(); } catch (_) { /* ignore */ }
+
+        }
+
     } catch (err) {
 
         console.error('toggleMerchantVipPreContract failed', err);
@@ -1066,7 +1074,7 @@ window.saveMerchantNameEdit = async () => {
 
 };
 
-window.openMerchantContract = () => {
+window.openMerchantContract = async () => {
 
     if (window.canGenerateContracts && !window.canGenerateContracts()) {
 
@@ -1078,7 +1086,19 @@ window.openMerchantContract = () => {
 
     const baseName = activeMerchantBaseName;
 
-    const task = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName);
+    let task = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName);
+
+    /* The merchant may only exist outside the current day's cache; wait for the
+       lazy archive once instead of refusing with "no task registered". */
+    if (!task
+        && (typeof window.canLoadTaskArchive !== 'function' || window.canLoadTaskArchive())
+        && typeof window.ensureTaskArchiveLoaded === 'function') {
+
+        try { await window.ensureTaskArchiveLoaded(); } catch (_) { /* fall through */ }
+
+        task = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName);
+
+    }
 
     if (!task) {
 
@@ -1780,7 +1800,11 @@ window.contractBusinessTypeOverride = '';
 
 window.persistMerchantLogo = async (logoBase64, merchantBaseName) => {
 
+    const logoMid = window.findMerchantIdForBase ? window.findMerchantIdForBase(merchantBaseName) : '';
+
     const batch = writeBatch(db);
+
+    let taskWrites = 0;
 
     window.tasksMemory.forEach((tData, id) => {
 
@@ -1788,23 +1812,67 @@ window.persistMerchantLogo = async (logoBase64, merchantBaseName) => {
 
             batch.update(doc(db, "tasks", id), { merchantLogo: logoBase64 });
 
+            taskWrites += 1;
+
         }
 
     });
 
-    await batch.commit();
+    if (taskWrites > 0) await batch.commit();
+
+    /* Durable source of truth: also persist the logo on the merchant record.
+       Task docs only cover the currently loaded window, so a logo uploaded from
+       a day-scoped cache used to be invisible to the contract builder later.
+       The contracts payload reads this field as its final fallback.
+       Writes target an EXISTING merchant doc only (a merge-set on a missing id
+       would create a phantom merchant and be rejected by the self-id rule). */
+    let logoMerchantRec = (logoMid && window.merchantsById && typeof window.merchantsById.get === 'function')
+        ? window.merchantsById.get(logoMid)
+        : null;
+
+    if (logoMid && !logoMerchantRec && window._merchantsLoaded !== true && typeof window.loadMerchantsCache === 'function') {
+
+        try { await window.loadMerchantsCache(); } catch (_) { /* keep going without it */ }
+
+        logoMerchantRec = (window.merchantsById && typeof window.merchantsById.get === 'function')
+            ? window.merchantsById.get(logoMid)
+            : null;
+
+    }
+
+    if (logoMid && logoMerchantRec && window.setDoc && window.doc && window.db) {
+
+        try {
+
+            await window.setDoc(window.doc(window.db, 'merchants', logoMid), {
+                merchantLogo: logoBase64,
+                logoUpdatedAt: new Date().toISOString()
+            }, { merge: true });
+
+            logoMerchantRec.merchantLogo = logoBase64;
+
+        } catch (err) {
+
+            console.error('[merchantLogo] merchant record sync failed:', err);
+
+        }
+
+    }
 
     /* Record the logo update on the merchant's Laravel-dashboard sync trail. */
     if (typeof window.recordMerchantDashboardChange === 'function') {
-        const logoMid = window.findMerchantIdForBase ? window.findMerchantIdForBase(merchantBaseName) : '';
+
         if (logoMid) {
+
             window.recordMerchantDashboardChange(logoMid, {
                 merchantName: merchantBaseName,
                 type: 'merchant_logo',
                 item: merchantBaseName,
                 summary: 'تحديث شعار التاجر'
             });
+
         }
+
     }
 
 };
@@ -2250,6 +2318,29 @@ window.openContractsManagerModal = () => {
 
 };
 
+/* Track whether the operator has started editing the contract form. The lazy
+   archive wait below may resolve after the modal opened; a full re-render at
+   that point would reset typed commission edits. A flag (set from real DOM
+   input events, not programmatic paints) lets us refresh only the logo source
+   in that case. */
+if (typeof document !== 'undefined' && !window._cpFormTouchBound) {
+
+    window._cpFormTouchBound = true;
+
+    const cpFormModal = document.getElementById('contractPreviewModal');
+
+    if (cpFormModal) {
+
+        const markContractFormTouched = () => { window._contractFormTouched = true; };
+
+        cpFormModal.addEventListener('input', markContractFormTouched);
+
+        cpFormModal.addEventListener('change', markContractFormTouched);
+
+    }
+
+}
+
 window.openContractPreview = (taskId) => {
 
     if (window.canGenerateContracts && !window.canGenerateContracts()) {
@@ -2265,6 +2356,9 @@ window.openContractPreview = (taskId) => {
     const modal = document.getElementById('contractPreviewModal');
 
     if (!modal) return;
+
+    /* A fresh open gets a fresh "untouched" state for the archive repaint. */
+    window._contractFormTouched = false;
 
     if (window.kanjoAuditLogView && task) {
         const baseN = getBaseName(task.name);
@@ -2292,9 +2386,11 @@ window.openContractPreview = (taskId) => {
 
     } else {
 
-        if (taskNameEl) taskNameEl.innerText = 'المهمة غير موجودة';
+        /* Keep the requested id: the lazy archive wait below resolves the task
+           even when it is not part of the current day-scoped cache. */
+        if (taskNameEl) taskNameEl.innerText = 'جاري تحميل بيانات التاجر...';
 
-        if (taskIdEl) taskIdEl.value = '';
+        if (taskIdEl) taskIdEl.value = taskId || '';
 
     }
 
@@ -2308,7 +2404,32 @@ window.openContractPreview = (taskId) => {
 
     const savedLogoTask = (window.allTasksCache || []).find(t => getBaseName(t.name) === baseName && t.merchantLogo);
 
-    if (savedLogoTask && savedLogoTask.merchantLogo) window.currentMerchantLogoBase64 = savedLogoTask.merchantLogo;
+    if (savedLogoTask && savedLogoTask.merchantLogo) {
+
+        window.currentMerchantLogoBase64 = savedLogoTask.merchantLogo;
+
+    } else if (task && typeof window.catalogMerchantLogoUrl === 'function') {
+
+        /* A sibling task for the same merchant may carry the logo even when the
+           task we opened does not (rename/follow-up docs); the helper matches by
+           the immutable merchantId first. */
+        const siblingLogo = window.catalogMerchantLogoUrl(task.name, task.merchantId || task.merchant_id || '');
+
+        if (siblingLogo) window.currentMerchantLogoBase64 = siblingLogo;
+
+    }
+
+    if (!task) {
+
+        const previewContainer = document.getElementById('contractPreviewContainer');
+
+        if (previewContainer) {
+
+            previewContainer.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل بيانات التاجر...</div></div>';
+
+        }
+
+    }
 
     const toggleContainer = document.getElementById('cpBusinessTypeToggle');
 
@@ -2351,6 +2472,84 @@ window.openContractPreview = (taskId) => {
     if (typeof window.resetContractAvailabilityUI === 'function') window.resetContractAvailabilityUI();
 
     if (typeof window.refreshContractAvailability === 'function') window.refreshContractAvailability();
+
+    /* The full task archive is loaded lazily and the day-scoped cache may not
+       contain this merchant (older signed merchants opened from the Contracts
+       Manager projection). Without waiting for it the cover/header silently
+       renders without the merchant logo. Wait once (idempotent, shared read),
+       then repaint with the real task + logo if the modal is still open for the
+       same merchant. */
+    const archiveCanLoad = typeof window.canLoadTaskArchive !== 'function' || window.canLoadTaskArchive();
+
+    const needsArchive = archiveCanLoad
+        && typeof window.ensureTaskArchiveLoaded === 'function'
+        && (!task || !window.currentMerchantLogoBase64);
+
+    if (needsArchive) {
+
+        Promise.resolve(window.ensureTaskArchiveLoaded()).then(() => {
+
+            if (modal.classList.contains('hidden')) return;
+
+            const currentId = taskIdEl ? String(taskIdEl.value || '') : '';
+
+            if (currentId !== String(taskId || '')) return;
+
+            const freshTask = (window.allTasksCache || []).find(t => t.id === taskId);
+
+            if (!freshTask) {
+
+                if (taskNameEl) taskNameEl.innerText = 'المهمة غير موجودة';
+
+                const previewContainer = document.getElementById('contractPreviewContainer');
+
+                if (previewContainer && !task) {
+                    previewContainer.innerHTML = '<div class="text-center py-16 text-red-400 font-bold">تعذر تحميل مهمة هذا التاجر. أعد فتح النافذة بعد اكتمال التحميل.</div>';
+                }
+
+                return;
+
+            }
+
+            if (taskNameEl) taskNameEl.innerText = freshTask.name;
+
+            const freshBase = getBaseName(freshTask.name);
+
+            const freshLogoTask = (window.allTasksCache || []).find(t => getBaseName(t.name) === freshBase && t.merchantLogo);
+
+            const freshLogo = (freshLogoTask && freshLogoTask.merchantLogo)
+                || (typeof window.catalogMerchantLogoUrl === 'function'
+                    ? window.catalogMerchantLogoUrl(freshTask.name, freshTask.merchantId || freshTask.merchant_id || '')
+                    : '');
+
+            if (freshLogo && !window.currentMerchantLogoBase64) window.currentMerchantLogoBase64 = freshLogo;
+
+            /* Full repaint is only safe while the form is untouched; otherwise
+               the operator's in-progress edits would be reset. The refreshed
+               `currentMerchantLogoBase64` still feeds the generated PDF. */
+            const repaintPreview = !task || !window._contractFormTouched;
+
+            if (repaintPreview && typeof window.buildContractHTML === 'function') {
+
+                window.buildContractHTML(freshTask);
+
+                const previewContainer = document.getElementById('contractPreviewContainer');
+
+                if (previewContainer) {
+
+                    const template = document.getElementById('contract-template-container');
+
+                    previewContainer.innerHTML = template ? template.innerHTML : '';
+
+                }
+
+            }
+
+            if (typeof window.refreshContractAvailability === 'function') window.refreshContractAvailability();
+
+        }).catch(() => { /* keep the initial paint */ });
+
+    }
 
 };
 

@@ -1214,6 +1214,12 @@ window.ensureFinalizedMerchantsLoaded = () => {
             console.log('[KANJO-DIAGNOSTIC] Eligible-merchants sync completed. Docs:', window.finalizedMerchantsCache.length);
             /* If the merchant picker is already open, repopulate it now. */
             if (typeof window.refreshCatalogMerchantOptions === 'function') window.refreshCatalogMerchantOptions();
+            /* VIP flags ride on these task-shaped rows; repaint an open catalog
+               grid so the VIP chip count/badges reflect them immediately. */
+            if (typeof window.renderCatalogAllProductsList === 'function') {
+                const catalogBody = document.getElementById('catalogAllProductsBody');
+                if (catalogBody && !catalogBody.classList.contains('hidden')) window.renderCatalogAllProductsList();
+            }
             /* A rep may have typed a search before this lightweight read landed.
                Re-render so the search binds to the freshly-cached merchants. */
             if ((window.currentUser && (window.currentUser.role === 'rep' || window.currentUser.role === 'data_entry'))
