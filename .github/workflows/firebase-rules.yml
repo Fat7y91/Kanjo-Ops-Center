@@ -1,0 +1,53 @@
+# Deploy firestore.rules to production on every main-branch change to the
+# rules (or this workflow). Kept separate from the hosting workflow so a
+# rules-only fix always reaches Firestore even when the site build/deploy is
+# skipped or fails first.
+#
+# Requires the repository secret FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK
+# (the same service account already used by firebase-hosting-merge.yml).
+name: Deploy Firestore Rules
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'firestore.rules'
+      - 'firebase.json'
+      - '.github/workflows/firebase-rules.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never overlap two rules deploys triggered by near-simultaneous pushes.
+concurrency:
+  group: firebase-rules-main
+  cancel-in-progress: false
+
+jobs:
+  deploy_rules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write Firebase service account
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::Missing repository secret FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK"
+            exit 1
+          fi
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/firebase-sa.json"
+
+      - name: Deploy Firestore rules
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ runner.temp }}/firebase-sa.json"
+          CI: true
+        run: >-
+          npx -y firebase-tools@latest deploy
+          --only firestore:rules
+          --project kanjo-desouk
+          --non-interactive

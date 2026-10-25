@@ -4136,9 +4136,13 @@ window.filterCatalogMerchantProductsDom = (query) => {
 };
 
 const renderCatalogAllProductsListNow = () => {
+    /* Bind the dashboard-render hydration hook on the first paint (dashboard.js
+       is evaluated after this module, so it cannot be bound at module init). */
+    catalogBindHydrationRepaintHooks();
     /* VIP flags may have flipped since the last paint; rebuild the lookup once
        per render so every card/filter/chip sees the same fresh snapshot. */
     catalogInvalidateVipIndex();
+    window._catalogHydrationSig = catalogHydrationSignature();
     const list = document.getElementById('catalogAllProductsList');
     const toolbar = document.getElementById('catalogAllProductsToolbar');
     const countEl = document.getElementById('catalogAllProductsCount');
@@ -4329,6 +4333,81 @@ const renderCatalogAllProductsList = window.scheduleFrameRender(renderCatalogAll
    guards, so a scheduled repaint could never reach the grid. */
 window.renderCatalogAllProductsList = renderCatalogAllProductsList;
 window.renderCatalogAllProductsListNow = renderCatalogAllProductsListNow;
+
+/* ─── Lazy-hydration repaint (zero reads) ────────────────────────────────────
+   The folder grid can paint before the in-memory caches hydrate (merchants
+   directory, tasks archive / live task snapshot). That showed a transient VIP
+   chip count of 0 and placeholder store icons until an unrelated action
+   repainted the grid. Both sources already land through existing flows; wrap
+   those flows so one coalesced repaint follows. No new query, fetch, listener
+   or duplicate read is introduced — the wrappers only chain the existing call
+   and re-render from memory. */
+const catalogHydrationSignature = () => [
+    Number(window.tasksMemoryVersion) || 0,
+    window.tasksMemory && typeof window.tasksMemory.size === 'number' ? window.tasksMemory.size : 0,
+    Array.isArray(window.allTasksCache) ? window.allTasksCache.length : 0,
+    window.merchantsById && typeof window.merchantsById.size === 'number' ? window.merchantsById.size : 0,
+    Array.isArray(window.finalizedMerchantsCache) ? window.finalizedMerchantsCache.length : 0
+].join('|');
+
+const catalogGridIsOpen = () => {
+    const widget = document.getElementById('catalogAllProductsWidget');
+    if (widget && widget.classList.contains('hidden')) return false;
+    const body = document.getElementById('catalogAllProductsBody');
+    return !!(body && !body.classList.contains('hidden'));
+};
+
+const catalogScheduleHydrationRepaint = () => {
+    /* Closed grid always repaints on open, so never do hidden work. */
+    if (!catalogGridIsOpen() || window._catalogHydrationRepaintQueued) return;
+    window._catalogHydrationRepaintQueued = true;
+    const run = () => {
+        window._catalogHydrationRepaintQueued = false;
+        if (!catalogGridIsOpen()) return;
+        /* Read the signature INSIDE the frame: the dashboard rebuilds
+           allTasksCache in its own earlier rAF callback. */
+        const sig = catalogHydrationSignature();
+        if (sig === window._catalogHydrationSig) return;
+        window._catalogHydrationSig = sig;
+        try { renderCatalogAllProductsListNow(); } catch (_) { /* ignore */ }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+    else setTimeout(run, 16);
+};
+
+const catalogBindHydrationRepaintHooks = () => {
+    /* Tasks/logos: every task path converges on renderDashboard (live
+       snapshot, lazy archive and filter repaints), which schedules its own
+       frame. Our hook is queued after it, so the repaint sees the hydrated
+       rows. */
+    if (typeof window.renderDashboard === 'function' && !window.renderDashboard._catalogHydrationRepaint) {
+        const baseRenderDashboard = window.renderDashboard;
+        const wrapped = function (...args) {
+            const out = baseRenderDashboard.apply(this, args);
+            catalogScheduleHydrationRepaint();
+            return out;
+        };
+        wrapped._catalogHydrationRepaint = true;
+        window.renderDashboard = wrapped;
+    }
+    /* Merchants directory: VIP flags can also live on merchant records. */
+    if (typeof window.loadMerchantsCache === 'function' && !window.loadMerchantsCache._catalogHydrationRepaint) {
+        const baseLoadMerchantsCache = window.loadMerchantsCache;
+        const wrappedLoad = function (...args) {
+            return Promise.resolve(baseLoadMerchantsCache.apply(this, args)).then((out) => {
+                catalogScheduleHydrationRepaint();
+                return out;
+            });
+        };
+        wrappedLoad._catalogHydrationRepaint = true;
+        window.loadMerchantsCache = wrappedLoad;
+    }
+};
+
+/* The merchants loader already exists at this point; the dashboard render is
+   bound lazily (see renderCatalogAllProductsListNow) because dashboard.js is
+   evaluated after this module. */
+catalogBindHydrationRepaintHooks();
 
 /* When the tasks cache (the merchant-logo source) fills AFTER the folder grid
    first painted, repaint the merchant cards so logos appear without a manual
