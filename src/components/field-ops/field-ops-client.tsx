@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { CreateMerchantModal } from "@/components/field-ops/create-merchant-modal";
 import { CreateTaskModal } from "@/components/field-ops/create-task-modal";
 import { OutcomeModal } from "@/components/field-ops/outcome-modal";
 import {
@@ -31,6 +32,8 @@ type FieldOpsClientProps = {
   canApproveEdits: boolean;
   canManageState: boolean;
   canViewMerchants: boolean;
+  canCreateMerchants: boolean;
+  canAssignTasks: boolean;
 };
 
 type DecisionTarget = {
@@ -89,6 +92,8 @@ export function FieldOpsClient({
   canApproveEdits,
   canManageState,
   canViewMerchants,
+  canCreateMerchants,
+  canAssignTasks,
 }: FieldOpsClientProps) {
   const [board, setBoard] = useState(initialBoard);
   const [query, setQuery] = useState("");
@@ -96,6 +101,7 @@ export function FieldOpsClient({
   const [searching, setSearching] = useState(false);
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
+  const [merchantOpen, setMerchantOpen] = useState(false);
   const [outcomeTarget, setOutcomeTarget] = useState<{
     merchant: Merchant;
     task: FieldTask | null;
@@ -209,7 +215,7 @@ export function FieldOpsClient({
     const city = cityMap.get(task.cityId);
     const state = merchant?.contractState ?? "no_agreement";
     const meta = CONTRACT_STATE_META[state];
-    const otherTeam = merchant ? merchant.team !== viewerTeam : false;
+    const otherTeam = merchant ? Boolean(merchant.team) && merchant.team !== viewerTeam : false;
 
     return (
       <article key={task.id} className="task-card">
@@ -384,15 +390,26 @@ export function FieldOpsClient({
               aria-label="البحث الذكي عن التجار"
             />
           </div>
-          {canManageTasks ? (
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => setCreateOpen(true)}
-            >
-              إنشاء مهمة
-            </button>
-          ) : null}
+          <div className="row-actions">
+            {canCreateMerchants ? (
+              <button
+                type="button"
+                className="button button-quiet"
+                onClick={() => setMerchantOpen(true)}
+              >
+                إضافة تاجر مستهدف
+              </button>
+            ) : null}
+            {canAssignTasks ? (
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => setCreateOpen(true)}
+              >
+                إسناد مهمة
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {results !== null ? (
@@ -425,8 +442,9 @@ export function FieldOpsClient({
                       <div className="search-result-main">
                         <strong>{result.merchant.name}</strong>
                         <span className="search-result-meta">
-                          {result.cityName} · {matchTypeLabel(result.matchType)}{" "}
-                          · تطابق {Math.round(result.score)}%
+                          {result.cityName} · {result.merchant.category} ·{" "}
+                          {matchTypeLabel(result.matchType)} · تطابق{" "}
+                          {Math.round(result.score)}%
                         </span>
                       </div>
                       <span className="chip chip-team">
@@ -441,7 +459,7 @@ export function FieldOpsClient({
                           فتح
                         </Link>
                       ) : null}
-                      {!result.isOwnTeam && canRequestTransfers ? (
+                      {result.merchant.team && !result.isOwnTeam && canRequestTransfers ? (
                         <button
                           type="button"
                           className="button button-small button-primary"
@@ -613,9 +631,23 @@ export function FieldOpsClient({
         </div>
       </section>
 
+      <CreateMerchantModal
+        open={merchantOpen}
+        cities={board.cities}
+        defaultCityId={
+          board.cities.find((city) => city.stage === "preparation")?.id
+        }
+        onClose={() => setMerchantOpen(false)}
+        onDone={async (message) => {
+          announce(message);
+          await refresh();
+        }}
+      />
+
       <CreateTaskModal
         open={createOpen}
         cities={board.cities}
+        merchants={board.merchants}
         defaultTeam={viewerTeam}
         onClose={() => setCreateOpen(false)}
         onDone={async (message) => {

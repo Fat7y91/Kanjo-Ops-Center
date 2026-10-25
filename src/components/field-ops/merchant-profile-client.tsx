@@ -85,7 +85,7 @@ export function MerchantProfileClient({
   const [toast, setToast] = useState("");
 
   const meta = CONTRACT_STATE_META[merchant.contractState];
-  const otherTeam = merchant.team !== viewerTeam;
+  const otherTeam = Boolean(merchant.team) && merchant.team !== viewerTeam;
   const agreementReached =
     merchant.contractState === "final_contract" ||
     merchant.contractState === "signed_contract";
@@ -139,6 +139,7 @@ export function MerchantProfileClient({
           <h2>{merchant.name}</h2>
           <div className="profile-badges">
             <span className={`badge ${meta.tone}`}>{meta.label}</span>
+            <span className="badge">{merchant.category}</span>
             <span className="chip chip-team">{teamLabel(merchant.team)}</span>
             {merchant.editUnlocked ? (
               <span className="badge badge-purple">التعديل مفتوح</span>

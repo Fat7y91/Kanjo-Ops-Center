@@ -36,24 +36,31 @@ export const cityCreateSchema = z.object({
     .min(3, "ارسم ثلاث نقاط حدود على الأقل على الخريطة."),
 });
 
-export const taskCreateSchema = z.object({
-  merchantName: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120),
+export const merchantCreateSchema = z.object({
+  name: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120),
   cityId: z.string().trim().min(1, "اختر المدينة."),
-  team: z.enum(FIELD_TEAMS),
-  visitDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الزيارة يجب أن يكون بصيغة YYYY-MM-DD."),
+  category: z.string().trim().min(2, "تصنيف التاجر مطلوب.").max(80),
   targetCommission: z.coerce
     .number()
     .min(0, "العمولة لا يمكن أن تكون سالبة.")
     .max(100, "العمولة لا يمكن أن تتجاوز 100%."),
-  strategicNotes: z.string().trim().max(2000).default(""),
   estimatedMonthlyValue: z.coerce
     .number()
     .min(0)
     .max(100_000_000)
-    .default(100_000),
+    .default(0),
+  strategicNotes: z.string().trim().max(2000).default(""),
 });
+
+export const taskAssignSchema = z.object({
+  merchantId: z.string().trim().min(1, "اختر التاجر."),
+  team: z.enum(FIELD_TEAMS),
+  visitDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الزيارة يجب أن يكون بصيغة YYYY-MM-DD."),
+});
+
+export const taskCreateSchema = taskAssignSchema;
 
 export const visitReportSchema = z.object({
   outcome: z.enum(CONTRACT_STATES),
@@ -105,6 +112,8 @@ export const merchantDocumentSchema = z.object({
 });
 
 export type CityCreateInput = z.infer<typeof cityCreateSchema>;
+export type MerchantCreateInput = z.infer<typeof merchantCreateSchema>;
+export type TaskAssignInput = z.infer<typeof taskAssignSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type VisitReportInput = z.infer<typeof visitReportSchema>;
 export type TransferRequestInput = z.infer<typeof transferRequestSchema>;

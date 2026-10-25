@@ -49,6 +49,7 @@ export const CONTRACT_STATE_META: Record<
 };
 
 export const CITY_STAGES = [
+  "preparation",
   "contracting",
   "data_entry",
   "live_operations",
@@ -60,6 +61,12 @@ export const CITY_STAGE_META: Record<
   CityStage,
   { label: string; tone: string; description: string }
 > = {
+  preparation: {
+    label: "مرحلة الإعداد",
+    tone: "badge-blue",
+    description:
+      "استكشاف السوق وجمع بيانات التجار المستهدفين قبل بدء الزيارات الميدانية.",
+  },
   contracting: {
     label: "مرحلة التعاقدات",
     tone: "badge-gold",
@@ -89,7 +96,8 @@ export const TEAM_LABELS: Record<string, string> = {
   Audit: "فريق المراجعة",
 };
 
-export function teamLabel(team: string): string {
+export function teamLabel(team: string | null | undefined): string {
+  if (!team) return "غير مسند";
   return TEAM_LABELS[team] ?? team;
 }
 
@@ -153,7 +161,8 @@ export type Merchant = {
   id: string;
   name: string;
   normalizedName: string;
-  team: string;
+  category: string;
+  team: string | null;
   cityId: string;
   targetCommission: number;
   monthlyValue: number;

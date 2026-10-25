@@ -9,11 +9,13 @@ import { currentTheme, THEME_EVENT, type Theme } from "@/lib/theme";
 
 const STAGE_COLORS: Record<Theme, Record<string, string>> = {
   light: {
+    preparation: "#1d6fa5",
     live_operations: "#137a4b",
     data_entry: "#5b21b6",
     contracting: "#a97900",
   },
   dark: {
+    preparation: "#7cc4ff",
     live_operations: "#4ade80",
     data_entry: "#c4a5ff",
     contracting: "#ffd700",
@@ -146,7 +148,7 @@ export default function CityMapInner({
 
     cities.forEach((city) => {
       if (city.zone.length < 3) return;
-      const color = palette[city.stage] ?? palette.contracting;
+      const color = palette[city.stage] ?? palette.preparation;
       leaflet
         .polygon(
           city.zone.map((point) => [point.lat, point.lng] as [number, number]),

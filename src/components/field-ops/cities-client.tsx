@@ -38,7 +38,7 @@ const EMPTY_FORM: FormState = {
   name: "",
   country: "مصر",
   population: "",
-  stage: "contracting",
+  stage: "preparation",
   strategicNotes: "",
   competitors: [],
 };

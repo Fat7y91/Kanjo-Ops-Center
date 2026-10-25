@@ -37,6 +37,7 @@ const SEED_USERS: AppUser[] = [
       "view_cities",
       "manage_cities",
       "view_merchants",
+      "create_merchants",
       "edit_merchants",
       "transfer_merchants",
       "view_field_ops",

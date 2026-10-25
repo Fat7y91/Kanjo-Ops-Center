@@ -78,6 +78,9 @@ export default async function MerchantsPage({
                       <Link href={`/merchants/${merchant.id}`}>
                         <strong>{merchant.name}</strong>
                       </Link>
+                      <span className="muted merchant-category">
+                        {merchant.category}
+                      </span>
                     </td>
                     <td>{cityMap.get(merchant.cityId)?.name ?? "—"}</td>
                     <td>

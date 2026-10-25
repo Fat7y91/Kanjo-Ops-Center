@@ -577,8 +577,20 @@ h3 {
   color: var(--red);
 }
 
+.badge-blue {
+  border-color: #bfd6f0;
+  background: #eaf3fd;
+  color: #1f5f9e;
+}
+
 .muted {
   color: var(--ink-soft);
+}
+
+.merchant-category {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.72rem;
 }
 
 /* ── Overview ──────────────────────────────────────────────────────────── */
@@ -2385,6 +2397,12 @@ textarea {
   border-color: rgba(255, 143, 143, 0.35);
   background: var(--red-soft);
   color: var(--red);
+}
+
+[data-theme="dark"] .badge-blue {
+  border-color: rgba(124, 196, 255, 0.35);
+  background: rgba(64, 150, 220, 0.16);
+  color: #9ed4ff;
 }
 
 [data-theme="dark"] .badge-signed {

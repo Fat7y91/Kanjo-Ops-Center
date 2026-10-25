@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import {
@@ -8,33 +8,49 @@ import {
   teamLabel,
   type City,
   type FieldTeam,
+  type Merchant,
 } from "@/lib/field-ops/types";
 
 type CreateTaskModalProps = {
   open: boolean;
   cities: City[];
+  merchants: Merchant[];
   defaultTeam: string;
   onClose: () => void;
   onDone: (message: string) => void;
 };
 
 type FormState = {
-  merchantName: string;
   cityId: string;
+  merchantId: string;
   team: FieldTeam;
   visitDate: string;
-  targetCommission: string;
-  estimatedMonthlyValue: string;
-  strategicNotes: string;
 };
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function activeCities(cities: City[]): City[] {
+  const active = cities.filter((city) => city.stage !== "preparation");
+  return active.length > 0 ? active : cities;
+}
+
+function merchantsForCity(merchants: Merchant[], cityId: string): Merchant[] {
+  return merchants
+    .filter((merchant) => merchant.cityId === cityId)
+    .sort((left, right) => {
+      const leftAssigned = left.team ? 1 : 0;
+      const rightAssigned = right.team ? 1 : 0;
+      if (leftAssigned !== rightAssigned) return leftAssigned - rightAssigned;
+      return left.name.localeCompare(right.name, "ar");
+    });
+}
+
 export function CreateTaskModal({
   open,
   cities,
+  merchants,
   defaultTeam,
   onClose,
   onDone,
@@ -46,34 +62,56 @@ export function CreateTaskModal({
     : FIELD_TEAMS[0];
 
   const [form, setForm] = useState<FormState>({
-    merchantName: "",
-    cityId: cities[0]?.id ?? "",
+    cityId: "",
+    merchantId: "",
     team: fallbackTeam,
     visitDate: todayIso(),
-    targetCommission: "8",
-    estimatedMonthlyValue: "100000",
-    strategicNotes: "",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const selectableCities = useMemo(() => activeCities(cities), [cities]);
+  const cityMerchants = useMemo(
+    () => merchantsForCity(merchants, form.cityId),
+    [merchants, form.cityId],
+  );
+  const selectedMerchant = cityMerchants.find(
+    (merchant) => merchant.id === form.merchantId,
+  );
+  const selectedCity = cities.find((city) => city.id === form.cityId);
+  const cityInPreparation = selectedCity?.stage === "preparation";
+
   useEffect(() => {
     if (!open) return;
+    const cityId = selectableCities[0]?.id ?? cities[0]?.id ?? "";
+    const firstMerchant = merchantsForCity(merchants, cityId)[0];
     setForm({
-      merchantName: "",
-      cityId: cities[0]?.id ?? "",
-      team: fallbackTeam,
+      cityId,
+      merchantId: firstMerchant?.id ?? "",
+      team: (firstMerchant?.team as FieldTeam | null) ?? fallbackTeam,
       visitDate: todayIso(),
-      targetCommission: "8",
-      estimatedMonthlyValue: "100000",
-      strategicNotes: "",
     });
     setError("");
     setSaving(false);
-  }, [open, cities, fallbackTeam]);
+  }, [open, cities, merchants, selectableCities, fallbackTeam]);
 
-  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((current) => ({ ...current, [key]: value }));
+  function selectCity(cityId: string) {
+    const firstMerchant = merchantsForCity(merchants, cityId)[0];
+    setForm((current) => ({
+      ...current,
+      cityId,
+      merchantId: firstMerchant?.id ?? "",
+      team: (firstMerchant?.team as FieldTeam | null) ?? fallbackTeam,
+    }));
+  }
+
+  function selectMerchant(merchantId: string) {
+    const merchant = cityMerchants.find((candidate) => candidate.id === merchantId);
+    setForm((current) => ({
+      ...current,
+      merchantId,
+      team: (merchant?.team as FieldTeam | null) ?? current.team,
+    }));
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -85,71 +123,83 @@ export function CreateTaskModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
-          targetCommission: Number(form.targetCommission),
-          estimatedMonthlyValue: Number(form.estimatedMonthlyValue),
+          merchantId: form.merchantId,
+          team: form.team,
+          visitDate: form.visitDate,
         }),
       });
       const payload = (await response.json()) as {
         error?: string;
-        merchantCreated?: boolean;
         merchant?: { name: string };
       };
       if (!response.ok) {
-        throw new Error(payload.error ?? "تعذر إنشاء المهمة.");
+        throw new Error(payload.error ?? "تعذر إسناد المهمة.");
       }
-      const name = payload.merchant?.name ?? form.merchantName;
+      const name = payload.merchant?.name ?? selectedMerchant?.name ?? "";
       onDone(
-        payload.merchantCreated
-          ? `تم إنشاء المهمة وتهيئة ${name} كتاجر.`
-          : `تم إنشاء المهمة لـ ${name}.`,
+        `تم إسناد مهمة ${name} إلى ${teamLabel(form.team)} بتاريخ ${form.visitDate}.`,
       );
       onClose();
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "تعذر إنشاء المهمة.",
+          : "تعذر إسناد المهمة.",
       );
     } finally {
       setSaving(false);
     }
   }
 
+  const disabled =
+    saving ||
+    cityInPreparation ||
+    !form.merchantId ||
+    cityMerchants.length === 0;
+
   return (
     <Modal
       open={open}
-      title="إنشاء مهمة ميدانية"
-      eyebrow="عمليات المدن"
-      description="إنشاء المهمة يهيئ التاجر تلقائياً إذا لم يكن موجوداً. فقط حاملو صلاحية إدارة المهام يمكنهم ذلك."
+      title="إسناد مهمة ميدانية"
+      eyebrow="مرحلة التعاقدات"
+      description="اختر تاجراً من قائمة الاستهداف، ثم حدّد الفريق وتاريخ الزيارة. الإسناد هو ما ينشئ المهمة الميدانية."
       onClose={onClose}
       wide
     >
       <form className="form-stack" onSubmit={submit}>
         <div className="form-grid">
           <label className="field">
-            <span>اسم التاجر</span>
-            <input
-              value={form.merchantName}
-              onChange={(event) =>
-                update("merchantName", event.target.value)
-              }
-              placeholder="كافيار أو Kaffyar Market"
-              required
-            />
-          </label>
-          <label className="field">
             <span>المدينة</span>
             <select
               value={form.cityId}
-              onChange={(event) => update("cityId", event.target.value)}
+              onChange={(event) => selectCity(event.target.value)}
               required
             >
-              {cities.map((city) => (
+              {selectableCities.map((city) => (
                 <option key={city.id} value={city.id}>
-                  {city.name}
+                  {city.name} · {city.stage === "preparation" ? "إعداد" : "جاهزة"}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>التاجر المستهدف</span>
+            <select
+              value={form.merchantId}
+              onChange={(event) => selectMerchant(event.target.value)}
+              required
+              disabled={cityMerchants.length === 0}
+            >
+              {cityMerchants.length === 0 ? (
+                <option value="">لا يوجد تجار في هذه المدينة</option>
+              ) : (
+                cityMerchants.map((merchant) => (
+                  <option key={merchant.id} value={merchant.id}>
+                    {merchant.name} — {merchant.category}
+                    {merchant.team ? " (مسند)" : " (متاح)"}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label className="field">
@@ -157,8 +207,13 @@ export function CreateTaskModal({
             <select
               value={form.team}
               onChange={(event) =>
-                update("team", event.target.value as FieldTeam)
+                setForm((current) => ({
+                  ...current,
+                  team: event.target.value as FieldTeam,
+                }))
               }
+              disabled={Boolean(selectedMerchant?.team)}
+              required
             >
               {FIELD_TEAMS.map((team) => (
                 <option key={team} value={team}>
@@ -172,53 +227,39 @@ export function CreateTaskModal({
             <input
               type="date"
               value={form.visitDate}
-              onChange={(event) => update("visitDate", event.target.value)}
-              required
-            />
-          </label>
-          <label className="field">
-            <span>العمولة المستهدفة (%)</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step="0.5"
-              value={form.targetCommission}
               onChange={(event) =>
-                update("targetCommission", event.target.value)
-              }
-              required
-            />
-          </label>
-          <label className="field">
-            <span>القيمة الشهرية التقديرية</span>
-            <input
-              type="number"
-              min={0}
-              step="1000"
-              value={form.estimatedMonthlyValue}
-              onChange={(event) =>
-                update("estimatedMonthlyValue", event.target.value)
+                setForm((current) => ({
+                  ...current,
+                  visitDate: event.target.value,
+                }))
               }
               required
             />
           </label>
         </div>
 
-        <label className="field">
-          <span>ملاحظات استراتيجية</span>
-          <textarea
-            rows={3}
-            value={form.strategicNotes}
-            onChange={(event) => update("strategicNotes", event.target.value)}
-            placeholder="جهات الاتصال الرئيسية، الضغط التنافسي، موقف التفاوض."
-          />
-        </label>
+        {selectedMerchant ? (
+          <div className="inline-note">
+            {selectedMerchant.category} · عمولة مستهدفة{" "}
+            {selectedMerchant.targetCommission}% ·{" "}
+            {selectedMerchant.team
+              ? `ملكية ${teamLabel(selectedMerchant.team)} محفوظة`
+              : "تاجر غير مسند وسيتم ربطه بالفريق عند الحفظ"}
+          </div>
+        ) : null}
 
-        <p className="inline-note">
-          يرى المندوبون مهام فريقهم فقط لليوم الحالي، بينما يرى المديرون اللوحة
-          الكاملة.
-        </p>
+        {cityInPreparation ? (
+          <p className="form-error" role="alert">
+            المدينة ما زالت في مرحلة الإعداد. حدّث مرحلتها إلى التعاقدات أولاً.
+          </p>
+        ) : null}
+
+        {cityMerchants.length === 0 && !cityInPreparation ? (
+          <p className="inline-note">
+            لا يوجد تجار مستهدفون في هذه المدينة بعد. أضف تاجراً من زر «إضافة
+            تاجر مستهدف» أولاً.
+          </p>
+        ) : null}
 
         {error ? (
           <p className="form-error" role="alert">
@@ -233,9 +274,9 @@ export function CreateTaskModal({
           <button
             type="submit"
             className="button button-primary"
-            disabled={saving}
+            disabled={disabled}
           >
-            {saving ? "جارٍ الإنشاء..." : "إنشاء المهمة"}
+            {saving ? "جارٍ الإسناد..." : "إسناد المهمة"}
           </button>
         </div>
       </form>

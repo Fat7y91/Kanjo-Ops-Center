@@ -17,8 +17,9 @@ import type {
 import { zoneToBoundary } from "@/lib/field-ops/types";
 import type {
   CityCreateInput,
+  MerchantCreateInput,
   MerchantDocumentInput,
-  TaskCreateInput,
+  TaskAssignInput,
   VisitReportInput,
 } from "@/lib/schemas/field-ops";
 
@@ -83,6 +84,31 @@ function seedStore(): FieldOpsStore {
   const yesterday = todayIso(-1);
 
   const cities: City[] = ([
+    {
+      id: "city-mansoura",
+      name: "المنصورة",
+      country: "مصر",
+      population: 1_600_000,
+      stage: "preparation",
+      competitors: [
+        {
+          name: "El Menus",
+          page: "https://www.elmenus.com",
+          marketStrength: "medium",
+        },
+      ],
+      strategicNotes:
+        "مرحلة الإعداد: حصر التجار المستهدفين في وسط المدينة والكورنيش وتقييم جاهزية السوق قبل بدء التعاقدات.",
+      zone: zone([
+        [31.092, 31.32],
+        [31.104, 31.43],
+        [31.012, 31.455],
+        [30.998, 31.338],
+      ]),
+      createdAt: isoNow(-4 * 24 * 60),
+      createdBy: "u-ops",
+      createdByName: "Mariam Adel",
+    },
     {
       id: "city-cairo",
       name: "القاهرة",
@@ -174,6 +200,7 @@ function seedStore(): FieldOpsStore {
       id: "m-kaffyar",
       name: "كافيار",
       normalizedName: merchantSearchKey("كافيار"),
+      category: "مأكولات بحرية",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 12,
@@ -192,6 +219,7 @@ function seedStore(): FieldOpsStore {
       id: "m-abar-sham",
       name: "عبر الشام",
       normalizedName: merchantSearchKey("عبر الشام"),
+      category: "مشاوي",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 10,
@@ -210,6 +238,7 @@ function seedStore(): FieldOpsStore {
       id: "m-cairo-fresh",
       name: "Cairo Fresh Market",
       normalizedName: merchantSearchKey("Cairo Fresh Market"),
+      category: "بقالة",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 9,
@@ -245,6 +274,7 @@ function seedStore(): FieldOpsStore {
       id: "m-nile-pharmacy",
       name: "Nile Pharmacy Group",
       normalizedName: merchantSearchKey("Nile Pharmacy Group"),
+      category: "صيدليات",
       team: "Power Team",
       cityId: "city-giza",
       targetCommission: 8,
@@ -280,6 +310,7 @@ function seedStore(): FieldOpsStore {
       id: "m-zamalek-kitchen",
       name: "Zamalek Kitchen",
       normalizedName: merchantSearchKey("Zamalek Kitchen"),
+      category: "مطاعم",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 11,
@@ -298,6 +329,7 @@ function seedStore(): FieldOpsStore {
       id: "m-maadi-home",
       name: "Maadi Home Supplies",
       normalizedName: merchantSearchKey("Maadi Home Supplies"),
+      category: "مستلزمات منزلية",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 7,
@@ -316,6 +348,7 @@ function seedStore(): FieldOpsStore {
       id: "m-heliopolis-pets",
       name: "Heliopolis Pet Corner",
       normalizedName: merchantSearchKey("Heliopolis Pet Corner"),
+      category: "حيوانات أليفة",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 6,
@@ -334,6 +367,7 @@ function seedStore(): FieldOpsStore {
       id: "m-seaside-grill",
       name: "Alexandria Seaside Grill",
       normalizedName: merchantSearchKey("Alexandria Seaside Grill"),
+      category: "مأكولات بحرية",
       team: "Power Team",
       cityId: "city-alexandria",
       targetCommission: 13,
@@ -347,6 +381,25 @@ function seedStore(): FieldOpsStore {
       createdAt: isoNow(-9 * 24 * 60),
       updatedAt: isoNow(-2 * 24 * 60),
       lastVisitAt: isoNow(-2 * 24 * 60),
+    },
+    {
+      id: "m-mansoura-grill",
+      name: "Mansoura Nile Grill",
+      normalizedName: merchantSearchKey("Mansoura Nile Grill"),
+      category: "مطاعم",
+      team: null,
+      cityId: "city-mansoura",
+      targetCommission: 10,
+      monthlyValue: 120_000,
+      strategicNotes:
+        "تاجر مستهدف من مرحلة الإعداد. لم يُسند إلى فريق ولم تُحدد له زيارة بعد.",
+      contractState: "no_agreement",
+      commissionAmount: 0,
+      editUnlocked: false,
+      documents: [],
+      createdAt: isoNow(-3 * 24 * 60),
+      updatedAt: isoNow(-3 * 24 * 60),
+      lastVisitAt: null,
     },
   ];
 
@@ -735,70 +788,104 @@ export function calculateCommission(
   return Math.round(monthlyValue * targetCommission) / 100;
 }
 
-export function createTaskWithMerchant(
-  input: TaskCreateInput,
-  actor: Actor,
-): { task: FieldTask; merchant: Merchant; merchantCreated: boolean } {
+export function createMerchant(
+  input: MerchantCreateInput,
+  _actor: Actor,
+): Merchant {
   const store = getStore();
   const city = store.cities.find((candidate) => candidate.id === input.cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
-  const normalizedName = merchantSearchKey(input.merchantName);
-  let merchant = store.merchants.find(
+  const normalizedName = merchantSearchKey(input.name);
+  const existing = store.merchants.find(
     (candidate) => candidate.normalizedName === normalizedName,
   );
-  let merchantCreated = false;
-
-  if (merchant && merchant.cityId !== input.cityId) {
+  if (existing) {
     throw new FieldOpsError(
-      "CITY_SCOPE_MISMATCH",
-      "هذا التاجر مسجل في مدينة أخرى. لا يمكن نقله بين المدن من خلال إنشاء مهمة.",
+      "MERCHANT_EXISTS",
+      existing.cityId === input.cityId
+        ? "يوجد تاجر بهذا الاسم في المدينة بالفعل."
+        : "يوجد تاجر بهذا الاسم في مدينة أخرى. استخدم اسماً مميزاً.",
       409,
     );
   }
 
+  const merchant: Merchant = {
+    id: id("m"),
+    name: input.name.trim(),
+    normalizedName,
+    category: input.category.trim(),
+    team: null,
+    cityId: input.cityId,
+    targetCommission: input.targetCommission,
+    monthlyValue: input.estimatedMonthlyValue,
+    strategicNotes: input.strategicNotes.trim(),
+    contractState: "no_agreement",
+    commissionAmount: 0,
+    editUnlocked: false,
+    documents: [],
+    createdAt: isoNow(),
+    updatedAt: isoNow(),
+    lastVisitAt: null,
+  };
+
+  store.merchants.push(merchant);
+  bump();
+  return clone(merchant);
+}
+
+export function assignMerchantTask(
+  input: TaskAssignInput,
+  actor: Actor,
+): { task: FieldTask; merchant: Merchant } {
+  const store = getStore();
+  const merchant = store.merchants.find(
+    (candidate) => candidate.id === input.merchantId,
+  );
   if (!merchant) {
-    merchant = {
-      id: id("m"),
-      name: input.merchantName.trim(),
-      normalizedName,
-      team: input.team,
-      cityId: input.cityId,
-      targetCommission: input.targetCommission,
-      monthlyValue: input.estimatedMonthlyValue,
-      strategicNotes: input.strategicNotes.trim(),
-      contractState: "no_agreement",
-      commissionAmount: 0,
-      editUnlocked: false,
-      documents: [],
-      createdAt: isoNow(),
-      updatedAt: isoNow(),
-      lastVisitAt: null,
-    };
-    store.merchants.push(merchant);
-    merchantCreated = true;
-  } else {
-    merchant.team = input.team;
-    merchant.cityId = input.cityId;
-    merchant.targetCommission = input.targetCommission;
-    merchant.monthlyValue = input.estimatedMonthlyValue;
-    if (input.strategicNotes.trim()) {
-      merchant.strategicNotes = input.strategicNotes.trim();
-    }
-    merchant.updatedAt = isoNow();
+    throw new FieldOpsError(
+      "MERCHANT_NOT_FOUND",
+      "التاجر المستهدف غير موجود.",
+      404,
+    );
   }
+
+  const city = store.cities.find((candidate) => candidate.id === merchant.cityId);
+  if (!city) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "مدينة التاجر غير موجودة.", 404);
+  }
+  if (city.stage === "preparation") {
+    throw new FieldOpsError(
+      "CITY_IN_PREPARATION",
+      "المدينة في مرحلة الإعداد. انقلها إلى مرحلة التعاقدات قبل إسناد المهام.",
+      409,
+    );
+  }
+
+  if (merchant.team && merchant.team !== input.team) {
+    throw new FieldOpsError(
+      "TEAM_LOCKED",
+      "ملكية هذا التاجر مثبتة لفريق آخر. استخدم طلب نقل الملكية بدلاً من إعادة الإسناد.",
+      409,
+    );
+  }
+
+  if (!merchant.team) {
+    merchant.team = input.team;
+  }
+  merchant.updatedAt = isoNow();
 
   const task: FieldTask = {
     id: id("task"),
     merchantId: merchant.id,
     merchantName: merchant.name,
     team: input.team,
-    cityId: input.cityId,
+    cityId: merchant.cityId,
     visitDate: input.visitDate,
-    targetCommission: input.targetCommission,
-    strategicNotes: input.strategicNotes.trim(),
+    targetCommission: merchant.targetCommission,
+    strategicNotes: merchant.strategicNotes,
     status: "scheduled",
     createdBy: actor.id,
     createdByName: actor.name,
@@ -808,11 +895,7 @@ export function createTaskWithMerchant(
   store.tasks.push(task);
   bump();
 
-  return {
-    task: clone(task),
-    merchant: clone(merchant),
-    merchantCreated,
-  };
+  return { task: clone(task), merchant: clone(merchant) };
 }
 
 export function createVisitReport(
@@ -926,6 +1009,13 @@ export function createTransferRequest(
   );
   if (!merchant) {
     throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
+  }
+  if (!merchant.team) {
+    throw new FieldOpsError(
+      "MERCHANT_UNASSIGNED",
+      "هذا التاجر غير مسند لأي فريق بعد. أسنده إلى فريق أولاً.",
+      409,
+    );
   }
   if (merchant.team === actor.team) {
     throw new FieldOpsError(

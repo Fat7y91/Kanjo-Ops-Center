@@ -26,6 +26,8 @@ export default async function FieldOpsPage() {
         canApproveEdits={permissions.includes("approve_edit_requests")}
         canManageState={permissions.includes("manage_merchant_state")}
         canViewMerchants={permissions.includes("view_merchants")}
+        canCreateMerchants={permissions.includes("create_merchants")}
+        canAssignTasks={permissions.includes("assign_tasks")}
       />
     </>
   );

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
-import { taskCreateSchema } from "@/lib/schemas/field-ops";
+import { taskAssignSchema } from "@/lib/schemas/field-ops";
 import {
-  createTaskWithMerchant,
+  assignMerchantTask,
   tasksForViewer,
   today,
 } from "@/lib/field-ops/store";
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
   if (!session) return response;
 
   try {
-    const input = taskCreateSchema.parse(await readJson(request));
-    const result = createTaskWithMerchant(input, actorFromSession(session));
+    const input = taskAssignSchema.parse(await readJson(request));
+    const result = assignMerchantTask(input, actorFromSession(session));
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return apiError(error);
