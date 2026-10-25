@@ -10,7 +10,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("manage_cities");
+  const { session, response } = await authorize("update_city_zone");
   if (!session) return response;
   const { id } = await context.params;
 

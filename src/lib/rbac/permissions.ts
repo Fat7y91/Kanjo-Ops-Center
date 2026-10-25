@@ -31,9 +31,21 @@ export const PERMISSIONS = [
     group: "المدن",
   },
   {
-    key: "manage_cities",
-    label: "إدارة المدن",
-    description: "إنشاء المدن وجمع معلومات السوق ورسم النطاقات.",
+    key: "create_city",
+    label: "إنشاء مدينة",
+    description: "إنشاء مدينة جديدة عبر معالج ذكاء الأعمال الجغرافي.",
+    group: "المدن",
+  },
+  {
+    key: "update_city_zone",
+    label: "تحديث النطاق الجغرافي",
+    description: "تعديل حدود المدينة ونطاقها التشغيلي وبياناتها الميدانية.",
+    group: "المدن",
+  },
+  {
+    key: "view_city_analytics",
+    label: "عرض تحليلات المدينة",
+    description: "الاطلاع على تقديرات السكان والتجار ومؤشر المنافسة داخل النطاق.",
     group: "المدن",
   },
   {

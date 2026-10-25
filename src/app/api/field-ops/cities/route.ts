@@ -7,7 +7,7 @@ import { createCity, listCities } from "@/lib/field-ops/store";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { session, response } = await authorize("manage_cities");
+  const { session, response } = await authorize("view_cities");
   if (!session) return response;
 
   return NextResponse.json(
@@ -17,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("manage_cities");
+  const { session, response } = await authorize("create_city");
   if (!session) return response;
 
   try {

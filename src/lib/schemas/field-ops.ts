@@ -23,6 +23,7 @@ const competitorSchema = z.object({
 export const cityCreateSchema = z.object({
   name: z.string().trim().min(2, "اسم المدينة مطلوب.").max(80),
   country: z.string().trim().min(2, "الدولة مطلوبة.").max(60),
+  governorate: z.string().trim().min(2, "المحافظة مطلوبة.").max(60),
   population: z.coerce
     .number()
     .int("عدد السكان يجب أن يكون رقماً صحيحاً.")

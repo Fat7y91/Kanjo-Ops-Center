@@ -32,6 +32,8 @@ export default function CityMapInner({
   editable = false,
   onAddPoint,
   center = [30.0444, 31.2357],
+  focus,
+  focusZoom = 12,
   zoom = 10,
   height = 320,
 }: CityMapProps) {
@@ -121,6 +123,12 @@ export default function CityMapInner({
     if (!ready || !map) return;
     map.invalidateSize();
   }, [height, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map || !focus) return;
+    map.flyTo(focus, focusZoom, { duration: 0.9, easeLinearity: 0.28 });
+  }, [focus, focusZoom, ready]);
 
   useEffect(() => {
     if (!ready) return;

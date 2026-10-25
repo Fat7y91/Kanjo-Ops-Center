@@ -6,7 +6,10 @@ import { listCities } from "@/lib/field-ops/store";
 export const dynamic = "force-dynamic";
 
 export default async function CitiesPage() {
-  const session = await requirePermission("manage_cities");
+  const session = await requirePermission("view_cities");
+  const canManage =
+    session.permissions.includes("create_city") ||
+    session.permissions.includes("update_city_zone");
 
   return (
     <>
@@ -15,12 +18,15 @@ export default async function CitiesPage() {
         title="المدن والنطاقات التشغيلية"
         description="حدّد أين تعمل كانجو، والتقط ذكاء السوق، وارسم النطاقات الجغرافية التي تغطيها الفرق الميدانية فعلياً."
         actions={
-          <span className="badge badge-purple">إدارة المدن مُفعّلة</span>
+          <span className="badge badge-purple">
+            {canManage
+              ? "إدارة المدن مُفعّلة"
+              : "عرض المدن والتحليلات"}
+          </span>
         }
       />
       <CitiesClient
         initialCities={listCities()}
-        canManage={session.permissions.includes("manage_cities")}
         viewerName={session.user.name}
       />
     </>

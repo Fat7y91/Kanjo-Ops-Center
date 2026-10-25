@@ -88,6 +88,7 @@ function seedStore(): FieldOpsStore {
       id: "city-mansoura",
       name: "المنصورة",
       country: "مصر",
+      governorate: "الدقهلية",
       population: 1_600_000,
       stage: "preparation",
       competitors: [
@@ -113,6 +114,7 @@ function seedStore(): FieldOpsStore {
       id: "city-cairo",
       name: "القاهرة",
       country: "مصر",
+      governorate: "القاهرة",
       population: 10_100_000,
       stage: "live_operations",
       competitors: [
@@ -144,6 +146,7 @@ function seedStore(): FieldOpsStore {
       id: "city-giza",
       name: "الجيزة",
       country: "مصر",
+      governorate: "الجيزة",
       population: 9_200_000,
       stage: "data_entry",
       competitors: [
@@ -169,6 +172,7 @@ function seedStore(): FieldOpsStore {
       id: "city-alexandria",
       name: "الإسكندرية",
       country: "مصر",
+      governorate: "الإسكندرية",
       population: 5_500_000,
       stage: "contracting",
       competitors: [
@@ -653,6 +657,7 @@ export function createCity(input: CityCreateInput, actor: Actor): City {
     id: id("city"),
     name: input.name.trim(),
     country: input.country.trim(),
+    governorate: input.governorate.trim(),
     population: input.population,
     stage: input.stage,
     competitors: input.competitors.map((competitor) => ({
@@ -702,6 +707,7 @@ export function updateCity(cityId: string, input: CityCreateInput): City {
 
   city.name = input.name.trim();
   city.country = input.country.trim();
+  city.governorate = input.governorate.trim();
   city.population = input.population;
   city.stage = input.stage;
   city.competitors = input.competitors.map((competitor) => ({

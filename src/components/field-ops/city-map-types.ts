@@ -13,6 +13,8 @@ export type CityMapProps = {
   editable?: boolean;
   onAddPoint?: (point: ZonePoint) => void;
   center?: [number, number];
+  focus?: [number, number];
+  focusZoom?: number;
   zoom?: number;
   height?: number;
 };

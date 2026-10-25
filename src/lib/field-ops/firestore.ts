@@ -11,6 +11,7 @@ export type CityFirestoreDocument = {
   id: string;
   name: string;
   country: string;
+  governorate: string;
   population: number;
   stage: City["stage"];
   competitors: City["competitors"];
@@ -27,6 +28,7 @@ export function toCityFirestoreDocument(city: City): CityFirestoreDocument {
     id: city.id,
     name: city.name,
     country: city.country,
+    governorate: city.governorate,
     population: city.population,
     stage: city.stage,
     competitors: city.competitors,

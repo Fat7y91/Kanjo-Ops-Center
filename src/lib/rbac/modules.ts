@@ -36,7 +36,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     label: "المدن",
     shortLabel: "المدن",
     description: "دورة حياة المدن ومعلومات السوق والنطاقات التشغيلية.",
-    permission: "manage_cities",
+    permission: "view_cities",
     icon: "cities",
   },
   {

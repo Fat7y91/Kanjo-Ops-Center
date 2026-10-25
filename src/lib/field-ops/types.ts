@@ -127,6 +127,7 @@ export type City = {
   id: string;
   name: string;
   country: string;
+  governorate: string;
   population: number;
   stage: CityStage;
   competitors: Competitor[];

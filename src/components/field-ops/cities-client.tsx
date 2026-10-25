@@ -3,27 +3,37 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { Protect } from "@/components/auth/protect";
+import { usePermission } from "@/components/auth/use-permission";
 import { CityMap } from "@/components/field-ops/city-map";
+import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-panel";
 import { Modal } from "@/components/field-ops/modal";
 import {
   CITY_STAGES,
   CITY_STAGE_META,
   type City,
   type CityStage,
-  type Competitor,
   type MarketStrength,
   type ZonePoint,
 } from "@/lib/field-ops/types";
+import {
+  EGYPT_GOVERNORATES,
+  findCityByName,
+  findEgyptCity,
+  findGovernorate,
+  findGovernorateByName,
+  findGovernorateForCity,
+} from "@/lib/geo/egypt";
 
 type CitiesClientProps = {
   initialCities: City[];
-  canManage: boolean;
   viewerName: string;
 };
 
 type FormState = {
   name: string;
   country: string;
+  governorate: string;
   population: string;
   stage: CityStage;
   strategicNotes: string;
@@ -37,6 +47,7 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   name: "",
   country: "مصر",
+  governorate: "",
   population: "",
   stage: "preparation",
   strategicNotes: "",
@@ -55,19 +66,50 @@ function formatNumber(value: number): string {
   );
 }
 
-export function CitiesClient({
-  initialCities,
-  canManage,
-  viewerName,
-}: CitiesClientProps) {
+function suggestedZone(lat: number, lng: number): ZonePoint[] {
+  const latDelta = 0.018;
+  const lngDelta = 0.018 / Math.max(Math.cos((lat * Math.PI) / 180), 0.2);
+  return [
+    { lat: lat + latDelta, lng: lng - lngDelta },
+    { lat: lat + latDelta, lng: lng + lngDelta },
+    { lat: lat - latDelta, lng: lng + lngDelta },
+    { lat: lat - latDelta, lng: lng - lngDelta },
+  ].map((point) => ({
+    lat: Number(point.lat.toFixed(6)),
+    lng: Number(point.lng.toFixed(6)),
+  }));
+}
+
+function zoneCentroid(zone: ZonePoint[]): [number, number] | undefined {
+  if (zone.length === 0) return undefined;
+  const lat = zone.reduce((sum, point) => sum + point.lat, 0) / zone.length;
+  const lng = zone.reduce((sum, point) => sum + point.lng, 0) / zone.length;
+  return [lat, lng];
+}
+
+export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
   const router = useRouter();
+  const { hasPermission } = usePermission();
+  const canCreate = hasPermission("create_city");
+  const canUpdate = hasPermission("update_city_zone");
+  const canAnalyze = hasPermission("view_city_analytics");
+
   const [cities, setCities] = useState(initialCities);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [zone, setZone] = useState<ZonePoint[]>([]);
+  const [governorateId, setGovernorateId] = useState("");
+  const [cityId, setCityId] = useState("");
+  const [focus, setFocus] = useState<[number, number] | undefined>(undefined);
+  const [focusZoom, setFocusZoom] = useState(12);
+  const [analyticsCity, setAnalyticsCity] = useState<City | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const selectedGovernorate = governorateId
+    ? findGovernorate(governorateId)
+    : undefined;
 
   const totals = useMemo(() => {
     const population = cities.reduce((sum, city) => sum + city.population, 0);
@@ -87,6 +129,10 @@ export function CitiesClient({
   function reset() {
     setForm(EMPTY_FORM);
     setZone([]);
+    setGovernorateId("");
+    setCityId("");
+    setFocus(undefined);
+    setFocusZoom(12);
     setError("");
     setEditingId(null);
   }
@@ -97,10 +143,13 @@ export function CitiesClient({
   }
 
   function openEdit(city: City) {
+    const governorate = findGovernorateByName(city.governorate);
+    const matchedCity = findCityByName(city.name);
     setEditingId(city.id);
     setForm({
       name: city.name,
       country: city.country,
+      governorate: city.governorate,
       population: String(city.population),
       stage: city.stage,
       strategicNotes: city.strategicNotes,
@@ -111,8 +160,51 @@ export function CitiesClient({
       })),
     });
     setZone(city.zone.map((point) => ({ ...point })));
+    setGovernorateId(governorate?.id ?? "");
+    setCityId(
+      matchedCity &&
+        findGovernorateForCity(matchedCity.id)?.id === governorate?.id
+        ? matchedCity.id
+        : "",
+    );
+    setFocus(zoneCentroid(city.zone));
+    setFocusZoom(12);
     setError("");
     setOpen(true);
+  }
+
+  function chooseGovernorate(id: string) {
+    setGovernorateId(id);
+    setCityId("");
+    const governorate = id ? findGovernorate(id) : undefined;
+    setForm((current) => ({
+      ...current,
+      governorate: governorate?.name ?? current.governorate,
+    }));
+    if (governorate) {
+      setFocus([governorate.center.lat, governorate.center.lng]);
+      setFocusZoom(9);
+    }
+  }
+
+  function chooseCity(id: string) {
+    setCityId(id);
+    const city = findEgyptCity(id);
+    const governorate = id ? findGovernorateForCity(id) : undefined;
+    if (!city) return;
+    if (governorate) setGovernorateId(governorate.id);
+    setFocus([city.lat, city.lng]);
+    setFocusZoom(12);
+    setForm((current) => ({
+      ...current,
+      name: city.name,
+      country: "مصر",
+      governorate: governorate?.name ?? current.governorate,
+      population: String(city.population),
+    }));
+    setZone((current) =>
+      current.length >= 3 ? current : suggestedZone(city.lat, city.lng),
+    );
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -229,7 +321,7 @@ export function CitiesClient({
             <p className="eyebrow">الجغرافيا التشغيلية</p>
             <h2>نطاقات المدن ومعلومات السوق</h2>
           </div>
-          {canManage ? (
+          <Protect require="create_city">
             <button
               type="button"
               className="button button-primary"
@@ -237,7 +329,7 @@ export function CitiesClient({
             >
               إضافة مدينة
             </button>
-          ) : null}
+          </Protect>
         </div>
         <CityMap
           cities={cities.map((city) => ({
@@ -263,7 +355,11 @@ export function CitiesClient({
             <article key={city.id} className="panel city-card flex h-full flex-col">
               <div className="city-card-head">
                 <div>
-                  <p className="eyebrow">{city.country}</p>
+                  <p className="eyebrow">
+                    {city.governorate
+                      ? `${city.governorate} · ${city.country}`
+                      : city.country}
+                  </p>
                   <h2>{city.name}</h2>
                 </div>
                 <span className={`badge ${meta.tone}`}>{meta.label}</span>
@@ -297,17 +393,31 @@ export function CitiesClient({
                   ))
                 )}
               </div>
-              {canManage ? (
+              <Protect
+                require={["view_city_analytics", "update_city_zone"]}
+                mode="any"
+              >
                 <div className="row-actions city-card-actions mt-auto">
-                  <button
-                    type="button"
-                    className="button button-small button-quiet"
-                    onClick={() => openEdit(city)}
-                  >
-                    تعديل المدينة
-                  </button>
+                  <Protect require="view_city_analytics">
+                    <button
+                      type="button"
+                      className="button button-small button-quiet"
+                      onClick={() => setAnalyticsCity(city)}
+                    >
+                      تحليل النطاق
+                    </button>
+                  </Protect>
+                  <Protect require="update_city_zone">
+                    <button
+                      type="button"
+                      className="button button-small button-quiet"
+                      onClick={() => openEdit(city)}
+                    >
+                      تعديل المدينة
+                    </button>
+                  </Protect>
                 </div>
-              ) : null}
+              </Protect>
             </article>
           );
         })}
@@ -317,7 +427,7 @@ export function CitiesClient({
         open={open}
         title={editingId ? "تعديل مدينة" : "إضافة مدينة"}
         eyebrow="التوسع الجغرافي"
-        description="ارسم النطاق التشغيلي ثم أدخل معلومات السوق التي يحتاجها الفريق الميداني."
+        description="اختر المدينة من قاعدة بيانات مصر، ثم ارسم النطاق التشغيلي وراجع التحليلات الفورية قبل الحفظ."
         onClose={() => {
           setOpen(false);
           reset();
@@ -325,6 +435,56 @@ export function CitiesClient({
         wide
       >
         <form className="form-stack" onSubmit={submit}>
+          <div className="geo-wizard">
+            <div className="geo-wizard-head">
+              <div>
+                <p className="eyebrow">معالج الذكاء الجغرافي</p>
+                <h3>حدد المحافظة ثم المدينة</h3>
+              </div>
+              <span className="badge badge-purple">بيانات مصر</span>
+            </div>
+            <div className="form-grid">
+              <label className="field">
+                <span>المحافظة</span>
+                <select
+                  value={governorateId}
+                  onChange={(event) => chooseGovernorate(event.target.value)}
+                  required
+                >
+                  <option value="">اختر المحافظة</option>
+                  {EGYPT_GOVERNORATES.map((governorate) => (
+                    <option key={governorate.id} value={governorate.id}>
+                      {governorate.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>المدينة</span>
+                <select
+                  value={cityId}
+                  onChange={(event) => chooseCity(event.target.value)}
+                  disabled={!selectedGovernorate}
+                  required
+                >
+                  <option value="">
+                    {selectedGovernorate
+                      ? "اختر المدينة"
+                      : "اختر المحافظة أولاً"}
+                  </option>
+                  {selectedGovernorate?.cities.map((city) => (
+                    <option key={city.id} value={city.id}>
+                      {city.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="field-hint">
+                  يحدّث اختيار المدينة موقع الخريطة وتقديرات السكان تلقائياً.
+                </span>
+              </label>
+            </div>
+          </div>
+
           <div className="form-grid">
             <label className="field">
               <span>اسم المدينة</span>
@@ -387,10 +547,27 @@ export function CitiesClient({
               onAddPoint={(point) => setZone((current) => [...current, point])}
               height={300}
               center={[30.0444, 31.2357]}
+              focus={focus}
+              focusZoom={focusZoom}
               zoom={10}
             />
             <div className="row-actions zone-actions">
               <span className="badge">{zone.length} نقطة</span>
+              <button
+                type="button"
+                className="button button-small button-quiet"
+                onClick={() => {
+                  const city = cityId ? findEgyptCity(cityId) : undefined;
+                  const point = city
+                    ? { lat: city.lat, lng: city.lng }
+                    : focus
+                      ? { lat: focus[0], lng: focus[1] }
+                      : undefined;
+                  if (point) setZone(suggestedZone(point.lat, point.lng));
+                }}
+              >
+                اقتراح نطاق تلقائي
+              </button>
               <button
                 type="button"
                 className="button button-small button-quiet"
@@ -409,6 +586,12 @@ export function CitiesClient({
               </button>
             </div>
           </div>
+
+          <GeoAnalyticsPanel
+            zone={zone}
+            cityId={cityId || undefined}
+            enabled={canAnalyze}
+          />
 
           <label className="field">
             <span>ملاحظات استراتيجية</span>
@@ -508,7 +691,7 @@ export function CitiesClient({
             <button
               type="submit"
               className="button button-primary"
-              disabled={saving}
+              disabled={saving || (editingId ? !canUpdate : !canCreate)}
             >
               {saving
                 ? "جارٍ الحفظ..."
@@ -518,6 +701,36 @@ export function CitiesClient({
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(analyticsCity)}
+        title={analyticsCity ? `تحليلات ${analyticsCity.name}` : "تحليلات النطاق"}
+        eyebrow="ذكاء الأعمال الجغرافي"
+        description="مراجعة تقديرات السوق داخل النطاق المسجّل للمدينة دون تعديل الحدود."
+        onClose={() => setAnalyticsCity(null)}
+        wide
+      >
+        {analyticsCity ? (
+          <>
+            <CityMap
+              draft={analyticsCity.zone}
+              height={320}
+              center={[analyticsCity.zone[0]?.lat ?? 30.04, analyticsCity.zone[0]?.lng ?? 31.23]}
+              focus={zoneCentroid(analyticsCity.zone)}
+              focusZoom={12}
+            />
+            <div className="analytics-modal-body">
+              <GeoAnalyticsPanel
+                zone={analyticsCity.zone}
+                cityId={
+                  findCityByName(analyticsCity.name)?.id ?? undefined
+                }
+                enabled={canAnalyze}
+              />
+            </div>
+          </>
+        ) : null}
       </Modal>
     </>
   );

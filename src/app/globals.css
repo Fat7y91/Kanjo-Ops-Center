@@ -2510,6 +2510,135 @@ textarea {
   background: rgba(9, 9, 11, 0.86);
 }
 
+
+
+.analytics-modal-body {
+  margin-top: 16px;
+}
+
+/* ── Geo-Intelligence Wizard ──────────────────────────────────────────── */
+
+.geo-wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.geo-wizard-head,
+.geo-analytics-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.geo-wizard-head h3,
+.geo-analytics-head h3 {
+  margin: 2px 0 0;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.geo-analytics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.geo-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.geo-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface-soft);
+  min-height: 104px;
+}
+
+.geo-stat strong {
+  font-size: 1.22rem;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.geo-stat strong small {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.geo-stat .badge {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.geo-stat .stat-hint {
+  line-height: 1.55;
+}
+
+.geo-stat.is-loading {
+  justify-content: center;
+}
+
+.skeleton {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(
+    100deg,
+    var(--line) 20%,
+    var(--surface) 45%,
+    var(--line) 70%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-sweep 1.35s ease-in-out infinite;
+}
+
+.skeleton-sm {
+  width: 52%;
+  height: 10px;
+}
+
+.skeleton-lg {
+  width: 78%;
+  height: 24px;
+}
+
+.skeleton-md {
+  width: 62%;
+  height: 10px;
+}
+
+@keyframes skeleton-sweep {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 /* ── Map direction guard ──────────────────────────────────────────────── */
 
 .city-map.leaflet-container {
