@@ -1807,6 +1807,10 @@ textarea {
   gap: 14px;
 }
 
+.city-grid > .panel.city-card {
+  margin-top: 0;
+}
+
 .city-card-head {
   display: flex;
   align-items: flex-start;

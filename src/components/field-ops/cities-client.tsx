@@ -256,11 +256,11 @@ export function CitiesClient({
         </p>
       </section>
 
-      <section className="city-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="city-grid grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cities.map((city) => {
           const meta = CITY_STAGE_META[city.stage];
           return (
-            <article key={city.id} className="panel city-card">
+            <article key={city.id} className="panel city-card flex h-full flex-col">
               <div className="city-card-head">
                 <div>
                   <p className="eyebrow">{city.country}</p>
@@ -282,7 +282,9 @@ export function CitiesClient({
                   <strong>{city.createdByName || viewerName}</strong>
                 </div>
               </div>
-              <p className="city-notes">{city.strategicNotes}</p>
+              <p className="city-notes line-clamp-2" title={city.strategicNotes}>
+                {city.strategicNotes}
+              </p>
               <div className="competitor-list">
                 {city.competitors.length === 0 ? (
                   <span className="muted">لا يوجد منافسون مسجلون.</span>
@@ -296,7 +298,7 @@ export function CitiesClient({
                 )}
               </div>
               {canManage ? (
-                <div className="row-actions">
+                <div className="row-actions city-card-actions mt-auto">
                   <button
                     type="button"
                     className="button button-small button-quiet"
