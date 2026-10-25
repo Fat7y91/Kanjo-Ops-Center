@@ -560,6 +560,14 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
         }
     }
 
+    @page :first {
+        margin: 0 !important;
+
+        @bottom-center {
+            content: none;
+        }
+    }
+
     body * {
         visibility: hidden !important;
     }

@@ -265,7 +265,7 @@ function buildCoverPage({ merchantName, merchantLogo, logoDataUri }) {
         : `<div style="${partnerCardStyle} background: linear-gradient(145deg, #4B0082, #6B21A8); border-color: #F59E0B;"><span style="color: #ffffff; font-size: 34px; font-weight: 900; line-height: 1;">${initial}</span></div>`;
 
     return `
-        <section class="contract-cover" style="position: relative; width: 100%; height: 260mm; min-height: 260mm; max-height: 260mm; box-sizing: border-box; padding: 24mm 20mm 16mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+        <section class="contract-cover" style="position: relative; width: 100%; min-height: 297mm; box-sizing: border-box; padding: 20mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
             <div style="position: absolute; top: 0; left: 0; right: 0; height: 9px; background: linear-gradient(90deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></div>
             <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #F59E0B 0%, #4B0082 50%, #F59E0B 100%);"></div>
             <div style="position: relative; z-index: 1; width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -664,6 +664,8 @@ ${fontFaces}
     }
 
     @page :first {
+        margin: 0 !important;
+
         @bottom-center {
             content: none;
         }
