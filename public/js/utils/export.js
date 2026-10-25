@@ -1941,13 +1941,9 @@ window.buildContractHTML = (task) => {
                     <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
                 </div>
                 <div style="font-size: 12px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 6mm;">شراكة رسمية</div>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 6mm; width: 100%;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 8mm; width: 100%;">
                     ${coverKanjoMark}
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3mm; min-width: 12mm; height: 40mm;">
-                        <span style="width: 1px; height: 11mm; background: linear-gradient(180deg, rgba(245, 158, 11, 0), #F59E0B);"></span>
-                        <span style="width: 8mm; height: 8mm; border: 1.5px solid #F59E0B; border-radius: 50%; background: #ffffff; color: #B45309; font-size: 13px; line-height: 1; font-weight: 900; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.18);">×</span>
-                        <span style="width: 1px; height: 11mm; background: linear-gradient(180deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
-                    </div>
+                    <span style="display: inline-block; width: 2px; height: 60px; border-radius: 999px; background: linear-gradient(180deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></span>
                     ${coverMerchantMark}
                 </div>
                 <div style="font-size: 28px; line-height: 1.55; font-weight: 900; color: #4B0082; margin-top: 8mm; max-width: 150mm; word-break: break-word;">${coverMerchantName}</div>
