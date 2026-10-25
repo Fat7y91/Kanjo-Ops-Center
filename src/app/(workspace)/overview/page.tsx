@@ -26,7 +26,10 @@ export default async function OverviewPage() {
         }
       />
 
-      <section className="stat-grid" aria-label="مؤشرات المؤسسة">
+      <section
+        className="stat-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+        aria-label="مؤشرات المؤسسة"
+      >
         <StatCard
           label="التجار النشطون"
           value="1,284"
@@ -81,7 +84,7 @@ export default async function OverviewPage() {
         </section>
       </Protect>
 
-      <section className="two-column">
+      <section className="two-column grid grid-cols-1 gap-4 lg:grid-cols-2">
         <article className="panel">
           <div className="panel-head">
             <div>

@@ -190,7 +190,7 @@ export function CitiesClient({
 
   return (
     <>
-      <section className="stat-grid">
+      <section className="stat-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="stat-card">
           <p className="eyebrow">المدن النشطة</p>
           <strong className="stat-value">{formatNumber(cities.length)}</strong>
@@ -256,7 +256,7 @@ export function CitiesClient({
         </p>
       </section>
 
-      <section className="city-grid">
+      <section className="city-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cities.map((city) => {
           const meta = CITY_STAGE_META[city.stage];
           return (

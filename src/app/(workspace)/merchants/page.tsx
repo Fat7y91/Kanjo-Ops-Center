@@ -57,7 +57,7 @@ export default async function MerchantsPage({
           </button>
         </form>
 
-        <div className="table-wrap">
+        <div className="table-wrap w-full overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>

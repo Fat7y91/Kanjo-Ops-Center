@@ -127,7 +127,7 @@ export function PermissionMatrix({
         </p>
       )}
 
-      <div className="matrix-list">
+      <div className="matrix-list overflow-hidden">
         {users.map((user) => {
           const held = new Set(user.permissions);
           return (
@@ -155,7 +155,7 @@ export function PermissionMatrix({
                 </span>
               </header>
 
-              <div className="matrix-groups">
+              <div className="matrix-groups grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {PERMISSION_GROUPS.map((group) => (
                   <div key={group.name} className="matrix-group">
                     <h3>{group.name}</h3>

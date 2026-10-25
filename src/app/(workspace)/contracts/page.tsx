@@ -60,7 +60,7 @@ export default async function ContractsPage() {
       />
 
       <section className="panel">
-        <div className="table-wrap">
+        <div className="table-wrap w-full overflow-x-auto">
           <table className="data-table">
             <thead>
               <tr>

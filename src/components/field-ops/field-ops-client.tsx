@@ -494,7 +494,7 @@ export function FieldOpsClient({
           ) : null}
         </div>
 
-        <div className="board">
+        <div className="board grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="board-column">
             <div className="board-head">
               <h2>مجدولة</h2>
