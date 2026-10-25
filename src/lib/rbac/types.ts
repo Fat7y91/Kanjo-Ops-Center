@@ -11,12 +11,16 @@ export type AppUser = {
   name: string;
   email: string;
   title: string;
+  team: string;
   permissions: Permission[];
   active: boolean;
   updatedAt: string;
 };
 
-export type SessionUser = Pick<AppUser, "id" | "name" | "email" | "title">;
+export type SessionUser = Pick<
+  AppUser,
+  "id" | "name" | "email" | "title" | "team"
+>;
 
 export type ActiveSession = {
   user: SessionUser;

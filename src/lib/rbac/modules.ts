@@ -2,6 +2,7 @@ import type { Permission } from "./permissions";
 
 export type ModuleIcon =
   | "overview"
+  | "cities"
   | "merchants"
   | "catalog"
   | "field-ops"
@@ -29,6 +30,14 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "Enterprise health, operational signals, and finance.",
     permission: "view_overview",
     icon: "overview",
+  },
+  {
+    href: "/cities",
+    label: "Cities",
+    shortLabel: "Cities",
+    description: "City lifecycle, market intelligence, and operational zones.",
+    permission: "view_cities",
+    icon: "cities",
   },
   {
     href: "/merchants",

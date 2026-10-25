@@ -25,6 +25,18 @@ export const PERMISSIONS = [
     group: "Workspace",
   },
   {
+    key: "view_cities",
+    label: "View cities",
+    description: "Open the city lifecycle and operational zoning register.",
+    group: "Cities",
+  },
+  {
+    key: "manage_cities",
+    label: "Manage cities",
+    description: "Create cities, capture market intelligence, and draw zones.",
+    group: "Cities",
+  },
+  {
     key: "view_merchants",
     label: "View merchants",
     description: "Open the merchant directory.",
@@ -81,13 +93,14 @@ export const PERMISSIONS = [
   {
     key: "view_field_ops",
     label: "View field ops",
-    description: "Open the field operations board.",
+    description: "Open the field operations board and visit workflow.",
     group: "Field Ops",
   },
   {
-    key: "create_tasks",
-    label: "Create tasks",
-    description: "Create field tasks and visits.",
+    key: "manage_tasks",
+    label: "Manage tasks",
+    description:
+      "Create tasks, initialize merchants, and administer field operations.",
     group: "Field Ops",
   },
   {
@@ -100,6 +113,31 @@ export const PERMISSIONS = [
     key: "approve_tasks",
     label: "Approve tasks",
     description: "Approve completed field work.",
+    group: "Field Ops",
+  },
+  {
+    key: "request_transfers",
+    label: "Request merchant transfers",
+    description: "Request that a merchant move to the operator's team.",
+    group: "Field Ops",
+  },
+  {
+    key: "approve_transfers",
+    label: "Approve transfers",
+    description: "Approve or reject cross-team merchant transfer requests.",
+    group: "Field Ops",
+  },
+  {
+    key: "approve_edit_requests",
+    label: "Approve report edits",
+    description: "Approve or reject locked visit-report edit requests.",
+    group: "Field Ops",
+  },
+  {
+    key: "manage_merchant_state",
+    label: "Manage merchant state",
+    description:
+      "Override final and signed contract states and edit locked records.",
     group: "Field Ops",
   },
   {

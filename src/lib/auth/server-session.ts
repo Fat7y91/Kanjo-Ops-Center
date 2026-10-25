@@ -29,6 +29,7 @@ export async function getServerSession(): Promise<ActiveSession | null> {
       name: user.name,
       email: user.email,
       title: user.title,
+      team: user.team,
     },
     permissions: [...user.permissions],
     revision: getRbacRevision(),
