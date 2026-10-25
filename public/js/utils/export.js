@@ -1941,13 +1941,22 @@ window.buildContractHTML = (task) => {
                     <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
                 </div>
                 <div style="font-size: 12px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 6mm;">شراكة رسمية</div>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8mm; width: 100%;">
-                    ${coverKanjoMark}
-                    <span style="display: inline-block; width: 2px; height: 60px; border-radius: 999px; background: linear-gradient(180deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></span>
-                    ${coverMerchantMark}
+                <div style="display: flex; align-items: flex-start; justify-content: center; gap: 6mm; width: 100%;">
+                    <div style="width: 58mm; display: flex; flex-direction: column; align-items: center;">
+                        ${coverKanjoMark}
+                        <div style="margin-top: 3.5mm; font-size: 18px; line-height: 1.45; font-weight: 900; color: #4B0082;">كانجو</div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2mm; min-width: 14mm; height: 40mm;">
+                        <span style="width: 2px; height: 13mm; border-radius: 999px; background: linear-gradient(180deg, rgba(75, 0, 130, 0), #4B0082 55%, #F59E0B);"></span>
+                        <span style="font-size: 30px; line-height: 1; font-weight: 900; color: #F59E0B;">&amp;</span>
+                        <span style="width: 2px; height: 13mm; border-radius: 999px; background: linear-gradient(180deg, #F59E0B, #4B0082 45%, rgba(75, 0, 130, 0));"></span>
+                    </div>
+                    <div style="width: 58mm; display: flex; flex-direction: column; align-items: center;">
+                        ${coverMerchantMark}
+                        <div style="margin-top: 3.5mm; font-size: 18px; line-height: 1.45; font-weight: 900; color: #4B0082; max-width: 56mm; word-break: break-word;">${coverMerchantName}</div>
+                    </div>
                 </div>
-                <div style="font-size: 28px; line-height: 1.55; font-weight: 900; color: #4B0082; margin-top: 8mm; max-width: 150mm; word-break: break-word;">${coverMerchantName}</div>
-                <div style="font-size: 11px; line-height: 1.6; letter-spacing: 3px; font-weight: 800; color: #B45309; margin-top: 2mm; direction: ltr;">MERCHANT PARTNER</div>
+                <div style="width: 100%; margin-top: 8mm; padding-top: 6mm; border-top: 1px solid #E9D5FF; font-size: 20px; line-height: 1.6; font-weight: 900; color: #4B0082;">ياما في الجراب يا حاوي</div>
             </div>
             <div style="position: relative; z-index: 1; width: 100%; margin-top: auto; padding-top: 7mm; border-top: 1px solid #E9D5FF; font-size: 10px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانجو — نسخة أصلية</div>
         </section>
