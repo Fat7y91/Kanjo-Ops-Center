@@ -1759,9 +1759,39 @@ textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #e9edf5;
+  background: #ffffff;
   overflow: hidden;
   z-index: 0;
+}
+
+.city-map-loading {
+  display: grid;
+  place-items: center;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.city-map.leaflet-container {
+  background: #ffffff;
+}
+
+.city-map .leaflet-tile-pane {
+  opacity: 1;
+}
+
+.city-map .leaflet-tile {
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.city-map.leaflet-container img {
+  display: block;
+  max-width: none !important;
+}
+
+[data-theme="dark"] .city-map .leaflet-tile-pane {
+  filter: brightness(0.82) contrast(1.05) saturate(0.9);
 }
 
 .city-grid {
@@ -2402,9 +2432,10 @@ textarea {
   background: rgba(220, 80, 80, 0.1);
 }
 
-[data-theme="dark"] .city-map {
+[data-theme="dark"] .city-map,
+[data-theme="dark"] .city-map.leaflet-container {
   border-color: var(--line);
-  background: #18181b;
+  background: #ffffff;
 }
 
 [data-theme="dark"] .leaflet-control-zoom a {
