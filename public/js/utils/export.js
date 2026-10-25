@@ -1921,44 +1921,46 @@ window.buildContractHTML = (task) => {
     const coverMerchantName = coverEscape(merchantName);
     const coverMerchantInitial = coverEscape(Array.from(String(merchantName || '').trim())[0] || 'ك');
     const coverMerchantLogo = window.currentMerchantLogoBase64 ? coverEscape(window.currentMerchantLogoBase64) : '';
-    const coverPartnerCardStyle = 'width: 40mm; height: 40mm; border-radius: 16px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 12px 34px rgba(75, 0, 130, 0.13); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 5mm; box-sizing: border-box;';
-    const coverKanjoMark = `<div style="${coverPartnerCardStyle}"><img src="logo.png" alt="Kanjo" style="max-width: 32mm; max-height: 24mm; object-fit: contain; display: block;"></div>`;
+    const coverPartnerCardStyle = 'width: 54mm; height: 54mm; border-radius: 20px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 16px 42px rgba(75, 0, 130, 0.13); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 6mm; box-sizing: border-box;';
+    const coverKanjoMark = `<div style="${coverPartnerCardStyle}"><img src="logo.png" alt="Kanjo" style="max-width: 43mm; max-height: 32mm; object-fit: contain; display: block;"></div>`;
     const coverMerchantMark = coverMerchantLogo
-        ? `<div style="${coverPartnerCardStyle}"><img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-width: 30mm; max-height: 30mm; object-fit: contain; display: block;"></div>`
-        : `<div style="${coverPartnerCardStyle} background: linear-gradient(145deg, #4B0082, #6B21A8); border-color: #F59E0B;"><span style="color: #ffffff; font-size: 34px; font-weight: 900; line-height: 1;">${coverMerchantInitial}</span></div>`;
+        ? `<div style="${coverPartnerCardStyle}"><img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-width: 40mm; max-height: 40mm; object-fit: contain; display: block;"></div>`
+        : `<div style="${coverPartnerCardStyle} background: linear-gradient(145deg, #4B0082, #6B21A8); border-color: #F59E0B;"><span style="color: #ffffff; font-size: 46px; font-weight: 900; line-height: 1;">${coverMerchantInitial}</span></div>`;
     const coverPage = `
-        <section class="contract-cover" style="position: relative; width: 100%; min-height: 297mm; box-sizing: border-box; padding: 20mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+        <section class="contract-cover" style="position: relative; width: 100%; min-height: 297mm; box-sizing: border-box; padding: 20mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
             <div style="position: absolute; top: 0; left: 0; right: 0; height: 9px; background: linear-gradient(90deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></div>
             <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #F59E0B 0%, #4B0082 50%, #F59E0B 100%);"></div>
-            <div style="position: relative; z-index: 1; width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="font-size: 11px; line-height: 1.6; letter-spacing: 6px; color: #B45309; font-weight: 800; direction: ltr;">KANJO PARTNERSHIP DOCUMENT</div>
-                <div style="width: 24mm; height: 3px; background: #F59E0B; border-radius: 999px; margin: 9mm auto 7mm;"></div>
-                <div style="font-size: 40px; line-height: 1.35; font-weight: 900; color: #4B0082; letter-spacing: -0.5px;">عقد شراكة نجاح</div>
-                <div style="font-size: 15px; line-height: 1.8; font-weight: 700; color: #6B21A8; margin-top: 4mm;">إطار تعاقدي رسمي لشراكة النجاح</div>
-                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 10mm 0 8mm;">
-                    <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, rgba(245, 158, 11, 0), #F59E0B);"></span>
-                    <span style="width: 7px; height: 7px; background: #F59E0B; transform: rotate(45deg); display: inline-block;"></span>
-                    <span style="height: 1px; width: 34mm; background: linear-gradient(90deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
+            <div style="position: relative; z-index: 1; width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly;">
+                <div style="font-size: 15px; line-height: 1.6; letter-spacing: 8px; color: #B45309; font-weight: 800; direction: ltr;">KANJO PARTNERSHIP DOCUMENT</div>
+                <div style="width: 32mm; height: 4px; background: #F59E0B; border-radius: 999px; margin: 8mm auto 6mm;"></div>
+                <div style="font-size: 54px; line-height: 1.3; font-weight: 900; color: #4B0082; letter-spacing: -0.5px;">عقد شراكة نجاح</div>
+                <div style="font-size: 20px; line-height: 1.8; font-weight: 700; color: #6B21A8; margin-top: 3mm;">إطار تعاقدي رسمي لشراكة النجاح</div>
+                <div style="display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin: 8mm 0 6mm;">
+                    <span style="height: 1.5px; width: 46mm; background: linear-gradient(90deg, rgba(245, 158, 11, 0), #F59E0B);"></span>
+                    <span style="width: 9px; height: 9px; background: #F59E0B; transform: rotate(45deg); display: inline-block;"></span>
+                    <span style="height: 1.5px; width: 46mm; background: linear-gradient(90deg, #F59E0B, rgba(245, 158, 11, 0));"></span>
                 </div>
-                <div style="font-size: 12px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 6mm;">شراكة رسمية</div>
-                <div style="display: flex; align-items: flex-start; justify-content: center; gap: 6mm; width: 100%;">
-                    <div style="width: 58mm; display: flex; flex-direction: column; align-items: center;">
+                <div style="font-size: 16px; line-height: 1.6; font-weight: 800; color: #64748b; margin-bottom: 4mm;">شراكة رسمية</div>
+                <div style="display: flex; align-items: flex-start; justify-content: center; gap: 5mm; width: 100%;">
+                    <div style="width: 70mm; display: flex; flex-direction: column; align-items: center;">
                         ${coverKanjoMark}
-                        <div style="margin-top: 3.5mm; font-size: 18px; line-height: 1.45; font-weight: 900; color: #4B0082;">كانچو</div>
+                        <div style="margin-top: 4.5mm; font-size: 24px; line-height: 1.45; font-weight: 900; color: #4B0082;">كانچو</div>
                     </div>
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2mm; min-width: 14mm; height: 40mm;">
-                        <span style="width: 2px; height: 13mm; border-radius: 999px; background: linear-gradient(180deg, rgba(75, 0, 130, 0), #4B0082 55%, #F59E0B);"></span>
-                        <span style="font-size: 30px; line-height: 1; font-weight: 900; color: #F59E0B;">&amp;</span>
-                        <span style="width: 2px; height: 13mm; border-radius: 999px; background: linear-gradient(180deg, #F59E0B, #4B0082 45%, rgba(75, 0, 130, 0));"></span>
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3mm; min-width: 18mm; height: 54mm;">
+                        <span style="width: 2px; height: 18mm; border-radius: 999px; background: linear-gradient(180deg, rgba(75, 0, 130, 0), #4B0082 55%, #F59E0B);"></span>
+                        <span style="font-size: 40px; line-height: 1; font-weight: 900; color: #F59E0B;">&amp;</span>
+                        <span style="width: 2px; height: 18mm; border-radius: 999px; background: linear-gradient(180deg, #F59E0B, #4B0082 45%, rgba(75, 0, 130, 0));"></span>
                     </div>
-                    <div style="width: 58mm; display: flex; flex-direction: column; align-items: center;">
+                    <div style="width: 70mm; display: flex; flex-direction: column; align-items: center;">
                         ${coverMerchantMark}
-                        <div style="margin-top: 3.5mm; font-size: 18px; line-height: 1.45; font-weight: 900; color: #4B0082; max-width: 56mm; word-break: break-word;">${coverMerchantName}</div>
+                        <div style="margin-top: 4.5mm; font-size: 24px; line-height: 1.45; font-weight: 900; color: #4B0082; max-width: 68mm; word-break: break-word;">${coverMerchantName}</div>
                     </div>
                 </div>
-                <div style="width: 100%; margin-top: 12mm; padding-top: 9mm; border-top: 1px solid #E9D5FF; font-size: 20px; line-height: 1.6; font-weight: 900; color: #4B0082;">ياما في الجراب يا حاوي</div>
             </div>
-            <div style="position: relative; z-index: 1; width: 100%; margin-top: auto; padding-top: 7mm; border-top: 1px solid #E9D5FF; font-size: 10px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانچو — نسخة أصلية</div>
+            <div style="position: relative; z-index: 1; width: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-top: 6mm; padding: 8mm 0; border-top: 1px solid #E9D5FF;">
+                <div style="font-size: 28px; line-height: 1.5; font-weight: 900; color: #4B0082; letter-spacing: 0.3px;">ياما في الجراب يا حاوي</div>
+            </div>
+            <div style="position: relative; z-index: 1; width: 100%; padding-top: 8mm; border-top: 1px solid #E9D5FF; font-size: 13px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانچو — نسخة أصلية</div>
         </section>
     `;
 
