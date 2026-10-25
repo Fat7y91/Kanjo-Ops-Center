@@ -21,13 +21,13 @@ export async function POST(
   try {
     const merchant = getMerchantById(id);
     if (!merchant) {
-      throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+      throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
     }
     const canManageTasks = session.permissions.includes("manage_tasks");
     if (!canManageTasks && merchant.team !== session.user.team) {
       throw new FieldOpsError(
         "OUTSIDE_TEAM",
-        "This merchant belongs to another team. Request a transfer first.",
+        "هذا التاجر تابع لفريق آخر. أرسل طلب نقل أولاً.",
         403,
       );
     }

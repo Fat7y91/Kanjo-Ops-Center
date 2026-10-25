@@ -44,13 +44,13 @@ export function PermissionMatrix({
       <section className="panel">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">Access changed</p>
-            <h2>Permission management revoked</h2>
+            <p className="eyebrow">تغيّر الوصول</p>
+            <h2>تم سحب إدارة الصلاحيات</h2>
           </div>
         </div>
         <p className="panel-note">
-          Your session no longer holds <code>manage_permissions</code>. The
-          matrix has been removed by the capability gate.
+          لم تعد جلساتك تحمل <code>manage_permissions</code>. أزالت بوابة
+          القدرات المصفوفة.
         </p>
       </section>
     );
@@ -79,7 +79,7 @@ export function PermissionMatrix({
       };
 
       if (!response.ok || !payload.user) {
-        setError(payload.error ?? "The permission update was rejected.");
+        setError(payload.error ?? "تم رفض تحديث الصلاحية.");
         return;
       }
 
@@ -96,7 +96,7 @@ export function PermissionMatrix({
       await refresh();
       router.refresh();
     } catch {
-      setError("The permission update could not reach the server.");
+      setError("تعذر وصول تحديث الصلاحية إلى الخادم.");
     } finally {
       setPendingKey(null);
     }
@@ -106,18 +106,18 @@ export function PermissionMatrix({
     <section className="panel">
       <div className="panel-head">
         <div>
-          <p className="eyebrow">Live matrix</p>
-          <h2>Users and capabilities</h2>
+          <p className="eyebrow">مصفوفة حيّة</p>
+          <h2>المستخدمون والقدرات</h2>
         </div>
         <div className="matrix-meta">
-          <span className="badge badge-green">Revision {revision}</span>
-          <span className="badge">Auto-sync 5s</span>
+          <span className="badge badge-green">إصدار {revision}</span>
+          <span className="badge">تزامن تلقائي 5ث</span>
         </div>
       </div>
 
       <p className="panel-note">
-        Every checkbox writes one capability to the server. No role is assigned
-        or read. At least one active operator must retain{" "}
+        كل مربع اختيار يكتب قدرة واحدة إلى الخادم. لا يُسند أي دور أو
+        يُقرأ. يجب أن يحتفظ مشغّل نشط واحد على الأقل بـ{" "}
         <code>manage_permissions</code>.
       </p>
 
@@ -144,7 +144,7 @@ export function PermissionMatrix({
                   <div className="matrix-user-name">
                     <strong>{user.name}</strong>
                     {user.id === viewerId && (
-                      <span className="badge badge-gold">You</span>
+                      <span className="badge badge-gold">أنت</span>
                     )}
                   </div>
                   <span>{user.title}</span>
@@ -176,7 +176,7 @@ export function PermissionMatrix({
                             <span>
                               {permission.label}
                               {pendingKey === keyId && (
-                                <em className="sync-mark">saving</em>
+                                <em className="sync-mark">جارٍ الحفظ</em>
                               )}
                             </span>
                           </label>

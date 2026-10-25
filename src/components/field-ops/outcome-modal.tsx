@@ -81,15 +81,15 @@ export function OutcomeModal({
       );
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not save the visit report.");
+        throw new Error(payload.error ?? "تعذر حفظ تقرير الزيارة.");
       }
-      onDone(`Visit report saved for ${target.name}.`);
+      onDone(`تم حفظ تقرير الزيارة لـ ${target.name}.`);
       onClose();
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "Could not save the visit report.",
+          : "تعذر حفظ تقرير الزيارة.",
       );
     } finally {
       setSaving(false);
@@ -99,20 +99,20 @@ export function OutcomeModal({
   return (
     <Modal
       open={open}
-      title={`Log visit outcome — ${merchant.name}`}
-      eyebrow={task ? `Scheduled ${task.visitDate}` : "Field report"}
-      description="Outcomes drive the merchant lifecycle. Locked states require manager approval before they can change."
+      title={`تسجيل نتيجة الزيارة — ${merchant.name}`}
+      eyebrow={task ? `مجدولة في ${task.visitDate}` : "تقرير ميداني"}
+      description="النتائج تحرك دورة حياة التاجر. الحالات المقفلة تتطلب اعتماد المدير قبل التغيير."
       onClose={onClose}
     >
       {locked ? (
         <div className="lock-panel">
           <span className="badge badge-red">
-            {signedLocked ? "Signed contract locked" : "Final contract locked"}
+            {signedLocked ? "العقد الموقّع مقفل" : "الاتفاق النهائي مقفل"}
           </span>
           <p>
             {signedLocked
-              ? "Signed contracts are strictly locked. Only a capability holder with merchant state management can change this record."
-              : "This final contract is locked for representatives. Submit an edit request with a reason for manager approval."}
+              ? "العقود الموقّعة مقفلة تماماً. فقط حامل صلاحية إدارة حالات التجار يمكنه تغيير هذا السجل."
+              : "هذا الاتفاق النهائي مقفل للمندوبين. أرسل طلب تعديل مع السبب لاعتماد المدير."}
           </p>
           {!signedLocked && canRequestEdit ? (
             <button
@@ -123,14 +123,14 @@ export function OutcomeModal({
                 onRequestEdit(merchant);
               }}
             >
-              Request edit approval
+              طلب اعتماد التعديل
             </button>
           ) : null}
         </div>
       ) : (
         <form className="form-stack" onSubmit={submit}>
           <div className="field">
-            <span>Outcome</span>
+            <span>النتيجة</span>
             <div className="outcome-grid">
               {choices.map((state) => {
                 const meta = CONTRACT_STATE_META[state];
@@ -152,25 +152,24 @@ export function OutcomeModal({
           </div>
 
           <label className="field">
-            <span>Visit notes</span>
+            <span>ملاحظات الزيارة</span>
             <textarea
               rows={4}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="What did you observe? Who did you meet? What is the agreed next step?"
+              placeholder="ماذا لاحظت؟ بمن قابلت؟ ما هي الخطوة التالية المتفق عليها؟"
               minLength={10}
               required
             />
             <span className="field-hint">
-              Minimum 10 characters. Notes are stored with the immutable report
-              history.
+              10 أحرف على الأقل. تُحفظ الملاحظات مع سجل التقارير غير القابل
+              للتغيير.
             </span>
           </label>
 
           {merchant.editUnlocked ? (
             <p className="inline-note">
-              An approved edit is active for this merchant. Saving will relock
-              the record.
+              يوجد تعديل معتمد ساري لهذا التاجر. الحفظ سيعيد قفل السجل.
             </p>
           ) : null}
 
@@ -186,14 +185,14 @@ export function OutcomeModal({
               className="button button-quiet"
               onClick={onClose}
             >
-              Cancel
+              إلغاء
             </button>
             <button
               type="submit"
               className="button button-primary"
               disabled={saving}
             >
-              {saving ? "Saving..." : "Save outcome"}
+              {saving ? "جارٍ الحفظ..." : "حفظ النتيجة"}
             </button>
           </div>
         </form>

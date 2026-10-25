@@ -24,20 +24,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <div className="login-brand">
           <span className="brand-mark brand-mark-large">K</span>
           <div>
-            <p className="eyebrow">Kanjo Enterprise</p>
-            <h1>Capability-based sign in</h1>
+            <p className="eyebrow">كانجو للمؤسسات</p>
+            <h1>الدخول القائم على القدرات</h1>
           </div>
         </div>
 
         <p className="login-intro">
-          Choose a demo account. Every link, action, and route in V2 is gated by
-          granular capability flags resolved from the active session, never by a
-          job title or role name.
+          اختر حساباً تجريبياً. كل رابط وإجراء ومسار في V2 محكوم بأعلام قدرات
+          دقيقة تُستمد من الجلسة النشطة، وليس من مسمى وظيفي أو دور ثابت.
         </p>
 
         {params.error && (
           <p className="form-error" role="alert">
-            That account is unavailable. Choose another profile.
+            هذا الحساب غير متاح. اختر ملفاً آخر.
           </p>
         )}
 
@@ -64,16 +63,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 <span className="account-email">{user.email}</span>
               </span>
               <span className="account-capabilities">
-                {user.permissions.length} capabilities
+                {user.permissions.length} صلاحية
               </span>
             </button>
           ))}
         </form>
 
         <p className="login-note">
-          Sessions are signed with HMAC-SHA256 and re-resolved on every server
-          request. Permission changes propagate to open clients within five
-          seconds.
+          تُوقّع الجلسات بـ HMAC-SHA256 ويُعاد التحقق منها في كل طلب إلى الخادم.
+          تنتقل تغييرات الصلاحيات إلى العملاء المفتوحين خلال خمس ثوانٍ.
         </p>
       </section>
     </main>

@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
-import { FIELD_TEAMS, type City, type FieldTeam } from "@/lib/field-ops/types";
+import {
+  FIELD_TEAMS,
+  teamLabel,
+  type City,
+  type FieldTeam,
+} from "@/lib/field-ops/types";
 
 type CreateTaskModalProps = {
   open: boolean;
@@ -91,20 +96,20 @@ export function CreateTaskModal({
         merchant?: { name: string };
       };
       if (!response.ok) {
-        throw new Error(payload.error ?? "Could not create the task.");
+        throw new Error(payload.error ?? "تعذر إنشاء المهمة.");
       }
       const name = payload.merchant?.name ?? form.merchantName;
       onDone(
         payload.merchantCreated
-          ? `Task created and ${name} initialized as a merchant.`
-          : `Task created for ${name}.`,
+          ? `تم إنشاء المهمة وتهيئة ${name} كتاجر.`
+          : `تم إنشاء المهمة لـ ${name}.`,
       );
       onClose();
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "Could not create the task.",
+          : "تعذر إنشاء المهمة.",
       );
     } finally {
       setSaving(false);
@@ -114,27 +119,27 @@ export function CreateTaskModal({
   return (
     <Modal
       open={open}
-      title="Create a field task"
-      eyebrow="City operations"
-      description="Creating a task also initializes the merchant when it does not exist yet. Only capability holders with task management can do this."
+      title="إنشاء مهمة ميدانية"
+      eyebrow="عمليات المدن"
+      description="إنشاء المهمة يهيئ التاجر تلقائياً إذا لم يكن موجوداً. فقط حاملو صلاحية إدارة المهام يمكنهم ذلك."
       onClose={onClose}
       wide
     >
       <form className="form-stack" onSubmit={submit}>
         <div className="form-grid">
           <label className="field">
-            <span>Merchant name</span>
+            <span>اسم التاجر</span>
             <input
               value={form.merchantName}
               onChange={(event) =>
                 update("merchantName", event.target.value)
               }
-              placeholder="كافيار or Kaffyar Market"
+              placeholder="كافيار أو Kaffyar Market"
               required
             />
           </label>
           <label className="field">
-            <span>City</span>
+            <span>المدينة</span>
             <select
               value={form.cityId}
               onChange={(event) => update("cityId", event.target.value)}
@@ -148,7 +153,7 @@ export function CreateTaskModal({
             </select>
           </label>
           <label className="field">
-            <span>Assigned team</span>
+            <span>الفريق المكلّف</span>
             <select
               value={form.team}
               onChange={(event) =>
@@ -157,13 +162,13 @@ export function CreateTaskModal({
             >
               {FIELD_TEAMS.map((team) => (
                 <option key={team} value={team}>
-                  {team}
+                  {teamLabel(team)}
                 </option>
               ))}
             </select>
           </label>
           <label className="field">
-            <span>Visit date</span>
+            <span>تاريخ الزيارة</span>
             <input
               type="date"
               value={form.visitDate}
@@ -172,7 +177,7 @@ export function CreateTaskModal({
             />
           </label>
           <label className="field">
-            <span>Target commission (%)</span>
+            <span>العمولة المستهدفة (%)</span>
             <input
               type="number"
               min={0}
@@ -186,7 +191,7 @@ export function CreateTaskModal({
             />
           </label>
           <label className="field">
-            <span>Estimated monthly value</span>
+            <span>القيمة الشهرية التقديرية</span>
             <input
               type="number"
               min={0}
@@ -201,18 +206,18 @@ export function CreateTaskModal({
         </div>
 
         <label className="field">
-          <span>Strategic notes</span>
+          <span>ملاحظات استراتيجية</span>
           <textarea
             rows={3}
             value={form.strategicNotes}
             onChange={(event) => update("strategicNotes", event.target.value)}
-            placeholder="Key contacts, competitive pressure, negotiation position."
+            placeholder="جهات الاتصال الرئيسية، الضغط التنافسي، موقف التفاوض."
           />
         </label>
 
         <p className="inline-note">
-          Reps see only their own team's tasks for the current day. Managers see
-          the full board.
+          يرى المندوبون مهام فريقهم فقط لليوم الحالي، بينما يرى المديرون اللوحة
+          الكاملة.
         </p>
 
         {error ? (
@@ -223,14 +228,14 @@ export function CreateTaskModal({
 
         <div className="form-actions">
           <button type="button" className="button button-quiet" onClick={onClose}>
-            Cancel
+            إلغاء
           </button>
           <button
             type="submit"
             className="button button-primary"
             disabled={saving}
           >
-            {saving ? "Creating..." : "Create task"}
+            {saving ? "جارٍ الإنشاء..." : "إنشاء المهمة"}
           </button>
         </div>
       </form>

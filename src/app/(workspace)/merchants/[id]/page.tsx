@@ -10,6 +10,7 @@ import {
   listTasks,
   listVisitReports,
 } from "@/lib/field-ops/store";
+import { teamLabel } from "@/lib/field-ops/types";
 
 export const dynamic = "force-dynamic";
 
@@ -31,16 +32,14 @@ export default async function MerchantProfilePage({
   return (
     <>
       <PageHeader
-        eyebrow="Merchant profile"
+        eyebrow="ملف التاجر"
         title={merchant.name}
-        description="Commercial history, locked-state governance, documents, and the audit trail for this merchant."
-        actions={
-          <span className="badge">{merchant.team}</span>
-        }
+        description="السجل التجاري وحوكمة الحالات المقفلة والمستندات وسجل المراجعة لهذا التاجر."
+        actions={<span className="badge">{teamLabel(merchant.team)}</span>}
       />
       <MerchantProfileClient
         merchant={merchant}
-        cityName={city?.name ?? "Unassigned city"}
+        cityName={city?.name ?? "مدينة غير محددة"}
         reports={listVisitReports(merchant.id)}
         overrides={listStateOverrides(merchant.id)}
         tasks={listTasks().filter((task) => task.merchantId === merchant.id)}

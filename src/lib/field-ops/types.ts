@@ -18,51 +18,80 @@ export const CONTRACT_STATE_META: Record<
   }
 > = {
   no_agreement: {
-    label: "No agreement",
+    label: "بدون تعاقد",
     labelAr: "بدون تعاقد",
     tone: "badge-red",
-    description: "Open for future visits and free outcome changes.",
+    description: "مفتوح للزيارات القادمة وتغيير النتيجة بحرية.",
     repEditable: true,
   },
   provisional: {
-    label: "Provisional agreement",
+    label: "اتفاق مبدئي",
     labelAr: "اتفاق مبدئي",
     tone: "badge-gold",
-    description: "Open for future visits and free outcome changes.",
+    description: "مفتوح للزيارات القادمة وتغيير النتيجة بحرية.",
     repEditable: true,
   },
   final_contract: {
-    label: "Final contract",
+    label: "اتفاق نهائي",
     labelAr: "اتفاق نهائي",
     tone: "badge-green",
-    description:
-      "Locked for representatives. Changes require an approved edit request.",
+    description: "مقفل للمندوبين. أي تغيير يتطلب طلب تعديل معتمد.",
     repEditable: false,
   },
   signed_contract: {
-    label: "Signed contract",
+    label: "توقيع العقد",
     labelAr: "توقيع العقد",
     tone: "badge-signed",
     description:
-      "Strictly locked. Commission is calculated. Only city operations can change it.",
+      "مقفل تماماً. يتم احتساب العمولة. فقط عمليات المدن يمكنها تغييره.",
     repEditable: false,
   },
 };
 
-export const CITY_STATUSES = ["planning", "launching", "active"] as const;
-export type CityStatus = (typeof CITY_STATUSES)[number];
+export const CITY_STAGES = [
+  "contracting",
+  "data_entry",
+  "live_operations",
+] as const;
 
-export const CITY_STATUS_META: Record<
-  CityStatus,
-  { label: string; tone: string }
+export type CityStage = (typeof CITY_STAGES)[number];
+
+export const CITY_STAGE_META: Record<
+  CityStage,
+  { label: string; tone: string; description: string }
 > = {
-  planning: { label: "Planning", tone: "badge-gold" },
-  launching: { label: "Launching", tone: "badge-purple" },
-  active: { label: "Active", tone: "badge-green" },
+  contracting: {
+    label: "مرحلة التعاقدات",
+    tone: "badge-gold",
+    description: "توقيع الاتفاقيات وتأمين التغطية التجارية قبل الإطلاق.",
+  },
+  data_entry: {
+    label: "مرحلة إدخال البيانات",
+    tone: "badge-purple",
+    description: "تسجيل التجار والمنتجات وبناء بيانات التشغيل.",
+  },
+  live_operations: {
+    label: "مرحلة التشغيل",
+    tone: "badge-green",
+    description: "المدينة تعمل بالكامل مع زيارات ميدانية وجدولة يومية.",
+  },
 };
 
 export const FIELD_TEAMS = ["Fox Team", "Power Team"] as const;
 export type FieldTeam = (typeof FIELD_TEAMS)[number];
+
+export const TEAM_LABELS: Record<string, string> = {
+  "Fox Team": "فريق فوكس",
+  "Power Team": "فريق باور",
+  "City Operations": "عمليات المدن",
+  Executive: "الإدارة التنفيذية",
+  Catalog: "فريق الكتالوج",
+  Audit: "فريق المراجعة",
+};
+
+export function teamLabel(team: string): string {
+  return TEAM_LABELS[team] ?? team;
+}
 
 export type MarketStrength = "low" | "medium" | "high";
 
@@ -77,19 +106,39 @@ export type ZonePoint = {
   lng: number;
 };
 
+/**
+ * Firestore-safe GeoJSON polygon. Coordinates are stored as [lng, lat] and the
+ * first vertex is repeated at the end to produce a closed linear ring.
+ */
+export type GeoPolygon = {
+  type: "Polygon";
+  coordinates: Array<Array<[number, number]>>;
+};
+
 export type City = {
   id: string;
   name: string;
   country: string;
   population: number;
-  status: CityStatus;
+  stage: CityStage;
   competitors: Competitor[];
   strategicNotes: string;
   zone: ZonePoint[];
+  boundary: GeoPolygon;
   createdAt: string;
   createdBy: string;
   createdByName: string;
 };
+
+export function zoneToBoundary(zone: ZonePoint[]): GeoPolygon {
+  const ring = zone.map(
+    (point) => [point.lng, point.lat] as [number, number],
+  );
+  if (ring.length > 0) {
+    ring.push([ring[0][0], ring[0][1]]);
+  }
+  return { type: "Polygon", coordinates: [ring] };
+}
 
 export type MerchantDocument = {
   id: string;

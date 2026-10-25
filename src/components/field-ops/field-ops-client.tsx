@@ -5,12 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateTaskModal } from "@/components/field-ops/create-task-modal";
 import { OutcomeModal } from "@/components/field-ops/outcome-modal";
-import { DecisionModal, JustificationModal } from "@/components/field-ops/request-modals";
+import {
+  DecisionModal,
+  JustificationModal,
+} from "@/components/field-ops/request-modals";
 import type { FieldOpsBoard } from "@/lib/field-ops/board";
 import {
   CONTRACT_STATE_META,
   CONTRACT_STATES,
   FIELD_TEAMS,
+  teamLabel,
   type EditRequest,
   type FieldTask,
   type Merchant,
@@ -37,7 +41,7 @@ type DecisionTarget = {
 };
 
 function formatAmount(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("ar-EG", {
     style: "currency",
     currency: "EGP",
     maximumFractionDigits: 0,
@@ -46,11 +50,34 @@ function formatAmount(value: number): string {
 
 function formatDate(value: string): string {
   const date = new Date(`${value}T00:00:00`);
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "short",
+  return new Intl.DateTimeFormat("ar-EG", {
+    weekday: "long",
     day: "2-digit",
-    month: "short",
+    month: "long",
   }).format(date);
+}
+
+const REQUEST_STATUS_LABEL: Record<string, string> = {
+  pending: "قيد المراجعة",
+  approved: "تمت الموافقة",
+  rejected: "مرفوض",
+};
+
+function requestStatusLabel(status: string): string {
+  return REQUEST_STATUS_LABEL[status] ?? status;
+}
+
+function matchTypeLabel(value: string): string {
+  return value
+    .replace("merchant", "التاجر")
+    .replace("city", "المدينة")
+    .replace("notes", "الملاحظات")
+    .replace("exact", "تطابق تام")
+    .replace("prefix", "بداية الاسم")
+    .replace("contains", "احتواء")
+    .replace("token", "كلمة")
+    .replace("dotless", "بدون نقاط")
+    .replace("fuzzy", "تقريبي");
 }
 
 export function FieldOpsClient({
@@ -188,23 +215,23 @@ export function FieldOpsClient({
       <article key={task.id} className="task-card">
         <div className="task-card-top">
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
-          <span className="chip chip-team">{task.team}</span>
+          <span className="chip chip-team">{teamLabel(task.team)}</span>
         </div>
         <h3>{task.merchantName}</h3>
         <p className="task-meta">
-          {city?.name ?? "Unassigned city"} · {formatDate(task.visitDate)} ·{" "}
-          {task.targetCommission}% target
+          {city?.name ?? "مدينة غير محددة"} · {formatDate(task.visitDate)} ·{" "}
+          هدف {task.targetCommission}%
         </p>
         {task.strategicNotes ? (
           <p className="task-notes">{task.strategicNotes}</p>
         ) : null}
         <div className="task-figures">
           <div>
-            <span>Monthly value</span>
+            <span>القيمة الشهرية</span>
             <strong>{formatAmount(merchant?.monthlyValue ?? 0)}</strong>
           </div>
           <div>
-            <span>Commission</span>
+            <span>العمولة</span>
             <strong>{formatAmount(merchant?.commissionAmount ?? 0)}</strong>
           </div>
         </div>
@@ -216,14 +243,14 @@ export function FieldOpsClient({
                 className="button button-small button-primary"
                 onClick={() => setOutcomeTarget({ merchant, task })}
               >
-                Log outcome
+                تسجيل النتيجة
               </button>
               {canViewMerchants ? (
                 <Link
                   href={`/merchants/${merchant.id}`}
                   className="button button-small button-quiet"
                 >
-                  Merchant profile
+                  ملف التاجر
                 </Link>
               ) : null}
               {otherTeam && canRequestTransfers ? (
@@ -232,12 +259,12 @@ export function FieldOpsClient({
                   className="button button-small button-quiet"
                   onClick={() => setTransferTarget(merchant)}
                 >
-                  Request transfer
+                  طلب نقل ملكية
                 </button>
               ) : null}
             </>
           ) : (
-            <span className="muted">Merchant record unavailable.</span>
+            <span className="muted">سجل التاجر غير متاح.</span>
           )}
         </div>
       </article>
@@ -260,16 +287,16 @@ export function FieldOpsClient({
                     : "badge-gold"
               }`}
             >
-              {request.status}
+              {requestStatusLabel(request.status)}
             </span>
           </div>
           <p className="request-route">
-            {request.fromTeam} → {request.toTeam} · requested by{" "}
-            {request.requestedByName}
+            من {teamLabel(request.fromTeam)} إلى {teamLabel(request.toTeam)} · طلب
+            بواسطة {request.requestedByName}
           </p>
           <p className="request-quote">{request.justification}</p>
           {request.reviewNote ? (
-            <p className="request-review">Review: {request.reviewNote}</p>
+            <p className="request-review">المراجعة: {request.reviewNote}</p>
           ) : null}
         </div>
         {canDecide ? (
@@ -286,7 +313,7 @@ export function FieldOpsClient({
                 })
               }
             >
-              Review
+              مراجعة
             </button>
           </div>
         ) : null}
@@ -310,15 +337,15 @@ export function FieldOpsClient({
                     : "badge-gold"
               }`}
             >
-              {request.status}
+              {requestStatusLabel(request.status)}
             </span>
           </div>
           <p className="request-route">
-            Edit approval · {request.requestedByName}
+            اعتماد تعديل · {request.requestedByName}
           </p>
           <p className="request-quote">{request.reason}</p>
           {request.reviewNote ? (
-            <p className="request-review">Review: {request.reviewNote}</p>
+            <p className="request-review">المراجعة: {request.reviewNote}</p>
           ) : null}
         </div>
         {canDecide ? (
@@ -335,7 +362,7 @@ export function FieldOpsClient({
                 })
               }
             >
-              Review
+              مراجعة
             </button>
           </div>
         ) : null}
@@ -348,13 +375,13 @@ export function FieldOpsClient({
       <section className="panel">
         <div className="field-ops-toolbar">
           <div className="search-shell search-shell-lg">
-            <span>Smart search</span>
+            <span>بحث ذكي</span>
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="كافيار, عبر الشام, Kaffyar, pharmacy…"
-              aria-label="Smart merchant search"
+              placeholder="كافيار، عبر الشام، Kaffyar، صيدلية…"
+              aria-label="البحث الذكي عن التجار"
             />
           </div>
           {canManageTasks ? (
@@ -363,7 +390,7 @@ export function FieldOpsClient({
               className="button button-primary"
               onClick={() => setCreateOpen(true)}
             >
-              Create task
+              إنشاء مهمة
             </button>
           ) : null}
         </div>
@@ -373,21 +400,21 @@ export function FieldOpsClient({
             <div className="search-results-head">
               <span>
                 {searching
-                  ? "Searching…"
-                  : `${results.length} match${results.length === 1 ? "" : "es"}`}
+                  ? "جارٍ البحث…"
+                  : `${results.length} نتيجة`}
               </span>
               <button
                 type="button"
                 className="button button-small button-quiet"
                 onClick={() => setQuery("")}
               >
-                Clear
+                مسح
               </button>
             </div>
             {results.length === 0 && !searching ? (
               <p className="muted search-empty">
-                No merchant matched that spelling. Try fewer letters or the
-                Arabic name.
+                لا يوجد تاجر مطابق لهذا الإملاء. جرّب حروفاً أقل أو الاسم
+                العربي.
               </p>
             ) : (
               <ul className="search-list">
@@ -398,12 +425,12 @@ export function FieldOpsClient({
                       <div className="search-result-main">
                         <strong>{result.merchant.name}</strong>
                         <span className="search-result-meta">
-                          {result.cityName} · {result.matchType} ·{" "}
-                          {Math.round(result.score)}% match
+                          {result.cityName} · {matchTypeLabel(result.matchType)}{" "}
+                          · تطابق {Math.round(result.score)}%
                         </span>
                       </div>
                       <span className="chip chip-team">
-                        {result.merchant.team}
+                        {teamLabel(result.merchant.team)}
                       </span>
                       <span className={`badge ${meta.tone}`}>{meta.label}</span>
                       {canViewMerchants ? (
@@ -411,7 +438,7 @@ export function FieldOpsClient({
                           href={`/merchants/${result.merchant.id}`}
                           className="button button-small button-quiet"
                         >
-                          Open
+                          فتح
                         </Link>
                       ) : null}
                       {!result.isOwnTeam && canRequestTransfers ? (
@@ -420,7 +447,7 @@ export function FieldOpsClient({
                           className="button button-small button-primary"
                           onClick={() => setTransferTarget(result.merchant)}
                         >
-                          Request transfer
+                          طلب نقل ملكية
                         </button>
                       ) : null}
                     </li>
@@ -434,12 +461,14 @@ export function FieldOpsClient({
         <div className="board-toolbar">
           <div>
             <p className="eyebrow">
-              {canManageTasks ? "Full operational board" : `Today · ${viewerTeam}`}
+              {canManageTasks
+                ? "لوحة التشغيل الكاملة"
+                : `اليوم · ${teamLabel(viewerTeam)}`}
             </p>
             <h2>
               {canManageTasks
-                ? "Every team, every visit"
-                : `Your route for ${formatDate(board.today)}`}
+                ? "كل الفرق وكل الزيارات"
+                : `مسارك ليوم ${formatDate(board.today)}`}
             </h2>
           </div>
           {canManageTasks ? (
@@ -449,7 +478,7 @@ export function FieldOpsClient({
                 className={teamFilter === "all" ? "is-active" : ""}
                 onClick={() => setTeamFilter("all")}
               >
-                All teams
+                كل الفرق
               </button>
               {teamsInBoard.map((team) => (
                 <button
@@ -458,7 +487,7 @@ export function FieldOpsClient({
                   className={teamFilter === team ? "is-active" : ""}
                   onClick={() => setTeamFilter(team)}
                 >
-                  {team}
+                  {teamLabel(team)}
                 </button>
               ))}
             </div>
@@ -468,24 +497,22 @@ export function FieldOpsClient({
         <div className="board">
           <div className="board-column">
             <div className="board-head">
-              <h2>Scheduled</h2>
+              <h2>مجدولة</h2>
               <span className="badge">{scheduled.length}</span>
             </div>
             {scheduled.length === 0 ? (
-              <p className="empty-state">
-                No scheduled visits for this view.
-              </p>
+              <p className="empty-state">لا توجد زيارات مجدولة في هذا العرض.</p>
             ) : (
               scheduled.map(renderTask)
             )}
           </div>
           <div className="board-column">
             <div className="board-head">
-              <h2>Completed</h2>
+              <h2>مكتملة</h2>
               <span className="badge badge-green">{completed.length}</span>
             </div>
             {completed.length === 0 ? (
-              <p className="empty-state">No completed visits yet.</p>
+              <p className="empty-state">لا توجد زيارات مكتملة بعد.</p>
             ) : (
               completed.map(renderTask)
             )}
@@ -497,19 +524,19 @@ export function FieldOpsClient({
         <section className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Ownership</p>
+              <p className="eyebrow">الملكية</p>
               <h2>
                 {canApproveTransfers
-                  ? "Transfer approval queue"
-                  : "Your transfer requests"}
+                  ? "قائمة اعتماد النقل"
+                  : "طلبات النقل الخاصة بك"}
               </h2>
             </div>
             <span className="badge badge-gold">
-              {pendingTransfers.length} pending
+              {pendingTransfers.length} قيد المراجعة
             </span>
           </div>
           {pendingTransfers.length === 0 ? (
-            <p className="empty-state">No pending transfer requests.</p>
+            <p className="empty-state">لا توجد طلبات نقل معلّقة.</p>
           ) : (
             <div className="request-list">
               {pendingTransfers.map(renderTransfer)}
@@ -517,7 +544,9 @@ export function FieldOpsClient({
           )}
           {reviewedTransfers.length > 0 ? (
             <details className="history-block">
-              <summary>Reviewed transfers ({reviewedTransfers.length})</summary>
+              <summary>
+                طلبات النقل المراجعة ({reviewedTransfers.length})
+              </summary>
               <div className="request-list">
                 {reviewedTransfers.map(renderTransfer)}
               </div>
@@ -530,21 +559,27 @@ export function FieldOpsClient({
         <section className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Locked reports</p>
+              <p className="eyebrow">التقارير المقفلة</p>
               <h2>
-                {canApproveEdits ? "Edit approval queue" : "Your edit requests"}
+                {canApproveEdits
+                  ? "قائمة اعتماد التعديلات"
+                  : "طلبات التعديل الخاصة بك"}
               </h2>
             </div>
-            <span className="badge badge-gold">{pendingEdits.length} pending</span>
+            <span className="badge badge-gold">
+              {pendingEdits.length} قيد المراجعة
+            </span>
           </div>
           {pendingEdits.length === 0 ? (
-            <p className="empty-state">No pending edit requests.</p>
+            <p className="empty-state">لا توجد طلبات تعديل معلّقة.</p>
           ) : (
             <div className="request-list">{pendingEdits.map(renderEdit)}</div>
           )}
           {reviewedEdits.length > 0 ? (
             <details className="history-block">
-              <summary>Reviewed edits ({reviewedEdits.length})</summary>
+              <summary>
+                طلبات التعديل المراجعة ({reviewedEdits.length})
+              </summary>
               <div className="request-list">
                 {reviewedEdits.map(renderEdit)}
               </div>
@@ -556,8 +591,8 @@ export function FieldOpsClient({
       <section className="panel">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">Lifecycle guardrails</p>
-            <h2>How outcomes stay trustworthy</h2>
+            <p className="eyebrow">ضوابط دورة الحياة</p>
+            <h2>كيف تبقى النتائج موثوقة</h2>
           </div>
         </div>
         <div className="rule-grid">
@@ -569,8 +604,8 @@ export function FieldOpsClient({
                 <p>{meta.description}</p>
                 <span className="rule-access">
                   {meta.repEditable
-                    ? "Representatives can change this outcome."
-                    : "Manager approval required to change."}
+                    ? "يمكن للمندوبين تغيير هذه النتيجة."
+                    : "يتطلب اعتماد المدير للتغيير."}
                 </span>
               </div>
             );
@@ -610,14 +645,16 @@ export function FieldOpsClient({
             ? `/api/field-ops/merchants/${transferTarget.id}/transfers`
             : ""
         }
-        title={transferTarget ? `Transfer ${transferTarget.name}` : "Transfer"}
-        eyebrow="Cross-team ownership"
-        description="Transfers never happen silently. A manager reviews the business justification before ownership moves."
-        label="Justification"
-        placeholder="Why should this merchant move to your team?"
-        submitLabel="Submit transfer request"
+        title={
+          transferTarget ? `نقل ملكية ${transferTarget.name}` : "نقل الملكية"
+        }
+        eyebrow="ملكية عابرة للفرق"
+        description="لا يتم نقل الملكية بصمت. يراجع المدير المبرر التجاري قبل انتقال الملكية."
+        label="المبرر"
+        placeholder="لماذا يجب أن ينتقل هذا التاجر إلى فريقك؟"
+        submitLabel="إرسال طلب النقل"
         field="justification"
-        successMessage="Transfer request submitted for manager approval."
+        successMessage="تم إرسال طلب النقل لاعتماد المدير."
         onClose={() => setTransferTarget(null)}
         onDone={async (message) => {
           announce(message);
@@ -632,14 +669,16 @@ export function FieldOpsClient({
             ? `/api/field-ops/merchants/${editTarget.id}/edit-requests`
             : ""
         }
-        title={editTarget ? `Unlock ${editTarget.name}` : "Edit request"}
-        eyebrow="Final contract lock"
-        description="Final contracts are locked for representatives. A manager must approve the reason before the outcome can change."
-        label="Reason for edit"
-        placeholder="What is wrong, and what should change?"
-        submitLabel="Request edit approval"
+        title={
+          editTarget ? `فتح تعديل ${editTarget.name}` : "طلب تعديل"
+        }
+        eyebrow="قفل الاتفاق النهائي"
+        description="الاتفاقات النهائية مقفلة للمندوبين. يجب أن يعتمد المدير السبب قبل تغيير النتيجة."
+        label="سبب التعديل"
+        placeholder="ما الخطأ، وما الذي يجب تغييره؟"
+        submitLabel="طلب اعتماد التعديل"
         field="reason"
-        successMessage="Edit request submitted for manager approval."
+        successMessage="تم إرسال طلب التعديل لاعتماد المدير."
         onClose={() => setEditTarget(null)}
         onDone={async (message) => {
           announce(message);

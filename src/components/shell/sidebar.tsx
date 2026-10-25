@@ -21,13 +21,13 @@ export function Sidebar() {
       <Link className="brand" href={homeHref}>
         <span className="brand-mark">K</span>
         <span className="brand-copy">
-          <strong>Kanjo</strong>
-          <span>Enterprise V2</span>
+          <strong>كانجو</strong>
+          <span>منصة المؤسسات V2</span>
         </span>
       </Link>
 
-      <nav className="nav" aria-label="Workspace modules">
-        <p className="nav-section">Workspace</p>
+      <nav className="nav" aria-label="وحدات مساحة العمل">
+        <p className="nav-section">مساحة العمل</p>
         {visibleModules.map((module) => {
           const active =
             pathname === module.href ||
@@ -48,7 +48,7 @@ export function Sidebar() {
 
         {visibleModules.length === 0 && (
           <p className="nav-empty">
-            No modules are currently granted to this account.
+            لا توجد وحدات ممنوحة لهذا الحساب حالياً.
           </p>
         )}
       </nav>
@@ -57,8 +57,8 @@ export function Sidebar() {
         <div className="capability-meter">
           <span className="live-dot" />
           <div>
-            <strong>{permissions.size} capabilities</strong>
-            <span>RBAC revision {revision}</span>
+            <strong>{permissions.size} صلاحية</strong>
+            <span>إصدار الصلاحيات {revision}</span>
           </div>
         </div>
       </div>

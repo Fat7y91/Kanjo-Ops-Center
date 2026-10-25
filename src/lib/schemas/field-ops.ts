@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  CITY_STATUSES,
+  CITY_STAGES,
   CONTRACT_STATES,
   FIELD_TEAMS,
 } from "@/lib/field-ops/types";
@@ -12,38 +12,41 @@ const zonePointSchema = z.object({
 });
 
 const competitorSchema = z.object({
-  name: z.string().trim().min(2, "Competitor name is required.").max(80),
-  page: z.union([z.string().trim().url("Enter a valid competitor URL."), z.literal("")]),
+  name: z.string().trim().min(2, "اسم المنافس مطلوب.").max(80),
+  page: z.union([
+    z.string().trim().url("أدخل رابط منافس صالحاً."),
+    z.literal(""),
+  ]),
   marketStrength: z.enum(["low", "medium", "high"]),
 });
 
 export const cityCreateSchema = z.object({
-  name: z.string().trim().min(2, "City name is required.").max(80),
-  country: z.string().trim().min(2, "Country is required.").max(60),
+  name: z.string().trim().min(2, "اسم المدينة مطلوب.").max(80),
+  country: z.string().trim().min(2, "الدولة مطلوبة.").max(60),
   population: z.coerce
     .number()
-    .int("Population must be a whole number.")
-    .min(1, "Population must be positive.")
+    .int("عدد السكان يجب أن يكون رقماً صحيحاً.")
+    .min(1, "عدد السكان يجب أن يكون أكبر من صفر.")
     .max(100_000_000),
-  status: z.enum(CITY_STATUSES),
+  stage: z.enum(CITY_STAGES),
   competitors: z.array(competitorSchema).max(10),
   strategicNotes: z.string().trim().max(2000),
   zone: z
     .array(zonePointSchema)
-    .min(3, "Draw at least three zone vertices on the map."),
+    .min(3, "ارسم ثلاث نقاط حدود على الأقل على الخريطة."),
 });
 
 export const taskCreateSchema = z.object({
-  merchantName: z.string().trim().min(2, "Merchant name is required.").max(120),
-  cityId: z.string().trim().min(1, "Select a city."),
+  merchantName: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120),
+  cityId: z.string().trim().min(1, "اختر المدينة."),
   team: z.enum(FIELD_TEAMS),
   visitDate: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Visit date must be YYYY-MM-DD."),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الزيارة يجب أن يكون بصيغة YYYY-MM-DD."),
   targetCommission: z.coerce
     .number()
-    .min(0, "Commission cannot be negative.")
-    .max(100, "Commission cannot exceed 100%."),
+    .min(0, "العمولة لا يمكن أن تكون سالبة.")
+    .max(100, "العمولة لا يمكن أن تتجاوز 100%."),
   strategicNotes: z.string().trim().max(2000).default(""),
   estimatedMonthlyValue: z.coerce
     .number()
@@ -57,7 +60,7 @@ export const visitReportSchema = z.object({
   notes: z
     .string()
     .trim()
-    .min(10, "Visit notes must be at least 10 characters.")
+    .min(10, "ملاحظات الزيارة يجب ألا تقل عن 10 أحرف.")
     .max(4000),
   taskId: z.string().trim().min(1).nullable().optional(),
 });
@@ -66,7 +69,7 @@ export const transferRequestSchema = z.object({
   justification: z
     .string()
     .trim()
-    .min(10, "A justification of at least 10 characters is required.")
+    .min(10, "مطلوب مبرر لا يقل عن 10 أحرف.")
     .max(1000),
 });
 
@@ -74,7 +77,7 @@ export const editRequestSchema = z.object({
   reason: z
     .string()
     .trim()
-    .min(10, "An edit reason of at least 10 characters is required.")
+    .min(10, "مطلوب سبب تعديل لا يقل عن 10 أحرف.")
     .max(1000),
 });
 
@@ -88,14 +91,17 @@ export const merchantStateSchema = z.object({
   note: z
     .string()
     .trim()
-    .min(5, "A state-change note of at least 5 characters is required.")
+    .min(5, "مطلوب ملاحظة تغيير الحالة لا تقل عن 5 أحرف.")
     .max(1000),
 });
 
 export const merchantDocumentSchema = z.object({
-  name: z.string().trim().min(2, "Document name is required.").max(160),
+  name: z.string().trim().min(2, "اسم المستند مطلوب.").max(160),
   type: z.enum(["contract", "tax", "license", "other"]),
-  url: z.union([z.string().trim().url("Enter a valid document URL."), z.literal("")]),
+  url: z.union([
+    z.string().trim().url("أدخل رابط مستند صالحاً."),
+    z.literal(""),
+  ]),
 });
 
 export type CityCreateInput = z.infer<typeof cityCreateSchema>;
@@ -109,7 +115,7 @@ export type MerchantDocumentInput = z.infer<typeof merchantDocumentSchema>;
 
 export function zodErrorMessage(error: z.ZodError): string {
   const first = error.errors[0];
-  if (!first) return "Validation failed.";
+  if (!first) return "فشل التحقق من البيانات.";
   const path = first.path.join(".");
   return path ? `${path}: ${first.message}` : first.message;
 }

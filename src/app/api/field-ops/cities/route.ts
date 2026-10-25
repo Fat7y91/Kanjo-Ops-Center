@@ -7,7 +7,7 @@ import { createCity, listCities } from "@/lib/field-ops/store";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { session, response } = await authorize("view_cities");
+  const { session, response } = await authorize("manage_cities");
   if (!session) return response;
 
   return NextResponse.json(

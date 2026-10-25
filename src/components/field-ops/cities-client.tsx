@@ -6,10 +6,10 @@ import { useMemo, useState } from "react";
 import { CityMap } from "@/components/field-ops/city-map";
 import { Modal } from "@/components/field-ops/modal";
 import {
-  CITY_STATUSES,
-  CITY_STATUS_META,
+  CITY_STAGES,
+  CITY_STAGE_META,
   type City,
-  type CityStatus,
+  type CityStage,
   type Competitor,
   type MarketStrength,
   type ZonePoint,
@@ -25,25 +25,35 @@ type FormState = {
   name: string;
   country: string;
   population: string;
-  status: CityStatus;
+  stage: CityStage;
   strategicNotes: string;
-  competitors: Array<Omit<Competitor, "marketStrength"> & { marketStrength: MarketStrength }>;
+  competitors: Array<{
+    name: string;
+    page: string;
+    marketStrength: MarketStrength;
+  }>;
 };
 
 const EMPTY_FORM: FormState = {
   name: "",
-  country: "Egypt",
+  country: "مصر",
   population: "",
-  status: "planning",
+  stage: "contracting",
   strategicNotes: "",
   competitors: [],
 };
 
 const STRENGTH_LABEL: Record<MarketStrength, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
+  low: "منخفض",
+  medium: "متوسط",
+  high: "مرتفع",
 };
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(
+    value,
+  );
+}
 
 export function CitiesClient({
   initialCities,
@@ -53,6 +63,7 @@ export function CitiesClient({
   const router = useRouter();
   const [cities, setCities] = useState(initialCities);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [zone, setZone] = useState<ZonePoint[]>([]);
   const [error, setError] = useState("");
@@ -63,8 +74,10 @@ export function CitiesClient({
     const competitors = new Set(
       cities.flatMap((city) => city.competitors.map((item) => item.name)),
     );
-    const active = cities.filter((city) => city.status === "active").length;
-    return { population, competitors: competitors.size, active };
+    const live = cities.filter(
+      (city) => city.stage === "live_operations",
+    ).length;
+    return { population, competitors: competitors.size, live };
   }, [cities]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -75,19 +88,47 @@ export function CitiesClient({
     setForm(EMPTY_FORM);
     setZone([]);
     setError("");
+    setEditingId(null);
+  }
+
+  function openCreate() {
+    reset();
+    setOpen(true);
+  }
+
+  function openEdit(city: City) {
+    setEditingId(city.id);
+    setForm({
+      name: city.name,
+      country: city.country,
+      population: String(city.population),
+      stage: city.stage,
+      strategicNotes: city.strategicNotes,
+      competitors: city.competitors.map((competitor) => ({
+        name: competitor.name,
+        page: competitor.page,
+        marketStrength: competitor.marketStrength,
+      })),
+    });
+    setZone(city.zone.map((point) => ({ ...point })));
+    setError("");
+    setOpen(true);
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     if (zone.length < 3) {
-      setError("Draw at least three zone vertices on the map.");
+      setError("ارسم ثلاث نقاط حدود على الأقل على الخريطة.");
       return;
     }
     setSaving(true);
     try {
-      const response = await fetch("/api/field-ops/cities", {
-        method: "POST",
+      const endpoint = editingId
+        ? `/api/field-ops/cities/${editingId}`
+        : "/api/field-ops/cities";
+      const response = await fetch(endpoint, {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
@@ -100,13 +141,17 @@ export function CitiesClient({
         error?: string;
       };
       if (!response.ok || !payload.city) {
-        throw new Error(payload.error ?? "Could not create the city.");
+        throw new Error(payload.error ?? "تعذر حفظ المدينة.");
       }
-      setCities((current) =>
-        [...current, payload.city as City].sort((left, right) =>
-          left.name.localeCompare(right.name),
-        ),
-      );
+      const saved = payload.city;
+      setCities((current) => {
+        const next = editingId
+          ? current.map((city) => (city.id === saved.id ? saved : city))
+          : [...current, saved];
+        return next.sort((left, right) =>
+          left.name.localeCompare(right.name, "ar"),
+        );
+      });
       setOpen(false);
       reset();
       router.refresh();
@@ -114,55 +159,83 @@ export function CitiesClient({
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "Could not create the city.",
+          : "تعذر حفظ المدينة.",
       );
     } finally {
       setSaving(false);
     }
   }
 
+  function addCompetitor() {
+    setForm((current) => ({
+      ...current,
+      competitors: [
+        ...current.competitors,
+        { name: "", page: "", marketStrength: "medium" },
+      ],
+    }));
+  }
+
+  function updateCompetitor(
+    index: number,
+    patch: Partial<FormState["competitors"][number]>,
+  ) {
+    setForm((current) => ({
+      ...current,
+      competitors: current.competitors.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...patch } : item,
+      ),
+    }));
+  }
+
   return (
     <>
       <section className="stat-grid">
         <div className="stat-card">
-          <p className="eyebrow">Live cities</p>
-          <strong className="stat-value">{cities.length}</strong>
-          <span className="stat-hint">{totals.active} active operations</span>
+          <p className="eyebrow">المدن النشطة</p>
+          <strong className="stat-value">{formatNumber(cities.length)}</strong>
+          <span className="stat-hint">
+            {formatNumber(totals.live)} مدينة في مرحلة التشغيل
+          </span>
         </div>
         <div className="stat-card">
-          <p className="eyebrow">Covered population</p>
+          <p className="eyebrow">عدد السكان المغطى</p>
           <strong className="stat-value">
             {(totals.population / 1_000_000).toFixed(1)}M
           </strong>
-          <span className="stat-hint">Across all zoned cities</span>
+          <span className="stat-hint">عبر جميع المدن ذات النطاقات</span>
         </div>
         <div className="stat-card">
-          <p className="eyebrow">Competitor watchlist</p>
-          <strong className="stat-value">{totals.competitors}</strong>
-          <span className="stat-hint">Distinct market players</span>
-        </div>
-        <div className="stat-card">
-          <p className="eyebrow">Zoned territory</p>
+          <p className="eyebrow">قائمة المنافسين</p>
           <strong className="stat-value">
-            {cities.reduce((sum, city) => sum + city.zone.length, 0)}
+            {formatNumber(totals.competitors)}
           </strong>
-          <span className="stat-hint">Polygon vertices mapped</span>
+          <span className="stat-hint">لاعبون مختلفون في السوق</span>
+        </div>
+        <div className="stat-card">
+          <p className="eyebrow">المساحة المرسومة</p>
+          <strong className="stat-value">
+            {formatNumber(
+              cities.reduce((sum, city) => sum + city.zone.length, 0),
+            )}
+          </strong>
+          <span className="stat-hint">نقطة حدود جغرافية محفوظة</span>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">Operational geography</p>
-            <h2>City zones and market intelligence</h2>
+            <p className="eyebrow">الجغرافيا التشغيلية</p>
+            <h2>نطاقات المدن ومعلومات السوق</h2>
           </div>
           {canManage ? (
             <button
               type="button"
               className="button button-primary"
-              onClick={() => setOpen(true)}
+              onClick={openCreate}
             >
-              Add city
+              إضافة مدينة
             </button>
           ) : null}
         </div>
@@ -170,7 +243,7 @@ export function CitiesClient({
           cities={cities.map((city) => ({
             id: city.id,
             name: city.name,
-            status: city.status,
+            stage: city.stage,
             zone: city.zone,
           }))}
           height={360}
@@ -178,14 +251,14 @@ export function CitiesClient({
           zoom={9}
         />
         <p className="panel-note">
-          Zones are drawn as geographic polygons. Select a city below to review
-          its launch status, population, and competitive landscape.
+          تُحفظ الحدود كنقاط جغرافية مغلقة قابلة للتخزين في Firestore. اختر
+          مدينة أدناه لمراجعة مرحلتها التشغيلية وعدد السكان والمنافسين.
         </p>
       </section>
 
       <section className="city-grid">
         {cities.map((city) => {
-          const meta = CITY_STATUS_META[city.status];
+          const meta = CITY_STAGE_META[city.stage];
           return (
             <article key={city.id} className="panel city-card">
               <div className="city-card-head">
@@ -197,22 +270,22 @@ export function CitiesClient({
               </div>
               <div className="detail-grid">
                 <div>
-                  <span className="detail-label">Population</span>
-                  <strong>{(city.population / 1_000_000).toFixed(2)}M</strong>
+                  <span className="detail-label">عدد السكان</span>
+                  <strong>{formatNumber(city.population)}</strong>
                 </div>
                 <div>
-                  <span className="detail-label">Zone vertices</span>
-                  <strong>{city.zone.length}</strong>
+                  <span className="detail-label">نقاط الحدود الجغرافية</span>
+                  <strong>{formatNumber(city.zone.length)}</strong>
                 </div>
                 <div>
-                  <span className="detail-label">Added by</span>
+                  <span className="detail-label">أضيفت بواسطة</span>
                   <strong>{city.createdByName || viewerName}</strong>
                 </div>
               </div>
               <p className="city-notes">{city.strategicNotes}</p>
               <div className="competitor-list">
                 {city.competitors.length === 0 ? (
-                  <span className="muted">No competitors recorded.</span>
+                  <span className="muted">لا يوجد منافسون مسجلون.</span>
                 ) : (
                   city.competitors.map((competitor) => (
                     <span key={competitor.name} className="chip">
@@ -222,6 +295,17 @@ export function CitiesClient({
                   ))
                 )}
               </div>
+              {canManage ? (
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="button button-small button-quiet"
+                    onClick={() => openEdit(city)}
+                  >
+                    تعديل المدينة
+                  </button>
+                </div>
+              ) : null}
             </article>
           );
         })}
@@ -229,9 +313,9 @@ export function CitiesClient({
 
       <Modal
         open={open}
-        title="Add a city"
-        eyebrow="Market expansion"
-        description="Draw the operational polygon, then capture the market intelligence that field teams need."
+        title={editingId ? "تعديل مدينة" : "إضافة مدينة"}
+        eyebrow="التوسع الجغرافي"
+        description="ارسم النطاق التشغيلي ثم أدخل معلومات السوق التي يحتاجها الفريق الميداني."
         onClose={() => {
           setOpen(false);
           reset();
@@ -241,25 +325,25 @@ export function CitiesClient({
         <form className="form-stack" onSubmit={submit}>
           <div className="form-grid">
             <label className="field">
-              <span>City name</span>
+              <span>اسم المدينة</span>
               <input
                 value={form.name}
                 onChange={(event) => update("name", event.target.value)}
-                placeholder="Cairo"
+                placeholder="القاهرة"
                 required
               />
             </label>
             <label className="field">
-              <span>Country</span>
+              <span>الدولة</span>
               <input
                 value={form.country}
                 onChange={(event) => update("country", event.target.value)}
-                placeholder="Egypt"
+                placeholder="مصر"
                 required
               />
             </label>
             <label className="field">
-              <span>Population</span>
+              <span>عدد السكان</span>
               <input
                 type="number"
                 min={1}
@@ -270,27 +354,30 @@ export function CitiesClient({
               />
             </label>
             <label className="field">
-              <span>Launch status</span>
+              <span>مرحلة المدينة</span>
               <select
-                value={form.status}
+                value={form.stage}
                 onChange={(event) =>
-                  update("status", event.target.value as CityStatus)
+                  update("stage", event.target.value as CityStage)
                 }
               >
-                {CITY_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {CITY_STATUS_META[status].label}
+                {CITY_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {CITY_STAGE_META[stage].label}
                   </option>
                 ))}
               </select>
+              <span className="field-hint">
+                {CITY_STAGE_META[form.stage].description}
+              </span>
             </label>
           </div>
 
           <div className="field">
-            <span>Operational zone</span>
+            <span>النطاق التشغيلي</span>
             <p className="field-hint">
-              Click the map to place vertices. Three or more points close the
-              polygon automatically.
+              اضغط على الخريطة لإضافة نقاط الحدود. تُغلق المضلعات تلقائياً عند
+              الوصول إلى ثلاث نقاط أو أكثر.
             </p>
             <CityMap
               draft={zone}
@@ -301,14 +388,14 @@ export function CitiesClient({
               zoom={10}
             />
             <div className="row-actions zone-actions">
-              <span className="badge">{zone.length} points</span>
+              <span className="badge">{zone.length} نقطة</span>
               <button
                 type="button"
                 className="button button-small button-quiet"
                 onClick={() => setZone((current) => current.slice(0, -1))}
                 disabled={zone.length === 0}
               >
-                Undo point
+                تراجع عن نقطة
               </button>
               <button
                 type="button"
@@ -316,43 +403,35 @@ export function CitiesClient({
                 onClick={() => setZone([])}
                 disabled={zone.length === 0}
               >
-                Clear zone
+                مسح النطاق
               </button>
             </div>
           </div>
 
           <label className="field">
-            <span>Strategic notes</span>
+            <span>ملاحظات استراتيجية</span>
             <textarea
               rows={3}
               value={form.strategicNotes}
               onChange={(event) => update("strategicNotes", event.target.value)}
-              placeholder="Prioritise the central corridor and premium seafood coverage."
+              placeholder="أولويات التغطية والمنافسة وخطة الانتشار."
             />
           </label>
 
           <div className="field">
             <div className="field-head">
-              <span>Competitors</span>
+              <span>المنافسون</span>
               <button
                 type="button"
                 className="button button-small button-quiet"
-                onClick={() =>
-                  setForm((current) => ({
-                    ...current,
-                    competitors: [
-                      ...current.competitors,
-                      { name: "", page: "", marketStrength: "medium" },
-                    ],
-                  }))
-                }
+                onClick={addCompetitor}
               >
-                Add competitor
+                إضافة منافس
               </button>
             </div>
             {form.competitors.length === 0 ? (
               <p className="field-hint">
-                Optional. Add the market players field teams should watch.
+                اختياري. أضف اللاعبين الذين يجب أن يراقبهم الفريق الميداني.
               </p>
             ) : (
               <div className="stack-list">
@@ -360,16 +439,9 @@ export function CitiesClient({
                   <div key={index} className="competitor-row">
                     <input
                       value={competitor.name}
-                      placeholder="Competitor name"
+                      placeholder="اسم المنافس"
                       onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          competitors: current.competitors.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, name: event.target.value }
-                              : item,
-                          ),
-                        }))
+                        updateCompetitor(index, { name: event.target.value })
                       }
                       required
                     />
@@ -377,31 +449,15 @@ export function CitiesClient({
                       value={competitor.page}
                       placeholder="https://competitor.example"
                       onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          competitors: current.competitors.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? { ...item, page: event.target.value }
-                              : item,
-                          ),
-                        }))
+                        updateCompetitor(index, { page: event.target.value })
                       }
                     />
                     <select
                       value={competitor.marketStrength}
                       onChange={(event) =>
-                        setForm((current) => ({
-                          ...current,
-                          competitors: current.competitors.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  marketStrength: event.target
-                                    .value as MarketStrength,
-                                }
-                              : item,
-                          ),
-                        }))
+                        updateCompetitor(index, {
+                          marketStrength: event.target.value as MarketStrength,
+                        })
                       }
                     >
                       {(["low", "medium", "high"] as const).map((level) => (
@@ -422,7 +478,7 @@ export function CitiesClient({
                         }))
                       }
                     >
-                      Remove
+                      إزالة
                     </button>
                   </div>
                 ))}
@@ -445,14 +501,18 @@ export function CitiesClient({
                 reset();
               }}
             >
-              Cancel
+              إلغاء
             </button>
             <button
               type="submit"
               className="button button-primary"
               disabled={saving}
             >
-              {saving ? "Creating city..." : "Create city"}
+              {saving
+                ? "جارٍ الحفظ..."
+                : editingId
+                  ? "حفظ التعديلات"
+                  : "إنشاء المدينة"}
             </button>
           </div>
         </form>

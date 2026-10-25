@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { JustificationModal, StateModal } from "@/components/field-ops/request-modals";
+import {
+  JustificationModal,
+  StateModal,
+} from "@/components/field-ops/request-modals";
 import {
   CONTRACT_STATE_META,
+  teamLabel,
   type FieldTask,
   type Merchant,
   type MerchantDocument,
@@ -30,14 +34,19 @@ type MerchantProfileClientProps = {
 
 const DOCUMENT_TYPES: Array<{ value: MerchantDocument["type"]; label: string }> =
   [
-    { value: "contract", label: "Contract" },
-    { value: "tax", label: "Tax document" },
-    { value: "license", label: "License" },
-    { value: "other", label: "Other" },
+    { value: "contract", label: "عقد" },
+    { value: "tax", label: "مستند ضريبي" },
+    { value: "license", label: "ترخيص" },
+    { value: "other", label: "أخرى" },
   ];
 
+const TASK_STATUS_LABEL: Record<string, string> = {
+  scheduled: "مجدولة",
+  completed: "مكتملة",
+};
+
 function formatAmount(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("ar-EG", {
     style: "currency",
     currency: "EGP",
     maximumFractionDigits: 0,
@@ -45,7 +54,7 @@ function formatAmount(value: number): string {
 }
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("ar-EG", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -107,17 +116,15 @@ export function MerchantProfileClient({
       );
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "The document could not be saved.");
+        throw new Error(payload.error ?? "تعذر حفظ المستند.");
       }
       setDocName("");
       setDocUrl("");
-      announce("Document attached to the merchant profile.");
+      announce("تم إرفاق المستند بملف التاجر.");
       router.refresh();
     } catch (error) {
       setDocError(
-        error instanceof Error
-          ? error.message
-          : "The document could not be saved.",
+        error instanceof Error ? error.message : "تعذر حفظ المستند.",
       );
     } finally {
       setDocSaving(false);
@@ -132,19 +139,19 @@ export function MerchantProfileClient({
           <h2>{merchant.name}</h2>
           <div className="profile-badges">
             <span className={`badge ${meta.tone}`}>{meta.label}</span>
-            <span className="chip chip-team">{merchant.team}</span>
+            <span className="chip chip-team">{teamLabel(merchant.team)}</span>
             {merchant.editUnlocked ? (
-              <span className="badge badge-purple">Edit unlocked</span>
+              <span className="badge badge-purple">التعديل مفتوح</span>
             ) : null}
             {otherTeam ? (
-              <span className="badge badge-gold">Owned by another team</span>
+              <span className="badge badge-gold">مملوك لفريق آخر</span>
             ) : null}
           </div>
         </div>
         <div className="profile-actions">
           {canViewFieldOpsPage ? (
             <Link href="/field-ops" className="button button-quiet">
-              Back to board
+              العودة إلى اللوحة
             </Link>
           ) : null}
           {canRequestTransfers && otherTeam ? (
@@ -153,7 +160,7 @@ export function MerchantProfileClient({
               className="button button-quiet"
               onClick={() => setTransferOpen(true)}
             >
-              Request transfer
+              طلب نقل ملكية
             </button>
           ) : null}
           {canManageState ? (
@@ -162,7 +169,7 @@ export function MerchantProfileClient({
               className="button button-primary"
               onClick={() => setStateOpen(true)}
             >
-              Override state
+              تجاوز الحالة
             </button>
           ) : null}
         </div>
@@ -172,57 +179,55 @@ export function MerchantProfileClient({
         <div className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Commercials</p>
-              <h2>Deal economics</h2>
+              <p className="eyebrow">الجوانب التجارية</p>
+              <h2>اقتصاديات الاتفاق</h2>
             </div>
           </div>
           <div className="detail-grid detail-grid-wide">
             <div>
-              <span className="detail-label">Monthly value</span>
+              <span className="detail-label">القيمة الشهرية</span>
               <strong>{formatAmount(merchant.monthlyValue)}</strong>
             </div>
             <div>
-              <span className="detail-label">Target commission</span>
+              <span className="detail-label">العمولة المستهدفة</span>
               <strong>{merchant.targetCommission}%</strong>
             </div>
             <div>
-              <span className="detail-label">Earned commission</span>
+              <span className="detail-label">العمولة المكتسبة</span>
               <strong>{formatAmount(merchant.commissionAmount)}</strong>
             </div>
             <div>
-              <span className="detail-label">Last visit</span>
+              <span className="detail-label">آخر زيارة</span>
               <strong>
                 {merchant.lastVisitAt
                   ? formatDateTime(merchant.lastVisitAt)
-                  : "Never"}
+                  : "لا يوجد"}
               </strong>
             </div>
           </div>
           <div className="note-block">
-            <span className="detail-label">Strategic notes</span>
-            <p>{merchant.strategicNotes || "No notes recorded."}</p>
+            <span className="detail-label">ملاحظات استراتيجية</span>
+            <p>{merchant.strategicNotes || "لا توجد ملاحظات مسجلة."}</p>
           </div>
           {finalLocked && canViewFieldOps && !otherTeam ? (
             <div className="lock-panel">
-              <span className="badge badge-red">Final contract locked</span>
+              <span className="badge badge-red">الاتفاق النهائي مقفل</span>
               <p>
-                Outcome changes require manager approval. Submit an edit request
-                with a reason.
+                تغيير النتيجة يتطلب اعتماد المدير. أرسل طلب تعديل مع ذكر السبب.
               </p>
               <button
                 type="button"
                 className="button button-primary"
                 onClick={() => setEditOpen(true)}
               >
-                Request edit approval
+                طلب اعتماد التعديل
               </button>
             </div>
           ) : null}
           {merchant.contractState === "signed_contract" ? (
             <p className="inline-note">
-              Signed contracts are strictly locked. Commission has been
-              calculated and only a state-management capability can change this
-              record.
+              العقود الموقّعة مقفلة تماماً. تم احتساب العمولة، وفقط صلاحية إدارة
+              الحالات يمكنها تغيير هذا السجل.
             </p>
           ) : null}
         </div>
@@ -230,13 +235,13 @@ export function MerchantProfileClient({
         <div className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Visit history</p>
-              <h2>Report timeline</h2>
+              <p className="eyebrow">سجل الزيارات</p>
+              <h2>الخط الزمني للتقارير</h2>
             </div>
-            <span className="badge">{reports.length} reports</span>
+            <span className="badge">{reports.length} تقرير</span>
           </div>
           {reports.length === 0 ? (
-            <p className="empty-state">No visit reports yet.</p>
+            <p className="empty-state">لا توجد تقارير زيارات بعد.</p>
           ) : (
             <div className="timeline">
               {reports.map((report) => {
@@ -253,9 +258,9 @@ export function MerchantProfileClient({
                     </div>
                     <p>{report.notes}</p>
                     <span className="timeline-meta">
-                      {report.repName} · {report.team}
+                      {report.repName} · {teamLabel(report.team)}
                       {report.commissionAmount > 0
-                        ? ` · ${formatAmount(report.commissionAmount)} commission`
+                        ? ` · عمولة ${formatAmount(report.commissionAmount)}`
                         : ""}
                     </span>
                   </article>
@@ -270,25 +275,25 @@ export function MerchantProfileClient({
         <div className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Merchant documents</p>
-              <h2>Agreement file</h2>
+              <p className="eyebrow">مستندات التاجر</p>
+              <h2>ملف الاتفاق</h2>
             </div>
             <span
               className={`badge ${agreementReached ? "badge-green" : "badge-gold"}`}
             >
-              {agreementReached ? "Unlocked" : "Locked"}
+              {agreementReached ? "مفتوح" : "مقفل"}
             </span>
           </div>
 
           {!agreementReached ? (
             <p className="empty-state">
-              Documents unlock only after a final or signed agreement. This keeps
-              the daily visit flow free of document uploads.
+              تُفتح المستندات فقط بعد اتفاق نهائي أو موقّع. يحافظ ذلك على تدفق
+              الزيارات اليومية دون رفع مستندات.
             </p>
           ) : (
             <>
               {merchant.documents.length === 0 ? (
-                <p className="empty-state">No documents attached yet.</p>
+                <p className="empty-state">لا توجد مستندات مرفقة بعد.</p>
               ) : (
                 <ul className="document-list">
                   {merchant.documents.map((document) => (
@@ -296,7 +301,12 @@ export function MerchantProfileClient({
                       <div>
                         <strong>{document.name}</strong>
                         <span>
-                          {document.type} · {formatDateTime(document.uploadedAt)}
+                          {
+                            DOCUMENT_TYPES.find(
+                              (option) => option.value === document.type,
+                            )?.label
+                          }{" "}
+                          · {formatDateTime(document.uploadedAt)}
                         </span>
                       </div>
                       {document.url ? (
@@ -306,10 +316,10 @@ export function MerchantProfileClient({
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Open
+                          فتح
                         </a>
                       ) : (
-                        <span className="badge">No link</span>
+                        <span className="badge">لا يوجد رابط</span>
                       )}
                     </li>
                   ))}
@@ -320,16 +330,16 @@ export function MerchantProfileClient({
                 <form className="form-stack document-form" onSubmit={addDocument}>
                   <div className="form-grid">
                     <label className="field">
-                      <span>Document name</span>
+                      <span>اسم المستند</span>
                       <input
                         value={docName}
                         onChange={(event) => setDocName(event.target.value)}
-                        placeholder="Signed contract 2026"
+                        placeholder="العقد الموقّع 2026"
                         required
                       />
                     </label>
                     <label className="field">
-                      <span>Type</span>
+                      <span>النوع</span>
                       <select
                         value={docType}
                         onChange={(event) =>
@@ -347,7 +357,7 @@ export function MerchantProfileClient({
                     </label>
                   </div>
                   <label className="field">
-                    <span>Document URL</span>
+                    <span>رابط المستند</span>
                     <input
                       value={docUrl}
                       onChange={(event) => setDocUrl(event.target.value)}
@@ -365,7 +375,7 @@ export function MerchantProfileClient({
                       className="button button-primary"
                       disabled={docSaving}
                     >
-                      {docSaving ? "Attaching..." : "Attach document"}
+                      {docSaving ? "جارٍ الإرفاق..." : "إرفاق المستند"}
                     </button>
                   </div>
                 </form>
@@ -377,39 +387,41 @@ export function MerchantProfileClient({
         <div className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Operations</p>
-              <h2>Tasks and audit</h2>
+              <p className="eyebrow">العمليات</p>
+              <h2>المهام والمراجعة</h2>
             </div>
           </div>
           <div className="stack-list">
             <div>
-              <span className="detail-label">Scheduled tasks</span>
+              <span className="detail-label">المهام المجدولة</span>
               {tasks.length === 0 ? (
-                <p className="muted">No tasks scheduled for this merchant.</p>
+                <p className="muted">لا توجد مهام مجدولة لهذا التاجر.</p>
               ) : (
                 <ul className="plain-list">
                   {tasks.map((task) => (
                     <li key={task.id}>
                       <span>{task.visitDate}</span>
-                      <span className={`badge ${task.status === "completed" ? "badge-green" : ""}`}>
-                        {task.status}
+                      <span
+                        className={`badge ${task.status === "completed" ? "badge-green" : ""}`}
+                      >
+                        {TASK_STATUS_LABEL[task.status] ?? task.status}
                       </span>
-                      <span className="muted">{task.team}</span>
+                      <span className="muted">{teamLabel(task.team)}</span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
             <div>
-              <span className="detail-label">State overrides</span>
+              <span className="detail-label">تجاوزات الحالة</span>
               {overrides.length === 0 ? (
-                <p className="muted">No manager overrides recorded.</p>
+                <p className="muted">لا توجد تجاوزات مسجلة من المدير.</p>
               ) : (
                 <ul className="plain-list">
                   {overrides.map((override) => (
                     <li key={override.id}>
                       <span>
-                        {CONTRACT_STATE_META[override.fromState].label} →{" "}
+                        من {CONTRACT_STATE_META[override.fromState].label} إلى{" "}
                         {CONTRACT_STATE_META[override.toState].label}
                       </span>
                       <span className="muted">{override.actorName}</span>
@@ -428,14 +440,14 @@ export function MerchantProfileClient({
       <JustificationModal
         open={transferOpen}
         endpoint={`/api/field-ops/merchants/${merchant.id}/transfers`}
-        title={`Transfer ${merchant.name}`}
-        eyebrow="Cross-team ownership"
-        description="A manager reviews this justification before ownership moves."
-        label="Justification"
-        placeholder="Why should this merchant move to your team?"
-        submitLabel="Submit transfer request"
+        title={`نقل ملكية ${merchant.name}`}
+        eyebrow="ملكية عابرة للفرق"
+        description="يراجع المدير هذا المبرر قبل انتقال الملكية."
+        label="المبرر"
+        placeholder="لماذا يجب أن ينتقل هذا التاجر إلى فريقك؟"
+        submitLabel="إرسال طلب النقل"
         field="justification"
-        successMessage="Transfer request submitted for manager approval."
+        successMessage="تم إرسال طلب النقل لاعتماد المدير."
         onClose={() => setTransferOpen(false)}
         onDone={(message) => {
           announce(message);
@@ -446,14 +458,14 @@ export function MerchantProfileClient({
       <JustificationModal
         open={editOpen}
         endpoint={`/api/field-ops/merchants/${merchant.id}/edit-requests`}
-        title={`Unlock ${merchant.name}`}
-        eyebrow="Final contract lock"
-        description="A manager must approve the reason before the outcome can change."
-        label="Reason for edit"
-        placeholder="What is wrong, and what should change?"
-        submitLabel="Request edit approval"
+        title={`فتح تعديل ${merchant.name}`}
+        eyebrow="قفل الاتفاق النهائي"
+        description="يجب أن يعتمد المدير السبب قبل تغيير النتيجة."
+        label="سبب التعديل"
+        placeholder="ما الخطأ، وما الذي يجب تغييره؟"
+        submitLabel="طلب اعتماد التعديل"
         field="reason"
-        successMessage="Edit request submitted for manager approval."
+        successMessage="تم إرسال طلب التعديل لاعتماد المدير."
         onClose={() => setEditOpen(false)}
         onDone={(message) => {
           announce(message);

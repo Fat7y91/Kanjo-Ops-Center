@@ -14,12 +14,12 @@ export default async function PermissionsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Governance"
-        title="Permission control plane"
-        description="Grant and revoke granular capabilities for any operator. Open sessions reconcile within five seconds and server guards re-resolve on every request."
+        eyebrow="الحوكمة"
+        title="مركز التحكم بالصلاحيات"
+        description="امنح واسحب القدرات الدقيقة لأي مشغّل. تتزامن الجلسات المفتوحة خلال خمس ثوانٍ، وتعيد حواجز الخادم التحقق في كل طلب."
         actions={
           <span className="badge badge-green">
-            {users.length} operators · rev {revision}
+            {users.length} مشغّل · إصدار {revision}
           </span>
         }
       />
@@ -35,33 +35,33 @@ export default async function PermissionsPage() {
       <section className="panel">
         <div className="panel-head">
           <div>
-            <p className="eyebrow">Enforcement chain</p>
-            <h2>Three independent checks</h2>
+            <p className="eyebrow">سلسلة التنفيذ</p>
+            <h2>ثلاثة فحوص مستقلة</h2>
           </div>
         </div>
         <div className="enforcement-grid">
           <div>
             <span className="badge">1</span>
-            <h3>Middleware</h3>
+            <h3>الوسيط</h3>
             <p>
-              Verifies the signed session and blocks unauthorized module URLs
-              before a page renders.
+              يتحقق من الجلسة الموقّعة ويمنع روابط الوحدات غير المصرّح بها قبل
+              عرض الصفحة.
             </p>
           </div>
           <div>
             <span className="badge">2</span>
-            <h3>Server guard</h3>
+            <h3>حاجز الخادم</h3>
             <p>
-              Each page calls <code>requirePermission()</code> and re-reads the
-              live capability set, so a stale cookie cannot bypass a revocation.
+              كل صفحة تستدعي <code>requirePermission()</code> وتعيد قراءة مجموعة
+              القدرات الحية، فلا يمكن لكوكي قديم تجاوز السحب.
             </p>
           </div>
           <div>
             <span className="badge">3</span>
-            <h3>Component gate</h3>
+            <h3>بوابة المكوّن</h3>
             <p>
-              Sidebar links and action buttons evaluate{" "}
-              <code>hasPermission()</code> through <code>&lt;Protect&gt;</code>.
+              روابط الشريط الجانبي وأزرار الإجراءات تقيّم{" "}
+              <code>hasPermission()</code> عبر <code>&lt;Protect&gt;</code>.
             </p>
           </div>
         </div>

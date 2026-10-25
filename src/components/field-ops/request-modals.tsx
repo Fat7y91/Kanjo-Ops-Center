@@ -65,7 +65,7 @@ export function JustificationModal({
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "The request could not be saved.");
+        throw new Error(payload.error ?? "تعذر حفظ الطلب.");
       }
       onDone(successMessage);
       onClose();
@@ -73,7 +73,7 @@ export function JustificationModal({
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "The request could not be saved.",
+          : "تعذر حفظ الطلب.",
       );
     } finally {
       setSaving(false);
@@ -100,8 +100,8 @@ export function JustificationModal({
             required
           />
           <span className="field-hint">
-            Mandatory. Minimum {minLength} characters. Managers see this exactly
-            as written.
+            إلزامي. {minLength} أحرف على الأقل. يرى المديرون النص كما هو مكتوب
+            تماماً.
           </span>
         </label>
 
@@ -113,14 +113,14 @@ export function JustificationModal({
 
         <div className="form-actions">
           <button type="button" className="button button-quiet" onClick={onClose}>
-            Cancel
+            إلغاء
           </button>
           <button
             type="submit"
             className="button button-primary"
             disabled={saving || value.trim().length < minLength}
           >
-            {saving ? "Submitting..." : submitLabel}
+            {saving ? "جارٍ الإرسال..." : submitLabel}
           </button>
         </div>
       </form>
@@ -173,19 +173,19 @@ export function DecisionModal({
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "The decision could not be saved.");
+        throw new Error(payload.error ?? "تعذر حفظ القرار.");
       }
       onDone(
-        `${kind === "transfer" ? "Transfer" : "Edit request"} ${
-          decision === "approve" ? "approved" : "rejected"
-        } for ${merchantName}.`,
+        `${kind === "transfer" ? "طلب النقل" : "طلب التعديل"} ${
+          decision === "approve" ? "تمت الموافقة عليه" : "تم رفضه"
+        } لـ ${merchantName}.`,
       );
       onClose();
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "The decision could not be saved.",
+          : "تعذر حفظ القرار.",
       );
     } finally {
       setSaving(false);
@@ -195,18 +195,18 @@ export function DecisionModal({
   return (
     <Modal
       open={open}
-      title={`Review ${kind === "transfer" ? "transfer" : "edit"} request`}
+      title={`مراجعة ${kind === "transfer" ? "طلب النقل" : "طلب التعديل"}`}
       eyebrow={merchantName}
       onClose={onClose}
     >
       <div className="request-quote">{requestText}</div>
       <label className="field">
-        <span>Decision note (optional)</span>
+        <span>ملاحظة القرار (اختياري)</span>
         <textarea
           rows={3}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          placeholder="Context for the audit trail."
+          placeholder="سياق لسجل المراجعة."
         />
       </label>
 
@@ -223,7 +223,7 @@ export function DecisionModal({
           onClick={() => decide("reject")}
           disabled={saving}
         >
-          Reject
+          رفض
         </button>
         <button
           type="button"
@@ -231,7 +231,7 @@ export function DecisionModal({
           onClick={() => decide("approve")}
           disabled={saving}
         >
-          {saving ? "Saving..." : "Approve"}
+          {saving ? "جارٍ الحفظ..." : "موافقة"}
         </button>
       </div>
     </Modal>
@@ -280,17 +280,17 @@ export function StateModal({
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error ?? "The state could not be changed.");
+        throw new Error(payload.error ?? "تعذر تغيير الحالة.");
       }
       onDone(
-        `${merchantName} moved to ${CONTRACT_STATE_META[state].label}. Audit entry recorded.`,
+        `انتقل ${merchantName} إلى ${CONTRACT_STATE_META[state].label}. تم تسجيل إدخال المراجعة.`,
       );
       onClose();
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "The state could not be changed.",
+          : "تعذر تغيير الحالة.",
       );
     } finally {
       setSaving(false);
@@ -300,14 +300,14 @@ export function StateModal({
   return (
     <Modal
       open={open}
-      title={`Override contract state — ${merchantName}`}
-      eyebrow="City operations"
-      description="Manager overrides are audited with the actor, previous state, and mandatory note."
+      title={`تجاوز حالة العقد — ${merchantName}`}
+      eyebrow="عمليات المدن"
+      description="تُسجّل تجاوزات المدير مع المنفّذ والحالة السابقة وملاحظة إلزامية."
       onClose={onClose}
     >
       <form className="form-stack" onSubmit={submit}>
         <label className="field">
-          <span>New state</span>
+          <span>الحالة الجديدة</span>
           <select
             value={state}
             onChange={(event) =>
@@ -322,12 +322,12 @@ export function StateModal({
           </select>
         </label>
         <label className="field">
-          <span>Audit note</span>
+          <span>ملاحظة المراجعة</span>
           <textarea
             rows={3}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Why is this override required?"
+            placeholder="لماذا هذا التجاوز مطلوب؟"
             minLength={5}
             required
           />
@@ -341,14 +341,14 @@ export function StateModal({
 
         <div className="form-actions">
           <button type="button" className="button button-quiet" onClick={onClose}>
-            Cancel
+            إلغاء
           </button>
           <button
             type="submit"
             className="button button-primary"
             disabled={saving}
           >
-            {saving ? "Saving..." : "Apply override"}
+            {saving ? "جارٍ الحفظ..." : "تطبيق التجاوز"}
           </button>
         </div>
       </form>

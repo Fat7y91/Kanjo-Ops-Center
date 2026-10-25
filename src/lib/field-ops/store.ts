@@ -14,6 +14,7 @@ import type {
   VisitReport,
   ZonePoint,
 } from "@/lib/field-ops/types";
+import { zoneToBoundary } from "@/lib/field-ops/types";
 import type {
   CityCreateInput,
   MerchantDocumentInput,
@@ -81,13 +82,13 @@ function seedStore(): FieldOpsStore {
   const tomorrow = todayIso(1);
   const yesterday = todayIso(-1);
 
-  const cities: City[] = [
+  const cities: City[] = ([
     {
       id: "city-cairo",
-      name: "Cairo",
-      country: "Egypt",
+      name: "القاهرة",
+      country: "مصر",
       population: 10_100_000,
-      status: "active",
+      stage: "live_operations",
       competitors: [
         {
           name: "Talabat",
@@ -101,7 +102,7 @@ function seedStore(): FieldOpsStore {
         },
       ],
       strategicNotes:
-        "Dense central corridor. Prioritise Zamalek, Maadi, and Heliopolis for premium seafood and pharmacy coverage.",
+        "الممر المركزي الكثيف. أولوية الزمالك والمعادي ومصر الجديدة لتغطية المأكولات البحرية والصيدليات.",
       zone: zone([
         [30.129, 31.176],
         [30.149, 31.334],
@@ -115,10 +116,10 @@ function seedStore(): FieldOpsStore {
     },
     {
       id: "city-giza",
-      name: "Giza",
-      country: "Egypt",
+      name: "الجيزة",
+      country: "مصر",
       population: 9_200_000,
-      status: "launching",
+      stage: "data_entry",
       competitors: [
         {
           name: "Breadfast",
@@ -127,7 +128,7 @@ function seedStore(): FieldOpsStore {
         },
       ],
       strategicNotes:
-        "West-bank expansion. Pharmacies and grocery anchors lead the launch wave.",
+        "توسع الضفة الغربية. الصيدليات والبقالة تقود موجة الإدخال قبل التشغيل.",
       zone: zone([
         [30.039, 30.987],
         [30.063, 31.113],
@@ -140,10 +141,10 @@ function seedStore(): FieldOpsStore {
     },
     {
       id: "city-alexandria",
-      name: "Alexandria",
-      country: "Egypt",
+      name: "الإسكندرية",
+      country: "مصر",
       population: 5_500_000,
-      status: "planning",
+      stage: "contracting",
       competitors: [
         {
           name: "El Menus",
@@ -152,7 +153,7 @@ function seedStore(): FieldOpsStore {
         },
       ],
       strategicNotes:
-        "Summer corridor readiness. Validate seafood supply before opening field operations.",
+        "جاهزية الممر الصيفي. يجب التحقق من إمدادات المأكولات البحرية قبل فتح العمليات الميدانية.",
       zone: zone([
         [31.292, 29.918],
         [31.31, 30.061],
@@ -163,7 +164,10 @@ function seedStore(): FieldOpsStore {
       createdBy: "u-ops",
       createdByName: "Mariam Adel",
     },
-  ];
+  ] as Array<Omit<City, "boundary">>).map((city) => ({
+    ...city,
+    boundary: zoneToBoundary(city.zone),
+  }));
 
   const merchants: Merchant[] = [
     {
@@ -582,33 +586,80 @@ export function createCity(input: CityCreateInput, actor: Actor): City {
   ) {
     throw new FieldOpsError(
       "CITY_EXISTS",
-      "A city with this name already exists.",
+      "توجد مدينة بهذا الاسم بالفعل.",
       409,
     );
   }
+
+  const zone = input.zone.map((point) => ({
+    lat: Number(point.lat.toFixed(6)),
+    lng: Number(point.lng.toFixed(6)),
+  }));
 
   const city: City = {
     id: id("city"),
     name: input.name.trim(),
     country: input.country.trim(),
     population: input.population,
-    status: input.status,
+    stage: input.stage,
     competitors: input.competitors.map((competitor) => ({
       name: competitor.name.trim(),
       page: competitor.page.trim(),
       marketStrength: competitor.marketStrength,
     })),
     strategicNotes: input.strategicNotes.trim(),
-    zone: input.zone.map((point) => ({
-      lat: Number(point.lat.toFixed(6)),
-      lng: Number(point.lng.toFixed(6)),
-    })),
+    zone,
+    boundary: zoneToBoundary(zone),
     createdAt: isoNow(),
     createdBy: actor.id,
     createdByName: actor.name,
   };
 
   store.cities.push(city);
+  bump();
+  return clone(city);
+}
+
+export function updateCity(cityId: string, input: CityCreateInput): City {
+  const store = getStore();
+  const city = store.cities.find((candidate) => candidate.id === cityId);
+  if (!city) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+  }
+
+  const normalized = normalizeSearchText(input.name);
+  if (
+    store.cities.some(
+      (candidate) =>
+        candidate.id !== cityId &&
+        normalizeSearchText(candidate.name) === normalized,
+    )
+  ) {
+    throw new FieldOpsError(
+      "CITY_EXISTS",
+      "توجد مدينة أخرى بهذا الاسم.",
+      409,
+    );
+  }
+
+  const zone = input.zone.map((point) => ({
+    lat: Number(point.lat.toFixed(6)),
+    lng: Number(point.lng.toFixed(6)),
+  }));
+
+  city.name = input.name.trim();
+  city.country = input.country.trim();
+  city.population = input.population;
+  city.stage = input.stage;
+  city.competitors = input.competitors.map((competitor) => ({
+    name: competitor.name.trim(),
+    page: competitor.page.trim(),
+    marketStrength: competitor.marketStrength,
+  }));
+  city.strategicNotes = input.strategicNotes.trim();
+  city.zone = zone;
+  city.boundary = zoneToBoundary(zone);
+
   bump();
   return clone(city);
 }
@@ -691,7 +742,7 @@ export function createTaskWithMerchant(
   const store = getStore();
   const city = store.cities.find((candidate) => candidate.id === input.cityId);
   if (!city) {
-    throw new FieldOpsError("CITY_NOT_FOUND", "City not found.", 404);
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
   const normalizedName = merchantSearchKey(input.merchantName);
@@ -699,6 +750,14 @@ export function createTaskWithMerchant(
     (candidate) => candidate.normalizedName === normalizedName,
   );
   let merchantCreated = false;
+
+  if (merchant && merchant.cityId !== input.cityId) {
+    throw new FieldOpsError(
+      "CITY_SCOPE_MISMATCH",
+      "هذا التاجر مسجل في مدينة أخرى. لا يمكن نقله بين المدن من خلال إنشاء مهمة.",
+      409,
+    );
+  }
 
   if (!merchant) {
     merchant = {
@@ -767,7 +826,7 @@ export function createVisitReport(
     (candidate) => candidate.id === merchantId,
   );
   if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
 
   const current = merchant.contractState;
@@ -776,21 +835,21 @@ export function createVisitReport(
     if (current === "signed_contract") {
       throw new FieldOpsError(
         "SIGNED_LOCKED",
-        "Signed contracts are strictly locked. Only city operations can change them.",
+        "عقود التوقيع مقفلة تماماً. فقط عمليات المدن يمكنها تغييرها.",
         423,
       );
     }
     if (current === "final_contract" && !merchant.editUnlocked) {
       throw new FieldOpsError(
         "EDIT_REQUEST_REQUIRED",
-        "This final contract is locked. Submit an edit request with a reason for manager approval.",
+        "هذا الاتفاق النهائي مقفل. أرسل طلب تعديل مع ذكر السبب لاعتماده من المدير.",
         423,
       );
     }
     if (input.outcome === "signed_contract") {
       throw new FieldOpsError(
         "SIGNED_MANAGER_ONLY",
-        "Only city operations can mark a merchant as signed.",
+        "فقط عمليات المدن يمكنها تحويل التاجر إلى موقّع.",
         403,
       );
     }
@@ -801,7 +860,7 @@ export function createVisitReport(
     ) {
       throw new FieldOpsError(
         "FINAL_LOCKED",
-        "A final contract state cannot be reverted by a representative.",
+        "لا يمكن للمندوب التراجع عن حالة الاتفاق النهائي.",
         423,
       );
     }
@@ -827,7 +886,7 @@ export function createVisitReport(
       if (task.merchantId !== merchant.id) {
         throw new FieldOpsError(
           "TASK_MISMATCH",
-          "The task does not belong to this merchant.",
+          "هذه المهمة لا تتبع هذا التاجر.",
           400,
         );
       }
@@ -866,12 +925,12 @@ export function createTransferRequest(
     (candidate) => candidate.id === merchantId,
   );
   if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
   if (merchant.team === actor.team) {
     throw new FieldOpsError(
       "SAME_TEAM",
-      "This merchant already belongs to your team.",
+      "هذا التاجر تابع لفريقك بالفعل.",
       400,
     );
   }
@@ -885,7 +944,7 @@ export function createTransferRequest(
   ) {
     throw new FieldOpsError(
       "TRANSFER_PENDING",
-      "A transfer request for this merchant is already pending.",
+      "يوجد طلب نقل لهذا التاجر قيد المراجعة بالفعل.",
       409,
     );
   }
@@ -923,12 +982,12 @@ export function decideTransferRequest(
     (candidate) => candidate.id === requestId,
   );
   if (!request) {
-    throw new FieldOpsError("TRANSFER_NOT_FOUND", "Request not found.", 404);
+    throw new FieldOpsError("TRANSFER_NOT_FOUND", "الطلب غير موجود.", 404);
   }
   if (request.status !== "pending") {
     throw new FieldOpsError(
       "TRANSFER_CLOSED",
-      "This transfer request has already been reviewed.",
+      "تمت مراجعة طلب النقل هذا بالفعل.",
       409,
     );
   }
@@ -971,26 +1030,26 @@ export function createEditRequest(
     (candidate) => candidate.id === merchantId,
   );
   if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
   if (merchant.contractState === "signed_contract") {
     throw new FieldOpsError(
       "SIGNED_LOCKED",
-      "Signed contracts cannot be edited through a representative request.",
+      "لا يمكن تعديل عقود التوقيع عبر طلب مندوب.",
       423,
     );
   }
   if (merchant.contractState !== "final_contract") {
     throw new FieldOpsError(
       "NOT_LOCKED",
-      "Only final contracts require an edit request.",
+      "طلبات التعديل مخصصة للاتفاقيات النهائية فقط.",
       400,
     );
   }
   if (merchant.editUnlocked) {
     throw new FieldOpsError(
       "ALREADY_UNLOCKED",
-      "This merchant is already unlocked for an approved edit.",
+      "هذا التاجر مفتوح بالفعل لتعديل معتمد.",
       409,
     );
   }
@@ -1004,7 +1063,7 @@ export function createEditRequest(
   ) {
     throw new FieldOpsError(
       "EDIT_PENDING",
-      "An edit request for this merchant is already pending.",
+      "يوجد طلب تعديل لهذا التاجر قيد المراجعة بالفعل.",
       409,
     );
   }
@@ -1040,12 +1099,12 @@ export function decideEditRequest(
     (candidate) => candidate.id === requestId,
   );
   if (!request) {
-    throw new FieldOpsError("EDIT_NOT_FOUND", "Request not found.", 404);
+    throw new FieldOpsError("EDIT_NOT_FOUND", "الطلب غير موجود.", 404);
   }
   if (request.status !== "pending") {
     throw new FieldOpsError(
       "EDIT_CLOSED",
-      "This edit request has already been reviewed.",
+      "تمت مراجعة طلب التعديل هذا بالفعل.",
       409,
     );
   }
@@ -1081,7 +1140,7 @@ export function setMerchantState(
     (candidate) => candidate.id === merchantId,
   );
   if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
 
   const previous = merchant.contractState;
@@ -1138,7 +1197,7 @@ export function addMerchantDocument(
     (candidate) => candidate.id === merchantId,
   );
   if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
   if (
     merchant.contractState !== "final_contract" &&
@@ -1146,7 +1205,7 @@ export function addMerchantDocument(
   ) {
     throw new FieldOpsError(
       "AGREEMENT_REQUIRED",
-      "Documents unlock only after a final or signed agreement.",
+      "تُفتح المستندات فقط بعد الاتفاق النهائي أو توقيع العقد.",
       423,
     );
   }

@@ -21,7 +21,7 @@ export async function POST(
   try {
     const merchant = getMerchantById(id);
     if (!merchant) {
-      throw new FieldOpsError("MERCHANT_NOT_FOUND", "Merchant not found.", 404);
+      throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
     }
     if (
       merchant.team !== session.user.team &&
@@ -29,7 +29,7 @@ export async function POST(
     ) {
       throw new FieldOpsError(
         "OUTSIDE_TEAM",
-        "Only the owning team can request an edit for this merchant.",
+        "فقط الفريق المالك يمكنه طلب تعديل هذا التاجر.",
         403,
       );
     }

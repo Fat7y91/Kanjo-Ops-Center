@@ -56,7 +56,7 @@ export function Modal({
             type="button"
             className="modal-close"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label="إغلاق النافذة"
           >
             ×
           </button>

@@ -7,38 +7,38 @@ export const dynamic = "force-dynamic";
 const contracts = [
   {
     id: "CTR-2041",
-    merchant: "Cairo Fresh Market",
-    value: "EGP 1,240,000",
-    status: "Signed",
-    signatory: "Authorized desk",
+    merchant: "سوق القاهرة الطازج",
+    value: "1,240,000 ج.م",
+    status: "موقّع",
+    signatory: "المكتب المعتمد",
   },
   {
     id: "CTR-2042",
-    merchant: "Nile Pharmacy Group",
-    value: "EGP 860,000",
-    status: "Signature required",
-    signatory: "Pending",
+    merchant: "مجموعة صيدليات النيل",
+    value: "860,000 ج.م",
+    status: "يتطلب توقيعاً",
+    signatory: "قيد الانتظار",
   },
   {
     id: "CTR-2043",
-    merchant: "Zamalek Kitchen",
-    value: "EGP 410,000",
-    status: "Draft",
-    signatory: "Draft owner",
+    merchant: "مطبخ الزمالك",
+    value: "410,000 ج.م",
+    status: "مسودة",
+    signatory: "مالك المسودة",
   },
   {
     id: "CTR-2044",
-    merchant: "Maadi Home Supplies",
-    value: "EGP 675,000",
-    status: "Signature required",
-    signatory: "Pending",
+    merchant: "لوازم منزل المعادي",
+    value: "675,000 ج.م",
+    status: "يتطلب توقيعاً",
+    signatory: "قيد الانتظار",
   },
 ];
 
 const statusTone: Record<string, string> = {
-  Signed: "badge-green",
-  "Signature required": "badge-gold",
-  Draft: "",
+  "موقّع": "badge-green",
+  "يتطلب توقيعاً": "badge-gold",
+  مسودة: "",
 };
 
 export default async function ContractsPage() {
@@ -47,13 +47,13 @@ export default async function ContractsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Commercial governance"
-        title="Contract register"
-        description="Drafting, editing, and authorized signing are separate capabilities. Signing authority is never inferred from a job title."
+        eyebrow="الحوكمة التجارية"
+        title="سجل العقود"
+        description="الصياغة والتعديل والتوقيع المعتمد صلاحيات منفصلة. لا تُستنتج صلاحية التوقيع من المسمى الوظيفي أبداً."
         actions={
           <Protect require="create_contracts">
             <button type="button" className="button button-primary">
-              Draft contract
+              صياغة عقد
             </button>
           </Protect>
         }
@@ -64,12 +64,12 @@ export default async function ContractsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Contract</th>
-                <th>Merchant</th>
-                <th>Value</th>
-                <th>Status</th>
-                <th>Signatory</th>
-                <th className="align-right">Actions</th>
+                <th>العقد</th>
+                <th>التاجر</th>
+                <th>القيمة</th>
+                <th>الحالة</th>
+                <th>الموقّع</th>
+                <th className="align-right">إجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -95,17 +95,17 @@ export default async function ContractsPage() {
                           type="button"
                           className="button button-small button-quiet"
                         >
-                          Edit
+                          تعديل
                         </button>
                       </Protect>
 
-                      {contract.status === "Signature required" && (
+                      {contract.status === "يتطلب توقيعاً" && (
                         <Protect require="sign_contracts">
                           <button
                             type="button"
                             className="button button-small button-primary"
                           >
-                            Sign
+                            توقيع
                           </button>
                         </Protect>
                       )}
@@ -115,7 +115,7 @@ export default async function ContractsPage() {
                           type="button"
                           className="button button-small button-danger"
                         >
-                          Void
+                          إلغاء
                         </button>
                       </Protect>
                     </div>
@@ -127,8 +127,8 @@ export default async function ContractsPage() {
         </div>
 
         <p className="panel-note">
-          The Sign control requires <code>sign_contracts</code>. A contract
-          editor without that flag can change terms but can never sign.
+          زر التوقيع يتطلب <code>sign_contracts</code>. محرر العقود الذي لا يملك
+          هذه الصلاحية يمكنه تعديل البنود لكنه لا يستطيع التوقيع أبداً.
         </p>
       </section>
     </>

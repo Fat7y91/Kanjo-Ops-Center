@@ -13,9 +13,9 @@ export default async function FieldOpsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Field operations"
-        title="Execution board"
-        description="Today's visits, ownership, and approval flow. Every control resolves from a capability, never from a job title."
+        eyebrow="العمليات الميدانية"
+        title="لوحة التنفيذ"
+        description="زيارات اليوم والملكية ومسار الاعتماد. كل عنصر تحكم مستمد من صلاحية، وليس من مسمى وظيفي."
       />
       <FieldOpsClient
         initialBoard={board}

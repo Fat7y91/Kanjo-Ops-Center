@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
 import { listCities, listMerchants } from "@/lib/field-ops/store";
-import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
+import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
 import { smartTextScore } from "@/lib/search/normalize";
 
 export const dynamic = "force-dynamic";
@@ -34,26 +34,26 @@ export default async function MerchantsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Merchant operations"
-        title="Merchant directory"
-        description="Ownership, lifecycle state, and commercial data for every merchant on the network. Open a profile to manage documents, outcomes, and transfers."
-        actions={<span className="badge">{merchants.length} merchants</span>}
+        eyebrow="عمليات التجار"
+        title="دليل التجار"
+        description="الملكية وحالة دورة الحياة والبيانات التجارية لكل تاجر على الشبكة. افتح الملف لإدارة المستندات والنتائج وعمليات النقل."
+        actions={<span className="badge">{merchants.length} تاجر</span>}
       />
 
       <section className="panel">
         <form className="table-toolbar" action="/merchants" method="get">
           <div className="search-shell">
-            <span>Search</span>
+            <span>بحث</span>
             <input
               type="search"
               name="q"
               defaultValue={query}
-              placeholder="Merchant, Arabic spelling, or typo"
-              aria-label="Search merchants"
+              placeholder="اسم التاجر أو الإملاء العربي أو خطأ إملائي"
+              aria-label="البحث عن التجار"
             />
           </div>
           <button type="submit" className="button button-quiet">
-            Search
+            بحث
           </button>
         </form>
 
@@ -61,12 +61,12 @@ export default async function MerchantsPage({
           <table className="data-table">
             <thead>
               <tr>
-                <th>Merchant</th>
-                <th>City</th>
-                <th>Owner</th>
-                <th>State</th>
-                <th>Commission</th>
-                <th className="align-right">Actions</th>
+                <th>التاجر</th>
+                <th>المدينة</th>
+                <th>الفريق المالك</th>
+                <th>الحالة</th>
+                <th>العمولة</th>
+                <th className="align-right">إجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -81,13 +81,15 @@ export default async function MerchantsPage({
                     </td>
                     <td>{cityMap.get(merchant.cityId)?.name ?? "—"}</td>
                     <td>
-                      <span className="chip chip-team">{merchant.team}</span>
+                      <span className="chip chip-team">
+                        {teamLabel(merchant.team)}
+                      </span>
                     </td>
                     <td>
                       <span className={`badge ${meta.tone}`}>{meta.label}</span>
                     </td>
                     <td>
-                      {new Intl.NumberFormat("en-US", {
+                      {new Intl.NumberFormat("ar-EG", {
                         style: "currency",
                         currency: "EGP",
                         maximumFractionDigits: 0,
@@ -99,7 +101,7 @@ export default async function MerchantsPage({
                           href={`/merchants/${merchant.id}`}
                           className="button button-small button-quiet"
                         >
-                          Open profile
+                          فتح الملف
                         </Link>
                       </div>
                     </td>
@@ -110,7 +112,7 @@ export default async function MerchantsPage({
                 <tr>
                   <td colSpan={6}>
                     <p className="empty-state">
-                      No merchant matched “{query}”. Try a shorter spelling.
+                      لا يوجد تاجر مطابق لـ «{query}». جرّب إملاءً أقصر.
                     </p>
                   </td>
                 </tr>

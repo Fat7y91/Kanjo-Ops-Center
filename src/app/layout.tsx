@@ -3,15 +3,16 @@ import type { ReactNode } from "react";
 
 import { SessionProvider } from "@/components/providers/session-provider";
 import { getServerSession } from "@/lib/auth/server-session";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Kanjo Enterprise V2",
+  title: "كانجو | Kanjo Enterprise V2",
   description:
-    "Capability-based operations platform with dynamic, zero-role RBAC.",
+    "منصة العمليات المؤسسية القائمة على الصلاحيات الديناميكية، بدون أدوار ثابتة.",
 };
 
 export default async function RootLayout({
@@ -22,7 +23,10 @@ export default async function RootLayout({
   const session = await getServerSession();
 
   return (
-    <html lang="en">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <SessionProvider initialSession={session}>
           {children}

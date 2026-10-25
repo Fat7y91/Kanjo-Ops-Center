@@ -14,40 +14,40 @@ export default async function OverviewPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Command center"
-        title={`Good to see you, ${firstName}`}
-        description="A live view of merchant health, field execution, and commercial risk. Every control below is resolved from your capability set."
+        eyebrow="مركز القيادة"
+        title={`سعداء برؤيتك، ${firstName}`}
+        description="رؤية حيّة لصحة التجار والتنفيذ الميداني والمخاطر التجارية. كل عنصر تحكم أدناه مستمد من مجموعة صلاحياتك."
         actions={
           <Protect require="view_contracts">
             <Link className="button button-primary" href="/contracts">
-              Review contracts
+              مراجعة العقود
             </Link>
           </Protect>
         }
       />
 
-      <section className="stat-grid" aria-label="Enterprise metrics">
+      <section className="stat-grid" aria-label="مؤشرات المؤسسة">
         <StatCard
-          label="Active merchants"
+          label="التجار النشطون"
           value="1,284"
-          detail="+38 this month"
+          detail="+38 هذا الشهر"
           tone="green"
         />
         <StatCard
-          label="Contracts awaiting signature"
+          label="عقود تنتظر التوقيع"
           value="17"
-          detail="4 escalated this week"
+          detail="4 تم تصعيدها هذا الأسبوع"
           tone="gold"
         />
         <StatCard
-          label="Field visits today"
+          label="زيارات ميدانية اليوم"
           value="42"
-          detail="31 completed, 11 open"
+          detail="31 مكتملة، 11 مفتوحة"
         />
         <StatCard
-          label="Catalog quality"
+          label="جودة الكتالوج"
           value="96.4%"
-          detail="12 products need review"
+          detail="12 منتجاً يحتاج مراجعة"
           tone="green"
         />
       </section>
@@ -56,28 +56,27 @@ export default async function OverviewPage() {
         <section className="panel finance-panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Finance snapshot</p>
-              <h2>Commercial position</h2>
+              <p className="eyebrow">لمحة مالية</p>
+              <h2>الموقف التجاري</h2>
             </div>
-            <span className="badge badge-gold">Restricted capability</span>
+            <span className="badge badge-gold">صلاحية مقيّدة</span>
           </div>
           <div className="finance-grid">
             <div>
-              <span>Collected this month</span>
-              <strong>EGP 4.82M</strong>
+              <span>المحصّل هذا الشهر</span>
+              <strong>4.82M ج.م</strong>
             </div>
             <div>
-              <span>Outstanding settlements</span>
-              <strong>EGP 312K</strong>
+              <span>التسويات المستحقة</span>
+              <strong>312K ج.م</strong>
             </div>
             <div>
-              <span>Contracted run-rate</span>
-              <strong>EGP 58.1M</strong>
+              <span>معدل التشغيل التعاقدي</span>
+              <strong>58.1M ج.م</strong>
             </div>
           </div>
           <p className="panel-note">
-            Visible because this session holds{" "}
-            <code>view_finance</code>.
+            ظاهر لأن هذه الجلسة تحمل صلاحية <code>view_finance</code>.
           </p>
         </section>
       </Protect>
@@ -86,30 +85,30 @@ export default async function OverviewPage() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Operations</p>
-              <h2>Today&apos;s focus</h2>
+              <p className="eyebrow">العمليات</p>
+              <h2>تركيز اليوم</h2>
             </div>
           </div>
           <ul className="activity-list">
             <li>
               <span className="activity-dot activity-dot-gold" />
               <div>
-                <strong>4 merchant contracts need authorized signature</strong>
-                <span>Contracts desk · 12 minutes ago</span>
+                <strong>4 عقود تجار تحتاج توقيعاً معتمداً</strong>
+                <span>مكتب العقود · قبل 12 دقيقة</span>
               </div>
             </li>
             <li>
               <span className="activity-dot activity-dot-green" />
               <div>
-                <strong>Fox Team completed 18 of 20 planned visits</strong>
-                <span>Field operations · 34 minutes ago</span>
+                <strong>أكمل فريق فوكس 18 من 20 زيارة مخططة</strong>
+                <span>العمليات الميدانية · قبل 34 دقيقة</span>
               </div>
             </li>
             <li>
               <span className="activity-dot" />
               <div>
-                <strong>Catalog review cleared 126 products</strong>
-                <span>Catalog desk · 1 hour ago</span>
+                <strong>أنهت مراجعة الكتالوج 126 منتجاً</strong>
+                <span>مكتب الكتالوج · قبل ساعة</span>
               </div>
             </li>
           </ul>
@@ -118,8 +117,8 @@ export default async function OverviewPage() {
         <article className="panel">
           <div className="panel-head">
             <div>
-              <p className="eyebrow">Your access</p>
-              <h2>Active capabilities</h2>
+              <p className="eyebrow">صلاحياتك</p>
+              <h2>القدرات النشطة</h2>
             </div>
             <span className="badge">{session.permissions.length}</span>
           </div>
@@ -131,8 +130,8 @@ export default async function OverviewPage() {
             ))}
           </div>
           <p className="panel-note">
-            This list is refreshed from the server every five seconds. Grants and
-            revocations appear without a reload.
+            تُحدّث هذه القائمة من الخادم كل خمس ثوانٍ. تظهر المنح والسحوبات دون
+            إعادة تحميل.
           </p>
         </article>
       </section>

@@ -6,24 +6,21 @@ import { listCities } from "@/lib/field-ops/store";
 export const dynamic = "force-dynamic";
 
 export default async function CitiesPage() {
-  const session = await requirePermission("view_cities");
-  const canManage = session.permissions.includes("manage_cities");
+  const session = await requirePermission("manage_cities");
 
   return (
     <>
       <PageHeader
-        eyebrow="Market expansion"
-        title="Cities and operational zoning"
-        description="Define where Kanjo operates, capture competitive intelligence, and draw the geographic zones that field teams actually cover."
+        eyebrow="التوسع الجغرافي"
+        title="المدن والنطاقات التشغيلية"
+        description="حدّد أين تعمل كانجو، والتقط ذكاء السوق، وارسم النطاقات الجغرافية التي تغطيها الفرق الميدانية فعلياً."
         actions={
-          canManage ? (
-            <span className="badge badge-purple">City management enabled</span>
-          ) : null
+          <span className="badge badge-purple">إدارة المدن مُفعّلة</span>
         }
       />
       <CitiesClient
         initialCities={listCities()}
-        canManage={canManage}
+        canManage={session.permissions.includes("manage_cities")}
         viewerName={session.user.name}
       />
     </>

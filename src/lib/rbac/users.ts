@@ -19,7 +19,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-owner",
     name: "Nour El-Sayed",
     email: "nour@kanjo.example",
-    title: "Platform owner",
+    title: "مالك المنصة",
     team: "Executive",
     permissions: ALL_PERMISSIONS,
     active: true,
@@ -29,7 +29,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-ops",
     name: "Mariam Adel",
     email: "mariam@kanjo.example",
-    title: "City operations manager",
+    title: "مدير عمليات المدن",
     team: "City Operations",
     permissions: [
       "view_overview",
@@ -56,7 +56,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-sales",
     name: "Omar Khaled",
     email: "omar@kanjo.example",
-    title: "Merchant partnerships",
+    title: "شراكات التجار",
     team: "Fox Team",
     permissions: [
       "view_overview",
@@ -76,7 +76,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-catalog",
     name: "Salma Hany",
     email: "salma@kanjo.example",
-    title: "Catalog desk",
+    title: "مكتب الكتالوج",
     team: "Catalog",
     permissions: [
       "view_overview",
@@ -92,7 +92,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-audit",
     name: "Youssef Tarek",
     email: "youssef@kanjo.example",
-    title: "Contract audit",
+    title: "مراجعة العقود",
     team: "Audit",
     permissions: [
       "view_overview",
@@ -107,7 +107,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-rep-fox",
     name: "Hassan Mostafa",
     email: "hassan@kanjo.example",
-    title: "Field representative",
+    title: "مندوب ميداني",
     team: "Fox Team",
     permissions: [
       "view_overview",
@@ -123,7 +123,7 @@ const SEED_USERS: AppUser[] = [
     id: "u-rep-power",
     name: "Dina Samir",
     email: "dina@kanjo.example",
-    title: "Field representative",
+    title: "مندوب ميداني",
     team: "Power Team",
     permissions: [
       "view_overview",

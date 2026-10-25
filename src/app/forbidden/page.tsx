@@ -25,18 +25,18 @@ export default async function ForbiddenPage({
     <main className="forbidden-shell">
       <section className="forbidden-card">
         <span className="forbidden-mark">403</span>
-        <p className="eyebrow">Capability check failed</p>
-        <h1>This surface is not granted to your session.</h1>
+        <p className="eyebrow">فشل فحص القدرات</p>
+        <h1>هذه الصفحة غير ممنوحة لجلساتك.</h1>
         <p className="page-description">
           {params.from
-            ? `Access to ${params.from} was denied`
-            : "Access was denied"}{" "}
-          because the required capability is not in your active permission set.
+            ? `تم رفض الوصول إلى ${params.from}`
+            : "تم رفض الوصول"}{" "}
+          لأن القدرة المطلوبة غير موجودة في مجموعة صلاحياتك النشطة.
         </p>
 
         {params.permission && (
           <div className="permission-callout">
-            <span>Required capability</span>
+            <span>القدرة المطلوبة</span>
             <code>{params.permission}</code>
           </div>
         )}
@@ -50,17 +50,17 @@ export default async function ForbiddenPage({
                 </span>
               ))
             ) : (
-              <span className="chip chip-muted">No capabilities granted</span>
+              <span className="chip chip-muted">لا توجد قدرات ممنوحة</span>
             )}
           </div>
         )}
 
         <div className="forbidden-actions">
           <Link className="button button-primary" href={destination}>
-            {session ? "Go to an allowed module" : "Sign in"}
+            {session ? "الانتقال إلى وحدة مسموحة" : "تسجيل الدخول"}
           </Link>
           <Link className="button button-quiet" href="/login">
-            Switch account
+            تبديل الحساب
           </Link>
         </div>
       </section>

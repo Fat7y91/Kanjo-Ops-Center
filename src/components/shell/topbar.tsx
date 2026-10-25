@@ -2,6 +2,7 @@
 
 import { logoutAction } from "@/app/login/actions";
 import { usePermission } from "@/components/auth/use-permission";
+import { ThemeToggle } from "@/components/shell/theme-toggle";
 
 export function Topbar() {
   const { user, pending, revision } = usePermission();
@@ -11,12 +12,13 @@ export function Topbar() {
       <div className="topbar-context">
         <span className={`status-pill${pending ? " is-pending" : ""}`}>
           <span className="status-dot" />
-          {pending ? "Syncing capabilities" : "Capabilities live"}
+          {pending ? "جارٍ مزامنة الصلاحيات" : "الصلاحيات محدّثة"}
         </span>
-        <span className="revision-pill">rev {revision}</span>
+        <span className="revision-pill">إصدار {revision}</span>
       </div>
 
       <div className="topbar-user">
+        <ThemeToggle />
         {user && (
           <div className="user-copy">
             <strong>{user.name}</strong>
@@ -25,7 +27,7 @@ export function Topbar() {
         )}
         <form action={logoutAction}>
           <button type="submit" className="button button-quiet button-small">
-            Sign out
+            تسجيل الخروج
           </button>
         </form>
       </div>

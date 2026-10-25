@@ -18,7 +18,7 @@ export async function authorize(
     return {
       session: null,
       response: NextResponse.json(
-        { error: "Authentication required." },
+        { error: "يلزم تسجيل الدخول." },
         { status: 401 },
       ),
     };
@@ -27,7 +27,7 @@ export async function authorize(
     return {
       session: null,
       response: NextResponse.json(
-        { error: "You do not have this capability." },
+        { error: "لا تملك هذه الصلاحية." },
         { status: 403 },
       ),
     };
@@ -56,7 +56,7 @@ export function apiError(error: unknown): NextResponse {
       {
         error: first
           ? `${first.path.join(".") || "input"}: ${first.message}`
-          : "Validation failed.",
+          : "فشل التحقق من البيانات.",
         code: "VALIDATION",
       },
       { status: 422 },
@@ -64,7 +64,7 @@ export function apiError(error: unknown): NextResponse {
   }
   console.error(error);
   return NextResponse.json(
-    { error: "Unexpected server error." },
+    { error: "حدث خطأ غير متوقع في الخادم." },
     { status: 500 },
   );
 }
