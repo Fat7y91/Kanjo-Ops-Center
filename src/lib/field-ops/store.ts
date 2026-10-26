@@ -29,10 +29,7 @@ import type {
   TaskAssignInput,
   VisitReportInput,
 } from "@/lib/schemas/field-ops";
-import {
-  assertCategoryInVendor,
-  assertVendorTypeExists,
-} from "@/lib/taxonomy/store";
+import { assertVendorTypeExists } from "@/lib/taxonomy/store";
 
 export class FieldOpsError extends Error {
   readonly code: string;
@@ -220,8 +217,7 @@ function seedStore(): FieldOpsStore {
       name: "كافيار",
       normalizedName: merchantSearchKey("كافيار"),
       vendorTypeId: 1,
-      categoryId: 10,
-      category: "أسماك",
+      vendorType: "مطعم",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 12,
@@ -241,8 +237,7 @@ function seedStore(): FieldOpsStore {
       name: "عبر الشام",
       normalizedName: merchantSearchKey("عبر الشام"),
       vendorTypeId: 1,
-      categoryId: 9,
-      category: "مشويات",
+      vendorType: "مطعم",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 10,
@@ -262,8 +257,7 @@ function seedStore(): FieldOpsStore {
       name: "Cairo Fresh Market",
       normalizedName: merchantSearchKey("Cairo Fresh Market"),
       vendorTypeId: 4,
-      categoryId: 32,
-      category: "بقالة",
+      vendorType: "سوبر ماركت",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 9,
@@ -300,8 +294,7 @@ function seedStore(): FieldOpsStore {
       name: "Nile Pharmacy Group",
       normalizedName: merchantSearchKey("Nile Pharmacy Group"),
       vendorTypeId: 3,
-      categoryId: 194,
-      category: "أدوية",
+      vendorType: "صيدلية",
       team: "Power Team",
       cityId: "city-giza",
       targetCommission: 8,
@@ -338,8 +331,7 @@ function seedStore(): FieldOpsStore {
       name: "Zamalek Kitchen",
       normalizedName: merchantSearchKey("Zamalek Kitchen"),
       vendorTypeId: 1,
-      categoryId: 11,
-      category: "مصري",
+      vendorType: "مطعم",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 11,
@@ -359,8 +351,7 @@ function seedStore(): FieldOpsStore {
       name: "Maadi Home Supplies",
       normalizedName: merchantSearchKey("Maadi Home Supplies"),
       vendorTypeId: 10,
-      categoryId: 67,
-      category: "منزلية",
+      vendorType: "مكتبات وهدايا",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 7,
@@ -380,8 +371,7 @@ function seedStore(): FieldOpsStore {
       name: "Heliopolis Pet Corner",
       normalizedName: merchantSearchKey("Heliopolis Pet Corner"),
       vendorTypeId: 11,
-      categoryId: 125,
-      category: "مستلزمات",
+      vendorType: "ادوية بيطرية",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 6,
@@ -401,8 +391,7 @@ function seedStore(): FieldOpsStore {
       name: "Alexandria Seaside Grill",
       normalizedName: merchantSearchKey("Alexandria Seaside Grill"),
       vendorTypeId: 1,
-      categoryId: 10,
-      category: "أسماك",
+      vendorType: "مطعم",
       team: "Power Team",
       cityId: "city-alexandria",
       targetCommission: 13,
@@ -422,8 +411,7 @@ function seedStore(): FieldOpsStore {
       name: "Mansoura Nile Grill",
       normalizedName: merchantSearchKey("Mansoura Nile Grill"),
       vendorTypeId: 1,
-      categoryId: 9,
-      category: "مشويات",
+      vendorType: "مطعم",
       team: null,
       cityId: "city-mansoura",
       targetCommission: 10,
@@ -926,11 +914,7 @@ export function createMerchant(
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
-  assertVendorTypeExists(input.vendorTypeId);
-  const category =
-    input.categoryId == null
-      ? null
-      : assertCategoryInVendor(input.vendorTypeId, input.categoryId);
+  const vendorType = assertVendorTypeExists(input.vendorTypeId);
 
   const normalizedName = merchantSearchKey(input.name);
   const existing = store.merchants.find(
@@ -951,8 +935,7 @@ export function createMerchant(
     name: input.name.trim(),
     normalizedName,
     vendorTypeId: input.vendorTypeId,
-    categoryId: category?.id ?? null,
-    category: category?.name_ar ?? "",
+    vendorType: vendorType.name_ar,
     team: null,
     cityId: input.cityId,
     targetCommission: input.targetCommission,

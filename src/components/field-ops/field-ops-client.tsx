@@ -435,7 +435,7 @@ export function FieldOpsClient({
                       <div className="search-result-main">
                         <strong>{result.merchant.name}</strong>
                         <span className="search-result-meta">
-                          {result.cityName} · {result.merchant.category} ·{" "}
+                          {result.cityName} · {result.merchant.vendorType} ·{" "}
                           {matchTypeLabel(result.matchType)} · تطابق{" "}
                           {Math.round(result.score)}%
                         </span>

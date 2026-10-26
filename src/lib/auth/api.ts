@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { getServerSession } from "@/lib/auth/server-session";
+import { CatalogError } from "@/lib/catalog/store";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
@@ -36,6 +37,35 @@ export async function authorize(
   return { session, response: null };
 }
 
+/**
+ * Capability check for routes that accept any one of several equivalent grants
+ * (for example `create_products` or the broader `manage_catalog`).
+ */
+export async function authorizeAny(
+  permissions: readonly Permission[],
+): Promise<Authorization> {
+  const session = await getServerSession();
+  if (!session) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "يلزم تسجيل الدخول." },
+        { status: 401 },
+      ),
+    };
+  }
+  if (!permissions.some((permission) => session.permissions.includes(permission))) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "لا تملك هذه الصلاحية." },
+        { status: 403 },
+      ),
+    };
+  }
+  return { session, response: null };
+}
+
 export function actorFromSession(session: ActiveSession) {
   return {
     id: session.user.id,
@@ -46,6 +76,12 @@ export function actorFromSession(session: ActiveSession) {
 
 export function apiError(error: unknown): NextResponse {
   if (error instanceof FieldOpsError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof CatalogError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },

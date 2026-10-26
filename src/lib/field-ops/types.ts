@@ -164,8 +164,7 @@ export type Merchant = {
   name: string;
   normalizedName: string;
   vendorTypeId: number;
-  categoryId: number | null;
-  category: string;
+  vendorType: string;
   team: string | null;
   cityId: string;
   targetCommission: number;
@@ -263,8 +262,7 @@ export type AssignableMerchant = {
   id: string;
   name: string;
   vendorTypeId: number;
-  categoryId: number | null;
-  category: string;
+  vendorType: string;
   cityId: string;
   cityName: string;
   cityStage: CityStage;

@@ -139,7 +139,7 @@ export function MerchantProfileClient({
           <h2>{merchant.name}</h2>
           <div className="profile-badges">
             <span className={`badge ${meta.tone}`}>{meta.label}</span>
-            <span className="badge">{merchant.category}</span>
+            <span className="badge">{merchant.vendorType}</span>
             <span className="chip chip-team">{teamLabel(merchant.team)}</span>
             {merchant.editUnlocked ? (
               <span className="badge badge-purple">التعديل مفتوح</span>

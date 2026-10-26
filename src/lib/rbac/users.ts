@@ -115,6 +115,7 @@ const SEED_USERS: AppUser[] = [
       "view_taxonomy",
       "request_taxonomy",
       "view_catalog",
+      "manage_catalog",
       "create_products",
       "edit_products",
     ],

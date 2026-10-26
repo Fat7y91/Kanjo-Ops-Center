@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { TaxonomyDirectAddButton } from "@/components/taxonomy/taxonomy-direct-add";
 import { TaxonomyRequestModal } from "@/components/taxonomy/taxonomy-request-modal";
 import type {
   TaxonomyKind,
@@ -15,6 +16,7 @@ type TaxonomyRequestButtonProps = {
   vendorTypeId?: number | null;
   suggestedName?: string;
   label?: string;
+  directLabel?: string;
   onRequested?: (message: string) => void;
 };
 
@@ -24,11 +26,27 @@ export function TaxonomyRequestButton({
   vendorTypeId,
   suggestedName,
   label = "طلب إضافة",
+  directLabel,
   onRequested,
 }: TaxonomyRequestButtonProps) {
   const { hasPermission } = usePermission();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
+
+  // Operators who can manage the taxonomy never enter the request queue.
+  if (hasPermission("manage_taxonomy")) {
+    return (
+      <TaxonomyDirectAddButton
+        kind={kind}
+        vendorTypes={vendorTypes}
+        label={directLabel}
+        onCreated={(createdMessage) => {
+          setMessage(createdMessage);
+          onRequested?.(createdMessage);
+        }}
+      />
+    );
+  }
 
   if (!hasPermission("request_taxonomy")) return null;
 

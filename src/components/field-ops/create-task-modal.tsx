@@ -203,7 +203,7 @@ export function CreateTaskModal({
 
         {merchant ? (
           <div className="inline-note">
-            {merchant.cityName} · {merchant.category} · عمولة مستهدفة{" "}
+            {merchant.cityName} · {merchant.vendorType} · عمولة مستهدفة{" "}
             {merchant.targetCommission}% ·{" "}
             {merchant.team
               ? `ملكية ${teamLabel(merchant.team)} محفوظة`

@@ -5,10 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/field-ops/modal";
 import { TaxonomyRequestButton } from "@/components/taxonomy/taxonomy-request-button";
 import type { CityStage } from "@/lib/field-ops/types";
-import type {
-  TaxonomyCategory,
-  TaxonomyVendorType,
-} from "@/lib/taxonomy/types";
+import type { TaxonomyVendorType } from "@/lib/taxonomy/types";
 
 export type MerchantCityOption = {
   id: string;
@@ -18,7 +15,6 @@ export type MerchantCityOption = {
 
 export type MerchantTaxonomyOptions = {
   vendorTypes: TaxonomyVendorType[];
-  categories: TaxonomyCategory[];
 };
 
 type CreateMerchantModalProps = {
@@ -34,7 +30,6 @@ type FormState = {
   name: string;
   cityId: string;
   vendorTypeId: number | null;
-  categoryId: number | null;
   strategicNotes: string;
 };
 
@@ -48,7 +43,6 @@ function initialForm(
     name: "",
     cityId: preferred?.id ?? preparation?.id ?? cities[0]?.id ?? "",
     vendorTypeId: null,
-    categoryId: null,
     strategicNotes: "",
   };
 }
@@ -81,16 +75,6 @@ export function CreateMerchantModal({
     [taxonomy.vendorTypes],
   );
 
-  const categoriesForVendor = useMemo(() => {
-    if (form.vendorTypeId == null) return [];
-    return taxonomy.categories
-      .filter(
-        (category) =>
-          category.vendorTypeId === form.vendorTypeId && category.active,
-      )
-      .sort((left, right) => left.sortOrder - right.sortOrder);
-  }, [taxonomy.categories, form.vendorTypeId]);
-
   const vendorType = activeVendorTypes.find(
     (vendor) => vendor.id === form.vendorTypeId,
   );
@@ -105,10 +89,6 @@ export function CreateMerchantModal({
       setError("اختر نوع التاجر من التصنيف المركزي.");
       return;
     }
-    if (form.categoryId == null) {
-      setError("اختر تصنيفاً تابعاً لنوع التاجر المحدد.");
-      return;
-    }
     setError("");
     setSaving(true);
     try {
@@ -119,7 +99,6 @@ export function CreateMerchantModal({
           name: form.name,
           cityId: form.cityId,
           vendorTypeId: form.vendorTypeId,
-          categoryId: form.categoryId,
           strategicNotes: form.strategicNotes,
         }),
       });
@@ -150,7 +129,7 @@ export function CreateMerchantModal({
       open={open}
       title="إضافة تاجر"
       eyebrow="دليل التجار"
-      description="نوع التاجر والتصنيف مقيّدان بالتصنيف المركزي المرتبط بمعرّفات لوحة المستهلك. لا يوجد إدخال حر."
+      description="نوع التاجر مقيّد بالتصنيف المركزي المرتبط بمعرّفات لوحة المستهلك. لا يوجد إدخال حر، والتصنيفات الفرعية تخص وحدة الكتالوج لا ملف التاجر."
       onClose={onClose}
       wide
     >
@@ -190,90 +169,41 @@ export function CreateMerchantModal({
           </label>
         </div>
 
-        <div className="form-grid">
-          <div className="field">
-            <div className="field-head">
-              <span>نوع التاجر</span>
-              <span className="taxonomy-id-hint">Dashboard ID</span>
-            </div>
-            <select
-              value={form.vendorTypeId ?? ""}
-              onChange={(event) => {
-                const next =
-                  event.target.value === "" ? null : Number(event.target.value);
-                setForm((current) => ({
-                  ...current,
-                  vendorTypeId: next,
-                  categoryId: null,
-                }));
-              }}
-              required
-              disabled={saving}
-            >
-              <option value="">اختر نوع التاجر…</option>
-              {activeVendorTypes.map((vendor) => (
-                <option key={vendor.id} value={vendor.id}>
-                  {vendor.name_ar} — ID: {vendor.id}
-                </option>
-              ))}
-            </select>
-            <div className="taxonomy-field-foot">
-              <span className="field-hint">
-                {vendorType
-                  ? `${vendorType.name_en || vendorType.name_ar} · معرّف لوحة المستهلك ${vendorType.id}`
-                  : "القائمة مقفلة على التصنيف المعتمد."}
-              </span>
-              <TaxonomyRequestButton
-                kind="vendor_type"
-                vendorTypes={activeVendorTypes}
-                suggestedName={form.name}
-                onRequested={setRequestNote}
-              />
-            </div>
+        <div className="field">
+          <div className="field-head">
+            <span>نوع التاجر</span>
+            <span className="taxonomy-id-hint">Dashboard ID</span>
           </div>
-
-          <div className="field">
-            <div className="field-head">
-              <span>التصنيف</span>
-              <span className="taxonomy-id-hint">أمام التصنيف المركزي</span>
-            </div>
-            <select
-              value={form.categoryId ?? ""}
-              onChange={(event) =>
-                update(
-                  "categoryId",
-                  event.target.value === "" ? null : Number(event.target.value),
-                )
-              }
-              required
-              disabled={saving || form.vendorTypeId == null}
-            >
-              <option value="">
-                {form.vendorTypeId == null
-                  ? "اختر نوع التاجر أولاً"
-                  : categoriesForVendor.length === 0
-                    ? "لا توجد تصنيفات معتمدة لهذا النوع"
-                    : "اختر التصنيف…"}
+          <select
+            value={form.vendorTypeId ?? ""}
+            onChange={(event) =>
+              update(
+                "vendorTypeId",
+                event.target.value === "" ? null : Number(event.target.value),
+              )
+            }
+            required
+            disabled={saving}
+          >
+            <option value="">اختر نوع التاجر…</option>
+            {activeVendorTypes.map((vendor) => (
+              <option key={vendor.id} value={vendor.id}>
+                {vendor.name_ar} — ID: {vendor.id}
               </option>
-              {categoriesForVendor.map((category) => (
-                <option key={category.key} value={category.id}>
-                  {category.name_ar} — ID: {category.id}
-                </option>
-              ))}
-            </select>
-            <div className="taxonomy-field-foot">
-              <span className="field-hint">
-                {form.categoryId != null
-                  ? `معرّف التصنيف ${form.categoryId} داخل نطاق النوع ${form.vendorTypeId}`
-                  : "التصنيفات تتغير تلقائياً حسب نوع التاجر."}
-              </span>
-              <TaxonomyRequestButton
-                kind="category"
-                vendorTypes={activeVendorTypes}
-                vendorTypeId={form.vendorTypeId}
-                onRequested={setRequestNote}
-              />
-            </div>
+            ))}
+          </select>
+          <div className="taxonomy-field-foot">
+            <span className="field-hint">
+              {vendorType
+                ? `${vendorType.name_en || vendorType.name_ar} · معرّف لوحة المستهلك ${vendorType.id}`
+                : "القائمة مقفلة على التصنيف المعتمد."}
+            </span>
+            <TaxonomyRequestButton
+              kind="vendor_type"
+              vendorTypes={activeVendorTypes}
+              suggestedName={form.name}
+              onRequested={setRequestNote}
+            />
           </div>
         </div>
 
@@ -313,10 +243,7 @@ export function CreateMerchantModal({
             type="submit"
             className="button button-primary"
             disabled={
-              saving ||
-              cities.length === 0 ||
-              form.vendorTypeId == null ||
-              form.categoryId == null
+              saving || cities.length === 0 || form.vendorTypeId == null
             }
           >
             {saving ? "جارٍ الحفظ..." : "إضافة التاجر"}

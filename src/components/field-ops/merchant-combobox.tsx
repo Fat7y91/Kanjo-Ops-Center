@@ -97,7 +97,7 @@ export function MerchantCombobox({
         score: Math.max(
           smartTextScore(normalized, merchant.name).score,
           Math.round(
-            smartTextScore(normalized, merchant.category).score * 0.6,
+            smartTextScore(normalized, merchant.vendorType).score * 0.6,
           ),
           Math.round(smartTextScore(normalized, merchant.cityName).score * 0.5),
         ),
@@ -212,7 +212,7 @@ export function MerchantCombobox({
           <div>
             <strong>{selected.name}</strong>
             <span className="combo-selected-meta">
-              {selected.cityName} · {selected.category} · هدف{" "}
+              {selected.cityName} · {selected.vendorType} · هدف{" "}
               {selected.targetCommission}%
             </span>
           </div>
@@ -251,7 +251,7 @@ export function MerchantCombobox({
                       <span className="combo-option-main">
                         <strong>{merchant.name}</strong>
                         <span>
-                          {merchant.cityName} · {merchant.category}
+                          {merchant.cityName} · {merchant.vendorType}
                         </span>
                       </span>
                       <span className="combo-option-side">

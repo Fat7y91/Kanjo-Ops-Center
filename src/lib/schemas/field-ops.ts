@@ -56,12 +56,6 @@ export const merchantCreateSchema = z.object({
     .int("نوع التاجر يجب أن يكون معرّفاً رقمياً.")
     .positive("اختر نوع التاجر من التصنيف المركزي.")
     .max(9_999_999),
-  categoryId: z.coerce
-    .number()
-    .int("التصنيف يجب أن يكون معرّفاً رقمياً.")
-    .positive("اختر تصنيفاً صالحاً.")
-    .max(9_999_999)
-    .nullish(),
   targetCommission: z.coerce
     .number()
     .min(0, "العمولة لا يمكن أن تكون سالبة.")

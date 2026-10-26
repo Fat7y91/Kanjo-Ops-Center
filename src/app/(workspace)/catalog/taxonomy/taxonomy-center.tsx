@@ -150,6 +150,14 @@ export function TaxonomyCenter({
 
   const requestTaxonomy: TaxonomyVendorType[] = snapshot.vendorTypes;
 
+  const announce = useCallback(
+    (message: string) => {
+      setToast(message);
+      void refresh();
+    },
+    [refresh],
+  );
+
   async function approve() {
     if (!approveTarget) return;
     const dashboardId = Number(approveId);
@@ -230,11 +238,11 @@ export function TaxonomyCenter({
       <section className="taxonomy-guardrail">
         <div>
           <p className="eyebrow">قاعدة الحوكمة</p>
-          <h2>لا إنشاء مباشر — طلب ثم اعتماد بمعرّف رسمي</h2>
+          <h2>مساران: إضافة مباشرة للمسؤولين وطلب مراجعة للميدان</h2>
           <p>
-            مندوبو الميدان ومديرو المدن لا يملكون إنشاء التصنيفات. يُرسلون طلب
-            إضافة يصل إلى هذه القائمة، ولا يُعتمد إلا بعد إنشاء السجل على لوحة
-            المستهلك وإدخال معرّفه الرقمي هنا.
+            من يملك <code>manage_taxonomy</code> ينشئ السجل مباشرةً ويُدخل معرّف
+            لوحة المستهلك في خطوة واحدة دون طابور طلبات. أما مندوبو الميدان
+            ومديرو المدن فيرسلون طلب إضافة يصل إلى قائمة الانتظار أدناه.
           </p>
         </div>
         <div className="taxonomy-guardrail-stats">
@@ -281,18 +289,20 @@ export function TaxonomyCenter({
                 <TaxonomyRequestButton
                   kind="vendor_type"
                   vendorTypes={requestTaxonomy}
-                  onRequested={setToast}
+                  onRequested={announce}
                 />
                 <TaxonomyRequestButton
                   kind="category"
                   vendorTypes={requestTaxonomy}
-                  onRequested={setToast}
+                  onRequested={announce}
                 />
               </div>
             </div>
 
             {pending.length === 0 ? (
-              <p className="empty-state">لا توجد طلبات معلّقة حالياً.</p>
+              <p className="empty-state">
+                لا توجد طلبات معلّقة حالياً من مندوبي الميدان.
+              </p>
             ) : (
               <div className="taxonomy-request-list">
                 {pending.map((request) => (
@@ -424,7 +434,7 @@ export function TaxonomyCenter({
               <TaxonomyRequestButton
                 kind="vendor_type"
                 vendorTypes={requestTaxonomy}
-                onRequested={setToast}
+                onRequested={announce}
               />
             </div>
             <div className="table-wrap w-full overflow-x-auto">
@@ -479,7 +489,7 @@ export function TaxonomyCenter({
               <TaxonomyRequestButton
                 kind="category"
                 vendorTypes={requestTaxonomy}
-                onRequested={setToast}
+                onRequested={announce}
               />
             </div>
             <div className="table-toolbar">
@@ -581,7 +591,7 @@ export function TaxonomyCenter({
               <TaxonomyRequestButton
                 kind="variant"
                 vendorTypes={requestTaxonomy}
-                onRequested={setToast}
+                onRequested={announce}
               />
             </div>
             <div className="taxonomy-variant-grid">

@@ -44,3 +44,26 @@ export type TaxonomyRequestCreateInput = z.infer<
 >;
 export type TaxonomyApproveInput = z.infer<typeof taxonomyApproveSchema>;
 export type TaxonomyRejectInput = z.infer<typeof taxonomyRejectSchema>;
+
+export const taxonomyDirectCreateSchema = z
+  .object({
+    kind: z.enum(TAXONOMY_KINDS),
+    name_ar: z.string().trim().min(2, "الاسم العربي مطلوب.").max(120),
+    name_en: z.string().trim().max(120).default(""),
+    dashboardId: dashboardIdSchema,
+    vendorTypeId: dashboardIdSchema.nullish(),
+    parentId: dashboardIdSchema.nullish(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === "category" && value.vendorTypeId == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["vendorTypeId"],
+        message: "اختر نوع التاجر الذي يتبع له التصنيف.",
+      });
+    }
+  });
+
+export type TaxonomyDirectCreateInput = z.infer<
+  typeof taxonomyDirectCreateSchema
+>;

@@ -92,6 +92,13 @@ export const PERMISSIONS = [
     group: "الكتالوج",
   },
   {
+    key: "manage_catalog",
+    label: "إدارة الكتالوج",
+    description:
+      "صلاحية شاملة لإدارة منتجات الكتالوج، تشمل الإضافة والتعديل والحذف.",
+    group: "الكتالوج",
+  },
+  {
     key: "create_products",
     label: "إضافة المنتجات",
     description: "إضافة منتجات إلى الكتالوج.",
