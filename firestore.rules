@@ -140,6 +140,16 @@ service cloud.firestore {
         ]);
       }
 
+      // The Operations Manager mirrors the operational VIP / pre-contract flag
+      // onto the merchant record so it survives days with no task rows. Scoped
+      // to that single boolean (plus the ISO stamp): nothing else is writable
+      // through this branch.
+      function merchantUpdateTouchesOnlyVipFlag() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'vipPreContract', 'updatedAt'
+        ]);
+      }
+
       // Delta-sync writes now always carry `updatedAt` as an ISO-8601 STRING
       // (see restStampUpdatedAt in firebase.js). Accept it as a string, or its
       // total absence for legacy clients that predate the stamping. NOTE: this
@@ -188,7 +198,8 @@ service cloud.firestore {
       // stamping key being rejected as "extra".
       allow update: if !isMarketingAgency() && (isPrivileged()
         || (isSignedIn() && updatedAtIsIsoStringOrAbsent()
-            && (merchantUpdateTouchesOnlyDocumentFields() || canToggleDashboardSync())));
+            && (merchantUpdateTouchesOnlyDocumentFields() || canToggleDashboardSync()))
+        || (isOpsManager() && updatedAtIsIsoStringOrAbsent() && merchantUpdateTouchesOnlyVipFlag()));
       allow delete: if !isMarketingAgency() && isPrivileged();
     }
 

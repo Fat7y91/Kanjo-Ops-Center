@@ -1537,14 +1537,21 @@ window.listenToTasks = () => {
             return true;
         }
     };
-    const startSilentPolling = () => {
+    const startSilentPolling = (reason) => {
         /* Automated background polling is FORBIDDEN (it was the source of the
            ~774k/day read spike and the billing leak). Live updates are disabled
            for this transport; the board keeps the last REST snapshot and refreshes
            only via the manual "تحديث" button (window.refreshTasksFromRest) or a
            page reload. Intentionally no setInterval / visibility poll here. */
         if (pollingTimer) { clearInterval(pollingTimer); pollingTimer = null; }
-        console.warn('[tasks] real-time stream unavailable and background polling is disabled; use the manual refresh button.');
+        /* 'transport-error' means a listener actually failed. Otherwise this is
+           the deliberate REST-first mode (the streaming listener is skipped by
+           design), which must not read like a connectivity incident. */
+        if (reason === 'transport-error') {
+            console.warn('[tasks] real-time stream unavailable and background polling is disabled; use the manual refresh button.');
+        } else {
+            console.info('[tasks] REST transport active; live listener skipped by design. Use the manual refresh button for updates.');
+        }
         return;
     };
     /* Manual refresh used by the tasks board "تحديث" button. Always reads the
@@ -1566,7 +1573,7 @@ window.listenToTasks = () => {
         if (isTransportError(error)) {
             realtimeFailed = true;
             detachCurrentUnsub();
-            startSilentPolling();
+            startSilentPolling('transport-error');
             return;
         }
         const code = String((error && error.code) || '').toLowerCase();
@@ -1605,7 +1612,7 @@ window.listenToTasks = () => {
             page.exhausted = true;
         }
         if (restTransportAvailable()) {
-            startSilentPolling();
+            startSilentPolling('transport-error');
             return;
         }
         console.warn('[tasks] composite index missing; loading without newest-first ordering.');
@@ -1618,7 +1625,7 @@ window.listenToTasks = () => {
     const attachRealtimeListener = () => {
         if (!window._tasksListenerStarted || realtimeFailed || typeof currentUnsub === 'function') return;
         if (restTransportAvailable()) {
-            startSilentPolling();
+            startSilentPolling('rest-mode');
             return;
         }
         currentUnsub = onSnapshot(fallbackActive ? buildDateFallback() : buildDateQuery(), handleSnapshot, handleRealtimeError);
@@ -1770,7 +1777,7 @@ window.listenToTasks = () => {
     const handleInitialError = (error) => {
         console.error("Firestore initial fetch error:", error);
         const code = String((error && error.code) || '').toLowerCase();
-        if (isTransportError(error)) { startSilentPolling(); return; }
+        if (isTransportError(error)) { startSilentPolling('transport-error'); return; }
         if (code === 'permission-denied' && !retriedForAuth) {
             retriedForAuth = true;
             Promise.resolve(window.authReady).catch(() => null).then(() => {
@@ -1798,7 +1805,6 @@ window.listenToTasks = () => {
                    REST poll remains the fallback and is started automatically by
                    handleRealtimeError if the streaming transport is unavailable. */
                 attachRealtimeListener();
-                if (typeof currentUnsub !== 'function') startSilentPolling();
                 return;
             } catch (restError) {
                 console.warn('[tasks] direct REST initial fetch failed; falling back to SDK getDocs:', restError);

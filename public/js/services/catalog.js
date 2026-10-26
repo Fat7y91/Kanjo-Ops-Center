@@ -3210,24 +3210,39 @@ window.openCatalogAudit = () => {
 
 const catalogMerchantLogoUrl = (merchantName, merchantId) => {
     const name = String(merchantName || '').trim();
-    if (!Array.isArray(window.allTasksCache)) return '';
-    /* Prefer the immutable merchantId: tasks rewrite their `name` on every
-       rename but keep their merchantId forever, so an id match survives renames
-       (this is what previously made a renamed merchant's logo vanish). */
     const mid = String(merchantId || '').trim();
-    if (mid) {
-        const byId = window.allTasksCache.find((t) => t && t.merchantLogo && String(t.merchantId || t.merchant_id || '') === mid);
-        if (byId) return String(byId.merchantLogo);
+    if (Array.isArray(window.allTasksCache)) {
+        /* Prefer the immutable merchantId: tasks rewrite their `name` on every
+           rename but keep their merchantId forever, so an id match survives renames
+           (this is what previously made a renamed merchant's logo vanish). */
+        if (mid) {
+            const byId = window.allTasksCache.find((t) => t && t.merchantLogo && String(t.merchantId || t.merchant_id || '') === mid);
+            if (byId) return String(byId.merchantLogo);
+        }
+        if (name) {
+            const getBase = window.getBaseName;
+            const baseName = getBase ? getBase(name) : name;
+            const logoTask = window.allTasksCache.find((t) => {
+                if (!t || !t.merchantLogo) return false;
+                const taskBase = getBase ? getBase(t.name) : String(t.name || '');
+                return taskBase === baseName || String(t.name || '') === name;
+            });
+            if (logoTask && logoTask.merchantLogo) return String(logoTask.merchantLogo);
+        }
     }
-    if (!name) return '';
-    const getBase = window.getBaseName;
-    const baseName = getBase ? getBase(name) : name;
-    const logoTask = window.allTasksCache.find((t) => {
-        if (!t || !t.merchantLogo) return false;
-        const taskBase = getBase ? getBase(t.name) : String(t.name || '');
-        return taskBase === baseName || String(t.name || '') === name;
-    });
-    return logoTask && logoTask.merchantLogo ? String(logoTask.merchantLogo) : '';
+    /* Durable fallback: `persistMerchantLogo` also stores the logo on the
+       merchant record. The day-scoped task cache alone is empty on a day with no
+       tasks (and legacy merchants may have no task row carrying a logo), so the
+       record is the only source that survives both. Zero reads: the directory is
+       already resident in merchantsById. */
+    const recId = mid || (name && typeof window.findMerchantIdForBase === 'function'
+        ? String(window.findMerchantIdForBase(name) || '').trim()
+        : '');
+    const rec = (recId && window.merchantsById && typeof window.merchantsById.get === 'function')
+        ? window.merchantsById.get(recId)
+        : null;
+    const stored = rec && (rec.merchantLogo || rec.logoUrl || rec.logo);
+    return stored ? String(stored) : '';
 };
 window.catalogMerchantLogoUrl = catalogMerchantLogoUrl;
 
@@ -3626,10 +3641,11 @@ const catalogMerchantHasDeleteRequest = (group) => (group && group.products || [
     .some((p) => !!(p && (p.deleteRequested || p.deleteRequestedBy)));
 
 /* VIP / pre-contract flag. It lives on the merchant's task docs (and on the
-   lightweight finalizedMerchantsCache for reps), not on merchant_products, so
-   resolve it from the already-loaded in-memory sources. Zero reads. The index
-   is built once per render (see catalogInvalidateVipIndex) so filtering and
-   badge painting stay O(merchants + tasks) instead of O(merchants * tasks). */
+   lightweight finalizedMerchantsCache for reps); the ops toggle also mirrors it
+   onto the merchant record. It is never stored on merchant_products, so resolve
+   it from the already-loaded in-memory sources. Zero reads. The index is built
+   once per render (see catalogInvalidateVipIndex) so filtering and badge
+   painting stay O(merchants + tasks) instead of O(merchants * tasks). */
 let _catalogVipIndex = null;
 
 const catalogBuildVipIndex = () => {

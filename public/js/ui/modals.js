@@ -690,8 +690,9 @@ window.saveMerchantContract = async () => {
 
 /* VIP / pre-contract flag. Purely operational: it lets reps stage a product
    catalog for a merchant still under negotiation. It is intentionally written
-   ONLY as `vipPreContract` on the merchant's task docs — never isSigned,
-   achieved or commission — so no final contract or payout is triggered. */
+   ONLY as the `vipPreContract` boolean — on the merchant's task docs and as a
+   durable mirror on the merchant record — never isSigned, achieved or
+   commission, so no final contract or payout is triggered. */
 window.toggleMerchantVipPreContract = async (checked) => {
 
     const toggle = document.getElementById('mpVipPreContractToggle');
@@ -767,6 +768,61 @@ window.toggleMerchantVipPreContract = async (checked) => {
             });
 
         }
+
+        /* Durable copy: mirror the flag onto the merchant record so the VIP
+           status survives a day with no task rows (the catalog grid can open
+           before the all-dates archive is resident). Only an existing merchant
+           doc is updated — a merge-set on a missing id would be rejected by the
+           self-id create rule. */
+        const vipMerchantId = window.findMerchantIdForBase
+
+            ? String(window.findMerchantIdForBase(activeMerchantBaseName) || '').trim()
+
+            : '';
+
+        let vipMerchantRec = (vipMerchantId && window.merchantsById && typeof window.merchantsById.get === 'function')
+
+            ? window.merchantsById.get(vipMerchantId)
+
+            : null;
+
+        if (vipMerchantId && !vipMerchantRec && window._merchantsLoaded !== true && typeof window.loadMerchantsCache === 'function') {
+
+            try { await window.loadMerchantsCache(); } catch (_) { /* keep going without it */ }
+
+            vipMerchantRec = (window.merchantsById && typeof window.merchantsById.get === 'function')
+
+                ? window.merchantsById.get(vipMerchantId)
+
+                : null;
+
+        }
+
+        if (vipMerchantId && vipMerchantRec && window.setDoc && window.doc && window.db) {
+
+            try {
+
+                await window.setDoc(window.doc(window.db, 'merchants', vipMerchantId), {
+
+                    vipPreContract: flag,
+
+                    updatedAt: new Date().toISOString()
+
+                }, { merge: true });
+
+                vipMerchantRec.vipPreContract = flag;
+
+            } catch (err) {
+
+                console.error('[vipPreContract] merchant record sync failed:', err);
+
+            }
+
+        }
+
+        /* The VIP index also reads merchant records; drop the memoized lookup so
+           the next paint sees the fresh flag. */
+        if (typeof window.catalogInvalidateVipIndex === 'function') window.catalogInvalidateVipIndex();
 
         if (window.kanjoAuditLog) {
 
