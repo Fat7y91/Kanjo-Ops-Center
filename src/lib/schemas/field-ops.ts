@@ -55,7 +55,8 @@ export const merchantCreateSchema = z.object({
   targetCommission: z.coerce
     .number()
     .min(0, "العمولة لا يمكن أن تكون سالبة.")
-    .max(100, "العمولة لا يمكن أن تتجاوز 100%."),
+    .max(100, "العمولة لا يمكن أن تتجاوز 100%.")
+    .default(0),
   estimatedMonthlyValue: z.coerce
     .number()
     .min(0)
@@ -70,6 +71,7 @@ export const taskAssignSchema = z.object({
   visitDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الزيارة يجب أن يكون بصيغة YYYY-MM-DD."),
+  instructions: z.string().trim().max(2000).default(""),
 });
 
 export const taskCreateSchema = taskAssignSchema;

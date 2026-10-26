@@ -3,11 +3,17 @@
 import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
-import type { City } from "@/lib/field-ops/types";
+import type { CityStage } from "@/lib/field-ops/types";
+
+export type MerchantCityOption = {
+  id: string;
+  name: string;
+  stage: CityStage;
+};
 
 type CreateMerchantModalProps = {
   open: boolean;
-  cities: City[];
+  cities: MerchantCityOption[];
   defaultCityId?: string;
   onClose: () => void;
   onDone: (message: string) => void;
@@ -17,20 +23,19 @@ type FormState = {
   name: string;
   cityId: string;
   category: string;
-  targetCommission: string;
-  estimatedMonthlyValue: string;
   strategicNotes: string;
 };
 
-function initialForm(cities: City[], defaultCityId?: string): FormState {
+function initialForm(
+  cities: MerchantCityOption[],
+  defaultCityId?: string,
+): FormState {
   const preferred = cities.find((city) => city.id === defaultCityId);
   const preparation = cities.find((city) => city.stage === "preparation");
   return {
     name: "",
     cityId: preferred?.id ?? preparation?.id ?? cities[0]?.id ?? "",
     category: "",
-    targetCommission: "8",
-    estimatedMonthlyValue: "100000",
     strategicNotes: "",
   };
 }
@@ -67,11 +72,7 @@ export function CreateMerchantModal({
       const response = await fetch("/api/field-ops/merchants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          targetCommission: Number(form.targetCommission),
-          estimatedMonthlyValue: Number(form.estimatedMonthlyValue),
-        }),
+        body: JSON.stringify(form),
       });
       const payload = (await response.json()) as {
         error?: string;
@@ -81,7 +82,7 @@ export function CreateMerchantModal({
         throw new Error(payload.error ?? "تعذر إنشاء التاجر.");
       }
       onDone(
-        `تمت إضافة ${payload.merchant?.name ?? form.name} إلى قائمة التجار المستهدفين دون إسناد فريق أو زيارة.`,
+        `تمت إضافة ${payload.merchant?.name ?? form.name} إلى دليل التجار دون فريق أو تاريخ زيارة.`,
       );
       onClose();
     } catch (submitError) {
@@ -98,9 +99,9 @@ export function CreateMerchantModal({
   return (
     <Modal
       open={open}
-      title="إضافة تاجر مستهدف"
-      eyebrow="مرحلة الإعداد"
-      description="سجّل التاجر في قائمة الاستهداف. لا يُسند فريق ولا تاريخ زيارة في هذه المرحلة؛ يتم ذلك لاحقاً من مرحلة التعاقدات."
+      title="إضافة تاجر"
+      eyebrow="دليل التجار"
+      description="سجّل البيانات الجوهرية للتاجر فقط. الإسناد إلى فريق وتحديد تاريخ الزيارة يتم لاحقاً من لوحة العمليات الميدانية."
       onClose={onClose}
       wide
     >
@@ -111,7 +112,8 @@ export function CreateMerchantModal({
             <input
               value={form.name}
               onChange={(event) => update("name", event.target.value)}
-              placeholder="مطعم أو متجر مستهدف"
+              placeholder="مطعم أو متجر أو صيدلية"
+              maxLength={120}
               required
             />
           </label>
@@ -121,50 +123,34 @@ export function CreateMerchantModal({
               value={form.cityId}
               onChange={(event) => update("cityId", event.target.value)}
               required
+              disabled={cities.length === 0}
             >
-              {cities.map((city) => (
-                <option key={city.id} value={city.id}>
-                  {city.name}
-                </option>
-              ))}
+              {cities.length === 0 ? (
+                <option value="">لا توجد مدن داخل نطاقك</option>
+              ) : (
+                cities.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}
+                  </option>
+                ))
+              )}
             </select>
-          </label>
-          <label className="field">
-            <span>التصنيف</span>
-            <input
-              value={form.category}
-              onChange={(event) => update("category", event.target.value)}
-              placeholder="مطاعم، صيدليات، بقالة…"
-              required
-            />
-          </label>
-          <label className="field">
-            <span>العمولة المستهدفة (%)</span>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              step="0.5"
-              value={form.targetCommission}
-              onChange={(event) =>
-                update("targetCommission", event.target.value)
-              }
-              required
-            />
-          </label>
-          <label className="field">
-            <span>القيمة الشهرية التقديرية</span>
-            <input
-              type="number"
-              min={0}
-              step="1000"
-              value={form.estimatedMonthlyValue}
-              onChange={(event) =>
-                update("estimatedMonthlyValue", event.target.value)
-              }
-            />
+            <span className="field-hint">
+              مقيّدة بالمدن المتاحة لنطاقك الحالي.
+            </span>
           </label>
         </div>
+
+        <label className="field">
+          <span>التصنيف</span>
+          <input
+            value={form.category}
+            onChange={(event) => update("category", event.target.value)}
+            placeholder="مطاعم، صيدليات، بقالة…"
+            maxLength={80}
+            required
+          />
+        </label>
 
         <label className="field">
           <span>ملاحظات استراتيجية</span>
@@ -173,12 +159,13 @@ export function CreateMerchantModal({
             value={form.strategicNotes}
             onChange={(event) => update("strategicNotes", event.target.value)}
             placeholder="جهات الاتصال، الموقع، الضغط التنافسي، فرصة التعاقد."
+            maxLength={2000}
           />
         </label>
 
         <p className="inline-note">
-          يظهر التاجر فوراً في قائمة الاستهداف، ويبقى بدون فريق أو مهمة حتى
-          إسناده من مرحلة التعاقدات.
+          يظهر التاجر فوراً في دليل التجار وفي قائمة إسناد المهام، ويبقى بدون
+          فريق أو تاريخ زيارة حتى يُسند من العمليات الميدانية.
         </p>
 
         {error ? (
@@ -194,9 +181,9 @@ export function CreateMerchantModal({
           <button
             type="submit"
             className="button button-primary"
-            disabled={saving}
+            disabled={saving || cities.length === 0}
           >
-            {saving ? "جارٍ الحفظ..." : "إضافة إلى قائمة الاستهداف"}
+            {saving ? "جارٍ الحفظ..." : "إضافة التاجر"}
           </button>
         </div>
       </form>

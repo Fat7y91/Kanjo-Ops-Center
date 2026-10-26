@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { CreateMerchantModal } from "@/components/field-ops/create-merchant-modal";
 import { CreateTaskModal } from "@/components/field-ops/create-task-modal";
 import { OutcomeModal } from "@/components/field-ops/outcome-modal";
 import {
@@ -32,7 +31,6 @@ type FieldOpsClientProps = {
   canApproveEdits: boolean;
   canManageState: boolean;
   canViewMerchants: boolean;
-  canCreateMerchants: boolean;
   canAssignTasks: boolean;
 };
 
@@ -92,7 +90,6 @@ export function FieldOpsClient({
   canApproveEdits,
   canManageState,
   canViewMerchants,
-  canCreateMerchants,
   canAssignTasks,
 }: FieldOpsClientProps) {
   const [board, setBoard] = useState(initialBoard);
@@ -101,7 +98,6 @@ export function FieldOpsClient({
   const [searching, setSearching] = useState(false);
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
-  const [merchantOpen, setMerchantOpen] = useState(false);
   const [outcomeTarget, setOutcomeTarget] = useState<{
     merchant: Merchant;
     task: FieldTask | null;
@@ -228,7 +224,13 @@ export function FieldOpsClient({
           {city?.name ?? "مدينة غير محددة"} · {formatDate(task.visitDate)} ·{" "}
           هدف {task.targetCommission}%
         </p>
-        {task.strategicNotes ? (
+        {task.instructions ? (
+          <p className="task-instructions">
+            <span>تعليمات المهمة</span>
+            {task.instructions}
+          </p>
+        ) : null}
+        {task.strategicNotes && task.strategicNotes !== task.instructions ? (
           <p className="task-notes">{task.strategicNotes}</p>
         ) : null}
         <div className="task-figures">
@@ -391,15 +393,6 @@ export function FieldOpsClient({
             />
           </div>
           <div className="row-actions">
-            {canCreateMerchants ? (
-              <button
-                type="button"
-                className="button button-quiet"
-                onClick={() => setMerchantOpen(true)}
-              >
-                إضافة تاجر مستهدف
-              </button>
-            ) : null}
             {canAssignTasks ? (
               <button
                 type="button"
@@ -631,23 +624,8 @@ export function FieldOpsClient({
         </div>
       </section>
 
-      <CreateMerchantModal
-        open={merchantOpen}
-        cities={board.cities}
-        defaultCityId={
-          board.cities.find((city) => city.stage === "preparation")?.id
-        }
-        onClose={() => setMerchantOpen(false)}
-        onDone={async (message) => {
-          announce(message);
-          await refresh();
-        }}
-      />
-
       <CreateTaskModal
         open={createOpen}
-        cities={board.cities}
-        merchants={board.merchants}
         defaultTeam={viewerTeam}
         onClose={() => setCreateOpen(false)}
         onDone={async (message) => {

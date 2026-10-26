@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AddMerchantButton } from "@/components/merchants/add-merchant-button";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
@@ -19,11 +20,19 @@ export default async function MerchantsPage({
   const session = await requirePermission("view_merchants");
   const { q } = await searchParams;
   const query = (q ?? "").trim();
-  const cityMap = new Map(listCities().map((city) => [city.id, city]));
+  const allCities = listCities();
+  const cityMap = new Map(allCities.map((city) => [city.id, city]));
   const allowedCities = new Set(effectiveCityIds(session));
   const scoped = listMerchants().filter((merchant) =>
     allowedCities.has(merchant.cityId),
   );
+  const canCreate = session.permissions.includes("create_merchants");
+  const availableCities = allCities
+    .filter((city) => allowedCities.has(city.id))
+    .map((city) => ({ id: city.id, name: city.name, stage: city.stage }));
+  const defaultCityId =
+    availableCities.find((city) => city.stage === "preparation")?.id ??
+    availableCities[0]?.id;
   const merchants =
     query.length > 0
       ? scoped
@@ -42,7 +51,17 @@ export default async function MerchantsPage({
         eyebrow="عمليات التجار"
         title="دليل التجار"
         description="الملكية وحالة دورة الحياة والبيانات التجارية لكل تاجر على الشبكة. افتح الملف لإدارة المستندات والنتائج وعمليات النقل."
-        actions={<span className="badge">{merchants.length} تاجر</span>}
+        actions={
+          <div className="row-actions">
+            <span className="badge">{merchants.length} تاجر</span>
+            {canCreate ? (
+              <AddMerchantButton
+                cities={availableCities}
+                defaultCityId={defaultCityId}
+              />
+            ) : null}
+          </div>
+        }
       />
 
       <section className="panel">
@@ -120,7 +139,9 @@ export default async function MerchantsPage({
                 <tr>
                   <td colSpan={6}>
                     <p className="empty-state">
-                      لا يوجد تاجر مطابق لـ «{query}». جرّب إملاءً أقصر.
+                      {query
+                        ? `لا يوجد تاجر مطابق لـ «${query}». جرّب إملاءً أقصر.`
+                        : "لا يوجد تجار داخل نطاق مدنك بعد. استخدم زر «إضافة تاجر» لتسجيل أول تاجر."}
                     </p>
                   </td>
                 </tr>

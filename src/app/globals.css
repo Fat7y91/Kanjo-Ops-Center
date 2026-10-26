@@ -1781,6 +1781,172 @@ textarea {
   font-weight: 500;
 }
 
+/* ── Merchant combobox ─────────────────────────────────────────────────── */
+
+.combo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.combo-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.combo-control:focus-within,
+.combo-control.is-open {
+  border-color: #a794ff;
+  box-shadow: 0 0 0 3px rgba(91, 31, 134, 0.14);
+}
+
+.combo-control.is-disabled {
+  opacity: 0.65;
+}
+
+.combo-input {
+  border: 0;
+  background: transparent;
+  padding-inline-end: 38px;
+  box-shadow: none;
+}
+
+.combo-input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.combo-clear {
+  position: absolute;
+  inset-inline-end: 8px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.combo-clear:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+.combo-selected {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.combo-selected > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-end: auto;
+}
+
+.combo-selected strong {
+  font-size: 0.88rem;
+}
+
+.combo-selected-meta {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.combo-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  inset-inline: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.combo-empty {
+  padding: 14px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.combo-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+}
+
+.combo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-align: start;
+  color: var(--ink);
+}
+
+.combo-option.is-active {
+  background: var(--surface-soft);
+}
+
+.combo-option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.combo-option-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.combo-option-main strong {
+  font-size: 0.85rem;
+}
+
+.combo-option-main span {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 500;
+}
+
+.combo-option-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .field-head {
   display: flex;
   align-items: center;
@@ -2132,6 +2298,30 @@ textarea {
   gap: 8px;
   padding-top: 6px;
   border-top: 1px dashed var(--line);
+}
+
+.task-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  margin-top: 8px;
+  border-inline-start: 3px solid var(--gold);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  border-start-end-radius: 8px;
+  border-end-end-radius: 8px;
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  color: var(--ink);
+  font-size: 0.79rem;
+}
+
+.task-instructions span {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .task-figures > div {
@@ -2532,6 +2722,21 @@ textarea {
 [data-theme="dark"] .permission-callout code {
   background: rgba(255, 215, 0, 0.18);
   color: #ffe680;
+}
+
+[data-theme="dark"] .combo-selected,
+[data-theme="dark"] .combo-option.is-active {
+  background: #27272a;
+}
+
+[data-theme="dark"] .combo-control:focus-within,
+[data-theme="dark"] .combo-control.is-open {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.18);
+}
+
+[data-theme="dark"] .task-instructions {
+  background: rgba(255, 215, 0, 0.1);
 }
 
 [data-theme="dark"] .inline-note {

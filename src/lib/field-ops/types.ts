@@ -189,6 +189,7 @@ export type FieldTask = {
   visitDate: string;
   targetCommission: number;
   strategicNotes: string;
+  instructions: string;
   status: TaskStatus;
   createdBy: string;
   createdByName: string;
@@ -254,6 +255,18 @@ export type StateOverride = {
   actorName: string;
   note: string;
   createdAt: string;
+};
+
+export type AssignableMerchant = {
+  id: string;
+  name: string;
+  category: string;
+  cityId: string;
+  cityName: string;
+  cityStage: CityStage;
+  team: string | null;
+  contractState: ContractState;
+  targetCommission: number;
 };
 
 export type MerchantSearchResult = {
