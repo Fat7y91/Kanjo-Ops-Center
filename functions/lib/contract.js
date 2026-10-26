@@ -180,6 +180,55 @@ const isRestaurantCafeCategoryExact = (cat) => {
 const isMedicalCategory = (cat) => ['صيدليات', 'كوزماتكس', 'عناية شخصية']
     .some((k) => String(cat || '').includes(k));
 
+const isSupermarketCategory = (cat) => {
+    const raw = String(cat || '').trim();
+    return raw.replace(/\s+/g, '').includes('سوبرماركت') || raw.toLowerCase().includes('supermarket');
+};
+
+/* Grocery annex is rendered as its own titled block (not appended to the main
+   clauses array) so the 20-label ARABIC_CLAUSE_NUMBERS ceiling is never hit. */
+const SUPERMARKET_ANNEX_CLAUSES = [
+    {
+        ordinal: 'أولاً',
+        title: 'سياسة المرتجعات',
+        body: 'يقتصر ضمان الأغذية الطازجة على ٢٤ ساعة فقط من وقت الاستلام، بشرط الحفاظ عليها في هيئتها الأصلية. كما يُتفق على أن مستحضرات التجميل غير قابلة للاسترجاع نهائياً حفاظاً على الصحة العامة.'
+    },
+    {
+        ordinal: 'ثانياً',
+        title: 'مسئولية النقل',
+        body: 'تنتقل المسئولية الكاملة للمنتجات القابلة للتلف أو الكسر (مثل الفواكه، الخضروات، والزجاجات) إلى شركة "كانچو" بمجرد تسليم التاجر لهذه المنتجات لطيار "كانچو" في حالة سليمة ومطابقة للمواصفات.'
+    },
+    {
+        ordinal: 'ثالثاً',
+        title: 'إدارة المخزون والنواقص',
+        body: 'يلتزم الطرف الثاني بتحديث حالة المخزون على المنصة فور نفاده. وفي حال طلب العميل منتجاً غير متوفر، يتم التواصل مع العميل حصرياً عبر قنوات "كانچو" الرسمية (عبر خدمة العملاء أو المحادثة المباشرة داخل المنصة) لعرض البدائل المتاحة، وذلك لضمان تقديم خدمة احترافية تحفظ حقوق جميع الأطراف.'
+    },
+    {
+        ordinal: 'رابعاً',
+        title: 'سياسة الموزونات',
+        body: 'تُسجل المنتجات التي تُباع بالوزن بـ (أوزان ثابتة) على التطبيق (مثل ربع كيلو، نصف كيلو، كيلو، إلخ). ونظراً لاستحالة ضبط الأوزان بدقة متناهية، يُسمح بتفاوت في الوزن الفعلي بزيادة أو نقصان في نطاق (١٠٪)، وتتم محاسبة العميل بناءً على الوزن الفعلي المُسلّم. تلتزم "كانچو" بتحديث قيمة الفاتورة للطلبات النقدية بناءً على الفاتورة المسلمة للسائق، وتوفير حل برمجي للطلبات المدفوعة إلكترونياً لتحديث السعر، مع التزامها بإعلام العميل المسبق بقابلية تغير الأوزان.'
+    },
+    {
+        ordinal: 'خامساً',
+        title: 'حدود المسئولية والتعويضات',
+        body: 'في حال حدوث خطأ في الطلب، يتحمل الطرف المخطئ وحده تكلفة تعويض العميل. يلتزم التاجر بتجهيز الطلب بشكل صحيح ومطابق لطلب العميل بأعلى جودة ممكنة، بينما تلتزم "كانچو" باستلام الطلب وتوصيله في نفس حالته المجهزة وتتحمل أي تبعات أو أخطاء تنتج عن التقصير في عملية التوصيل.'
+    }
+];
+
+const buildSupermarketAnnexHtml = () => {
+    const items = SUPERMARKET_ANNEX_CLAUSES.map((cl) => `<div class="contract-clause-wrapper" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 14px;">
+            <div class="contract-clause-title" style="font-size: 14px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 8px;">${cl.ordinal}: ${cl.title}</div>
+            <div class="contract-text" style="font-size: 14px; line-height: 1.9; text-align: justify; color: #1e293b; font-weight: bold;">${cl.body}</div>
+        </div>`).join('\n');
+
+    return `
+        <div class="contract-annex" style="margin: 20px 0;">
+            <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 10px 15px; border-right: 4px solid #F59E0B; margin-bottom: 12px;">ملحق تشغيل السوبر ماركت: التزامات إضافية</div>
+            <div class="contract-text" style="font-size: 14px; line-height: 1.9; text-align: justify; color: #1e293b; font-weight: bold; margin-bottom: 14px;">يُعد هذا الملحق جزءًا لا يتجزأ من العقد ويُطبق على الطرف الثاني بصورة إضافية على نشاط السوبر ماركت، دون أن يلغي أو يحد من أي التزام آخر وارد في العقد.</div>
+            ${items}
+        </div>`;
+};
+
 const resolveBusinessType = (category, explicitType) => {
     const cat = String(category || '');
     const explicit = String(explicitType || '').trim();
@@ -311,6 +360,7 @@ function buildContractHtml(input) {
     const businessType = input.businessType;
     const resolvedCat = input.category;
     const isRestCafe = isRestaurantCafeCategoryExact(resolvedCat);
+    const isSupermarket = isSupermarketCategory(resolvedCat);
     const titleBusinessType = (isRestCafe && input.titleBusinessType) ? input.titleBusinessType : businessType;
 
     const merchantNameKey = String(merchantName || '').replace(/\s+/g, ' ').trim();
@@ -504,6 +554,8 @@ function buildContractHtml(input) {
             </div>`;
     }
 
+    const supermarketAnnexHtml = isSupermarket ? buildSupermarketAnnexHtml() : '';
+
     const nationalIdBoxes = '<span style="display: inline-block; white-space: nowrap; direction: ltr; unicode-bidi: isolate;" dir="ltr">' + Array.from({ length: 14 }).map(() => '<span style="display: inline-block; width: 20px; height: 28px; border: 1.5px solid #4B0082; border-radius: 4px; margin: 0 1px; vertical-align: middle; background: #fff;"></span>').join('') + '</span>';
 
     const fillBlank = '....................................';
@@ -553,6 +605,7 @@ function buildContractHtml(input) {
                 </div>
                 ${clauseHtml}
                 ${commissionTableHtml}
+                ${supermarketAnnexHtml}
                 <!-- Legal Copies Clause -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin: 15px 0; text-align: center; font-size: 13px; line-height: 1.9; font-weight: bold; color: #4B0082; background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #F59E0B; border-radius: 6px; padding: 12px 15px;">تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها، ويتكون العقد من البنود والملاحق المذكورة أعلاه.</div>
                 <!-- Final Signatures Block -->
