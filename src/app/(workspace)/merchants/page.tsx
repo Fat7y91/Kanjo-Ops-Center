@@ -7,6 +7,7 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listCities, listMerchants } from "@/lib/field-ops/store";
 import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
 import { smartTextScore } from "@/lib/search/normalize";
+import { listCategories, listVendorTypes } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,10 @@ export default async function MerchantsPage({
   const defaultCityId =
     availableCities.find((city) => city.stage === "preparation")?.id ??
     availableCities[0]?.id;
+  const taxonomy = {
+    vendorTypes: listVendorTypes(),
+    categories: listCategories(),
+  };
   const merchants =
     query.length > 0
       ? scoped
@@ -57,6 +62,7 @@ export default async function MerchantsPage({
             {canCreate ? (
               <AddMerchantButton
                 cities={availableCities}
+                taxonomy={taxonomy}
                 defaultCityId={defaultCityId}
               />
             ) : null}

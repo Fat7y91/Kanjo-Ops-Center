@@ -33,6 +33,8 @@ export async function GET() {
       return {
         id: merchant.id,
         name: merchant.name,
+        vendorTypeId: merchant.vendorTypeId,
+        categoryId: merchant.categoryId,
         category: merchant.category,
         cityId: merchant.cityId,
         cityName: city?.name ?? merchant.cityId,

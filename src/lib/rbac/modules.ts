@@ -5,6 +5,7 @@ export type ModuleIcon =
   | "cities"
   | "merchants"
   | "catalog"
+  | "taxonomy"
   | "field-ops"
   | "contracts"
   | "permissions";
@@ -54,6 +55,15 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "المنتجات والأسعار وحوكمة الكتالوج.",
     permission: "view_catalog",
     icon: "catalog",
+  },
+  {
+    href: "/catalog/taxonomy",
+    label: "تصنيفات الكتالوج",
+    shortLabel: "التصنيفات",
+    description:
+      "التصنيف المركزي المرتبط بمعرّفات لوحة المستهلك وطلبات الإضافة.",
+    permission: "manage_taxonomy",
+    icon: "taxonomy",
   },
   {
     href: "/field-ops",

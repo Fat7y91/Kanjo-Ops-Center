@@ -51,7 +51,17 @@ export const cityManagerRevokeSchema = z.object({
 export const merchantCreateSchema = z.object({
   name: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120),
   cityId: z.string().trim().min(1, "اختر المدينة."),
-  category: z.string().trim().min(2, "تصنيف التاجر مطلوب.").max(80),
+  vendorTypeId: z.coerce
+    .number()
+    .int("نوع التاجر يجب أن يكون معرّفاً رقمياً.")
+    .positive("اختر نوع التاجر من التصنيف المركزي.")
+    .max(9_999_999),
+  categoryId: z.coerce
+    .number()
+    .int("التصنيف يجب أن يكون معرّفاً رقمياً.")
+    .positive("اختر تصنيفاً صالحاً.")
+    .max(9_999_999)
+    .nullish(),
   targetCommission: z.coerce
     .number()
     .min(0, "العمولة لا يمكن أن تكون سالبة.")

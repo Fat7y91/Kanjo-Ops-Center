@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { getServerSession } from "@/lib/auth/server-session";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
+import { TaxonomyError } from "@/lib/taxonomy/store";
 import type { ActiveSession } from "@/lib/rbac/types";
 
 type Authorization =
@@ -45,6 +46,12 @@ export function actorFromSession(session: ActiveSession) {
 
 export function apiError(error: unknown): NextResponse {
   if (error instanceof FieldOpsError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof TaxonomyError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },

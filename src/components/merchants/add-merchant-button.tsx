@@ -6,15 +6,18 @@ import { useRouter } from "next/navigation";
 import {
   CreateMerchantModal,
   type MerchantCityOption,
+  type MerchantTaxonomyOptions,
 } from "@/components/merchants/create-merchant-modal";
 
 type AddMerchantButtonProps = {
   cities: MerchantCityOption[];
+  taxonomy: MerchantTaxonomyOptions;
   defaultCityId?: string;
 };
 
 export function AddMerchantButton({
   cities,
+  taxonomy,
   defaultCityId,
 }: AddMerchantButtonProps) {
   const router = useRouter();
@@ -46,6 +49,7 @@ export function AddMerchantButton({
       <CreateMerchantModal
         open={open}
         cities={cities}
+        taxonomy={taxonomy}
         defaultCityId={defaultCityId}
         onClose={() => setOpen(false)}
         onDone={(message) => {

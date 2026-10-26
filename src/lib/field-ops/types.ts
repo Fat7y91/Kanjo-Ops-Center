@@ -163,6 +163,8 @@ export type Merchant = {
   id: string;
   name: string;
   normalizedName: string;
+  vendorTypeId: number;
+  categoryId: number | null;
   category: string;
   team: string | null;
   cityId: string;
@@ -260,6 +262,8 @@ export type StateOverride = {
 export type AssignableMerchant = {
   id: string;
   name: string;
+  vendorTypeId: number;
+  categoryId: number | null;
   category: string;
   cityId: string;
   cityName: string;

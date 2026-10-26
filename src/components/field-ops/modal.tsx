@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 type ModalProps = {
   open: boolean;
@@ -37,7 +38,7 @@ export function Modal({
 
   if (!open) return null;
 
-  return (
+  const content = (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div
         className={`modal-card${wide ? " modal-wide" : ""}`}
@@ -65,4 +66,8 @@ export function Modal({
       </div>
     </div>
   );
+
+  return typeof document === "undefined"
+    ? content
+    : createPortal(content, document.body);
 }

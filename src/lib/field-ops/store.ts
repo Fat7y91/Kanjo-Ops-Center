@@ -29,6 +29,10 @@ import type {
   TaskAssignInput,
   VisitReportInput,
 } from "@/lib/schemas/field-ops";
+import {
+  assertCategoryInVendor,
+  assertVendorTypeExists,
+} from "@/lib/taxonomy/store";
 
 export class FieldOpsError extends Error {
   readonly code: string;
@@ -215,7 +219,9 @@ function seedStore(): FieldOpsStore {
       id: "m-kaffyar",
       name: "كافيار",
       normalizedName: merchantSearchKey("كافيار"),
-      category: "مأكولات بحرية",
+      vendorTypeId: 1,
+      categoryId: 10,
+      category: "أسماك",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 12,
@@ -234,7 +240,9 @@ function seedStore(): FieldOpsStore {
       id: "m-abar-sham",
       name: "عبر الشام",
       normalizedName: merchantSearchKey("عبر الشام"),
-      category: "مشاوي",
+      vendorTypeId: 1,
+      categoryId: 9,
+      category: "مشويات",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 10,
@@ -253,6 +261,8 @@ function seedStore(): FieldOpsStore {
       id: "m-cairo-fresh",
       name: "Cairo Fresh Market",
       normalizedName: merchantSearchKey("Cairo Fresh Market"),
+      vendorTypeId: 4,
+      categoryId: 32,
       category: "بقالة",
       team: "Fox Team",
       cityId: "city-cairo",
@@ -289,7 +299,9 @@ function seedStore(): FieldOpsStore {
       id: "m-nile-pharmacy",
       name: "Nile Pharmacy Group",
       normalizedName: merchantSearchKey("Nile Pharmacy Group"),
-      category: "صيدليات",
+      vendorTypeId: 3,
+      categoryId: 194,
+      category: "أدوية",
       team: "Power Team",
       cityId: "city-giza",
       targetCommission: 8,
@@ -325,7 +337,9 @@ function seedStore(): FieldOpsStore {
       id: "m-zamalek-kitchen",
       name: "Zamalek Kitchen",
       normalizedName: merchantSearchKey("Zamalek Kitchen"),
-      category: "مطاعم",
+      vendorTypeId: 1,
+      categoryId: 11,
+      category: "مصري",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 11,
@@ -344,7 +358,9 @@ function seedStore(): FieldOpsStore {
       id: "m-maadi-home",
       name: "Maadi Home Supplies",
       normalizedName: merchantSearchKey("Maadi Home Supplies"),
-      category: "مستلزمات منزلية",
+      vendorTypeId: 10,
+      categoryId: 67,
+      category: "منزلية",
       team: "Power Team",
       cityId: "city-cairo",
       targetCommission: 7,
@@ -363,7 +379,9 @@ function seedStore(): FieldOpsStore {
       id: "m-heliopolis-pets",
       name: "Heliopolis Pet Corner",
       normalizedName: merchantSearchKey("Heliopolis Pet Corner"),
-      category: "حيوانات أليفة",
+      vendorTypeId: 11,
+      categoryId: 125,
+      category: "مستلزمات",
       team: "Fox Team",
       cityId: "city-cairo",
       targetCommission: 6,
@@ -382,7 +400,9 @@ function seedStore(): FieldOpsStore {
       id: "m-seaside-grill",
       name: "Alexandria Seaside Grill",
       normalizedName: merchantSearchKey("Alexandria Seaside Grill"),
-      category: "مأكولات بحرية",
+      vendorTypeId: 1,
+      categoryId: 10,
+      category: "أسماك",
       team: "Power Team",
       cityId: "city-alexandria",
       targetCommission: 13,
@@ -401,7 +421,9 @@ function seedStore(): FieldOpsStore {
       id: "m-mansoura-grill",
       name: "Mansoura Nile Grill",
       normalizedName: merchantSearchKey("Mansoura Nile Grill"),
-      category: "مطاعم",
+      vendorTypeId: 1,
+      categoryId: 9,
+      category: "مشويات",
       team: null,
       cityId: "city-mansoura",
       targetCommission: 10,
@@ -904,6 +926,12 @@ export function createMerchant(
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
+  assertVendorTypeExists(input.vendorTypeId);
+  const category =
+    input.categoryId == null
+      ? null
+      : assertCategoryInVendor(input.vendorTypeId, input.categoryId);
+
   const normalizedName = merchantSearchKey(input.name);
   const existing = store.merchants.find(
     (candidate) => candidate.normalizedName === normalizedName,
@@ -922,7 +950,9 @@ export function createMerchant(
     id: id("m"),
     name: input.name.trim(),
     normalizedName,
-    category: input.category.trim(),
+    vendorTypeId: input.vendorTypeId,
+    categoryId: category?.id ?? null,
+    category: category?.name_ar ?? "",
     team: null,
     cityId: input.cityId,
     targetCommission: input.targetCommission,

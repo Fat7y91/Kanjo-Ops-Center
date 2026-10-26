@@ -9,6 +9,8 @@ const paths: Record<ModuleIconName, string> = {
     "M4 10v9h16v-9M3 10l2-6h14l2 6M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M9 19v-4h6v4",
   catalog:
     "M4 7.5 12 3l8 4.5-8 4.5-8-4.5ZM4 7.5V16l8 5 8-5V7.5M12 12v9",
+  taxonomy:
+    "M4 5h6v4H4V5Zm10 0h6v4h-6V5ZM4 15h6v4H4v-4Zm10 0h6v4h-6v-4ZM7 9v6M17 9v6M10 17h4",
   "field-ops":
     "M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Zm0-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
   contracts:
