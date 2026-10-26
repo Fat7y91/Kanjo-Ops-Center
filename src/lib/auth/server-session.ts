@@ -32,6 +32,7 @@ export async function getServerSession(): Promise<ActiveSession | null> {
       team: user.team,
     },
     permissions: [...user.permissions],
+    accessibleCities: [...user.accessibleCities],
     revision: getRbacRevision(),
   };
 }

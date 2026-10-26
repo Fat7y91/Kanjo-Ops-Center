@@ -1,16 +1,57 @@
 "use client";
 
 import { logoutAction } from "@/app/login/actions";
+import { useEffect, useState } from "react";
+
 import { usePermission } from "@/components/auth/use-permission";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import type { City } from "@/lib/field-ops/types";
+import { readActiveCityId } from "@/lib/city-scope";
 
 type TopbarProps = {
   navOpen: boolean;
   onOpenNav: () => void;
+  cityOptions: City[];
 };
 
-export function Topbar({ navOpen, onOpenNav }: TopbarProps) {
-  const { user, pending, revision } = usePermission();
+export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
+  const { user, pending, revision, permissions, accessibleCities } =
+    usePermission();
+  const canSwitchCities =
+    permissions.has("view_cities") && accessibleCities.length > 1;
+
+  function selectCity(cityId: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("kanjo_active_city", cityId);
+    window.dispatchEvent(new Event("kanjo-city-change"));
+  }
+
+  const scopedOptions = cityOptions.filter((city) =>
+    accessibleCities.includes(city.id),
+  );
+  const [activeCityId, setActiveCityId] = useState<string | null>(null);
+  const scopeKey = accessibleCities.join("|");
+  const optionsKey = scopedOptions.map((city) => city.id).join("|");
+
+  useEffect(() => {
+    const sync = () => {
+      setActiveCityId(
+        readActiveCityId(scopedOptions.map((city) => city.id)),
+      );
+    };
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener("kanjo-city-change", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("kanjo-city-change", sync);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey, optionsKey]);
+
+  const activeCity =
+    scopedOptions.find((city) => city.id === activeCityId) ??
+    scopedOptions[0];
 
   return (
     <header className="topbar px-3 sm:px-4 md:px-6 lg:px-8">
@@ -35,6 +76,21 @@ export function Topbar({ navOpen, onOpenNav }: TopbarProps) {
       </div>
 
       <div className="topbar-user">
+        {canSwitchCities ? (
+          <label className="city-switcher">
+            <span>نطاق المدينة</span>
+            <select
+              value={activeCity?.id ?? ""}
+              onChange={(event) => selectCity(event.target.value)}
+            >
+              {scopedOptions.map((city) => (
+                <option key={city.id} value={city.id}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <ThemeToggle />
         {user && (
           <div className="user-copy">

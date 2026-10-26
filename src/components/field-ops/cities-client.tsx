@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Protect } from "@/components/auth/protect";
 import { usePermission } from "@/components/auth/use-permission";
+import { PERMISSION_CHANNEL } from "@/components/providers/session-provider";
 import { CityMap } from "@/components/field-ops/city-map";
 import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-panel";
 import { Modal } from "@/components/field-ops/modal";
@@ -89,7 +91,7 @@ function zoneCentroid(zone: ZonePoint[]): [number, number] | undefined {
 
 export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
   const router = useRouter();
-  const { hasPermission } = usePermission();
+  const { hasPermission, refresh } = usePermission();
   const canCreate = hasPermission("create_city");
   const canUpdate = hasPermission("update_city_zone");
   const canAnalyze = hasPermission("view_city_analytics");
@@ -246,6 +248,12 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
       });
       setOpen(false);
       reset();
+      await refresh();
+      if (typeof BroadcastChannel !== "undefined") {
+        const channel = new BroadcastChannel(PERMISSION_CHANNEL);
+        channel.postMessage("refresh");
+        channel.close();
+      }
       router.refresh();
     } catch (submitError) {
       setError(
@@ -360,7 +368,11 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                       ? `${city.governorate} · ${city.country}`
                       : city.country}
                   </p>
-                  <h2>{city.name}</h2>
+                  <h2>
+                    <Link className="city-title-link" href={`/cities/${city.id}`}>
+                      {city.name}
+                    </Link>
+                  </h2>
                 </div>
                 <span className={`badge ${meta.tone}`}>{meta.label}</span>
               </div>
@@ -374,8 +386,12 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                   <strong>{formatNumber(city.zone.length)}</strong>
                 </div>
                 <div>
-                  <span className="detail-label">أضيفت بواسطة</span>
-                  <strong>{city.createdByName || viewerName}</strong>
+                  <span className="detail-label">مديرو التشغيل</span>
+                  <strong>
+                    {city.opsManagers.length > 0
+                      ? `${formatNumber(city.opsManagers.length)} مُسند`
+                      : "غير مسند"}
+                  </strong>
                 </div>
               </div>
               <p className="city-notes line-clamp-2" title={city.strategicNotes}>
@@ -398,6 +414,12 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                 mode="any"
               >
                 <div className="row-actions city-card-actions mt-auto">
+                  <Link
+                    className="button button-small button-quiet"
+                    href={`/cities/${city.id}`}
+                  >
+                    تفاصيل المدينة
+                  </Link>
                   <Protect require="view_city_analytics">
                     <button
                       type="button"

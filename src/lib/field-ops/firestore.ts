@@ -18,6 +18,7 @@ export type CityFirestoreDocument = {
   strategicNotes: string;
   zone: City["zone"];
   boundary: City["boundary"];
+  opsManagers: string[];
   createdAt: string;
   createdBy: string;
   createdByName: string;
@@ -35,6 +36,7 @@ export function toCityFirestoreDocument(city: City): CityFirestoreDocument {
     strategicNotes: city.strategicNotes,
     zone: city.zone,
     boundary: city.boundary,
+    opsManagers: city.opsManagers,
     createdAt: city.createdAt,
     createdBy: city.createdBy,
     createdByName: city.createdByName,

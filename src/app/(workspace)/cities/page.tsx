@@ -1,7 +1,7 @@
 import { CitiesClient } from "@/components/field-ops/cities-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
-import { listCities } from "@/lib/field-ops/store";
+import { scopedCities } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,7 @@ export default async function CitiesPage() {
         }
       />
       <CitiesClient
-        initialCities={listCities()}
+        initialCities={scopedCities(session)}
         viewerName={session.user.name}
       />
     </>

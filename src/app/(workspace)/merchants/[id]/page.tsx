@@ -24,7 +24,9 @@ export default async function MerchantProfilePage({
   const session = await requirePermission("view_merchants");
   const { id } = await params;
   const merchant = getMerchantById(id);
-  if (!merchant) notFound();
+  if (!merchant || !session.accessibleCities.includes(merchant.cityId)) {
+    notFound();
+  }
 
   const city = getCityById(merchant.cityId);
   const permissions = session.permissions;

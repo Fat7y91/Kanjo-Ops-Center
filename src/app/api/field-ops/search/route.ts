@@ -11,7 +11,14 @@ export async function GET(request: Request) {
 
   const query = new URL(request.url).searchParams.get("q") ?? "";
   return NextResponse.json(
-    { results: searchMerchants(query, session.user.team) },
+    {
+      results: searchMerchants(
+        query,
+        session.user.team,
+        20,
+        session.accessibleCities,
+      ),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

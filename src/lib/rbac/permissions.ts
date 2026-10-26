@@ -49,6 +49,13 @@ export const PERMISSIONS = [
     group: "المدن",
   },
   {
+    key: "assign_city_managers",
+    label: "إسناد مديري التشغيل",
+    description:
+      "تعيين أو إلغاء مديري التشغيل للمدينة وتوسيع نطاق مدنهم المتاحة.",
+    group: "المدن",
+  },
+  {
     key: "view_merchants",
     label: "عرض التجار",
     description: "فتح دليل التجار.",

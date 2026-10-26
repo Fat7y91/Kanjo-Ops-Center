@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
 import { cityCreateSchema } from "@/lib/schemas/field-ops";
-import { createCity, listCities } from "@/lib/field-ops/store";
+import { createCity } from "@/lib/field-ops/store";
+import { scopedCities } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function GET() {
   if (!session) return response;
 
   return NextResponse.json(
-    { cities: listCities() },
+    { cities: scopedCities(session) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

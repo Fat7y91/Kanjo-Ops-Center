@@ -17,6 +17,7 @@ export function searchMerchants(
   query: string,
   viewerTeam: string,
   limit = 20,
+  accessibleCityIds: readonly string[] = [],
 ): MerchantSearchResult[] {
   const trimmed = query.trim();
   if (trimmed.length < 1) return [];
@@ -25,7 +26,15 @@ export function searchMerchants(
     listCities().map((city) => [city.id, city]),
   );
 
-  const results = listMerchants()
+  const allowedCities = new Set(accessibleCityIds);
+  const scopedMerchants =
+    allowedCities.size > 0
+      ? listMerchants().filter((merchant) =>
+          allowedCities.has(merchant.cityId),
+        )
+      : listMerchants();
+
+  const results = scopedMerchants
     .map((merchant) => {
       const city = cities.get(merchant.cityId);
       const nameMatch = smartTextScore(trimmed, merchant.name);

@@ -22,6 +22,7 @@ const SEED_USERS: AppUser[] = [
     title: "مالك المنصة",
     team: "Executive",
     permissions: ALL_PERMISSIONS,
+    accessibleCities: ["city-cairo", "city-giza", "city-alexandria", "city-mansoura"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -51,7 +52,9 @@ const SEED_USERS: AppUser[] = [
       "approve_edit_requests",
       "manage_merchant_state",
       "view_contracts",
+      "assign_city_managers",
     ],
+    accessibleCities: ["city-cairo"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -72,6 +75,7 @@ const SEED_USERS: AppUser[] = [
       "view_field_ops",
       "request_transfers",
     ],
+    accessibleCities: ["city-cairo"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -88,6 +92,7 @@ const SEED_USERS: AppUser[] = [
       "create_products",
       "edit_products",
     ],
+    accessibleCities: [],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -104,6 +109,7 @@ const SEED_USERS: AppUser[] = [
       "view_cities",
       "view_city_analytics",
     ],
+    accessibleCities: ["city-cairo", "city-giza"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -120,6 +126,7 @@ const SEED_USERS: AppUser[] = [
       "view_field_ops",
       "request_transfers",
     ],
+    accessibleCities: ["city-cairo"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -136,6 +143,7 @@ const SEED_USERS: AppUser[] = [
       "view_field_ops",
       "request_transfers",
     ],
+    accessibleCities: ["city-cairo"],
     active: true,
     updatedAt: new Date(0).toISOString(),
   },
@@ -151,7 +159,11 @@ const globalStore = globalThis as typeof globalThis & {
 };
 
 function cloneUser(user: AppUser): AppUser {
-  return { ...user, permissions: [...user.permissions] };
+  return {
+    ...user,
+    permissions: [...user.permissions],
+    accessibleCities: [...user.accessibleCities],
+  };
 }
 
 function getStore(): RbacStore {
@@ -177,6 +189,48 @@ export function getUserById(id: string): AppUser | null {
 
 export function getRbacRevision(): number {
   return getStore().revision;
+}
+
+export function addUserCityScope(id: string, cityId: string): AppUser {
+  const store = getStore();
+  const current = store.users.get(id);
+  if (!current) throw new Error("User not found");
+
+  if (current.accessibleCities.includes(cityId)) {
+    return cloneUser(current);
+  }
+
+  const updated: AppUser = {
+    ...current,
+    accessibleCities: [...current.accessibleCities, cityId],
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.users.set(id, updated);
+  store.revision += 1;
+  return cloneUser(updated);
+}
+
+export function removeUserCityScope(id: string, cityId: string): AppUser {
+  const store = getStore();
+  const current = store.users.get(id);
+  if (!current) throw new Error("User not found");
+
+  if (!current.accessibleCities.includes(cityId)) {
+    return cloneUser(current);
+  }
+
+  const updated: AppUser = {
+    ...current,
+    accessibleCities: current.accessibleCities.filter(
+      (candidate) => candidate !== cityId,
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+
+  store.users.set(id, updated);
+  store.revision += 1;
+  return cloneUser(updated);
 }
 
 export function normalizePermissions(values: readonly unknown[]): Permission[] {

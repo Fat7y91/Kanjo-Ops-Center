@@ -37,17 +37,31 @@ export function buildBoard(session: ActiveSession): FieldOpsBoard {
     (report) => canManageTasks || report.team === session.user.team,
   );
 
+  const canSeeAllCities = session.permissions.includes("manage_permissions");
+  const scopedCityIds = canSeeAllCities
+    ? new Set(listCities().map((city) => city.id))
+    : new Set(session.accessibleCities);
+  const cities = listCities().filter((city) => scopedCityIds.has(city.id));
+  const merchants = listMerchants().filter((merchant) =>
+    scopedCityIds.has(merchant.cityId),
+  );
+
   return {
     today: today(),
     tasks: tasksForViewer({
       team: session.user.team,
       canManageTasks,
       date: today(),
-    }),
-    cities: listCities(),
-    merchants: listMerchants(),
+    }).filter((task) => scopedCityIds.has(task.cityId)),
+    cities,
+    merchants,
     transferRequests,
-    editRequests,
+    editRequests: editRequests.filter((request) => {
+      const merchant = merchants.find(
+        (candidate) => candidate.id === request.merchantId,
+      );
+      return Boolean(merchant);
+    }),
     reports,
   };
 }

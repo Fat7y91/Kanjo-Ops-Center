@@ -15,13 +15,16 @@ type MerchantsPageProps = {
 export default async function MerchantsPage({
   searchParams,
 }: MerchantsPageProps) {
-  await requirePermission("view_merchants");
+  const session = await requirePermission("view_merchants");
   const { q } = await searchParams;
   const query = (q ?? "").trim();
   const cityMap = new Map(listCities().map((city) => [city.id, city]));
+  const scoped = listMerchants().filter((merchant) =>
+    session.accessibleCities.includes(merchant.cityId),
+  );
   const merchants =
     query.length > 0
-      ? listMerchants()
+      ? scoped
           .map((merchant) => ({
             merchant,
             score: smartTextScore(query, merchant.name).score,
@@ -29,7 +32,7 @@ export default async function MerchantsPage({
           .filter((entry) => entry.score > 0)
           .sort((left, right) => right.score - left.score)
           .map((entry) => entry.merchant)
-      : listMerchants();
+      : scoped;
 
   return (
     <>

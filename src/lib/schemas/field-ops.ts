@@ -37,6 +37,17 @@ export const cityCreateSchema = z.object({
     .min(3, "ارسم ثلاث نقاط حدود على الأقل على الخريطة."),
 });
 
+export const cityManagerAssignSchema = z.object({
+  userIds: z
+    .array(z.string().trim().min(1))
+    .min(1, "اختر مديراً واحداً على الأقل.")
+    .max(25),
+});
+
+export const cityManagerRevokeSchema = z.object({
+  userId: z.string().trim().min(1, "معرّف المدير مطلوب."),
+});
+
 export const merchantCreateSchema = z.object({
   name: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120),
   cityId: z.string().trim().min(1, "اختر المدينة."),
@@ -113,6 +124,8 @@ export const merchantDocumentSchema = z.object({
 });
 
 export type CityCreateInput = z.infer<typeof cityCreateSchema>;
+export type CityManagerAssignInput = z.infer<typeof cityManagerAssignSchema>;
+export type CityManagerRevokeInput = z.infer<typeof cityManagerRevokeSchema>;
 export type MerchantCreateInput = z.infer<typeof merchantCreateSchema>;
 export type TaskAssignInput = z.infer<typeof taskAssignSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;

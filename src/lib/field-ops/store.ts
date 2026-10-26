@@ -15,6 +15,13 @@ import type {
   ZonePoint,
 } from "@/lib/field-ops/types";
 import { zoneToBoundary } from "@/lib/field-ops/types";
+import type { AppUser } from "@/lib/rbac/types";
+import {
+  addUserCityScope,
+  getUserById,
+  listUsers,
+  removeUserCityScope,
+} from "@/lib/rbac/users";
 import type {
   CityCreateInput,
   MerchantCreateInput,
@@ -89,6 +96,7 @@ function seedStore(): FieldOpsStore {
       name: "المنصورة",
       country: "مصر",
       governorate: "الدقهلية",
+      opsManagers: [],
       population: 1_600_000,
       stage: "preparation",
       competitors: [
@@ -115,6 +123,7 @@ function seedStore(): FieldOpsStore {
       name: "القاهرة",
       country: "مصر",
       governorate: "القاهرة",
+      opsManagers: ["u-ops"],
       population: 10_100_000,
       stage: "live_operations",
       competitors: [
@@ -147,6 +156,7 @@ function seedStore(): FieldOpsStore {
       name: "الجيزة",
       country: "مصر",
       governorate: "الجيزة",
+      opsManagers: [],
       population: 9_200_000,
       stage: "data_entry",
       competitors: [
@@ -173,6 +183,7 @@ function seedStore(): FieldOpsStore {
       name: "الإسكندرية",
       country: "مصر",
       governorate: "الإسكندرية",
+      opsManagers: [],
       population: 5_500_000,
       stage: "contracting",
       competitors: [
@@ -668,12 +679,14 @@ export function createCity(input: CityCreateInput, actor: Actor): City {
     strategicNotes: input.strategicNotes.trim(),
     zone,
     boundary: zoneToBoundary(zone),
+    opsManagers: [],
     createdAt: isoNow(),
     createdBy: actor.id,
     createdByName: actor.name,
   };
 
   store.cities.push(city);
+  addUserCityScope(actor.id, city.id);
   bump();
   return clone(city);
 }
@@ -719,6 +732,87 @@ export function updateCity(cityId: string, input: CityCreateInput): City {
   city.zone = zone;
   city.boundary = zoneToBoundary(zone);
 
+  bump();
+  return clone(city);
+}
+
+export function listCityManagers(cityId: string): AppUser[] {
+  const city = getStore().cities.find((candidate) => candidate.id === cityId);
+  if (!city) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+  }
+
+  return city.opsManagers
+    .map((userId) => getUserById(userId))
+    .filter((user): user is AppUser => Boolean(user));
+}
+
+export function listAssignableManagers(): AppUser[] {
+  return listUsers().filter((user) => user.active);
+}
+
+export function assignCityManagers(
+  cityId: string,
+  userIds: readonly string[],
+): City {
+  const store = getStore();
+  const city = store.cities.find((candidate) => candidate.id === cityId);
+  if (!city) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+  }
+
+  const uniqueIds = Array.from(new Set(userIds.map((id) => id.trim()))).filter(
+    Boolean,
+  );
+  if (uniqueIds.length === 0) {
+    throw new FieldOpsError(
+      "MANAGER_REQUIRED",
+      "اختر مديراً واحداً على الأقل.",
+      422,
+    );
+  }
+
+  const users = uniqueIds.map((userId) => {
+    const user = getUserById(userId);
+    if (!user || !user.active) {
+      throw new FieldOpsError(
+        "MANAGER_NOT_FOUND",
+        "أحد المشغّلين المحددين غير موجود أو غير نشط.",
+        422,
+      );
+    }
+    return user;
+  });
+
+  const next = new Set(city.opsManagers);
+  for (const user of users) {
+    next.add(user.id);
+    addUserCityScope(user.id, cityId);
+  }
+  city.opsManagers = Array.from(next);
+
+  bump();
+  return clone(city);
+}
+
+export function revokeCityManager(cityId: string, userId: string): City {
+  const city = getStore().cities.find((candidate) => candidate.id === cityId);
+  if (!city) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+  }
+
+  if (!city.opsManagers.includes(userId)) {
+    throw new FieldOpsError(
+      "MANAGER_NOT_ASSIGNED",
+      "هذا المشغّل ليس مديراً للعمليات في المدينة.",
+      404,
+    );
+  }
+
+  city.opsManagers = city.opsManagers.filter(
+    (managerId) => managerId !== userId,
+  );
+  removeUserCityScope(userId, cityId);
   bump();
   return clone(city);
 }

@@ -10,14 +10,24 @@ import type { Permission } from "@/lib/rbac/permissions";
  *   if (hasPermission("view_contracts")) { ... }
  */
 export function usePermission() {
-  const { hasPermission, hasAny, hasAll, permissions, user, revision, pending, refresh } =
-    useSession();
+  const {
+    hasPermission,
+    hasAny,
+    hasAll,
+    permissions,
+    accessibleCities,
+    user,
+    revision,
+    pending,
+    refresh,
+  } = useSession();
 
   return {
     hasPermission,
     hasAny,
     hasAll,
     permissions,
+    accessibleCities,
     user,
     revision,
     pending,

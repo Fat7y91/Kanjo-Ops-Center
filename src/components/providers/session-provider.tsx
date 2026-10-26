@@ -21,6 +21,7 @@ const REFRESH_INTERVAL_MS = 5_000;
 type SessionContextValue = {
   user: ActiveSession["user"] | null;
   permissions: ReadonlySet<Permission>;
+  accessibleCities: string[];
   revision: number;
   pending: boolean;
   hasPermission: (permission: Permission) => boolean;
@@ -133,6 +134,7 @@ export function SessionProvider({
     () => ({
       user: session?.user ?? null,
       permissions,
+      accessibleCities: session?.accessibleCities ?? [],
       revision: session?.revision ?? 0,
       pending,
       hasPermission,

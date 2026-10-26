@@ -134,6 +134,7 @@ export type City = {
   strategicNotes: string;
   zone: ZonePoint[];
   boundary: GeoPolygon;
+  opsManagers: string[];
   createdAt: string;
   createdBy: string;
   createdByName: string;

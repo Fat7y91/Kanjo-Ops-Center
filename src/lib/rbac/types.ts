@@ -13,6 +13,7 @@ export type AppUser = {
   title: string;
   team: string;
   permissions: Permission[];
+  accessibleCities: string[];
   active: boolean;
   updatedAt: string;
 };
@@ -25,5 +26,6 @@ export type SessionUser = Pick<
 export type ActiveSession = {
   user: SessionUser;
   permissions: Permission[];
+  accessibleCities: string[];
   revision: number;
 };
