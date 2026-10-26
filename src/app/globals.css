@@ -3272,6 +3272,138 @@ textarea {
   }
 }
 
+/* ── Route loading boundaries (SPA shell persistence) ─────────────────── */
+
+.skeleton-header {
+  pointer-events: none;
+}
+
+.skeleton-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.skeleton-header-actions {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-inline {
+  display: flex;
+  gap: 10px;
+}
+
+.skeleton-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.skeleton-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-table-head,
+.skeleton-table-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  align-items: center;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skeleton-table-head {
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.skeleton-table-row:last-child {
+  border-bottom: 0;
+}
+
+.skeleton-map {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Navigation progress feedback ─────────────────────────────────────── */
+
+.route-progress {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 90;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.route-progress.is-active {
+  opacity: 1;
+}
+
+.route-progress::after {
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--gold), var(--gold-deep));
+  animation: route-progress-sweep 900ms ease-in-out infinite;
+  content: "";
+}
+
+@keyframes route-progress-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.nav-link[data-pending="true"] {
+  color: #ffffff;
+  opacity: 0.72;
+}
+
+.nav-link-spinner {
+  width: 13px;
+  height: 13px;
+  margin-inline-start: auto;
+  border: 2px solid rgba(255, 215, 0, 0.25);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: nav-link-spin 620ms linear infinite;
+}
+
+@keyframes nav-link-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-progress::after,
+  .nav-link-spinner {
+    animation: none;
+  }
+}
+
 /* ── Map direction guard ──────────────────────────────────────────────── */
 
 .city-map.leaflet-container {

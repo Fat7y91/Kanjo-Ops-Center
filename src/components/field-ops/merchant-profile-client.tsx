@@ -151,7 +151,7 @@ export function MerchantProfileClient({
         </div>
         <div className="profile-actions">
           {canViewFieldOpsPage ? (
-            <Link href="/field-ops" className="button button-quiet">
+            <Link href="/field-ops" className="button button-quiet" prefetch>
               العودة إلى اللوحة
             </Link>
           ) : null}

@@ -19,7 +19,7 @@ export default async function OverviewPage() {
         description="رؤية حيّة لصحة التجار والتنفيذ الميداني والمخاطر التجارية. كل عنصر تحكم أدناه مستمد من مجموعة صلاحياتك."
         actions={
           <Protect require="view_contracts">
-            <Link className="button button-primary" href="/contracts">
+            <Link className="button button-primary" href="/contracts" prefetch>
               مراجعة العقود
             </Link>
           </Protect>

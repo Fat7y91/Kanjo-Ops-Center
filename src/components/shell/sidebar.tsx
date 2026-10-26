@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { ModuleIcon } from "@/components/shell/module-icon";
+import { NavLinkStatus } from "@/components/shell/nav-link-status";
 import { firstPermittedPath, MODULES } from "@/lib/rbac/modules";
 
 type SidebarProps = {
@@ -58,12 +59,14 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <Link
               key={module.href}
               href={module.href}
+              prefetch
               className={`nav-link${active ? " is-active" : ""}`}
               aria-current={active ? "page" : undefined}
               onClick={onClose}
             >
               <ModuleIcon name={module.icon} />
               <span>{module.label}</span>
+              <NavLinkStatus />
             </Link>
           );
         })}

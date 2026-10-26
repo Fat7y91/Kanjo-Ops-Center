@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { CityMap } from "@/components/field-ops/city-map";
-import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-panel";
+import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-lazy";
 import { OpsTeamPanel } from "@/components/field-ops/ops-team-panel";
 import {
   CITY_STAGE_META,
@@ -64,11 +64,11 @@ export function CityDetailsClient({
           </div>
         </div>
         <div className="profile-actions">
-          <Link className="button button-quiet" href="/cities">
+          <Link className="button button-quiet" href="/cities" prefetch>
             العودة إلى المدن
           </Link>
           {canEdit ? (
-            <Link className="button button-primary" href="/cities">
+            <Link className="button button-primary" href="/cities" prefetch>
               تعديل المدينة
             </Link>
           ) : null}

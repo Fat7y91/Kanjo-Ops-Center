@@ -20,7 +20,7 @@ function formatNumber(value: number): string {
   );
 }
 
-type GeoAnalyticsPanelProps = {
+export type GeoAnalyticsPanelProps = {
   zone: ZonePoint[];
   cityId?: string;
   enabled: boolean;

@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
+import { RouteProgress } from "@/components/shell/route-progress";
 import type { City } from "@/lib/field-ops/types";
 
 export function AppShell({
@@ -37,6 +38,7 @@ export function AppShell({
 
   return (
     <div className={`app-shell${navOpen ? " nav-open" : ""}`}>
+      <RouteProgress />
       <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="app-main min-w-0">
         <Topbar

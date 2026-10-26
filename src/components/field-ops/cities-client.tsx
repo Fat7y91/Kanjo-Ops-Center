@@ -8,7 +8,7 @@ import { Protect } from "@/components/auth/protect";
 import { usePermission } from "@/components/auth/use-permission";
 import { PERMISSION_CHANNEL } from "@/components/providers/session-provider";
 import { CityMap } from "@/components/field-ops/city-map";
-import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-panel";
+import { GeoAnalyticsPanel } from "@/components/field-ops/geo-analytics-lazy";
 import { Modal } from "@/components/field-ops/modal";
 import {
   CITY_STAGES,
@@ -369,7 +369,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                       : city.country}
                   </p>
                   <h2>
-                    <Link className="city-title-link" href={`/cities/${city.id}`}>
+                    <Link className="city-title-link" href={`/cities/${city.id}`} prefetch>
                       {city.name}
                     </Link>
                   </h2>
@@ -417,6 +417,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                   <Link
                     className="button button-small button-quiet"
                     href={`/cities/${city.id}`}
+                    prefetch
                   >
                     تفاصيل المدينة
                   </Link>
