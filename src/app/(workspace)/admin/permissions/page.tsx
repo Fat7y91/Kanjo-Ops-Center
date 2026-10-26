@@ -2,14 +2,27 @@ import { PermissionMatrix } from "@/components/admin/permission-matrix";
 import { Protect } from "@/components/auth/protect";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
+import { listCities } from "@/lib/field-ops/store";
+import {
+  assignableLevels,
+  clearanceLabel,
+  filterManageableUsers,
+  isGlobalActor,
+  toClearanceActor,
+} from "@/lib/rbac/hierarchy";
 import { getRbacRevision, listUsers } from "@/lib/rbac/users";
 
 export const dynamic = "force-dynamic";
 
 export default async function PermissionsPage() {
   const session = await requirePermission("manage_permissions");
-  const users = listUsers();
+  const actor = toClearanceActor(session);
+  const global = isGlobalActor(actor);
+  const manageable = filterManageableUsers(actor, listUsers());
   const revision = getRbacRevision();
+  const cities = listCities().filter(
+    (city) => global || actor.accessibleCities.includes(city.id),
+  );
 
   return (
     <>
@@ -18,17 +31,27 @@ export default async function PermissionsPage() {
         title="مركز التحكم بالصلاحيات"
         description="امنح واسحب القدرات الدقيقة لأي مشغّل. تتزامن الجلسات المفتوحة خلال خمس ثوانٍ، وتعيد حواجز الخادم التحقق في كل طلب."
         actions={
-          <span className="badge badge-green">
-            {users.length} مشغّل · إصدار {revision}
+          <span className="badge badge-gold">
+            رتبتك · {clearanceLabel(session.clearanceLevel)}
           </span>
         }
       />
 
       <Protect require="manage_permissions">
         <PermissionMatrix
-          initialUsers={users}
+          initialUsers={manageable}
           initialRevision={revision}
           viewerId={session.user.id}
+          viewerLevel={actor.clearanceLevel}
+          viewerGlobalScope={global}
+          assignableLevels={assignableLevels(actor).map((level) => ({
+            level: level.level,
+            label: level.label,
+          }))}
+          assignableCities={cities.map((city) => ({
+            id: city.id,
+            name: city.name,
+          }))}
         />
       </Protect>
 
@@ -36,7 +59,7 @@ export default async function PermissionsPage() {
         <div className="panel-head">
           <div>
             <p className="eyebrow">سلسلة التنفيذ</p>
-            <h2>ثلاثة فحوص مستقلة</h2>
+            <h2>أربعة فحوص مستقلة</h2>
           </div>
         </div>
         <div className="enforcement-grid">
@@ -58,10 +81,18 @@ export default async function PermissionsPage() {
           </div>
           <div>
             <span className="badge">3</span>
+            <h3>حاجز الرتبة</h3>
+            <p>
+              لا يمكن إدارة أو منح صلاحية لمشغّل يعادل رتبتك أو يتجاوزها، ولا
+              إنشاء مشغّل خارج نطاق مدنك.
+            </p>
+          </div>
+          <div>
+            <span className="badge">4</span>
             <h3>بوابة المكوّن</h3>
             <p>
-              روابط الشريط الجانبي وأزرار الإجراءات تقيّم{" "}
-              <code>hasPermission()</code> عبر <code>&lt;Protect&gt;</code>.
+              المصفوفة لا تعرض إلا المشغّلين الأدنى منك رتبةً وداخل نطاقك
+              الجغرافي، مع تعطيل الأزرار خارج ذلك.
             </p>
           </div>
         </div>

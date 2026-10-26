@@ -9,6 +9,10 @@ import {
   listAssignableManagers,
   listCityManagers,
 } from "@/lib/field-ops/store";
+import {
+  filterGovernableUsers,
+  toClearanceActor,
+} from "@/lib/rbac/hierarchy";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +28,8 @@ export default async function CityDetailsPage({
   const city = getCityById(id);
   if (!city || !canAccessCity(session, city.id)) notFound();
 
+  const actor = toClearanceActor(session);
+
   return (
     <>
       <PageHeader
@@ -34,7 +40,7 @@ export default async function CityDetailsPage({
       <CityDetailsClient
         city={city}
         managers={listCityManagers(city.id)}
-        assignable={listAssignableManagers()}
+        assignable={filterGovernableUsers(actor, listAssignableManagers())}
         canEdit={session.permissions.includes("update_city_zone")}
       />
     </>

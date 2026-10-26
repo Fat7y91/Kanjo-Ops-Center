@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
+import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listCities, listMerchants } from "@/lib/field-ops/store";
 import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
 import { smartTextScore } from "@/lib/search/normalize";
@@ -19,8 +20,9 @@ export default async function MerchantsPage({
   const { q } = await searchParams;
   const query = (q ?? "").trim();
   const cityMap = new Map(listCities().map((city) => [city.id, city]));
+  const allowedCities = new Set(effectiveCityIds(session));
   const scoped = listMerchants().filter((merchant) =>
-    session.accessibleCities.includes(merchant.cityId),
+    allowedCities.has(merchant.cityId),
   );
   const merchants =
     query.length > 0

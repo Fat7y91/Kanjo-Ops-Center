@@ -15,10 +15,19 @@ type TopbarProps = {
 };
 
 export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
-  const { user, pending, revision, permissions, accessibleCities } =
-    usePermission();
+  const {
+    user,
+    pending,
+    revision,
+    permissions,
+    accessibleCities,
+    globalScope,
+  } = usePermission();
+  const cityScopeKey = globalScope
+    ? cityOptions.map((city) => city.id).join("|")
+    : accessibleCities.join("|");
   const canSwitchCities =
-    permissions.has("view_cities") && accessibleCities.length > 1;
+    permissions.has("view_cities") && cityOptions.length > 1;
 
   function selectCity(cityId: string) {
     if (typeof window === "undefined") return;
@@ -26,11 +35,11 @@ export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
     window.dispatchEvent(new Event("kanjo-city-change"));
   }
 
-  const scopedOptions = cityOptions.filter((city) =>
-    accessibleCities.includes(city.id),
-  );
+  const scopedOptions = globalScope
+    ? cityOptions
+    : cityOptions.filter((city) => accessibleCities.includes(city.id));
   const [activeCityId, setActiveCityId] = useState<string | null>(null);
-  const scopeKey = accessibleCities.join("|");
+  const scopeKey = cityScopeKey;
   const optionsKey = scopedOptions.map((city) => city.id).join("|");
 
   useEffect(() => {

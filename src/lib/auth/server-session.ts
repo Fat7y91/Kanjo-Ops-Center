@@ -33,6 +33,8 @@ export async function getServerSession(): Promise<ActiveSession | null> {
     },
     permissions: [...user.permissions],
     accessibleCities: [...user.accessibleCities],
+    clearanceLevel: user.clearanceLevel,
+    globalScope: user.globalScope,
     revision: getRbacRevision(),
   };
 }

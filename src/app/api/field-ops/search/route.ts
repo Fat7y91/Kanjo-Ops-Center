@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorize } from "@/lib/auth/api";
+import { effectiveCityIds } from "@/lib/city-scope-query";
 import { searchMerchants } from "@/lib/search/merchant-search";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
         query,
         session.user.team,
         20,
-        session.accessibleCities,
+        effectiveCityIds(session),
       ),
     },
     { headers: { "Cache-Control": "no-store" } },

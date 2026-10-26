@@ -14,6 +14,8 @@ export type AppUser = {
   team: string;
   permissions: Permission[];
   accessibleCities: string[];
+  clearanceLevel: number;
+  globalScope: boolean;
   active: boolean;
   updatedAt: string;
 };
@@ -27,5 +29,7 @@ export type ActiveSession = {
   user: SessionUser;
   permissions: Permission[];
   accessibleCities: string[];
+  clearanceLevel: number;
+  globalScope: boolean;
   revision: number;
 };

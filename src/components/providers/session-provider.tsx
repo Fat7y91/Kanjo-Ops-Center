@@ -22,6 +22,8 @@ type SessionContextValue = {
   user: ActiveSession["user"] | null;
   permissions: ReadonlySet<Permission>;
   accessibleCities: string[];
+  clearanceLevel: number;
+  globalScope: boolean;
   revision: number;
   pending: boolean;
   hasPermission: (permission: Permission) => boolean;
@@ -135,6 +137,8 @@ export function SessionProvider({
       user: session?.user ?? null,
       permissions,
       accessibleCities: session?.accessibleCities ?? [],
+      clearanceLevel: session?.clearanceLevel ?? 0,
+      globalScope: session?.globalScope ?? false,
       revision: session?.revision ?? 0,
       pending,
       hasPermission,

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MerchantProfileClient } from "@/components/field-ops/merchant-profile-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
+import { canAccessCity } from "@/lib/city-scope-query";
 import {
   getCityById,
   getMerchantById,
@@ -24,7 +25,7 @@ export default async function MerchantProfilePage({
   const session = await requirePermission("view_merchants");
   const { id } = await params;
   const merchant = getMerchantById(id);
-  if (!merchant || !session.accessibleCities.includes(merchant.cityId)) {
+  if (!merchant || !canAccessCity(session, merchant.cityId)) {
     notFound();
   }
 

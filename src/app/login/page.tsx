@@ -1,4 +1,5 @@
 import { loginAction } from "@/app/login/actions";
+import { clearanceLabel, clearanceTone } from "@/lib/rbac/hierarchy";
 import { listUsers } from "@/lib/rbac/users";
 
 export const dynamic = "force-dynamic";
@@ -62,8 +63,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 <span className="account-title">{user.title}</span>
                 <span className="account-email">{user.email}</span>
               </span>
-              <span className="account-capabilities">
-                {user.permissions.length} صلاحية
+              <span className="account-badges">
+                <span
+                  className={`badge ${clearanceTone(user.clearanceLevel)}`}
+                >
+                  L{user.clearanceLevel} · {clearanceLabel(user.clearanceLevel)}
+                </span>
+                <span className="account-capabilities">
+                  {user.permissions.length} صلاحية
+                </span>
               </span>
             </button>
           ))}

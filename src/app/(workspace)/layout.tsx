@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { requireSession } from "@/lib/auth/guard";
-import { listCities } from "@/lib/field-ops/store";
+import { scopedCities } from "@/lib/city-scope-query";
 
 export default async function WorkspaceLayout({
   children,
@@ -12,9 +12,7 @@ export default async function WorkspaceLayout({
   const session = await requireSession();
   return (
     <AppShell
-      cityOptions={listCities().filter((city) =>
-        session.accessibleCities.includes(city.id),
-      )}
+      cityOptions={scopedCities(session)}
     >
       {children}
     </AppShell>

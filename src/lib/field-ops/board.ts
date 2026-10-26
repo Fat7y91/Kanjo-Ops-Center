@@ -37,7 +37,8 @@ export function buildBoard(session: ActiveSession): FieldOpsBoard {
     (report) => canManageTasks || report.team === session.user.team,
   );
 
-  const canSeeAllCities = session.permissions.includes("manage_permissions");
+  const canSeeAllCities =
+    session.globalScope || session.clearanceLevel >= 4;
   const scopedCityIds = canSeeAllCities
     ? new Set(listCities().map((city) => city.id))
     : new Set(session.accessibleCities);
