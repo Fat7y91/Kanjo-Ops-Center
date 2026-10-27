@@ -2060,12 +2060,16 @@ window.buildContractHTML = (task) => {
        It gets a dedicated cover instead: a single, large, perfectly centred
        Kanjo logo with the official slogan directly beneath it. */
     const blankCoverBody = `
-            <div style="position: absolute; z-index: 1; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 130mm; height: 130mm; border-radius: 28px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 22px 60px rgba(75, 0, 130, 0.16); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16mm; box-sizing: border-box;">
-                <img src="logo.png" alt="Kanjo" style="max-width: 96mm; max-height: 96mm; object-fit: contain; display: block;">
+            <div style="position: relative; z-index: 1; width: 100%; flex: 1 1 auto; display: flex; align-items: center; justify-content: center;">
+                <div style="width: 138mm; height: 138mm; border-radius: 28px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 22px 60px rgba(75, 0, 130, 0.16); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16mm; box-sizing: border-box;">
+                    <img src="logo.png" alt="Kanjo" style="max-width: 102mm; max-height: 102mm; object-fit: contain; display: block;">
+                </div>
             </div>
-            <div style="position: absolute; z-index: 1; top: calc(50% + 80mm); left: 0; right: 0; text-align: center; font-size: 40px; line-height: 1.5; font-weight: 900; color: #4B0082; letter-spacing: 0.4px;">ياما في الجراب يا حاوي</div>
-            <div style="position: absolute; z-index: 1; top: calc(50% + 97mm); left: 50%; transform: translateX(-50%); width: 46mm; height: 4px; background: #F59E0B; border-radius: 999px;"></div>
-            <div style="position: absolute; z-index: 1; bottom: 0; left: 0; right: 0; padding-top: 8mm; border-top: 1px solid #E9D5FF; text-align: center; font-size: 13px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانچو — نسخة أصلية</div>
+            <div style="position: relative; z-index: 1; width: 100%; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <div style="margin-top: 12mm; margin-bottom: 40px; font-size: 40px; line-height: 1.5; font-weight: 900; color: #4B0082; letter-spacing: 0.4px;">ياما في الجراب يا حاوي</div>
+                <div style="width: 46mm; height: 4px; background: #F59E0B; border-radius: 999px;"></div>
+            </div>
+            <div style="position: relative; z-index: 1; width: 100%; flex: 0 0 auto; margin-top: 20mm; padding-top: 8mm; padding-bottom: 20px; border-top: 1px solid #E9D5FF; text-align: center; font-size: 13px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانچو — نسخة أصلية</div>
     `;
 
     const coverPage = blankTemplate ? `

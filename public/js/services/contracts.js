@@ -37,13 +37,18 @@ window.resolveContractMerchantId = (task) => {
  * hardcoded sentinel. Registering them here lets the existing Contracts Manager
  * open and issue them without adding any Firestore read. */
 window.CONTRACT_BLANK_TEMPLATE_ID = 'contract-blank-template';
+/* The template is persisted like any other contract, under a fixed generic
+   storage path: contracts/MASTER_TEMPLATE/contract.pdf. Reusing the real
+   storage pipeline means it opens instantly ("عرض العقد الحالي") instead of
+   being re-rendered from scratch on every visit. */
+window.CONTRACT_BLANK_TEMPLATE_MERCHANT_ID = 'MASTER_TEMPLATE';
 /* A single dummy category that trips every conditional clause branch:
    medical (مستلزمات طبية), food (مطاعم) and the supermarket annex. */
 window.CONTRACT_BLANK_TEMPLATE_CATEGORY = 'مستلزمات طبية مطاعم سوبر ماركت';
 
 window.buildBlankContractTemplateTask = () => ({
     id: window.CONTRACT_BLANK_TEMPLATE_ID,
-    merchantId: 'TEMPLATE-BLANK',
+    merchantId: window.CONTRACT_BLANK_TEMPLATE_MERCHANT_ID,
     name: 'عقد عام فارغ (Template)',
     cat: window.CONTRACT_BLANK_TEMPLATE_CATEGORY,
     isBlankTemplate: true,
@@ -75,7 +80,9 @@ window.resolveContractTaskById = (taskId) => {
 window.resolveContractStorageId = (task) => {
     const base = window.resolveContractMerchantId(task);
     if (!base) return '';
-    if (task && task.isBlankTemplate === true) return base;
+    /* The blank template keeps a fixed generic path so every issue overwrites
+       the same persisted master PDF. */
+    if (task && task.isBlankTemplate === true) return window.CONTRACT_BLANK_TEMPLATE_MERCHANT_ID;
     /* Only an unsigned VIP draft is scoped; a merchant that later signs keeps
        the canonical storage path so its final contract is not orphaned. */
     if (task && task.vipPreContract === true && task.isSigned !== true) return `VIP-${base}`;
@@ -296,13 +303,6 @@ window.refreshContractAvailability = async () => {
     if (!window.canGenerateContracts()) return;
 
     const task = currentContractTask();
-    /* The master blank template must always start from a clean sheet, so it
-       never offers a previously stored PDF. */
-    if (task && task.isBlankTemplate) {
-        window.contractAvailability = { exists: false };
-        window.applyContractAvailability(window.contractAvailability);
-        return;
-    }
     const merchantId = window.resolveContractStorageId(task);
     if (!task || !merchantId) {
         showContractBanner('none');
@@ -326,12 +326,6 @@ window.refreshContractAvailability = async () => {
 window.viewExistingContract = async () => {
     if (!window.canGenerateContracts()) {
         if (window.showToast) window.showToast('إصدار العقود متاح لمدير التشغيل (أ/ محمود) فقط', false);
-        return false;
-    }
-
-    const activeTask = currentContractTask();
-    if (activeTask && activeTask.isBlankTemplate) {
-        if (window.showToast) window.showToast('القالب الفارغ يُصدر من جديد في كل مرة', false);
         return false;
     }
 
