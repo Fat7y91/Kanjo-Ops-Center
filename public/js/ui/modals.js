@@ -2220,6 +2220,108 @@ window.openContractsManagerModal = () => {
 
     }
 
+    /* ─── VIP merchants (pre-contract) ───────────────────────────────────────
+       The picker's base list is signed contracts only. VIP merchants are staged
+       for a contract while still under negotiation, so they must be selectable
+       here too. Everything below reads the already-resident in-memory caches
+       (`merchantsById`, `finalizedMerchantsCache`, `tasksMemory`) — ZERO new
+       Firestore reads. */
+    const vipEntries = [];
+    /* Seeded from every signed merchant (before team/search filters) so a VIP
+       flag can never duplicate an existing contract row. */
+    const signedBaseNames = new Set(Array.from(uniqueMap.values())
+        .map(t => (window.getBaseName ? window.getBaseName(t.name) : t.name)));
+    const seenVipNames = new Set(signedBaseNames);
+
+    /* Drop VIP registrations from the previous render so a merchant whose VIP
+       flag was cleared can never be resolved from a stale synthetic entry. */
+    if (window._contractSyntheticTasks && typeof window._contractSyntheticTasks.forEach === 'function') {
+        const staleIds = [];
+        window._contractSyntheticTasks.forEach((entry, id) => {
+            if (entry && entry.isVipEntry === true) staleIds.push(id);
+        });
+        staleIds.forEach((id) => window._contractSyntheticTasks.delete(id));
+    }
+
+    (typeof window.listDirectoryMerchants === 'function' ? window.listDirectoryMerchants() : []).forEach((m) => {
+        if (!m || m.vipPreContract !== true) return;
+        const baseName = String(m.merchantName || '').trim();
+        if (!baseName || seenVipNames.has(baseName)) return;
+        seenVipNames.add(baseName);
+        vipEntries.push({
+            id: `vip-${m.merchantId || baseName}`,
+            taskId: null,
+            merchantId: m.merchantId || '',
+            name: baseName,
+            cat: m.category || '',
+            team: m.team || '',
+            achieved: 0,
+            isSigned: false,
+            vipPreContract: true,
+            isVipEntry: true,
+            isSyntheticContract: true
+        });
+    });
+
+    const vipTaskSources = []
+        .concat(Array.isArray(window.finalizedMerchantsCache) ? window.finalizedMerchantsCache : [])
+        .concat(Array.isArray(window.allTasksCache) ? window.allTasksCache : [])
+        .concat(window.tasksMemory && typeof window.tasksMemory.values === 'function' ? Array.from(window.tasksMemory.values()) : []);
+
+    vipTaskSources.forEach((t) => {
+        if (!t || t.vipPreContract !== true) return;
+        const baseName = window.getBaseName ? window.getBaseName(t.name) : String(t.name || '');
+        if (!baseName || seenVipNames.has(baseName)) return;
+        seenVipNames.add(baseName);
+        const merchantId = String(
+            t.merchantId
+            || t.merchant_id
+            || (window.findMerchantIdForBase ? window.findMerchantIdForBase(baseName) : '')
+            || ''
+        ).trim();
+        const rec = merchantId && window.merchantsById ? window.merchantsById.get(merchantId) : null;
+        const recCat = rec && String(rec.cat || rec.category || '').trim();
+        const taskCat = (t.cat && t.cat !== 'متابعة' && t.cat !== 'متابعه') ? t.cat : '';
+        vipEntries.push({
+            id: `vip-${merchantId || baseName}`,
+            taskId: null,
+            merchantId,
+            name: baseName,
+            cat: recCat || taskCat || '',
+            team: t.team || (rec && rec.team) || '',
+            achieved: 0,
+            isSigned: false,
+            vipPreContract: true,
+            isVipEntry: true,
+            isSyntheticContract: true
+        });
+    });
+
+    if (teamFilter !== 'all') {
+        /* VIP entries without a team stay visible: they are still selectable. */
+        const filteredVip = vipEntries.filter((v) => {
+            const team = v.team === 'A' ? 'Fox Team' : (v.team === 'B' ? 'Power Team' : v.team);
+            return !team || team === teamFilter;
+        });
+        vipEntries.length = 0;
+        vipEntries.push(...filteredVip);
+    }
+
+    if (searchQuery) {
+        const filteredVip = vipEntries.filter((v) => {
+            const haystack = [v.name, String(v.cat || ''), 'vip', 'تحت التعاقد'].join(' ').toLowerCase();
+            return haystack.includes(searchQuery);
+        });
+        vipEntries.length = 0;
+        vipEntries.push(...filteredVip);
+    }
+
+    if (typeof window.registerSyntheticContractTask === 'function') {
+        vipEntries.forEach((entry) => window.registerSyntheticContractTask(entry));
+    }
+
+    uniqueTasks = uniqueTasks.concat(vipEntries);
+
     uniqueTasks = uniqueTasks.sort((a, b) => {
 
         const na = window.getBaseName ? window.getBaseName(a.name) : a.name;
@@ -2230,6 +2332,18 @@ window.openContractsManagerModal = () => {
 
     });
 
+    /* ─── Master blank template ──────────────────────────────────────────────
+       Always available (independent of filters): a nameless contract that ticks
+       every conditional branch so it can be printed and filled in on site. */
+    const blankTemplateTask = typeof window.buildBlankContractTemplateTask === 'function'
+        ? window.buildBlankContractTemplateTask()
+        : null;
+    if (blankTemplateTask) {
+        if (typeof window.registerSyntheticContractTask === 'function') window.registerSyntheticContractTask(blankTemplateTask);
+        /* Pinned to the top: this is a hardcoded, always-available option. */
+        uniqueTasks = [blankTemplateTask].concat(uniqueTasks);
+    }
+
     const statsEl = document.getElementById('contractsManagerStats');
 
     if (statsEl) {
@@ -2238,7 +2352,9 @@ window.openContractsManagerModal = () => {
             ? window.buildUniqueSignedMerchantsFrom(allTasks)
             : (window.buildUniqueSignedMerchants ? window.buildUniqueSignedMerchants() : []);
 
-        const filteredUnique = uniqueTasks.length;
+        /* VIP rows and the blank template are not issued contracts, so they must
+           not inflate the "contracts for this team" counter. */
+        const filteredUnique = uniqueTasks.filter(t => !t.isVipEntry && !t.isBlankTemplate && !t.isSyntheticContract).length;
 
         /* The range is anchored to the frozen baseline (#1001 → #1093) and
            extended by any post-baseline merchants, never recomputed from a
@@ -2290,8 +2406,12 @@ window.openContractsManagerModal = () => {
 
     } else {
 
-        /* Only the designated issuer (Mahmoud) gets the per-row action. */
-        const canIssueContract = !contractsPending && (window.canGenerateContracts ? window.canGenerateContracts() : false);
+        /* Only the designated issuer (Mahmoud) gets the per-row action. Real
+           contract rows still wait for the archive so the printed data is
+           complete; synthetic targets (VIP + blank template) already resolve
+           from memory, so they can be issued immediately. */
+        const canIssueAny = window.canGenerateContracts ? window.canGenerateContracts() : false;
+        const canIssueContract = !contractsPending && canIssueAny;
 
         const pendingHint = contractsPending
             ? '<div class="text-xs text-slate-400 font-bold mb-2"><i class="fa-solid fa-spinner fa-spin ml-1"></i>جارٍ تحديث القائمة…</div>'
@@ -2301,29 +2421,55 @@ window.openContractsManagerModal = () => {
 
             const achieved = Number(t.achieved) || 0;
 
-            const serial = window.getContractSerialNumber ? window.getContractSerialNumber(t, allTasks) : '';
+            const isBlankTemplate = t.isBlankTemplate === true;
+
+            const isVipEntry = t.isVipEntry === true;
+
+            const serial = (isBlankTemplate || isVipEntry || t.isSyntheticContract)
+                ? '—'
+                : (window.getContractSerialNumber ? window.getContractSerialNumber(t, allTasks) : '');
 
             const team = t.team === 'A' ? 'Fox Team' : (t.team === 'B' ? 'Power Team' : t.team);
+
+            const badge = isBlankTemplate
+                ? '<span class="text-[10px] font-black text-violet-700 bg-violet-100 border border-violet-200 rounded-full px-2 py-0.5">قالب فارغ</span>'
+                : (isVipEntry ? '<span class="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2 py-0.5">تحت التعاقد (VIP)</span>' : '');
+
+            const subtitle = isBlankTemplate
+                ? 'يشمل جميع البنود والملاحق الاختيارية (أغذية، طبية، سوبر ماركت)'
+                : window.safeString(t.cat) || 'غير محدد';
+
+            const rateChip = isBlankTemplate
+                ? '<span class="text-slate-400 font-bold"><i class="fa-solid fa-percent ml-1"></i>يُستكمل يدويًا</span>'
+                : `<span class="text-amber-500 font-bold"><i class="fa-solid fa-percent ml-1"></i>${achieved > 0 ? `${achieved}%` : '—'}</span>`;
+
+            const nameHtml = (isBlankTemplate || isVipEntry)
+                ? `<span class="font-semibold text-purple-800">${window.safeString(t.name)}</span>`
+                : window.renderMerchantNameLink(t.name);
+
+            /* Synthetic ids may be derived from a merchant name, so they must be
+               escaped before being inlined into the onclick attribute. */
+            const previewTarget = String(t.taskId || t.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
             return `<div class="flex justify-between items-center p-4 rounded-2xl border border-purple-100 bg-kanjo-light hover:bg-purple-100 transition-colors">
 
                 <div>
 
-                    <div class="font-bold text-sm text-kanjo-dark"><span class="contract-serial-chip">#${serial}</span> ${window.renderMerchantNameLink(t.name)}</div>
+                    <div class="font-bold text-sm text-kanjo-dark">${(isBlankTemplate || isVipEntry) ? '' : `<span class="contract-serial-chip">#${serial}</span> `}${nameHtml} ${badge}</div>
 
                     <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-2">
 
                         <span><i class="fa-solid fa-people-group ml-1 text-kanjo-primary"></i>${window.safeString(team) || 'غير محدد'}</span>
 
-                        <span><i class="fa-solid fa-tag ml-1 text-kanjo-primary"></i>${window.safeString(t.cat) || 'غير محدد'}</span>
+                        <span><i class="fa-solid fa-tag ml-1 text-kanjo-primary"></i>${subtitle}</span>
 
-                        <span class="text-amber-500 font-bold"><i class="fa-solid fa-percent ml-1"></i>${achieved}%</span>
+                        ${rateChip}
 
                     </div>
 
                 </div>
 
-                ${canIssueContract ? `<button onclick="openContractPreview('${t.taskId || t.id}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>` : ''}
+                ${(canIssueContract || (canIssueAny && (isBlankTemplate || isVipEntry || t.isSyntheticContract))) ? `<button onclick="openContractPreview('${previewTarget}')" class="bg-kanjo-primary text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-violet-800 transition shadow-sm whitespace-nowrap"><i class="fa-solid fa-file-contract ml-1"></i>إنشاء عقد</button>` : ''}
 
             </div>`;
 
@@ -2407,7 +2553,11 @@ window.openContractPreview = (taskId) => {
 
     }
 
-    const task = (window.allTasksCache || []).find(t => t.id === taskId);
+    const task = window.resolveContractTaskById
+        ? window.resolveContractTaskById(taskId)
+        : ((window.allTasksCache || []).find(t => t.id === taskId));
+
+    const isSyntheticTask = !!(task && (task.isSyntheticContract === true || task.isBlankTemplate === true || task.isVipEntry === true));
 
     const modal = document.getElementById('contractPreviewModal');
 
@@ -2416,7 +2566,7 @@ window.openContractPreview = (taskId) => {
     /* A fresh open gets a fresh "untouched" state for the archive repaint. */
     window._contractFormTouched = false;
 
-    if (window.kanjoAuditLogView && task) {
+    if (window.kanjoAuditLogView && task && !isSyntheticTask) {
         const baseN = getBaseName(task.name);
         window.kanjoAuditLogView({
             entityKind: 'contract',
@@ -2535,7 +2685,8 @@ window.openContractPreview = (taskId) => {
        renders without the merchant logo. Wait once (idempotent, shared read),
        then repaint with the real task + logo if the modal is still open for the
        same merchant. */
-    const archiveCanLoad = typeof window.canLoadTaskArchive !== 'function' || window.canLoadTaskArchive();
+    const archiveCanLoad = !isSyntheticTask
+        && (typeof window.canLoadTaskArchive !== 'function' || window.canLoadTaskArchive());
 
     const needsArchive = archiveCanLoad
         && typeof window.ensureTaskArchiveLoaded === 'function'

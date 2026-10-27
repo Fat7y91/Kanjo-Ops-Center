@@ -31,6 +31,57 @@ window.resolveContractMerchantId = (task) => {
     ).trim();
 };
 
+/* ─── Synthetic contract targets (VIP merchants + master blank template) ────
+ * Both are rendered from memory only: VIP merchants come from the already
+ * resident merchant directory / task caches, and the blank template is a
+ * hardcoded sentinel. Registering them here lets the existing Contracts Manager
+ * open and issue them without adding any Firestore read. */
+window.CONTRACT_BLANK_TEMPLATE_ID = 'contract-blank-template';
+/* A single dummy category that trips every conditional clause branch:
+   medical (مستلزمات طبية), food (مطاعم) and the supermarket annex. */
+window.CONTRACT_BLANK_TEMPLATE_CATEGORY = 'مستلزمات طبية مطاعم سوبر ماركت';
+
+window.buildBlankContractTemplateTask = () => ({
+    id: window.CONTRACT_BLANK_TEMPLATE_ID,
+    merchantId: 'TEMPLATE-BLANK',
+    name: 'عقد عام فارغ (Template)',
+    cat: window.CONTRACT_BLANK_TEMPLATE_CATEGORY,
+    isBlankTemplate: true,
+    isSyntheticContract: true,
+    isSigned: false,
+    achieved: 0,
+    vipPreContract: false
+});
+
+window._contractSyntheticTasks = window._contractSyntheticTasks || new Map();
+
+window.registerSyntheticContractTask = (task) => {
+    if (!task || !task.id) return null;
+    window._contractSyntheticTasks.set(String(task.id), task);
+    return task;
+};
+
+window.resolveContractTaskById = (taskId) => {
+    const id = String(taskId || '').trim();
+    if (!id) return null;
+    const cached = window._contractSyntheticTasks ? window._contractSyntheticTasks.get(id) : null;
+    if (cached) return cached;
+    return (window.allTasksCache || []).find(t => t && t.id === id) || null;
+};
+
+/* A VIP merchant is still under negotiation, so its pre-contract PDF must never
+ * overwrite (or be shadowed by) a stored final contract for the same merchant.
+ * Scoping the storage id keeps both documents independent. */
+window.resolveContractStorageId = (task) => {
+    const base = window.resolveContractMerchantId(task);
+    if (!base) return '';
+    if (task && task.isBlankTemplate === true) return base;
+    /* Only an unsigned VIP draft is scoped; a merchant that later signs keeps
+       the canonical storage path so its final contract is not orphaned. */
+    if (task && task.vipPreContract === true && task.isSigned !== true) return `VIP-${base}`;
+    return base;
+};
+
 window.buildContractCallablePayload = (task) => {
     if (!task) return null;
 
@@ -39,7 +90,10 @@ window.buildContractCallablePayload = (task) => {
         ? window.getMerchantBusinessInfo(task)
         : { baseName, cat: task.cat || 'غير محدد', businessType: 'منشأة', achieved: Number(task.achieved) || 0 };
 
-    const merchantId = window.resolveContractMerchantId(task);
+    const merchantId = window.resolveContractStorageId(task);
+    /* Record lookups use the REAL merchant id; `merchantId` above may be a
+       storage-scoped variant (VIP-…). */
+    const recordMerchantId = window.resolveContractMerchantId(task);
 
     const toggleEl = contractEl('cpExceptionToggle');
     const exceptionsEnabled = toggleEl ? toggleEl.checked : false;
@@ -71,17 +125,20 @@ window.buildContractCallablePayload = (task) => {
        The day-scoped task cache alone is not a reliable source: legacy merchants
        often have no task in the current window. */
     const taskSiblingLogo = typeof window.catalogMerchantLogoUrl === 'function'
-        ? (window.catalogMerchantLogoUrl(baseName || task.name, merchantId) || '')
+        ? (window.catalogMerchantLogoUrl(baseName || task.name, recordMerchantId) || '')
         : '';
-    const merchantRec = (merchantId && window.merchantsById && typeof window.merchantsById.get === 'function')
-        ? window.merchantsById.get(merchantId)
+    const merchantRec = (recordMerchantId && window.merchantsById && typeof window.merchantsById.get === 'function')
+        ? window.merchantsById.get(recordMerchantId)
         : null;
     const storedMerchantLogo = (merchantRec && (merchantRec.merchantLogo || merchantRec.logoUrl || merchantRec.logo)) || '';
     const merchantLogo = window.currentMerchantLogoBase64 || taskSiblingLogo || storedMerchantLogo || '';
 
     return {
         merchantId,
-        merchantName: baseName || task.name,
+        isBlankTemplate: task.isBlankTemplate === true,
+        /* The master template is intentionally nameless; everything is filled in
+           by hand on site. */
+        merchantName: task.isBlankTemplate === true ? '' : (baseName || task.name),
         category: info.cat,
         businessType: info.businessType,
         titleBusinessType: window.contractBusinessTypeOverride || '',
@@ -90,8 +147,8 @@ window.buildContractCallablePayload = (task) => {
         commission: { baseCommission, exceptions },
         contactName,
         contactRole,
-        contactPhone,
-        address: task.address || '',
+        contactPhone: contactPhone || (merchantRec && (merchantRec.phone || (merchantRec.contact && merchantRec.contact.phone))) || '',
+        address: task.address || (merchantRec && merchantRec.address) || '',
         merchantLogo
     };
 };
@@ -227,7 +284,7 @@ const callGetMerchantContract = async (merchantId) => {
 const currentContractTask = () => {
     const taskIdEl = contractEl('cpTaskId');
     const taskId = taskIdEl ? taskIdEl.value : '';
-    return (window.allTasksCache || []).find(t => t.id === taskId) || null;
+    return window.resolveContractTaskById ? window.resolveContractTaskById(taskId) : ((window.allTasksCache || []).find(t => t.id === taskId) || null);
 };
 
 /* ─── Public actions ─────────────────────────────────────────────────────── */
@@ -239,7 +296,14 @@ window.refreshContractAvailability = async () => {
     if (!window.canGenerateContracts()) return;
 
     const task = currentContractTask();
-    const merchantId = window.resolveContractMerchantId(task);
+    /* The master blank template must always start from a clean sheet, so it
+       never offers a previously stored PDF. */
+    if (task && task.isBlankTemplate) {
+        window.contractAvailability = { exists: false };
+        window.applyContractAvailability(window.contractAvailability);
+        return;
+    }
+    const merchantId = window.resolveContractStorageId(task);
     if (!task || !merchantId) {
         showContractBanner('none');
         return;
@@ -265,6 +329,12 @@ window.viewExistingContract = async () => {
         return false;
     }
 
+    const activeTask = currentContractTask();
+    if (activeTask && activeTask.isBlankTemplate) {
+        if (window.showToast) window.showToast('القالب الفارغ يُصدر من جديد في كل مرة', false);
+        return false;
+    }
+
     const cached = window.contractAvailability;
     if (cached && cached.exists && cached.url) {
         openServerContractPdf(cached.url);
@@ -272,7 +342,7 @@ window.viewExistingContract = async () => {
     }
 
     const task = currentContractTask();
-    const merchantId = window.resolveContractMerchantId(task);
+    const merchantId = window.resolveContractStorageId(task);
     if (!merchantId) {
         if (window.showToast) window.showToast('تعذر تحديد معرّف التاجر', false);
         return false;

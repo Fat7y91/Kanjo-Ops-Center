@@ -177,8 +177,14 @@ const isRestaurantCafeCategoryExact = (cat) => {
     return c === 'مطاعم وكافيهات' || c.endsWith('مطاعم وكافيهات');
 };
 
-const isMedicalCategory = (cat) => ['صيدليات', 'كوزماتكس', 'عناية شخصية']
+const isMedicalCategory = (cat) => ['صيدليات', 'كوزماتكس', 'عناية شخصية', 'مستلزمات طبية']
     .some((k) => String(cat || '').includes(k));
+
+/* Wide ruled blank used wherever a merchant-supplied value is missing (VIP
+   pre-contract merchants, the master blank template, incomplete records). It is
+   deliberately long so there is physical room to handwrite the value on site. */
+const CONTRACT_WIDE_BLANK = '............................................................';
+const CONTRACT_SHORT_BLANK = '......................';
 
 const isSupermarketCategory = (cat) => {
     const raw = String(cat || '').trim();
@@ -254,11 +260,14 @@ const SOCIAL_ICONS = {
 function normalizeContractInput(raw) {
     const data = raw && typeof raw === 'object' ? raw : {};
     const merchantId = String(data.merchantId || data.merchant_id || '').trim();
+    const isBlankTemplate = data.isBlankTemplate === true || data.blankTemplate === true;
     const rawName = String(data.merchantName || data.name || '').trim();
     if (!merchantId) throw new Error('merchantId مطلوب لإصدار العقد');
-    if (!rawName) throw new Error('merchantName مطلوب لإصدار العقد');
+    /* The master blank template is intentionally nameless: every merchant field
+       is left to be handwritten on site. */
+    if (!rawName && !isBlankTemplate) throw new Error('merchantName مطلوب لإصدار العقد');
 
-    const baseName = getBaseName(rawName) || rawName;
+    const baseName = rawName ? (getBaseName(rawName) || rawName) : '';
     const merchantName = sanitizeLegalText(baseName) || baseName;
 
     const category = sanitizeLegalText(String(data.category || data.cat || '').trim()) || String(data.category || data.cat || '').trim();
@@ -281,9 +290,15 @@ function normalizeContractInput(raw) {
     let contactName = String(data.contactName || '').trim();
     if (contactName) contactName = sanitizeLegalText(contactName) || contactName;
 
+    /* The master template prints every money/commission field as a ruled blank,
+       so any values that happened to be in the form are intentionally dropped. */
+    const finalBaseCommission = isBlankTemplate ? null : baseCommission;
+    const finalExceptions = isBlankTemplate ? [] : exceptions;
+
     return {
         merchantId,
         merchantName,
+        blankTemplate: isBlankTemplate,
         category: category || 'غير محدد',
         businessType,
         titleBusinessType: String(data.titleBusinessType || '').trim() || businessType,
@@ -294,17 +309,17 @@ function normalizeContractInput(raw) {
         address: String(data.address || '').trim(),
         merchantLogo: String(data.merchantLogo || data.merchantLogoBase64 || '').trim(),
         vipPreContract: data.vipPreContract === true,
-        baseCommission,
-        exceptions
+        baseCommission: finalBaseCommission,
+        exceptions: finalExceptions
     };
 }
 
 /* ----------------------------------------------------------------------------
  * Document builder — mirrors window.buildContractHTML exactly.
  * ------------------------------------------------------------------------- */
-function buildCoverPage({ merchantName, merchantLogo, logoDataUri }) {
+function buildCoverPage({ merchantName, merchantLogo, logoDataUri, blankTemplate }) {
     const safeName = escapeHtml(merchantName);
-    const initial = escapeHtml(Array.from(String(merchantName || '').trim())[0] || 'ك');
+    const initial = escapeHtml(blankTemplate ? '؟' : (Array.from(String(merchantName || '').trim())[0] || 'ك'));
     const safeLogo = merchantLogo ? escapeHtml(merchantLogo) : '';
 
     const partnerCardStyle = 'width: 54mm; height: 54mm; border-radius: 20px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 16px 42px rgba(75, 0, 130, 0.13); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 6mm; box-sizing: border-box;';
@@ -356,12 +371,20 @@ function buildContractHtml(input) {
     const assets = getAssets();
     const logoDataUri = assets.logoDataUri;
 
-    const merchantName = input.merchantName;
+    const blankTemplate = input.blankTemplate === true;
+    const merchantName = blankTemplate ? '' : String(input.merchantName || '');
+    const nameDisplay = merchantName || CONTRACT_WIDE_BLANK;
     const businessType = input.businessType;
     const resolvedCat = input.category;
+    const categoryDisplay = (blankTemplate || !resolvedCat || resolvedCat === 'غير محدد') ? CONTRACT_WIDE_BLANK : resolvedCat;
     const isRestCafe = isRestaurantCafeCategoryExact(resolvedCat);
     const isSupermarket = isSupermarketCategory(resolvedCat);
-    const titleBusinessType = (isRestCafe && input.titleBusinessType) ? input.titleBusinessType : businessType;
+    const titleBusinessType = blankTemplate
+        ? ''
+        : ((isRestCafe && input.titleBusinessType) ? input.titleBusinessType : businessType);
+    const contractHeading = blankTemplate
+        ? `عقد انضمام ${CONTRACT_SHORT_BLANK}`
+        : `عقد انضمام ${titleBusinessType} ${merchantName}`;
 
     const merchantNameKey = String(merchantName || '').replace(/\s+/g, ' ').trim();
     const financialSpecialException = merchantNameKey.includes(FINANCIAL_EXCEPTION_MERCHANT)
@@ -379,10 +402,14 @@ function buildContractHtml(input) {
     const exceptions = input.exceptions || [];
     const vipPreContract = input.vipPreContract === true;
     const displayRate = (baseCommission !== null) ? baseCommission : achieved;
+    /* Blank/zero commission is never printed as "0%" — it becomes a wide ruled
+       line so the figure can be filled in by hand. */
+    const achievedMeter = (!blankTemplate && Number(achieved) > 0) ? `${toArabicNumerals(achieved)}%` : CONTRACT_WIDE_BLANK;
+    const displayRateMeter = (!blankTemplate && Number(displayRate) > 0) ? `${toArabicNumerals(displayRate)}%` : CONTRACT_WIDE_BLANK;
 
-    const contactName = input.contactName;
-    const address = input.address || '........................';
-    const phone = input.contactPhone || '........................';
+    const contactName = String(input.contactName || '').trim();
+    const address = String(input.address || '').trim();
+    const phone = String(input.contactPhone || '').trim();
     const merchantLogo = input.merchantLogo;
 
     const headerHtml = merchantLogo
@@ -417,7 +444,7 @@ function buildContractHtml(input) {
         },
         {
             title: 'رسوم تقديم الخدمات والتشغيل',
-            body: `تحصل كانچو مقابل خدمات المنصة والتشغيل على نسبة <strong>[ ${toArabicNumerals(achieved)}% ]</strong> من كل طلب أو عملية بيع أو توريد أو خدمة تتم أو تبدأ من خلال المنصة، ويجوز تحديد نسب مختلفة بحسب النشاط أو فئة المنتج أو المدينة أو حجم المبيعات وفق ملحق العمولات المعتمد. وتُعرض هذه النسبة بوضوح في كشف الحساب الدوري قبل التسوية، ولا تُخصم أي رسوم خفية من مستحقات الطرف الثاني. وأي طلب يبدأ من كانچو ثم ينفذ خارجها يستحق عنه كامل رسوم كانچو، ولا يجوز للطرف الثاني الالتفاف على المنصة بتقسيم الطلبات أو تغيير التصنيف أو الإلغاء بقصد التعامل الخارجي.`
+            body: `تحصل كانچو مقابل خدمات المنصة والتشغيل على نسبة <strong>[ ${achievedMeter} ]</strong> من كل طلب أو عملية بيع أو توريد أو خدمة تتم أو تبدأ من خلال المنصة، ويجوز تحديد نسب مختلفة بحسب النشاط أو فئة المنتج أو المدينة أو حجم المبيعات وفق ملحق العمولات المعتمد. وتُعرض هذه النسبة بوضوح في كشف الحساب الدوري قبل التسوية، ولا تُخصم أي رسوم خفية من مستحقات الطرف الثاني. وأي طلب يبدأ من كانچو ثم ينفذ خارجها يستحق عنه كامل رسوم كانچو، ولا يجوز للطرف الثاني الالتفاف على المنصة بتقسيم الطلبات أو تغيير التصنيف أو الإلغاء بقصد التعامل الخارجي.`
         },
         {
             title: 'الأسعار والخصومات والعروض',
@@ -509,12 +536,12 @@ function buildContractHtml(input) {
                 ${hasMerchantLogo ? `
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4B0082; padding-bottom: 10px; margin-top: 10px; margin-bottom: 15px;">
                     <div style="width: 100px; text-align: right;"><img src="${logoDataUri}" style="max-height: 65px; object-fit: contain;"></div>
-                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center;">عقد انضمام ${titleBusinessType} ${merchantName}</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center;">${contractHeading}</div>
                     <div style="width: 100px; text-align: left;"><img src="${merchantLogo}" style="max-height: 65px; max-width: 90px; object-fit: contain;"></div>
                 </div>` : `
                 <div style="border-bottom: 2px solid #4B0082; padding-bottom: 10px; margin-top: 10px; margin-bottom: 15px;">
                     <div style="display: flex; justify-content: center; align-items: center;"><img src="${logoDataUri}" style="max-height: 65px; object-fit: contain;"></div>
-                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center; margin-top: 10px;">عقد انضمام ${titleBusinessType} ${merchantName}</div>
+                    <div style="font-size: 24px; font-weight: 900; color: #4B0082; text-align: center; margin-top: 10px;">${contractHeading}</div>
                 </div>`}
             </th></tr>
         </thead>
@@ -525,7 +552,7 @@ function buildContractHtml(input) {
             <tr><td style="padding: 0;">
                 <div style="border-top: 2px solid #E2E8F0; margin-top: 15px; padding-top: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: #4B0082;">
                     <span>توقيع الطرف الأول (كانچو): ..............................</span>
-                    <span>توقيع الطرف الثاني (${merchantName}): ..............................</span>
+                    <span>توقيع الطرف الثاني (${nameDisplay}): ..............................</span>
                 </div>
             </td></tr>
         </tfoot>
@@ -558,7 +585,6 @@ function buildContractHtml(input) {
 
     const nationalIdBoxes = '<span style="display: inline-block; white-space: nowrap; direction: ltr; unicode-bidi: isolate;" dir="ltr">' + Array.from({ length: 14 }).map(() => '<span style="display: inline-block; width: 20px; height: 28px; border: 1.5px solid #4B0082; border-radius: 4px; margin: 0 1px; vertical-align: middle; background: #fff;"></span>').join('') + '</span>';
 
-    const fillBlank = '....................................';
 
     const firstPartyBlockHtml = `
                 <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #4B0082; padding: 12px; border-radius: 8px; margin-bottom: 18px; font-size: 14px; line-height: 1.8; font-weight: bold;">
@@ -571,21 +597,21 @@ function buildContractHtml(input) {
 
     const secondPartyBlockHtml = `
                 <div class="contract-parties" style="background-color: #F8F9FA; border: 1px solid #E2E8F0; border-right: 4px solid #F59E0B; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; line-height: 1.8; font-weight: bold;">
-                    <strong>الطرف الثاني:</strong> ${titleBusinessType}: ${merchantName}
+                    <strong>الطرف الثاني:</strong>${blankTemplate ? '' : ` ${titleBusinessType}:`} ${nameDisplay}
                     <table style="width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px;">
-                        <tr><td style="padding: 5px 0; width: 42%; vertical-align: top;">اسم المنشأة / المحل:</td><td style="padding: 5px 0;">${merchantName}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">اسم المفوض / صاحب النشاط:</td><td style="padding: 5px 0;">${safeString(contactName) || fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; width: 42%; vertical-align: top;">اسم المنشأة / المحل:</td><td style="padding: 5px 0;">${nameDisplay}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">اسم المفوض / صاحب النشاط:</td><td style="padding: 5px 0;">${safeString(contactName) || CONTRACT_WIDE_BLANK}</td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">بطاقة الرقم القومي (١٤ رقمًا):</td><td style="padding: 5px 0;">${nationalIdBoxes}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي:</td><td style="padding: 5px 0;">${fillBlank}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم السجل التجاري:</td><td style="padding: 5px 0;">${CONTRACT_WIDE_BLANK}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">رقم التسجيل الضريبي:</td><td style="padding: 5px 0;">${CONTRACT_WIDE_BLANK}</td></tr>
                         <tr><td colspan="2" style="padding: 5px 0; vertical-align: top;">
                             <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 18px;">
-                                <span>رقم الهاتف / واتساب: <span dir="ltr">${safeString(phone)}</span></span>
+                                <span>رقم الهاتف / واتساب: <span dir="ltr">${safeString(phone) || CONTRACT_WIDE_BLANK}</span></span>
                                 <span>رقم إضافي (إن وجد): ........................................</span>
                             </div>
                         </td></tr>
                         <tr><td style="padding: 5px 0; vertical-align: top;">البريد الإلكتروني:</td><td style="padding: 5px 0;">..................................................</td></tr>
-                        <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${safeString(address)}</td></tr>
+                        <tr><td style="padding: 5px 0; vertical-align: top;">العنوان:</td><td style="padding: 5px 0;">${safeString(address) || CONTRACT_WIDE_BLANK}</td></tr>
                     </table>
                 </div>`;
 
@@ -611,7 +637,7 @@ function buildContractHtml(input) {
                 <!-- Final Signatures Block -->
                 <div style="page-break-inside: avoid; break-inside: avoid; margin-top: 20px;">
                     <div class="contract-clause-title" style="font-size: 16px; font-weight: bold; color: #4B0082; background-color: #F5F3FF; padding: 8px 12px; border-right: 4px solid #F59E0B; margin-bottom: 10px;">ملحق مختصر: البيانات والتوقيعات النهائية</div>
-                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${safeString(resolvedCat)} | نسبة مقابل خدمات المنصة: <strong>[ ${toArabicNumerals(displayRate)}% ]</strong></div>
+                    <div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">الفئة التجارية: ${safeString(categoryDisplay)} | نسبة مقابل خدمات المنصة: <strong>[ ${displayRateMeter} ]</strong></div>
                     ${vipPreContract ? `<div class="contract-text" style="font-size: 13px; margin-bottom: 15px; font-weight: bold; color: #92400e; background-color: #fffbeb; border: 1px solid #fcd34d; border-right: 4px solid #F59E0B; border-radius: 6px; padding: 10px 12px;">حالة التعاقد: عرض مبدئي / تحت التعاقد (VIP) — هذا المستند عرض مبدئي غير نهائي ولا يترتب عليه أي التزام تعاقدي أو عمولة.</div>` : ''}
                     ${exceptions.length ? `<div class="contract-text" style="font-size: 14px; margin-bottom: 15px; font-weight: bold; color: #1e293b;">استثناءات النسب: ${exceptions.map((ex) => `${safeString(ex.category)}: [ ${toArabicNumerals(ex.rate)}% ]`).join(' — ')}</div>` : ''}
                     <div class="contract-signatures" style="display: flex; align-items: stretch; gap: 12px; width: 100%; margin-bottom: 15px; font-size: 14px; line-height: 1.8; font-weight: bold;">
@@ -626,8 +652,8 @@ function buildContractHtml(input) {
                             </div>
                         </div>
                         <div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; border: 1px solid #E2E8F0; border-radius: 8px; padding: 15px; background: #fff;">
-                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${merchantName}</div>
-                            <div>الاسم: ${safeString(contactName) || '....................'}</div>
+                            <div style="color: #4B0082; margin-bottom: 10px; font-weight: bold;">الطرف الثاني: ${nameDisplay}</div>
+                            <div>الاسم: ${safeString(contactName) || CONTRACT_WIDE_BLANK}</div>
                             <div>الصفة: صاحب النشاط</div>
                             <div style="margin-top: auto; padding-top: 18px;">
                                 <div style="font-weight: bold;">توقيع صاحب النشاط: ..............................</div>
@@ -648,11 +674,11 @@ function buildContractHtml(input) {
         </tbody>
     `;
 
-    const coverPage = buildCoverPage({ merchantName, merchantLogo, logoDataUri });
+    const coverPage = buildCoverPage({ merchantName: blankTemplate ? CONTRACT_SHORT_BLANK : nameDisplay, merchantLogo, logoDataUri, blankTemplate });
     const body = coverPage + printBorderAndWatermark + '<table style="width: 100%; border-collapse: collapse;">' + tableHeader + tableBody + tableFooter + '</table>';
 
-    const title = `عقد انضمام ${titleBusinessType} ${merchantName}`;
-    return buildDocument({ title, body, fontFaces: assets.fontFaces, businessType: titleBusinessType, merchantName });
+    const title = contractHeading;
+    return buildDocument({ title, body, fontFaces: assets.fontFaces, businessType: titleBusinessType, merchantName: nameDisplay });
 }
 
 /* Category used for the food/medical conditional clauses. */
