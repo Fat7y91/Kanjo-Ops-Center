@@ -12,7 +12,7 @@ import { categories } from './config/constants.js?v=20261014d';
 import './utils/helpers.js?v=20261015a';
 import './utils/exportWorker.js';
 import './services/aggregates.js';
-import './utils/export.js?v=20261027a';
+import './utils/export.js?v=20261027b';
 import './services/contractProjection.js?v=20261018a';
 import './services/contracts.js?v=20261027a';
 import './services/geolocation.js';

@@ -562,6 +562,9 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 
     @page :first {
         margin: 0 !important;
+        /* The cover is not part of the numbered document: reset the page
+           counter so the first terms page reads "صفحة ١". */
+        counter-reset: page 0;
 
         @bottom-center {
             content: none;

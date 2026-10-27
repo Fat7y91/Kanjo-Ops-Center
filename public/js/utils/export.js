@@ -2046,15 +2046,35 @@ window.buildContractHTML = (task) => {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-    const coverMerchantName = coverEscape(blankTemplate ? CONTRACT_SHORT_BLANK : nameDisplay);
-    const coverMerchantInitial = coverEscape(blankTemplate ? '؟' : (Array.from(String(merchantName || '').trim())[0] || 'ك'));
+    const coverMerchantName = coverEscape(nameDisplay);
+    const coverMerchantInitial = coverEscape(Array.from(String(merchantName || '').trim())[0] || 'ك');
     const coverMerchantLogo = window.currentMerchantLogoBase64 ? coverEscape(window.currentMerchantLogoBase64) : '';
     const coverPartnerCardStyle = 'width: 54mm; height: 54mm; border-radius: 20px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 16px 42px rgba(75, 0, 130, 0.13); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 6mm; box-sizing: border-box;';
     const coverKanjoMark = `<div style="${coverPartnerCardStyle}"><img src="logo.png" alt="Kanjo" style="max-width: 43mm; max-height: 32mm; object-fit: contain; display: block;"></div>`;
     const coverMerchantMark = coverMerchantLogo
         ? `<div style="${coverPartnerCardStyle}"><img src="${coverMerchantLogo}" alt="${coverMerchantName}" style="max-width: 40mm; max-height: 40mm; object-fit: contain; display: block;"></div>`
         : `<div style="${coverPartnerCardStyle} background: linear-gradient(145deg, #4B0082, #6B21A8); border-color: #F59E0B;"><span style="color: #ffffff; font-size: 46px; font-weight: 900; line-height: 1;">${coverMerchantInitial}</span></div>`;
-    const coverPage = `
+
+    /* The master blank template has no merchant identity at all, so the paired
+       Kanjo + merchant logo layout would print a meaningless placeholder card.
+       It gets a dedicated cover instead: a single, large, perfectly centred
+       Kanjo logo with the official slogan directly beneath it. */
+    const blankCoverBody = `
+            <div style="position: absolute; z-index: 1; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 130mm; height: 130mm; border-radius: 28px; background: #ffffff; border: 2px solid #E9D5FF; box-shadow: 0 22px 60px rgba(75, 0, 130, 0.16); display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16mm; box-sizing: border-box;">
+                <img src="logo.png" alt="Kanjo" style="max-width: 96mm; max-height: 96mm; object-fit: contain; display: block;">
+            </div>
+            <div style="position: absolute; z-index: 1; top: calc(50% + 80mm); left: 0; right: 0; text-align: center; font-size: 40px; line-height: 1.5; font-weight: 900; color: #4B0082; letter-spacing: 0.4px;">ياما في الجراب يا حاوي</div>
+            <div style="position: absolute; z-index: 1; top: calc(50% + 97mm); left: 50%; transform: translateX(-50%); width: 46mm; height: 4px; background: #F59E0B; border-radius: 999px;"></div>
+            <div style="position: absolute; z-index: 1; bottom: 0; left: 0; right: 0; padding-top: 8mm; border-top: 1px solid #E9D5FF; text-align: center; font-size: 13px; line-height: 1.7; font-weight: 700; color: #7E22CE;">وثيقة تعاقدية رسمية صادرة عن كانچو — نسخة أصلية</div>
+    `;
+
+    const coverPage = blankTemplate ? `
+        <section class="contract-cover" style="position: relative; width: 100%; min-height: 297mm; box-sizing: border-box; padding: 20mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            <div style="position: absolute; top: 0; left: 0; right: 0; height: 9px; background: linear-gradient(90deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></div>
+            <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #F59E0B 0%, #4B0082 50%, #F59E0B 100%);"></div>
+            ${blankCoverBody}
+        </section>
+    ` : `
         <section class="contract-cover" style="position: relative; width: 100%; min-height: 297mm; box-sizing: border-box; padding: 20mm; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; overflow: hidden; direction: rtl; background: linear-gradient(160deg, #ffffff 0%, #fdfbff 48%, #f5f3ff 100%); font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; color: #4B0082; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
             <div style="position: absolute; top: 0; left: 0; right: 0; height: 9px; background: linear-gradient(90deg, #4B0082 0%, #F59E0B 50%, #4B0082 100%);"></div>
             <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #F59E0B 0%, #4B0082 50%, #F59E0B 100%);"></div>
