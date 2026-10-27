@@ -3,13 +3,17 @@ import { notFound } from "next/navigation";
 import { MerchantProfileClient } from "@/components/field-ops/merchant-profile-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
-import { canAccessCity } from "@/lib/city-scope-query";
+import { effectiveCityIds } from "@/lib/city-scope-query";
 import {
   getCityById,
   getMerchantById,
+  listFollowUpTasks,
   listStateOverrides,
   listTasks,
   listVisitReports,
+  merchantCrmSummary,
+  merchantTimeline,
+  visitCountFor,
 } from "@/lib/field-ops/store";
 import { teamLabel } from "@/lib/field-ops/types";
 
@@ -25,7 +29,10 @@ export default async function MerchantProfilePage({
   const session = await requirePermission("view_merchants");
   const { id } = await params;
   const merchant = getMerchantById(id);
-  if (!merchant || !canAccessCity(session, merchant.cityId)) {
+  // Merchant profiles follow the merchant directory's scope: any city the
+  // viewer can operate in, not just cities they have the `view_cities`
+  // dashboard permission for.
+  if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {
     notFound();
   }
 
@@ -35,9 +42,9 @@ export default async function MerchantProfilePage({
   return (
     <>
       <PageHeader
-        eyebrow="ملف التاجر"
+        eyebrow="كارت التاجر"
         title={merchant.name}
-        description="السجل التجاري وحوكمة الحالات المقفلة والمستندات وسجل المراجعة لهذا التاجر."
+        description="السجل التجاري الموحّد: كل زيارة، كل رأي مندوب، بيانات التواصل الحالية، والتحليلات المجمّعة — بعيداً عن ضجيج المهام اليومية."
         actions={<span className="badge">{teamLabel(merchant.team)}</span>}
       />
       <MerchantProfileClient
@@ -46,12 +53,17 @@ export default async function MerchantProfilePage({
         reports={listVisitReports(merchant.id)}
         overrides={listStateOverrides(merchant.id)}
         tasks={listTasks().filter((task) => task.merchantId === merchant.id)}
+        followUps={listFollowUpTasks(merchant.id)}
+        timeline={merchantTimeline(merchant.id)}
+        summary={merchantCrmSummary(merchant.id)}
+        visitCount={visitCountFor(merchant.id)}
         viewerTeam={session.user.team}
         canEditMerchants={permissions.includes("edit_merchants")}
         canRequestTransfers={permissions.includes("request_transfers")}
         canManageState={permissions.includes("manage_merchant_state")}
         canViewFieldOps={permissions.includes("view_field_ops")}
         canViewFieldOpsPage={permissions.includes("view_field_ops")}
+        canStartVisit={permissions.includes("view_field_ops")}
       />
     </>
   );

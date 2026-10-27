@@ -177,6 +177,13 @@ export type Merchant = {
   createdAt: string;
   updatedAt: string;
   lastVisitAt: string | null;
+  /**
+   * CRM roll-up fields. They are derived from the visit timeline but stored on
+   * the merchant so the profile card renders without replaying every report.
+   */
+  contact?: VisitContact | null;
+  opinions?: RepOpinion[];
+  contactUpdatedAt?: string | null;
 };
 
 export type TaskStatus = "scheduled" | "completed";
@@ -210,6 +217,89 @@ export type VisitReport = {
   notes: string;
   commissionAmount: number;
   createdAt: string;
+  /**
+   * Visit Engine enrichments. All optional so historical/seed reports and
+   * manager state overrides remain valid records.
+   */
+  startedAt?: string | null;
+  endedAt?: string | null;
+  durationSeconds?: number | null;
+  startLocation?: GeoCapture | null;
+  endLocation?: GeoCapture | null;
+  contact?: VisitContact | null;
+  opinions?: RepOpinion[];
+  followUpAt?: string | null;
+  followUpTaskId?: string | null;
+  source?: VisitSource;
+  clientVisitId?: string | null;
+};
+
+/**
+ * Where a report originated. `offline` marks reports that were captured
+ * without connectivity and flushed by the sync queue on reconnect.
+ */
+export type VisitSource = "task" | "unplanned" | "offline" | "override";
+
+export type GeoCapture = {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  capturedAt: string;
+};
+
+export type VisitContact = {
+  name: string;
+  role: string;
+  mobile: string;
+};
+
+export const REP_OPINIONS = [
+  "cooperative",
+  "difficult",
+  "commission_conservative",
+  "marketing_interested",
+  "price_sensitive",
+  "expansion_ready",
+] as const;
+
+export type RepOpinion = (typeof REP_OPINIONS)[number];
+
+export const REP_OPINION_META: Record<
+  RepOpinion,
+  { label: string; tone: string }
+> = {
+  cooperative: { label: "متعاون", tone: "badge-green" },
+  difficult: { label: "صعب المراس", tone: "badge-red" },
+  commission_conservative: { label: "متحفظ على العمولة", tone: "badge-gold" },
+  marketing_interested: { label: "مهتم بالتسويق", tone: "badge-purple" },
+  price_sensitive: { label: "حساس للسعر", tone: "badge-gold" },
+  expansion_ready: { label: "جاهز للتوسع", tone: "badge-blue" },
+};
+
+/**
+ * Outcomes that represent a contract already being in motion. These are hidden
+ * for a merchant's very first visit, where no prior agreement can exist.
+ */
+export const ADVANCED_OUTCOMES: readonly ContractState[] = [
+  "final_contract",
+  "signed_contract",
+];
+
+export type FollowUpTask = {
+  id: string;
+  merchantId: string;
+  merchantName: string;
+  team: string;
+  cityId: string;
+  visitDate: string;
+  dueAt: string;
+  kind: "visit" | "call";
+  note: string;
+  status: "scheduled" | "completed";
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  sourceReportId: string | null;
 };
 
 export type TransferRequestStatus = "pending" | "approved" | "rejected";
@@ -277,4 +367,6 @@ export type MerchantSearchResult = {
   isOwnTeam: boolean;
   score: number;
   matchType: string;
+  /** Populated by the global Visit Engine search endpoint. */
+  visitCount?: number;
 };

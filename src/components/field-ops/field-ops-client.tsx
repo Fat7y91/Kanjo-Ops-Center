@@ -4,12 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateTaskModal } from "@/components/field-ops/create-task-modal";
-import { OutcomeModal } from "@/components/field-ops/outcome-modal";
+import {
+  VisitEngine,
+  type VisitEngineTarget,
+} from "@/components/field-ops/visit-engine";
 import {
   DecisionModal,
   JustificationModal,
 } from "@/components/field-ops/request-modals";
 import type { FieldOpsBoard } from "@/lib/field-ops/board";
+import { useVisitQueue } from "@/lib/field-ops/offline-queue";
 import {
   CONTRACT_STATE_META,
   CONTRACT_STATES,
@@ -98,16 +102,22 @@ export function FieldOpsClient({
   const [searching, setSearching] = useState(false);
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
-  const [outcomeTarget, setOutcomeTarget] = useState<{
-    merchant: Merchant;
-    task: FieldTask | null;
-  } | null>(null);
+  const [visitTarget, setVisitTarget] = useState<VisitEngineTarget | null>(
+    null,
+  );
+  const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
   const [transferTarget, setTransferTarget] = useState<Merchant | null>(null);
   const [editTarget, setEditTarget] = useState<Merchant | null>(null);
   const [decisionTarget, setDecisionTarget] = useState<DecisionTarget | null>(
     null,
   );
   const [toast, setToast] = useState("");
+  const {
+    pending: pendingSync,
+    online,
+    syncing,
+    flush,
+  } = useVisitQueue();
 
   const merchantMap = useMemo(
     () => new Map(board.merchants.map((merchant) => [merchant.id, merchant])),
@@ -206,6 +216,32 @@ export function FieldOpsClient({
     (request) => request.status !== "pending",
   );
 
+  async function openVisit(merchant: Merchant, task: FieldTask | null) {
+    // Fetch the authoritative visit count so the conditional outcome gate is
+    // correct even if this merchant was never on this rep's board before.
+    let count = visitCounts[merchant.id];
+    if (count === undefined) {
+      try {
+        const response = await fetch(
+          `/api/field-ops/merchants/${merchant.id}/reports`,
+          { cache: "no-store" },
+        );
+        if (response.ok) {
+          const payload = (await response.json()) as { visitCount?: number };
+          count = payload.visitCount ?? 0;
+        }
+      } catch {
+        count = 0;
+      }
+    }
+    setVisitCounts((current) => ({ ...current, [merchant.id]: count ?? 0 }));
+    setVisitTarget({
+      merchant,
+      taskId: task?.id ?? null,
+      visitCount: count ?? 0,
+    });
+  }
+
   function renderTask(task: FieldTask) {
     const merchant = merchantMap.get(task.merchantId) ?? null;
     const city = cityMap.get(task.cityId);
@@ -249,9 +285,9 @@ export function FieldOpsClient({
               <button
                 type="button"
                 className="button button-small button-primary"
-                onClick={() => setOutcomeTarget({ merchant, task })}
+                onClick={() => void openVisit(merchant, task)}
               >
-                تسجيل النتيجة
+                بدء الزيارة
               </button>
               {canViewMerchants ? (
                 <Link
@@ -381,6 +417,40 @@ export function FieldOpsClient({
 
   return (
     <>
+      {!online ? (
+        <div className="offline-banner" role="status">
+          <span className="offline-dot" />
+          <div>
+            <strong>وضع عدم الاتصال</strong>
+            <span>
+              يمكنك بدء الزيارة وإدخال التقرير الآن. سيُحفظ محلياً على الجهاز
+              ويُزامن تلقائياً عند عودة الشبكة.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {pendingSync > 0 ? (
+        <div className="sync-banner" role="status">
+          <div>
+            <strong>{pendingSync} زيارة بانتظار المزامنة</strong>
+            <span>
+              {syncing
+                ? "جارٍ إرسال الزيارات المحفوظة محلياً…"
+                : "ستُرسل تلقائياً بمجرد استقرار الاتصال."}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="button button-small button-quiet"
+            onClick={() => void flush()}
+            disabled={syncing || !online}
+          >
+            {syncing ? "جارٍ المزامنة…" : "مزامنة الآن"}
+          </button>
+        </div>
+      ) : null}
+
       <section className="panel">
         <div className="field-ops-toolbar">
           <div className="search-shell search-shell-lg">
@@ -445,6 +515,26 @@ export function FieldOpsClient({
                         {teamLabel(result.merchant.team)}
                       </span>
                       <span className={`badge ${meta.tone}`}>{meta.label}</span>
+                      <button
+                        type="button"
+                        className="button button-small button-primary"
+                        onClick={() => {
+                          setVisitCounts((current) => ({
+                            ...current,
+                            [result.merchant.id]:
+                              result.visitCount ??
+                              current[result.merchant.id] ??
+                              0,
+                          }));
+                          setVisitTarget({
+                            merchant: result.merchant,
+                            taskId: null,
+                            visitCount: result.visitCount ?? 0,
+                          });
+                        }}
+                      >
+                        بدء زيارة
+                      </button>
                       {canViewMerchants ? (
                         <Link
                           href={`/merchants/${result.merchant.id}`}
@@ -636,17 +726,19 @@ export function FieldOpsClient({
         }}
       />
 
-      <OutcomeModal
-        open={outcomeTarget !== null}
-        merchant={outcomeTarget?.merchant ?? null}
-        task={outcomeTarget?.task ?? null}
+      <VisitEngine
+        target={visitTarget}
         canManageState={canManageState}
-        canRequestEdit={true}
-        onClose={() => setOutcomeTarget(null)}
-        onRequestEdit={(merchant) => setEditTarget(merchant)}
-        onDone={async (message) => {
+        onClose={() => setVisitTarget(null)}
+        onSaved={async (message) => {
           announce(message);
           await refresh();
+          if (visitTarget) {
+            setVisitCounts((current) => ({
+              ...current,
+              [visitTarget.merchant.id]: (current[visitTarget.merchant.id] ?? 0) + 1,
+            }));
+          }
         }}
       />
 

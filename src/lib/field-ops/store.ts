@@ -7,14 +7,20 @@ import type {
   ContractState,
   EditRequest,
   FieldTask,
+  FollowUpTask,
   Merchant,
   MerchantDocument,
+  RepOpinion,
   StateOverride,
   TransferRequest,
+  VisitContact,
   VisitReport,
   ZonePoint,
 } from "@/lib/field-ops/types";
-import { zoneToBoundary } from "@/lib/field-ops/types";
+import {
+  ADVANCED_OUTCOMES,
+  zoneToBoundary,
+} from "@/lib/field-ops/types";
 import type { AppUser } from "@/lib/rbac/types";
 import {
   addUserCityScope,
@@ -48,6 +54,7 @@ type FieldOpsStore = {
   merchants: Merchant[];
   tasks: FieldTask[];
   reports: VisitReport[];
+  followUps: FollowUpTask[];
   transferRequests: TransferRequest[];
   editRequests: EditRequest[];
   overrides: StateOverride[];
@@ -627,6 +634,7 @@ function seedStore(): FieldOpsStore {
     merchants,
     tasks,
     reports,
+    followUps: [],
     transferRequests,
     editRequests,
     overrides: [],
@@ -862,8 +870,14 @@ export function tasksForViewer(input: {
 }): FieldTask[] {
   const tasks = listTasks();
   if (input.canManageTasks) return tasks;
+  // Reps see today's work plus any scheduled follow-up already booked for a
+  // future date, so a follow-up created in a visit report is team-visible
+  // immediately instead of silently appearing days later.
   return tasks.filter(
-    (task) => task.team === input.team && task.visitDate === input.date,
+    (task) =>
+      task.team === input.team &&
+      (task.visitDate === input.date ||
+        (task.status === "scheduled" && task.visitDate > input.date)),
   );
 }
 
@@ -1018,12 +1032,37 @@ export function assignMerchantTask(
   return { task: clone(task), merchant: clone(merchant) };
 }
 
+/**
+ * How many visits a merchant has ever had. The first-visit gate for advanced
+ * outcomes is derived from this count, so it stays correct even when the
+ * earlier visit was logged offline and flushed later.
+ */
+export function visitCountFor(merchantId: string): number {
+  return getStore().reports.filter(
+    (report) => report.merchantId === merchantId,
+  ).length;
+}
+
+export function listFollowUpTasks(merchantId?: string): FollowUpTask[] {
+  const tasks = clone(getStore().followUps ?? []).sort((left, right) =>
+    right.dueAt.localeCompare(left.dueAt),
+  );
+  return merchantId
+    ? tasks.filter((task) => task.merchantId === merchantId)
+    : tasks;
+}
+
 export function createVisitReport(
   merchantId: string,
   input: VisitReportInput,
   actor: Actor,
   options: { canManageState: boolean },
-): { report: VisitReport; merchant: Merchant } {
+): {
+  report: VisitReport;
+  merchant: Merchant;
+  followUp: FollowUpTask | null;
+  duplicate: boolean;
+} {
   const store = getStore();
   const merchant = store.merchants.find(
     (candidate) => candidate.id === merchantId,
@@ -1032,7 +1071,35 @@ export function createVisitReport(
     throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
 
+  // Offline flush is idempotent: a retried clientVisitId must not duplicate.
+  if (input.clientVisitId) {
+    const existing = store.reports.find(
+      (report) =>
+        report.merchantId === merchantId &&
+        report.clientVisitId === input.clientVisitId,
+    );
+    if (existing) {
+      return {
+        report: clone(existing),
+        merchant: clone(merchant),
+        followUp: null,
+        duplicate: true,
+      };
+    }
+  }
+
   const current = merchant.contractState;
+  const priorVisits = visitCountFor(merchantId);
+
+  // First-ever visits cannot claim a draft handover or a signed contract:
+  // there is no prior agreement for those outcomes to build on.
+  if (priorVisits === 0 && ADVANCED_OUTCOMES.includes(input.outcome) && !options.canManageState) {
+    throw new FieldOpsError(
+      "FIRST_VISIT_GATE",
+      "خيارات تسليم المسودة وتوقيع العقد متاحة فقط للتجار الذين لديهم زيارة سابقة. اختر نتيجة أساسية أولاً.",
+      422,
+    );
+  }
 
   if (!options.canManageState) {
     if (current === "signed_contract") {
@@ -1097,6 +1164,22 @@ export function createVisitReport(
     }
   }
 
+  // CRM roll-up: the newest contact block wins, and rep opinions accumulate
+  // (union) so a manager sees every signal ever captured for the merchant.
+  const contact = input.contact ?? null;
+  if (contact && (contact.name || contact.role || contact.mobile)) {
+    merchant.contact = {
+      name: contact.name.trim(),
+      role: contact.role.trim(),
+      mobile: contact.mobile.trim(),
+    };
+    merchant.contactUpdatedAt = isoNow();
+  }
+
+  const opinions = new Set<RepOpinion>(merchant.opinions ?? []);
+  for (const opinion of input.opinions ?? []) opinions.add(opinion);
+  merchant.opinions = Array.from(opinions);
+
   const report: VisitReport = {
     id: id("report"),
     merchantId: merchant.id,
@@ -1110,12 +1193,184 @@ export function createVisitReport(
     notes: input.notes.trim(),
     commissionAmount,
     createdAt: isoNow(),
+    startedAt: input.startedAt ?? null,
+    endedAt: input.endedAt ?? null,
+    durationSeconds: input.durationSeconds ?? null,
+    startLocation: input.startLocation ?? null,
+    endLocation: input.endLocation ?? null,
+    contact: merchant.contact ?? null,
+    opinions: input.opinions ?? [],
+    followUpAt: input.followUpAt ?? null,
+    followUpTaskId: null,
+    source:
+      input.source ??
+      (input.taskId ? "task" : input.clientVisitId ? "offline" : "task"),
+    clientVisitId: input.clientVisitId ?? null,
   };
+
+  let followUp: FollowUpTask | null = null;
+  if (input.followUpAt) {
+    const followUpDate = input.followUpAt.slice(0, 10);
+    followUp = {
+      id: id("followup"),
+      merchantId: merchant.id,
+      merchantName: merchant.name,
+      team: merchant.team ?? actor.team,
+      cityId: merchant.cityId,
+      visitDate: followUpDate,
+      dueAt: input.followUpAt,
+      kind: input.followUpKind ?? "visit",
+      note: input.followUpNote?.trim() || input.notes.trim().slice(0, 160),
+      status: "scheduled",
+      createdBy: actor.id,
+      createdByName: actor.name,
+      createdAt: isoNow(),
+      sourceReportId: report.id,
+    };
+    report.followUpTaskId = followUp.id;
+    store.followUps = [...(store.followUps ?? []), followUp];
+
+    // A follow-up is a real board task for the whole team, not a private note.
+    if (merchant.team) {
+      store.tasks.push({
+        id: id("task"),
+        merchantId: merchant.id,
+        merchantName: merchant.name,
+        team: merchant.team,
+        cityId: merchant.cityId,
+        visitDate: followUpDate,
+        targetCommission: merchant.targetCommission,
+        strategicNotes: merchant.strategicNotes,
+        instructions:
+          followUp.kind === "call"
+            ? `متابعة هاتفية مجدولة من زيارة ${report.repName}.`
+            : `زيارة متابعة مجدولة من زيارة ${report.repName}.`,
+        status: "scheduled",
+        createdBy: actor.id,
+        createdByName: actor.name,
+        createdAt: isoNow(),
+      });
+    }
+  }
 
   store.reports.push(report);
   bump();
 
-  return { report: clone(report), merchant: clone(merchant) };
+  return {
+    report: clone(report),
+    merchant: clone(merchant),
+    followUp: followUp ? clone(followUp) : null,
+    duplicate: false,
+  };
+}
+
+/**
+ * Chronological, cross-rep CRM timeline for a merchant card.
+ *
+ * Unlike the field-ops board (which is task-centric and team-filtered), this is
+ * the single source for a manager reading a merchant's full history.
+ */
+export type MerchantTimelineEntry =
+  | { kind: "visit"; at: string; report: VisitReport }
+  | { kind: "override"; at: string; override: StateOverride }
+  | { kind: "document"; at: string; document: MerchantDocument }
+  | { kind: "follow_up"; at: string; followUp: FollowUpTask };
+
+export function merchantTimeline(merchantId: string): MerchantTimelineEntry[] {
+  const store = getStore();
+  const entries: MerchantTimelineEntry[] = [];
+
+  for (const report of store.reports) {
+    if (report.merchantId === merchantId) {
+      entries.push({
+        kind: "visit",
+        at: report.endedAt ?? report.createdAt,
+        report: clone(report),
+      });
+    }
+  }
+  for (const override of store.overrides) {
+    if (override.merchantId === merchantId) {
+      entries.push({
+        kind: "override",
+        at: override.createdAt,
+        override: clone(override),
+      });
+    }
+  }
+  for (const document of store.merchants.find((m) => m.id === merchantId)?.documents ?? []) {
+    entries.push({
+      kind: "document",
+      at: document.uploadedAt,
+      document: clone(document),
+    });
+  }
+  for (const followUp of store.followUps ?? []) {
+    if (followUp.merchantId === merchantId) {
+      entries.push({
+        kind: "follow_up",
+        at: followUp.createdAt,
+        followUp: clone(followUp),
+      });
+    }
+  }
+
+  return entries.sort((left, right) => right.at.localeCompare(left.at));
+}
+
+export type MerchantCrmSummary = {
+  visitCount: number;
+  totalDurationSeconds: number;
+  averageDurationSeconds: number;
+  lastVisitAt: string | null;
+  lastOutcome: ContractState | null;
+  opinions: RepOpinion[];
+  contact: VisitContact | null;
+  contactUpdatedAt: string | null;
+  reps: string[];
+  nextFollowUpAt: string | null;
+};
+
+export function merchantCrmSummary(merchantId: string): MerchantCrmSummary {
+  const merchant = getStore().merchants.find((m) => m.id === merchantId);
+  const visits = getStore().reports.filter(
+    (report) => report.merchantId === merchantId,
+  );
+  const totalDuration = visits.reduce(
+    (sum, report) => sum + (report.durationSeconds ?? 0),
+    0,
+  );
+  const timed = visits.filter((report) => report.durationSeconds != null);
+  const reps = Array.from(new Set(visits.map((report) => report.repName)));
+  const sortedVisits = [...visits].sort((left, right) =>
+    right.createdAt.localeCompare(left.createdAt),
+  );
+  const openFollowUps = (getStore().followUps ?? [])
+    .filter(
+      (task) => task.merchantId === merchantId && task.status === "scheduled",
+    )
+    .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
+
+  return {
+    visitCount: visits.length,
+    totalDurationSeconds: totalDuration,
+    averageDurationSeconds:
+      timed.length > 0
+        ? Math.round(
+            timed.reduce((sum, report) => sum + (report.durationSeconds ?? 0), 0) /
+              timed.length,
+          )
+        : 0,
+    lastVisitAt: merchant?.lastVisitAt ?? null,
+    lastOutcome: sortedVisits[0]?.outcome ?? null,
+    opinions: Array.from(
+      new Set(merchant?.opinions ?? []),
+    ) as RepOpinion[],
+    contact: merchant?.contact ?? null,
+    contactUpdatedAt: merchant?.contactUpdatedAt ?? null,
+    reps,
+    nextFollowUpAt: openFollowUps[0]?.dueAt ?? null,
+  };
 }
 
 export function createTransferRequest(

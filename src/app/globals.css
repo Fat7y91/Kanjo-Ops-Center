@@ -1607,6 +1607,47 @@ textarea {
     box-shadow 120ms ease;
 }
 
+/*
+ * Native dropdown popups are painted by the OS, not by the page. Without an
+ * explicit option palette the popup can inherit a light system background
+ * while the text keeps our dark-theme ink colour, producing invisible
+ * white-on-white items. Pin both halves of the pair in every theme.
+ */
+select option,
+select optgroup,
+datalist option {
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+select option:disabled {
+  color: var(--ink-soft);
+}
+
+select option:checked,
+select option:hover {
+  background-color: var(--surface-soft);
+  color: var(--ink);
+}
+
+[data-theme="dark"] select option,
+[data-theme="dark"] select optgroup,
+[data-theme="dark"] datalist option {
+  background-color: #1f1f23;
+  color: #fafafa;
+}
+
+[data-theme="dark"] select option:checked,
+[data-theme="dark"] select option:hover {
+  background-color: #2f2f36;
+  color: #ffffff;
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #8b8b96;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -2827,6 +2868,83 @@ textarea {
   background: rgba(9, 9, 11, 0.86);
 }
 
+/*
+ * Hard-coded light surfaces that must invert in dark mode. Each rule pairs a
+ * readable foreground with a dark background; leaving any one of them out
+ * produces the low-contrast "washed out" panels management flagged.
+ */
+[data-theme="dark"] .board-column {
+  background: #14101b;
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .task-notes {
+  background: #1f1f23;
+  border-inline-start-color: #4c2c6a;
+  color: #cbc4d6;
+}
+
+[data-theme="dark"] .request-quote {
+  background: #1f1c14;
+  color: #f0e4bd;
+}
+
+[data-theme="dark"] .search-shell-lg input {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .search-shell-lg > span {
+  color: #b9a8cf;
+}
+
+[data-theme="dark"] .empty-state {
+  background: #14101b;
+  border-color: #3a2a4d;
+  color: #a1a1aa;
+}
+
+[data-theme="dark"] .csv-table th,
+[data-theme="dark"] .data-table th {
+  color: #a1a1aa;
+}
+
+[data-theme="dark"] .rule-card {
+  background: #1f1f23;
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .timeline-item {
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .note-block {
+  background: #1f1f23;
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .city-tab {
+  color: #b9c2d4;
+}
+
+[data-theme="dark"] .city-tab.is-active {
+  background: #27272a;
+  color: var(--ink);
+}
+
+[data-theme="dark"] .segmented {
+  background: #14101b;
+  border-color: var(--line);
+}
+
+[data-theme="dark"] .segmented button {
+  color: #b9c2d4;
+}
+
+[data-theme="dark"] .segmented button.is-active {
+  background: #27272a;
+  color: var(--ink);
+}
+
 
 
 .analytics-modal-body {
@@ -3780,6 +3898,860 @@ textarea {
   .field-inline {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+/* ── Field Visit Engine ────────────────────────────────────────────────── */
+
+/*
+ * Visit Mode is a locked, full-viewport focus surface. The app shell is hidden
+ * outright (not merely covered) so the rep cannot tab, scroll, or click back
+ * into navigation while a visit is running.
+ */
+body.visit-mode-active {
+  overflow: hidden;
+}
+
+body.visit-mode-active .app-shell {
+  visibility: hidden;
+}
+
+.visit-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% -10%, rgba(91, 31, 134, 0.14), transparent 46%),
+    radial-gradient(circle at 92% 110%, rgba(255, 215, 0, 0.16), transparent 44%),
+    var(--canvas);
+}
+
+.visit-mode-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.visit-mode-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.visit-mode-brand .brand-mark {
+  width: 40px;
+  height: 40px;
+  font-size: 1.1rem;
+}
+
+.visit-mode-brand .eyebrow {
+  margin-bottom: 2px;
+}
+
+.visit-mode-brand strong {
+  font-size: 0.95rem;
+}
+
+.visit-mode-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.visit-clock-value {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.visit-clock-label {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.visit-mode-clock.is-urgent {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.visit-mode-clock.is-urgent .visit-clock-value {
+  color: var(--red);
+}
+
+.visit-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.5);
+  animation: visit-pulse 1.8s ease-out infinite;
+}
+
+.visit-mode-clock.is-urgent .visit-live-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.5);
+}
+
+@keyframes visit-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(21, 128, 61, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 128, 61, 0);
+  }
+}
+
+.visit-mode-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 26px 28px 28px;
+}
+
+.visit-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.visit-merchant-card {
+  grid-row: span 2;
+}
+
+.visit-merchant-card h1 {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  line-height: 1.15;
+}
+
+.visit-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.visit-figures,
+.visit-tracking-grid,
+.visit-summary-strip,
+.visit-contact-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.visit-figures {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visit-figures > div,
+.visit-tracking-grid > div,
+.visit-summary-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.visit-figures span,
+.visit-tracking-grid span,
+.visit-summary-strip span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.visit-figures strong,
+.visit-summary-strip strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.visit-tracking-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visit-tracking-grid strong {
+  font-size: 0.85rem;
+}
+
+.visit-tracking-grid small {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.visit-coords {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  direction: ltr;
+  text-align: start;
+  word-break: break-word;
+}
+
+.visit-geo-note {
+  padding: 10px 12px;
+  border: 1px solid #f0dc9f;
+  border-radius: 10px;
+  background: #fdf6df;
+  color: var(--gold-deep);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.visit-card-head,
+.visit-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.visit-card-head .eyebrow,
+.visit-form-head .eyebrow {
+  margin-bottom: 0;
+}
+
+.visit-strategic-notes {
+  padding: 14px;
+  border-inline-start: 3px solid var(--gold);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.visit-mode-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: auto;
+  padding: 16px 28px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.visit-foot-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.visit-foot-note strong {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.visit-foot-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.visit-end {
+  min-width: 170px;
+}
+
+.visit-notes-card .visit-card-head,
+.visit-tracking-card .visit-card-head {
+  align-items: flex-start;
+}
+
+.visit-cancel {
+  min-width: 96px;
+}
+
+.visit-followup-note {
+  grid-column: span 1;
+}
+
+/* Visit report form */
+
+.visit-report-form .visit-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.visit-report-form .visit-form-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.visit-summary-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.visit-summary-strip > div {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.visit-contact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visit-followup-grid {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 1.4fr;
+  gap: 12px;
+}
+
+.visit-advanced-note {
+  padding: 10px 12px;
+  border: 1px solid #cfc4ff;
+  border-radius: 10px;
+  background: #f5f1ff;
+  color: #5b1f86;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.outcome-advanced-tag {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(122, 91, 0, 0.12);
+  color: var(--gold-deep);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.opinion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opinion-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.opinion-chip:hover {
+  border-color: #b9a9f7;
+}
+
+.opinion-chip.is-active {
+  border-color: #8f78ff;
+  background: #f5f1ff;
+}
+
+.opinion-chip .badge {
+  white-space: normal;
+  text-align: start;
+}
+
+.opinion-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.opinion-chip.is-active .opinion-check {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+.opinion-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* CRM roll-up */
+
+.crm-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.crm-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+}
+
+.crm-metric > span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.crm-metric > strong {
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.crm-metric > strong.crm-metric-date {
+  font-size: 0.95rem;
+  letter-spacing: 0;
+}
+
+.crm-metric > small {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.contact-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.contact-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.contact-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contact-body strong {
+  font-size: 0.95rem;
+}
+
+.contact-body span {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.contact-mobile {
+  color: var(--purple);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+  direction: ltr;
+  text-align: start;
+}
+
+.contact-mobile:hover {
+  text-decoration: underline;
+}
+
+.crm-opinions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.crm-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crm-timeline-item {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+}
+
+.crm-timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.crm-timeline-dot {
+  position: relative;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--purple);
+  box-shadow: 0 0 0 2px var(--line-strong);
+}
+
+.crm-timeline-dot[data-kind="override"] {
+  background: var(--gold);
+}
+
+.crm-timeline-dot[data-kind="document"] {
+  background: #1f5f9e;
+}
+
+.crm-timeline-dot[data-kind="follow_up"] {
+  background: var(--green);
+}
+
+.crm-timeline-item:not(:last-child) .crm-timeline-dot::after {
+  position: absolute;
+  inset-inline-start: 50%;
+  top: 18px;
+  width: 2px;
+  height: calc(100% + 18px);
+  background: var(--line);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.crm-timeline-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.crm-timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.crm-timeline-body p {
+  font-size: 0.86rem;
+  line-height: 1.65;
+  white-space: pre-line;
+}
+
+.crm-timeline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--ink-soft);
+  font-size: 0.73rem;
+}
+
+.crm-contact-note {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.73rem;
+  align-self: flex-start;
+}
+
+/* Connectivity banners */
+
+.offline-banner,
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.offline-banner {
+  border: 1px solid #f0dc9f;
+  background: #fdf6df;
+  color: #6b4e00;
+}
+
+.sync-banner {
+  border: 1px solid #cfc4ff;
+  background: #f5f1ff;
+  color: #5b1f86;
+}
+
+.offline-banner > div,
+.sync-banner > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.offline-banner strong,
+.sync-banner strong {
+  font-size: 0.84rem;
+}
+
+.offline-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #c08a18;
+  animation: visit-pulse 2s ease-out infinite;
+}
+
+.toast-error {
+  border-color: #f2caca;
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* Dark theme */
+
+[data-theme="dark"] body.visit-mode-active {
+  background: var(--canvas);
+}
+
+[data-theme="dark"] .visit-mode {
+  background:
+    radial-gradient(circle at 12% -10%, rgba(201, 167, 255, 0.12), transparent 46%),
+    radial-gradient(circle at 92% 110%, rgba(255, 215, 0, 0.08), transparent 44%),
+    var(--canvas);
+}
+
+[data-theme="dark"] .visit-mode-head,
+[data-theme="dark"] .visit-mode-foot {
+  background: rgba(24, 24, 27, 0.92);
+}
+
+[data-theme="dark"] .visit-mode-card {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .visit-live-dot {
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+}
+
+[data-theme="dark"] .visit-geo-note {
+  border-color: #4c3b16;
+  background: #201a0c;
+  color: #ffd75e;
+}
+
+[data-theme="dark"] .visit-advanced-note {
+  border-color: #4c2c6a;
+  background: #1f1f23;
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .outcome-advanced-tag {
+  background: rgba(255, 215, 0, 0.16);
+  color: #ffd75e;
+}
+
+[data-theme="dark"] .opinion-chip {
+  border-color: var(--line-strong);
+  background: #1f1f23;
+}
+
+[data-theme="dark"] .opinion-chip:hover {
+  border-color: #7f6bb5;
+}
+
+[data-theme="dark"] .opinion-chip.is-active {
+  border-color: var(--purple);
+  background: #27272a;
+}
+
+[data-theme="dark"] .opinion-check {
+  border-color: var(--line-strong);
+  background: #27272a;
+  color: #a1a1aa;
+}
+
+[data-theme="dark"] .opinion-chip.is-active .opinion-check {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+[data-theme="dark"] .contact-card,
+[data-theme="dark"] .crm-contact-note,
+[data-theme="dark"] .visit-strategic-notes,
+[data-theme="dark"] .visit-summary-strip > div,
+[data-theme="dark"] .visit-figures > div,
+[data-theme="dark"] .visit-tracking-grid > div {
+  border-color: var(--line);
+  background: #1f1f23;
+}
+
+[data-theme="dark"] .contact-mobile {
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .crm-timeline-dot {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--line-strong);
+}
+
+[data-theme="dark"] .offline-banner {
+  border-color: #4c3b16;
+  background: #201a0c;
+  color: #f0e4bd;
+}
+
+[data-theme="dark"] .offline-dot {
+  background: #ffd75e;
+}
+
+[data-theme="dark"] .sync-banner {
+  border-color: #4c2c6a;
+  background: #1f1f23;
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .toast-error {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: #2a1313;
+  color: var(--red);
+}
+
+@media (max-width: 1023px) {
+  .visit-mode-body {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .visit-merchant-card {
+    grid-row: auto;
+  }
+
+  .crm-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .visit-mode-head,
+  .visit-mode-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  /* On phones the sticky footer would cover the notes card, so let it scroll
+     with the content instead. */
+  .visit-mode-foot {
+    position: static;
+  }
+
+  .visit-mode-clock {
+    justify-content: space-between;
+  }
+
+  .visit-mode-body {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .visit-mode-card {
+    padding: 16px;
+  }
+
+  .visit-figures,
+  .visit-tracking-grid,
+  .visit-summary-strip,
+  .visit-contact-grid,
+  .visit-followup-grid,
+  .opinion-grid,
+  .crm-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .visit-foot-actions {
+    flex-direction: column-reverse;
+  }
+
+  .visit-foot-actions .button {
+    width: 100%;
+  }
+
+  .offline-banner,
+  .sync-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visit-live-dot,
+  .offline-dot {
+    animation: none;
   }
 }
 

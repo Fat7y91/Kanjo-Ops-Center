@@ -4,6 +4,7 @@ import {
   CITY_STAGES,
   CONTRACT_STATES,
   FIELD_TEAMS,
+  REP_OPINIONS,
 } from "@/lib/field-ops/types";
 
 const zonePointSchema = z.object({
@@ -80,6 +81,19 @@ export const taskAssignSchema = z.object({
 
 export const taskCreateSchema = taskAssignSchema;
 
+const geoCaptureSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().min(0).max(100_000).nullable().default(null),
+  capturedAt: z.string().trim().min(1),
+});
+
+const visitContactSchema = z.object({
+  name: z.string().trim().max(120).default(""),
+  role: z.string().trim().max(120).default(""),
+  mobile: z.string().trim().max(40).default(""),
+});
+
 export const visitReportSchema = z.object({
   outcome: z.enum(CONTRACT_STATES),
   notes: z
@@ -88,6 +102,28 @@ export const visitReportSchema = z.object({
     .min(10, "ملاحظات الزيارة يجب ألا تقل عن 10 أحرف.")
     .max(4000),
   taskId: z.string().trim().min(1).nullable().optional(),
+  startedAt: z.string().trim().min(1).nullable().optional(),
+  endedAt: z.string().trim().min(1).nullable().optional(),
+  durationSeconds: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(86_400)
+    .nullable()
+    .optional(),
+  startLocation: geoCaptureSchema.nullable().optional(),
+  endLocation: geoCaptureSchema.nullable().optional(),
+  contact: visitContactSchema.nullable().optional(),
+  opinions: z.array(z.enum(REP_OPINIONS)).max(12).default([]),
+  followUpAt: z.string().trim().min(1).nullable().optional(),
+  followUpKind: z.enum(["visit", "call"]).optional(),
+  followUpNote: z.string().trim().max(500).optional(),
+  source: z.enum(["task", "unplanned", "offline"]).optional(),
+  clientVisitId: z.string().trim().max(80).nullable().optional(),
+});
+
+export const visitSyncSchema = z.object({
+  visits: z.array(visitReportSchema).min(1).max(50),
 });
 
 export const transferRequestSchema = z.object({
@@ -136,6 +172,7 @@ export type MerchantCreateInput = z.infer<typeof merchantCreateSchema>;
 export type TaskAssignInput = z.infer<typeof taskAssignSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type VisitReportInput = z.infer<typeof visitReportSchema>;
+export type VisitSyncInput = z.infer<typeof visitSyncSchema>;
 export type TransferRequestInput = z.infer<typeof transferRequestSchema>;
 export type EditRequestInput = z.infer<typeof editRequestSchema>;
 export type DecisionInput = z.infer<typeof decisionSchema>;
