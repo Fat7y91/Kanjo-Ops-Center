@@ -78,6 +78,7 @@ export function VisitEngine({
       endLocation: draft.endLocation,
       contact: report.contact,
       opinions: report.opinions,
+      agreedCommission: report.agreedCommission,
       followUpAt: report.followUpAt || null,
       followUpKind: report.followUpKind,
       followUpNote: report.followUpNote,

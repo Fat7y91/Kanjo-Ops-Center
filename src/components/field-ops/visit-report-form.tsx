@@ -6,13 +6,17 @@ import { Modal } from "@/components/field-ops/modal";
 import { formatCoordinates, formatDuration } from "@/lib/field-ops/geolocation";
 import {
   ADVANCED_OUTCOMES,
-  CONTRACT_STATES,
+  COMMISSION_OUTCOMES,
   CONTRACT_STATE_META,
+  FOLLOW_UP_KINDS,
+  FOLLOW_UP_KIND_META,
   REP_OPINIONS,
   REP_OPINION_META,
   type ContractState,
+  type FollowUpKind,
   type Merchant,
   type RepOpinion,
+  type RepOpinionTrait,
 } from "@/lib/field-ops/types";
 import type { VisitDraft } from "@/components/field-ops/visit-mode";
 
@@ -21,8 +25,9 @@ export type VisitReportDraft = {
   notes: string;
   contact: { name: string; role: string; mobile: string };
   opinions: RepOpinion[];
+  agreedCommission: number | null;
   followUpAt: string;
-  followUpKind: "visit" | "call";
+  followUpKind: FollowUpKind;
   followUpNote: string;
 };
 
@@ -45,6 +50,16 @@ type OutcomeOption = {
   advanced: boolean;
 };
 
+/**
+ * Reps can only choose the three non-signature outcomes. `signed_contract` is
+ * deliberately absent: signing is an admin governance action on the CRM card.
+ */
+const REP_OUTCOME_ORDER: ContractState[] = [
+  "no_agreement",
+  "provisional",
+  "final_contract",
+];
+
 const OUTCOME_LABELS: Record<ContractState, { label: string; description: string }> = {
   no_agreement: {
     label: "بدون تعاقد",
@@ -56,13 +71,52 @@ const OUTCOME_LABELS: Record<ContractState, { label: string; description: string
   },
   final_contract: {
     label: "اتفاق نهائي",
-    description: "بنود نهائية متفق عليها. حفظ العقد يسير إلى مكتب العقود.",
+    description: "بنود نهائية متفق عليها. اعتماد التوقيع يتم من كارت التاجر.",
   },
   signed_contract: {
     label: "توقيع العقد",
-    description: "تم توقيع العقد رسمياً واحتساب العمولة.",
+    description: "اعتماد إداري فقط من كارت التاجر.",
   },
 };
+
+const DEFAULT_WEIGHTS: Record<RepOpinionTrait, number> = {
+  cooperative: 60,
+  difficult: 40,
+  commission_conservative: 50,
+  marketing_interested: 50,
+  price_sensitive: 50,
+  expansion_ready: 50,
+};
+
+type OpinionState = {
+  trait: string;
+  label?: string;
+  weight: number;
+  enabled: boolean;
+};
+
+function toOpinionState(
+  opinions: RepOpinion[] | undefined,
+): Record<string, OpinionState> {
+  const next: Record<string, OpinionState> = {};
+  for (const trait of REP_OPINIONS) {
+    next[trait] = {
+      trait,
+      weight: DEFAULT_WEIGHTS[trait],
+      enabled: false,
+    };
+  }
+  for (const opinion of opinions ?? []) {
+    const existing = next[opinion.trait];
+    next[opinion.trait] = {
+      trait: opinion.trait,
+      label: opinion.label,
+      weight: opinion.weight > 0 ? opinion.weight : existing?.weight ?? 50,
+      enabled: true,
+    };
+  }
+  return next;
+}
 
 export function VisitReportForm({
   open,
@@ -75,20 +129,27 @@ export function VisitReportForm({
   onClose,
   onSubmit,
 }: VisitReportFormProps) {
-  const [outcome, setOutcome] = useState<ContractState>(
-    merchant?.contractState ?? "no_agreement",
-  );
+  const [outcome, setOutcome] = useState<ContractState>("no_agreement");
   const [notes, setNotes] = useState("");
   const [contactName, setContactName] = useState(merchant?.contact?.name ?? "");
   const [contactRole, setContactRole] = useState(merchant?.contact?.role ?? "");
   const [contactMobile, setContactMobile] = useState(merchant?.contact?.mobile ?? "");
-  const [opinions, setOpinions] = useState<RepOpinion[]>(merchant?.opinions ?? []);
+  const [opinionState, setOpinionState] = useState<Record<string, OpinionState>>(
+    () => toOpinionState(merchant?.opinions),
+  );
+  const [customLabel, setCustomLabel] = useState("");
+  const [customWeight, setCustomWeight] = useState(50);
+  const [customEnabled, setCustomEnabled] = useState(false);
+  const [agreedCommission, setAgreedCommission] = useState<string>(
+    merchant?.agreedCommission != null ? String(merchant.agreedCommission) : "",
+  );
   const [followUpAt, setFollowUpAt] = useState("");
-  const [followUpKind, setFollowUpKind] = useState<"visit" | "call">("visit");
+  const [followUpKind, setFollowUpKind] = useState<FollowUpKind>("visit");
   const [followUpNote, setFollowUpNote] = useState("");
   const [error, setError] = useState("");
 
   const canUseAdvanced = visitCount > 0 || canManageState;
+  const needsCommission = COMMISSION_OUTCOMES.includes(outcome);
 
   // Reset the form whenever a new visit opens; the modal stays mounted so
   // React state would otherwise leak the previous merchant's answers.
@@ -97,13 +158,24 @@ export function VisitReportForm({
     setOutcome(
       ADVANCED_OUTCOMES.includes(merchant.contractState) && visitCount === 0
         ? "no_agreement"
-        : merchant.contractState,
+        : REP_OUTCOME_ORDER.includes(merchant.contractState)
+          ? merchant.contractState
+          : "no_agreement",
     );
     setNotes("");
     setContactName(merchant.contact?.name ?? "");
     setContactRole(merchant.contact?.role ?? "");
     setContactMobile(merchant.contact?.mobile ?? "");
-    setOpinions(merchant.opinions ?? []);
+    setOpinionState(toOpinionState(merchant.opinions));
+    const existingCustom = (merchant.opinions ?? []).find(
+      (opinion) => opinion.trait === "custom",
+    );
+    setCustomLabel(existingCustom?.label ?? "");
+    setCustomWeight(existingCustom?.weight || 50);
+    setCustomEnabled(Boolean(existingCustom));
+    setAgreedCommission(
+      merchant.agreedCommission != null ? String(merchant.agreedCommission) : "",
+    );
     setFollowUpAt("");
     setFollowUpKind("visit");
     setFollowUpNote("");
@@ -111,25 +183,25 @@ export function VisitReportForm({
   }, [open, merchant, visitCount]);
 
   const outcomeOptions = useMemo<OutcomeOption[]>(() => {
-    return CONTRACT_STATES.filter((state) => state !== "signed_contract" || canManageState)
-      .map((state) => ({
-        value: state as ContractState,
-        label: OUTCOME_LABELS[state].label,
-        description: OUTCOME_LABELS[state].description,
-        advanced: ADVANCED_OUTCOMES.includes(state),
-      }))
-      .filter((option) => !option.advanced || canUseAdvanced);
-  }, [canManageState, canUseAdvanced]);
+    return REP_OUTCOME_ORDER.map((state) => ({
+      value: state,
+      label: OUTCOME_LABELS[state].label,
+      description: OUTCOME_LABELS[state].description,
+      advanced: ADVANCED_OUTCOMES.includes(state),
+    })).filter((option) => !option.advanced || canUseAdvanced);
+  }, [canUseAdvanced]);
 
   if (!merchant) return null;
   const target = merchant;
+  const activeOpinions = Object.values(opinionState).filter(
+    (state) => state.enabled,
+  );
 
-  function toggleOpinion(opinion: RepOpinion) {
-    setOpinions((current) =>
-      current.includes(opinion)
-        ? current.filter((value) => value !== opinion)
-        : [...current, opinion],
-    );
+  function patchOpinion(trait: string, patch: Partial<OpinionState>) {
+    setOpinionState((current) => ({
+      ...current,
+      [trait]: { ...current[trait], ...patch },
+    }));
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -142,20 +214,56 @@ export function VisitReportForm({
     }
     if (ADVANCED_OUTCOMES.includes(outcome) && !canUseAdvanced) {
       setError(
-        "تسليم المسودة وتوقيع العقد متاحان فقط للتجار الذين لديهم زيارة سابقة.",
+        "«اتفاق نهائي» متاح فقط للتجار الذين لديهم زيارة سابقة مسجلة في سجلهم.",
       );
       return;
     }
+
+    const commission = Number(agreedCommission);
     if (
-      followUpAt &&
-      new Date(followUpAt).getTime() < Date.now() - 60_000
+      needsCommission &&
+      (!agreedCommission.trim() ||
+        !Number.isFinite(commission) ||
+        commission <= 0 ||
+        commission > 100)
     ) {
+      setError("أدخل النسبة المتفق عليها بين 1% و100%.");
+      return;
+    }
+
+    if (customEnabled) {
+      if (!customLabel.trim()) {
+        setError("اكتب وصف الرأي المخصص أو ألغِ تفعيله.");
+        return;
+      }
+      if (customWeight <= 0) {
+        setError("وزن الرأي المخصص يجب أن يكون أكبر من صفر.");
+        return;
+      }
+    }
+
+    if (followUpAt && new Date(followUpAt).getTime() < Date.now() - 60_000) {
       setError("موعد المتابعة يجب أن يكون في المستقبل.");
       return;
     }
     if (followUpAt && !target.team) {
       setError("لا يمكن جدولة مهمة متابعة قبل إسناد التاجر لفريق.");
       return;
+    }
+
+    const opinions: RepOpinion[] = activeOpinions
+      .filter((state) => state.weight > 0)
+      .map((state) => ({
+        trait: state.trait,
+        weight: state.weight,
+        label: state.label,
+      }));
+    if (customEnabled && customLabel.trim() && customWeight > 0) {
+      opinions.push({
+        trait: "custom",
+        label: customLabel.trim(),
+        weight: customWeight,
+      });
     }
 
     onSubmit({
@@ -167,6 +275,7 @@ export function VisitReportForm({
         mobile: contactMobile,
       },
       opinions,
+      agreedCommission: needsCommission ? commission : null,
       followUpAt,
       followUpKind,
       followUpNote,
@@ -250,7 +359,7 @@ export function VisitReportForm({
             <p className="eyebrow">نتيجة الزيارة</p>
             <span className="badge badge-gold">
               {visitCount === 0
-                ? "أول زيارة — الخيارات المتقدمة مخفية"
+                ? "أول زيارة — خيار الاتفاق النهائي مخفي"
                 : `زيارة رقم ${visitCount + 1}`}
             </span>
           </div>
@@ -273,18 +382,36 @@ export function VisitReportForm({
             ))}
           </div>
 
-          {!canUseAdvanced ? (
-            <p className="inline-note">
-              «تسليم مسودة العقد» و«توقيع العقد» يظهران فقط للتجار الذين لديهم
-              زيارة سابقة مسجلة في سجلهم.
-            </p>
-          ) : null}
+          <p className="inline-note">
+            اعتماد توقيع العقد يتم حصرياً من كارت التاجر بواسطة مدير الحالات.
+          </p>
 
           {ADVANCED_OUTCOMES.includes(outcome) && canUseAdvanced ? (
             <p className="visit-advanced-note">
               هذا الخيار يفترض وجود اتفاق سابق. تأكد من مطابقة الحالة الحالية
               ({CONTRACT_STATE_META[merchant.contractState].label}) قبل الحفظ.
             </p>
+          ) : null}
+
+          {needsCommission ? (
+            <label className="field field-commission">
+              <span>النسبة المتفق عليها (%)</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                step={0.5}
+                inputMode="decimal"
+                value={agreedCommission}
+                onChange={(event) => setAgreedCommission(event.target.value)}
+                placeholder="مثال: 12"
+                required
+              />
+              <span className="field-hint">
+                إلزامية عند الاتفاق المبدئي أو النهائي. تُحفظ في كارت التاجر
+                وتُقفل نهائياً عند اعتماد التوقيع.
+              </span>
+            </label>
           ) : null}
         </section>
 
@@ -306,28 +433,83 @@ export function VisitReportForm({
         <section className="visit-form-section">
           <div className="visit-form-head">
             <p className="eyebrow">رأي المندوب</p>
-            <span className="badge">{opinions.length} وسم</span>
+            <span className="badge">{activeOpinions.length + (customEnabled ? 1 : 0)} وسم مفعّل</span>
           </div>
-          <div className="opinion-grid">
-            {REP_OPINIONS.map((opinion) => {
-              const active = opinions.includes(opinion);
+          <p className="field-hint opinion-hint">
+            فعّل ما ينطبق واضبط الوزن من 0% إلى 100%. الوزن يعبّر عن شدة
+            الملاحظة، ويُجمع في كارت التاجر بأعلى قيمة مسجلة لكل وسم.
+          </p>
+          <div className="opinion-slider-grid">
+            {REP_OPINIONS.map((trait) => {
+              const state = opinionState[trait];
+              const meta = REP_OPINION_META[trait];
               return (
-                <button
-                  key={opinion}
-                  type="button"
-                  className={`opinion-chip${active ? " is-active" : ""}`}
-                  onClick={() => toggleOpinion(opinion)}
-                  aria-pressed={active}
+                <div
+                  key={trait}
+                  className={`opinion-slider${state.enabled ? " is-active" : ""}`}
                 >
-                  <span className={`badge ${REP_OPINION_META[opinion].tone}`}>
-                    {REP_OPINION_META[opinion].label}
-                  </span>
-                  <span className="opinion-check" aria-hidden="true">
-                    {active ? "✓" : "+"}
-                  </span>
-                </button>
+                  <div className="opinion-slider-head">
+                    <label className="opinion-slider-toggle">
+                      <input
+                        type="checkbox"
+                        checked={state.enabled}
+                        onChange={(event) =>
+                          patchOpinion(trait, { enabled: event.target.checked })
+                        }
+                      />
+                      <span className={`badge ${meta.tone}`}>{meta.label}</span>
+                    </label>
+                    <strong className="opinion-weight">{state.weight}%</strong>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={state.weight}
+                    disabled={!state.enabled}
+                    onChange={(event) =>
+                      patchOpinion(trait, { weight: Number(event.target.value) })
+                    }
+                    aria-label={`وزن ${meta.label}`}
+                  />
+                </div>
               );
             })}
+          </div>
+
+          <div className={`opinion-slider opinion-custom${customEnabled ? " is-active" : ""}`}>
+            <div className="opinion-slider-head">
+              <label className="opinion-slider-toggle">
+                <input
+                  type="checkbox"
+                  checked={customEnabled}
+                  onChange={(event) => setCustomEnabled(event.target.checked)}
+                />
+                <span className="badge badge-purple">أخرى / مخصص</span>
+              </label>
+              <strong className="opinion-weight">
+                {customEnabled ? `${customWeight}%` : "غير مفعّل"}
+              </strong>
+            </div>
+            <input
+              type="text"
+              value={customLabel}
+              disabled={!customEnabled}
+              onChange={(event) => setCustomLabel(event.target.value)}
+              placeholder="صف الملاحظة بكلماتك، مثال: يطلب حصرية التوزيع"
+              maxLength={60}
+            />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={customWeight}
+              disabled={!customEnabled}
+              onChange={(event) => setCustomWeight(Number(event.target.value))}
+              aria-label="وزن الرأي المخصص"
+            />
           </div>
         </section>
 
@@ -342,11 +524,14 @@ export function VisitReportForm({
               <select
                 value={followUpKind}
                 onChange={(event) =>
-                  setFollowUpKind(event.target.value as "visit" | "call")
+                  setFollowUpKind(event.target.value as FollowUpKind)
                 }
               >
-                <option value="visit">زيارة متابعة</option>
-                <option value="call">مكالمة هاتفية</option>
+                {FOLLOW_UP_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {FOLLOW_UP_KIND_META[kind].label}
+                  </option>
+                ))}
               </select>
             </label>
             <label className="field">
@@ -372,6 +557,9 @@ export function VisitReportForm({
             <p className="inline-note">
               ستُنشأ مهمة مجدولة لفريق {merchant.team ?? "غير مسند"} وتظهر في
               لوحة العمليات الميدانية.
+              {followUpKind === "whatsapp" && !contactMobile.trim()
+                ? " أضف رقم موبايل ليظهر زر واتساب المباشر."
+                : ""}
             </p>
           ) : null}
         </section>

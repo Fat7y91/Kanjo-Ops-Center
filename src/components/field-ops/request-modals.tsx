@@ -314,12 +314,18 @@ export function StateModal({
               setState(event.target.value as ContractState)
             }
           >
-            {CONTRACT_STATES.map((option) => (
-              <option key={option} value={option}>
-                {CONTRACT_STATE_META[option].label}
-              </option>
-            ))}
+            {CONTRACT_STATES.filter((option) => option !== "signed_contract").map(
+              (option) => (
+                <option key={option} value={option}>
+                  {CONTRACT_STATE_META[option].label}
+                </option>
+              ),
+            )}
           </select>
+          <span className="field-hint">
+            اعتماد «توقيع العقد» يتم من زر الاعتماد المخصص في كارت التاجر لأنه
+            يتطلب إدخال النسبة النهائية المقفلة.
+          </span>
         </label>
         <label className="field">
           <span>ملاحظة المراجعة</span>
@@ -349,6 +355,149 @@ export function StateModal({
             disabled={saving}
           >
             {saving ? "جارٍ الحفظ..." : "تطبيق التجاوز"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+type SignContractModalProps = {
+  open: boolean;
+  merchantName: string;
+  currentCommission: number;
+  suggestedCommission: number;
+  endpoint: string;
+  onClose: () => void;
+  onDone: (message: string) => void;
+};
+
+/**
+ * Admin-only contract signing.
+ *
+ * This is intentionally NOT part of the visit report. A signature is a
+ * governance event that permanently locks the final commission percentage, so
+ * it is gated by `manage_merchant_state` and requires an explicit note.
+ */
+export function SignContractModal({
+  open,
+  merchantName,
+  currentCommission,
+  suggestedCommission,
+  endpoint,
+  onClose,
+  onDone,
+}: SignContractModalProps) {
+  const [commission, setCommission] = useState(String(suggestedCommission));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setCommission(String(currentCommission || suggestedCommission));
+    setNote("");
+    setError("");
+    setSaving(false);
+  }, [open, currentCommission, suggestedCommission]);
+
+  const numeric = Number(commission);
+  const validCommission =
+    commission.trim() !== "" && Number.isFinite(numeric) && numeric > 0 && numeric <= 100;
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    if (!validCommission) {
+      setError("أدخل النسبة النهائية بين 1% و100%.");
+      return;
+    }
+    if (note.trim().length < 5) {
+      setError("مطلوب ملاحظة لا تقل عن 5 أحرف لسجل المراجعة.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: "signed_contract",
+          note: note.trim(),
+          agreedCommission: numeric,
+        }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "تعذر اعتماد التوقيع.");
+      }
+      onDone(`تم اعتماد توقيع عقد ${merchantName} بنسبة ${numeric}%.`);
+      onClose();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "تعذر اعتماد التوقيع.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      title={`اعتماد توقيع العقد — ${merchantName}`}
+      eyebrow="اعتماد إداري"
+      description="التوقيع ينتقل بالحالة إلى «توقيع العقد» ويقفل النسبة النهائية نهائياً."
+      onClose={onClose}
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <label className="field">
+          <span>النسبة النهائية المقفلة (%)</span>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            step={0.5}
+            inputMode="decimal"
+            value={commission}
+            onChange={(event) => setCommission(event.target.value)}
+            required
+          />
+          <span className="field-hint">
+            تُحفظ نهائياً على التاجر وتُستخدم لاحتساب العمولة المكتسبة. لا يمكن
+            تعديلها بعد الاعتماد إلا بتجاوز حالة جديد.
+          </span>
+        </label>
+        <label className="field">
+          <span>ملاحظة الاعتماد</span>
+          <textarea
+            rows={3}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="مرجع العقد الموقّع، تاريخ التوقيع، أي شرط خاص…"
+            minLength={5}
+            required
+          />
+        </label>
+
+        {error ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="form-actions">
+          <button type="button" className="button button-quiet" onClick={onClose}>
+            إلغاء
+          </button>
+          <button
+            type="submit"
+            className="button button-primary"
+            disabled={saving || !validCommission}
+          >
+            {saving ? "جارٍ الاعتماد..." : "اعتماد التوقيع نهائياً"}
           </button>
         </div>
       </form>

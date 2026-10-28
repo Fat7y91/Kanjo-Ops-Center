@@ -6,8 +6,10 @@ import { useState } from "react";
 
 import {
   JustificationModal,
+  SignContractModal,
   StateModal,
 } from "@/components/field-ops/request-modals";
+import { Protect } from "@/components/auth/protect";
 import {
   VisitEngine,
   type VisitEngineTarget,
@@ -19,7 +21,9 @@ import type {
 } from "@/lib/field-ops/store";
 import {
   CONTRACT_STATE_META,
-  REP_OPINION_META,
+  FOLLOW_UP_KIND_META,
+  opinionLabel,
+  opinionTone,
   teamLabel,
   type FieldTask,
   type FollowUpTask,
@@ -28,6 +32,7 @@ import {
   type StateOverride,
   type VisitReport,
 } from "@/lib/field-ops/types";
+import { whatsappLink } from "@/lib/field-ops/whatsapp";
 
 type MerchantProfileClientProps = {
   merchant: Merchant;
@@ -112,6 +117,7 @@ export function MerchantProfileClient({
   const [transferOpen, setTransferOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [stateOpen, setStateOpen] = useState(false);
+  const [signOpen, setSignOpen] = useState(false);
   const [docName, setDocName] = useState("");
   const [docType, setDocType] = useState<MerchantDocument["type"]>("contract");
   const [docUrl, setDocUrl] = useState("");
@@ -313,14 +319,32 @@ export function MerchantProfileClient({
             {summary.opinions.length === 0 ? (
               <p className="muted">لم تُسجَّل آراء بعد.</p>
             ) : (
-              <div className="opinion-summary">
+              <div className="opinion-weighted">
                 {summary.opinions.map((opinion) => (
-                  <span
-                    key={opinion}
-                    className={`badge ${REP_OPINION_META[opinion].tone}`}
+                  <div
+                    key={`${opinion.trait}-${opinion.label ?? ""}`}
+                    className="opinion-weighted-row"
                   >
-                    {REP_OPINION_META[opinion].label}
-                  </span>
+                    <div className="opinion-weighted-head">
+                      <span className={`badge ${opinionTone(opinion)}`}>
+                        {opinionLabel(opinion)}
+                      </span>
+                      <strong>{opinion.weight}%</strong>
+                    </div>
+                    <div
+                      className="opinion-bar"
+                      role="meter"
+                      aria-valuenow={opinion.weight}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={opinionLabel(opinion)}
+                    >
+                      <span
+                        className="opinion-bar-fill"
+                        style={{ width: `${opinion.weight}%` }}
+                      />
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -344,6 +368,14 @@ export function MerchantProfileClient({
               <strong>{merchant.targetCommission}%</strong>
             </div>
             <div>
+              <span className="detail-label">النسبة المتفق عليها</span>
+              <strong>
+                {merchant.agreedCommission != null
+                  ? `${merchant.agreedCommission}%`
+                  : "لم تُحدَّد"}
+              </strong>
+            </div>
+            <div>
               <span className="detail-label">العمولة المكتسبة</span>
               <strong>{formatAmount(merchant.commissionAmount)}</strong>
             </div>
@@ -352,6 +384,40 @@ export function MerchantProfileClient({
               <strong>{meta.label}</strong>
             </div>
           </div>
+
+          <Protect require="manage_merchant_state">
+            {merchant.contractState !== "signed_contract" ? (
+              <div className="sign-panel">
+                <div className="sign-panel-head">
+                  <div>
+                    <p className="eyebrow">اعتماد إداري</p>
+                    <h3>اعتماد توقيع العقد</h3>
+                  </div>
+                  <span className="badge badge-gold">صلاحية إدارة الحالات</span>
+                </div>
+                <p>
+                  متاح فقط بعد الوصول إلى اتفاق نهائي. يُدخل المدير النسبة
+                  النهائية المقفلة، فتُحدَّث حالة التاجر إلى «توقيع العقد»
+                  وتُحتسب العمولة نهائياً.
+                </p>
+                {merchant.contractState === "final_contract" ||
+                merchant.contractState === "provisional" ? (
+                  <button
+                    type="button"
+                    className="button button-primary button-sign"
+                    onClick={() => setSignOpen(true)}
+                  >
+                    اعتماد توقيع العقد
+                  </button>
+                ) : (
+                  <p className="inline-note">
+                    يجب الوصول إلى اتفاق مبدئي أو نهائي أولاً قبل اعتماد
+                    التوقيع. الحالة الحالية: {meta.label}.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </Protect>
           {finalLocked && canViewFieldOps && !otherTeam ? (
             <div className="lock-panel">
               <span className="badge badge-red">الاتفاق النهائي مقفل</span>
@@ -414,15 +480,18 @@ export function MerchantProfileClient({
                         {entry.report.commissionAmount > 0 ? (
                           <span>عمولة {formatAmount(entry.report.commissionAmount)}</span>
                         ) : null}
+                        {entry.report.agreedCommission != null ? (
+                          <span>النسبة المتفق عليها {entry.report.agreedCommission}%</span>
+                        ) : null}
                       </div>
                       {(entry.report.opinions ?? []).length > 0 ? (
                         <div className="opinion-summary">
                           {(entry.report.opinions ?? []).map((opinion) => (
                             <span
-                              key={opinion}
-                              className={`badge ${REP_OPINION_META[opinion].tone}`}
+                              key={`${opinion.trait}-${opinion.label ?? ""}`}
+                              className={`badge ${opinionTone(opinion)}`}
                             >
-                              {REP_OPINION_META[opinion].label}
+                              {opinionLabel(opinion)} · {opinion.weight}%
                             </span>
                           ))}
                         </div>
@@ -498,12 +567,28 @@ export function MerchantProfileClient({
                     </div>
                     <p>{entry.followUp.note}</p>
                     <div className="crm-timeline-meta">
-                      <span>
-                        {entry.followUp.kind === "call" ? "مكالمة" : "زيارة"}
-                      </span>
+                      <span>{FOLLOW_UP_KIND_META[entry.followUp.kind].label}</span>
                       <span>{teamLabel(entry.followUp.team)}</span>
                       <span>{TASK_STATUS_LABEL[entry.followUp.status]}</span>
                     </div>
+                    {whatsappLink(
+                      summary.contact?.mobile,
+                      `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
+                    ) ? (
+                      <a
+                        href={
+                          whatsappLink(
+                            summary.contact?.mobile,
+                            `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
+                          ) as string
+                        }
+                        className="button button-small button-whatsapp"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        تواصل واتساب
+                      </a>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -663,9 +748,28 @@ export function MerchantProfileClient({
                     <li key={followUp.id}>
                       <span>{formatDateTime(followUp.dueAt)}</span>
                       <span className="badge">
-                        {followUp.kind === "call" ? "مكالمة" : "زيارة"}
+                        {FOLLOW_UP_KIND_META[followUp.kind].label}
                       </span>
                       <span className="muted">{followUp.note}</span>
+                      {whatsappLink(
+                        summary.contact?.mobile,
+                        `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
+                      ) ? (
+                        <a
+                          href={
+                            whatsappLink(
+                              summary.contact?.mobile,
+                              `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
+                            ) as string
+                          }
+                          className="button button-small button-whatsapp"
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`تواصل واتساب مع ${merchant.name}`}
+                        >
+                          واتساب
+                        </a>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -758,6 +862,19 @@ export function MerchantProfileClient({
         current={merchant.contractState}
         endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
         onClose={() => setStateOpen(false)}
+        onDone={(message) => {
+          announce(message);
+          router.refresh();
+        }}
+      />
+
+      <SignContractModal
+        open={signOpen}
+        merchantName={merchant.name}
+        currentCommission={merchant.agreedCommission ?? merchant.targetCommission}
+        suggestedCommission={merchant.targetCommission}
+        endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
+        onClose={() => setSignOpen(false)}
         onDone={(message) => {
           announce(message);
           router.refresh();

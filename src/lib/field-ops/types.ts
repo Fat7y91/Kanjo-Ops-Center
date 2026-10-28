@@ -172,6 +172,11 @@ export type Merchant = {
   strategicNotes: string;
   contractState: ContractState;
   commissionAmount: number;
+  /**
+   * Commission percentage locked at the moment the contract is signed by an
+   * admin. Null until a signature is registered.
+   */
+  agreedCommission?: number | null;
   editUnlocked: boolean;
   documents: MerchantDocument[];
   createdAt: string;
@@ -199,6 +204,11 @@ export type FieldTask = {
   strategicNotes: string;
   instructions: string;
   status: TaskStatus;
+  /**
+   * Set only on tasks spawned by a visit follow-up, so the board can render the
+   * correct channel action (e.g. a WhatsApp deep link).
+   */
+  followUpKind?: FollowUpKind | null;
   createdBy: string;
   createdByName: string;
   createdAt: string;
@@ -216,6 +226,8 @@ export type VisitReport = {
   previousState: ContractState;
   notes: string;
   commissionAmount: number;
+  /** Negotiated commission % captured with the outcome (provisional/final). */
+  agreedCommission?: number | null;
   createdAt: string;
   /**
    * Visit Engine enrichments. All optional so historical/seed reports and
@@ -262,10 +274,24 @@ export const REP_OPINIONS = [
   "expansion_ready",
 ] as const;
 
-export type RepOpinion = (typeof REP_OPINIONS)[number];
+export type RepOpinionTrait = (typeof REP_OPINIONS)[number];
+
+/**
+ * A rep's qualitative read on a merchant, now weighted 0-100% so the CRM card
+ * can show intensity instead of a binary "tagged / not tagged".
+ *
+ * `trait` is a known `RepOpinionTrait` key or a free-form custom slug. Custom
+ * traits carry their own `label` so the merchant card can render the rep's own
+ * wording ("متعاون جداً في التوريد").
+ */
+export type RepOpinion = {
+  trait: string;
+  weight: number;
+  label?: string;
+};
 
 export const REP_OPINION_META: Record<
-  RepOpinion,
+  RepOpinionTrait,
   { label: string; tone: string }
 > = {
   cooperative: { label: "متعاون", tone: "badge-green" },
@@ -276,14 +302,57 @@ export const REP_OPINION_META: Record<
   expansion_ready: { label: "جاهز للتوسع", tone: "badge-blue" },
 };
 
+export function isKnownOpinionTrait(trait: string): trait is RepOpinionTrait {
+  return (REP_OPINIONS as readonly string[]).includes(trait);
+}
+
+export function opinionLabel(opinion: RepOpinion): string {
+  if (opinion.label?.trim()) return opinion.label.trim();
+  return isKnownOpinionTrait(opinion.trait)
+    ? REP_OPINION_META[opinion.trait].label
+    : opinion.trait;
+}
+
+export function opinionTone(opinion: RepOpinion): string {
+  return isKnownOpinionTrait(opinion.trait)
+    ? REP_OPINION_META[opinion.trait].tone
+    : "badge-purple";
+}
+
 /**
- * Outcomes that represent a contract already being in motion. These are hidden
- * for a merchant's very first visit, where no prior agreement can exist.
+ * Outcomes a field rep may submit. Signing is an admin-only governance action
+ * handled on the merchant CRM card, never from the visit report.
  */
-export const ADVANCED_OUTCOMES: readonly ContractState[] = [
+export const REP_OUTCOMES = [
+  "no_agreement",
+  "provisional",
   "final_contract",
-  "signed_contract",
+] as const satisfies readonly ContractState[];
+
+export type RepOutcome = (typeof REP_OUTCOMES)[number];
+
+export function isRepOutcome(outcome: string): outcome is RepOutcome {
+  return (REP_OUTCOMES as readonly string[]).includes(outcome);
+}
+
+/** Outcomes that require an existing agreement (not a first visit). */
+export const ADVANCED_OUTCOMES: readonly ContractState[] = ["final_contract"];
+
+/** Outcomes that carry a negotiated commission percentage. */
+export const COMMISSION_OUTCOMES: readonly ContractState[] = [
+  "provisional",
+  "final_contract",
 ];
+
+export const FOLLOW_UP_KINDS = ["visit", "call", "whatsapp"] as const;
+
+export type FollowUpKind = (typeof FOLLOW_UP_KINDS)[number];
+
+export const FOLLOW_UP_KIND_META: Record<FollowUpKind, { label: string }> = {
+  visit: { label: "زيارة متابعة" },
+  call: { label: "مكالمة هاتفية" },
+  whatsapp: { label: "تواصل واتساب" },
+};
 
 export type FollowUpTask = {
   id: string;
@@ -293,7 +362,7 @@ export type FollowUpTask = {
   cityId: string;
   visitDate: string;
   dueAt: string;
-  kind: "visit" | "call";
+  kind: FollowUpKind;
   note: string;
   status: "scheduled" | "completed";
   createdBy: string;

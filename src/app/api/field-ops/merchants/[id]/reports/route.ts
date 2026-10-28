@@ -44,17 +44,25 @@ export async function POST(
 
     const input = visitReportSchema.parse(await readJson(request));
 
+    // Signing is never a rep outcome: it is an admin action on the CRM card.
+    if (input.outcome === "signed_contract") {
+      throw new FieldOpsError(
+        "SIGNED_MANAGER_ONLY",
+        "اعتماد توقيع العقد متاح فقط من كارت التاجر لمديري الحالات.",
+        403,
+      );
+    }
+
     // Server-side enforcement of the conditional state machine, independent
     // of whatever the offline client cached.
     if (
       visitCountFor(id) === 0 &&
-      (input.outcome === "final_contract" ||
-        input.outcome === "signed_contract") &&
+      input.outcome === "final_contract" &&
       !session.permissions.includes("manage_merchant_state")
     ) {
       throw new FieldOpsError(
         "FIRST_VISIT_GATE",
-        "خيارات تسليم المسودة وتوقيع العقد متاحة فقط للتجار الذين لديهم زيارة سابقة.",
+        "خيار «اتفاق نهائي» متاح فقط للتجار الذين لديهم زيارة سابقة.",
         422,
       );
     }

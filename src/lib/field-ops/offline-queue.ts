@@ -25,9 +25,10 @@ export type QueuedVisitPayload = {
   startLocation?: unknown;
   endLocation?: unknown;
   contact?: unknown;
-  opinions?: string[];
+  opinions?: Array<{ trait: string; weight: number; label?: string }>;
+  agreedCommission?: number | null;
   followUpAt?: string | null;
-  followUpKind?: "visit" | "call";
+  followUpKind?: "visit" | "call" | "whatsapp";
   followUpNote?: string;
   source?: "task" | "unplanned" | "offline";
   clientVisitId?: string | null;

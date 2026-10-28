@@ -97,10 +97,19 @@ export async function POST(request: Request) {
     }
 
     const priorVisits = visitCountFor(merchantId);
+    if (parsed.data.outcome === "signed_contract") {
+      results.push({
+        clientVisitId,
+        merchantId,
+        status: "failed",
+        code: "SIGNED_MANAGER_ONLY",
+        error: "اعتماد توقيع العقد متاح فقط من كارت التاجر لمديري الحالات.",
+      });
+      continue;
+    }
     if (
       priorVisits === 0 &&
-      (parsed.data.outcome === "final_contract" ||
-        parsed.data.outcome === "signed_contract") &&
+      parsed.data.outcome === "final_contract" &&
       !canManageState
     ) {
       results.push({
@@ -109,7 +118,7 @@ export async function POST(request: Request) {
         status: "failed",
         code: "FIRST_VISIT_GATE",
         error:
-          "خيارات تسليم المسودة وتوقيع العقد متاحة فقط للتجار الذين لديهم زيارة سابقة.",
+          "خيار «اتفاق نهائي» متاح فقط للتجار الذين لديهم زيارة سابقة.",
       });
       continue;
     }

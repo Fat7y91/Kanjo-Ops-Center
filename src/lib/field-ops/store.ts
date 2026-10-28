@@ -7,6 +7,7 @@ import type {
   ContractState,
   EditRequest,
   FieldTask,
+  FollowUpKind,
   FollowUpTask,
   Merchant,
   MerchantDocument,
@@ -19,6 +20,8 @@ import type {
 } from "@/lib/field-ops/types";
 import {
   ADVANCED_OUTCOMES,
+  COMMISSION_OUTCOMES,
+  isRepOutcome,
   zoneToBoundary,
 } from "@/lib/field-ops/types";
 import type { AppUser } from "@/lib/rbac/types";
@@ -310,6 +313,7 @@ function seedStore(): FieldOpsStore {
         "Multi-branch pharmacy group. Signed contract and commission accrual active.",
       contractState: "signed_contract",
       commissionAmount: 32_000,
+      agreedCommission: 8,
       editUnlocked: false,
       documents: [
         {
@@ -557,6 +561,7 @@ function seedStore(): FieldOpsStore {
       notes:
         "Authorized signature applied. Commission calculated at 8% of the monthly value.",
       commissionAmount: 32_000,
+      agreedCommission: 8,
       createdAt: isoNow(-25 * 24 * 60),
     },
     {
@@ -572,6 +577,7 @@ function seedStore(): FieldOpsStore {
       notes:
         "Owner accepted the provisional commission range. Final negotiation scheduled.",
       commissionAmount: 0,
+      agreedCommission: 7,
       createdAt: isoNow(-3 * 24 * 60),
     },
     {
@@ -918,6 +924,41 @@ export function calculateCommission(
   return Math.round(monthlyValue * targetCommission) / 100;
 }
 
+/**
+ * Merge weighted opinions for the CRM roll-up.
+ *
+ * Each trait keeps ONE entry on the merchant: the highest weight ever recorded.
+ * That way a rep flipping "cooperative" from 80% down to 20% on a later visit
+ * does not erase the earlier strong signal, but a stronger read always wins.
+ * Custom traits are keyed by their normalized label so the same wording
+ * accumulates instead of producing duplicates.
+ */
+export function mergeOpinions(
+  existing: RepOpinion[],
+  incoming: RepOpinion[],
+): RepOpinion[] {
+  const merged = new Map<string, RepOpinion>();
+  const keyFor = (opinion: RepOpinion) =>
+    opinion.trait === "custom"
+      ? `custom:${(opinion.label ?? "").trim().toLowerCase()}`
+      : opinion.trait;
+
+  for (const opinion of existing) {
+    const key = keyFor(opinion);
+    const current = merged.get(key);
+    if (!current || opinion.weight > current.weight) merged.set(key, { ...opinion });
+  }
+  for (const opinion of incoming) {
+    const key = keyFor(opinion);
+    if (!key || key === "custom:") continue;
+    const current = merged.get(key);
+    if (!current || opinion.weight > current.weight) {
+      merged.set(key, { ...opinion });
+    }
+  }
+  return Array.from(merged.values()).sort((left, right) => right.weight - left.weight);
+}
+
 export function createMerchant(
   input: MerchantCreateInput,
   _actor: Actor,
@@ -1090,13 +1131,24 @@ export function createVisitReport(
 
   const current = merchant.contractState;
   const priorVisits = visitCountFor(merchantId);
+  const outcome = input.outcome as ContractState;
 
-  // First-ever visits cannot claim a draft handover or a signed contract:
-  // there is no prior agreement for those outcomes to build on.
-  if (priorVisits === 0 && ADVANCED_OUTCOMES.includes(input.outcome) && !options.canManageState) {
+  // A rep can never submit a signature: that is an admin governance action on
+  // the CRM card. Guard here too in case a stale client sends it.
+  if (!isRepOutcome(input.outcome)) {
+    throw new FieldOpsError(
+      "SIGNED_MANAGER_ONLY",
+      "اعتماد توقيع العقد متاح فقط لمديري الحالات من كارت التاجر.",
+      403,
+    );
+  }
+
+  // First-ever visits cannot claim a final agreement: there is no prior
+  // agreement for that outcome to build on.
+  if (priorVisits === 0 && ADVANCED_OUTCOMES.includes(outcome) && !options.canManageState) {
     throw new FieldOpsError(
       "FIRST_VISIT_GATE",
-      "خيارات تسليم المسودة وتوقيع العقد متاحة فقط للتجار الذين لديهم زيارة سابقة. اختر نتيجة أساسية أولاً.",
+      "خيار «اتفاق نهائي» متاح فقط للتجار الذين لديهم زيارة سابقة. اختر نتيجة أساسية أولاً.",
       422,
     );
   }
@@ -1116,16 +1168,9 @@ export function createVisitReport(
         423,
       );
     }
-    if (input.outcome === "signed_contract") {
-      throw new FieldOpsError(
-        "SIGNED_MANAGER_ONLY",
-        "فقط عمليات المدن يمكنها تحويل التاجر إلى موقّع.",
-        403,
-      );
-    }
     if (
       current === "final_contract" &&
-      input.outcome !== "final_contract" &&
+      outcome !== "final_contract" &&
       !merchant.editUnlocked
     ) {
       throw new FieldOpsError(
@@ -1136,15 +1181,27 @@ export function createVisitReport(
     }
   }
 
-  const commissionAmount =
-    input.outcome === "signed_contract"
-      ? calculateCommission(
-          merchant.monthlyValue,
-          merchant.targetCommission,
-        )
-      : 0;
+  if (
+    COMMISSION_OUTCOMES.includes(outcome) &&
+    (input.agreedCommission == null || input.agreedCommission <= 0)
+  ) {
+    throw new FieldOpsError(
+      "COMMISSION_REQUIRED",
+      "النسبة المتفق عليها مطلوبة عند الاتفاق المبدئي أو النهائي.",
+      422,
+    );
+  }
 
-  merchant.contractState = input.outcome;
+  // Commission is only *earned* at signature; agreedCommission records the
+  // negotiated percentage at every stage so the CRM card has the full picture.
+  let commissionAmount = 0;
+  if (COMMISSION_OUTCOMES.includes(outcome)) {
+    merchant.agreedCommission = input.agreedCommission ?? null;
+  }
+
+  const agreedCommission = input.agreedCommission ?? null;
+
+  merchant.contractState = outcome;
   merchant.commissionAmount = commissionAmount;
   merchant.editUnlocked = false;
   merchant.lastVisitAt = isoNow();
@@ -1164,8 +1221,9 @@ export function createVisitReport(
     }
   }
 
-  // CRM roll-up: the newest contact block wins, and rep opinions accumulate
-  // (union) so a manager sees every signal ever captured for the merchant.
+  // CRM roll-up: the newest contact block wins, while opinions merge per trait
+  // keeping the strongest weight, so the card shows the most recent intensity
+  // each rep has expressed without letting a weak signal overwrite a strong one.
   const contact = input.contact ?? null;
   if (contact && (contact.name || contact.role || contact.mobile)) {
     merchant.contact = {
@@ -1176,9 +1234,7 @@ export function createVisitReport(
     merchant.contactUpdatedAt = isoNow();
   }
 
-  const opinions = new Set<RepOpinion>(merchant.opinions ?? []);
-  for (const opinion of input.opinions ?? []) opinions.add(opinion);
-  merchant.opinions = Array.from(opinions);
+  merchant.opinions = mergeOpinions(merchant.opinions ?? [], input.opinions ?? []);
 
   const report: VisitReport = {
     id: id("report"),
@@ -1188,10 +1244,11 @@ export function createVisitReport(
     repId: actor.id,
     repName: actor.name,
     team: actor.team,
-    outcome: input.outcome,
+    outcome,
     previousState: current,
     notes: input.notes.trim(),
     commissionAmount,
+    agreedCommission,
     createdAt: isoNow(),
     startedAt: input.startedAt ?? null,
     endedAt: input.endedAt ?? null,
@@ -1244,8 +1301,11 @@ export function createVisitReport(
         instructions:
           followUp.kind === "call"
             ? `متابعة هاتفية مجدولة من زيارة ${report.repName}.`
-            : `زيارة متابعة مجدولة من زيارة ${report.repName}.`,
+            : followUp.kind === "whatsapp"
+              ? `متابعة واتساب مجدولة من زيارة ${report.repName}.`
+              : `زيارة متابعة مجدولة من زيارة ${report.repName}.`,
         status: "scheduled",
+        followUpKind: followUp.kind,
         createdBy: actor.id,
         createdByName: actor.name,
         createdAt: isoNow(),
@@ -1363,9 +1423,9 @@ export function merchantCrmSummary(merchantId: string): MerchantCrmSummary {
         : 0,
     lastVisitAt: merchant?.lastVisitAt ?? null,
     lastOutcome: sortedVisits[0]?.outcome ?? null,
-    opinions: Array.from(
-      new Set(merchant?.opinions ?? []),
-    ) as RepOpinion[],
+    opinions: [...(merchant?.opinions ?? [])].sort(
+      (left, right) => right.weight - left.weight,
+    ),
     contact: merchant?.contact ?? null,
     contactUpdatedAt: merchant?.contactUpdatedAt ?? null,
     reps,
@@ -1599,6 +1659,7 @@ export function setMerchantState(
   state: ContractState,
   note: string,
   actor: Actor,
+  agreedCommission?: number | null,
 ): { merchant: Merchant; override: StateOverride } {
   const store = getStore();
   const merchant = store.merchants.find(
@@ -1609,9 +1670,24 @@ export function setMerchantState(
   }
 
   const previous = merchant.contractState;
+
+  // Signing is the one transition that must carry a final, locked commission
+  // percentage. It is recorded on the merchant permanently and drives the
+  // earned commission amount.
+  if (state === "signed_contract") {
+    if (agreedCommission == null || agreedCommission <= 0) {
+      throw new FieldOpsError(
+        "COMMISSION_REQUIRED",
+        "النسبة النهائية المقفلة مطلوبة عند اعتماد توقيع العقد.",
+        422,
+      );
+    }
+    merchant.agreedCommission = agreedCommission;
+  }
+
   const commissionAmount =
     state === "signed_contract"
-      ? calculateCommission(merchant.monthlyValue, merchant.targetCommission)
+      ? calculateCommission(merchant.monthlyValue, merchant.agreedCommission ?? merchant.targetCommission)
       : 0;
 
   merchant.contractState = state;
@@ -1644,6 +1720,8 @@ export function setMerchantState(
     previousState: previous,
     notes: `Manager state override: ${note.trim()}`,
     commissionAmount,
+    agreedCommission:
+      state === "signed_contract" ? (merchant.agreedCommission ?? null) : null,
     createdAt: isoNow(),
   };
   store.reports.push(report);

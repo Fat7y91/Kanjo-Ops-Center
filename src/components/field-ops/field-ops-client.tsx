@@ -18,6 +18,7 @@ import {
   CONTRACT_STATE_META,
   CONTRACT_STATES,
   FIELD_TEAMS,
+  FOLLOW_UP_KIND_META,
   teamLabel,
   type EditRequest,
   type FieldTask,
@@ -25,6 +26,7 @@ import {
   type MerchantSearchResult,
   type TransferRequest,
 } from "@/lib/field-ops/types";
+import { whatsappLink } from "@/lib/field-ops/whatsapp";
 
 type FieldOpsClientProps = {
   initialBoard: FieldOpsBoard;
@@ -248,12 +250,23 @@ export function FieldOpsClient({
     const state = merchant?.contractState ?? "no_agreement";
     const meta = CONTRACT_STATE_META[state];
     const otherTeam = merchant ? Boolean(merchant.team) && merchant.team !== viewerTeam : false;
+    const isFollowUp =
+      Boolean(task.followUpKind) || /متابعة/.test(task.instructions);
+    const waLink = whatsappLink(
+      merchant?.contact?.mobile,
+      `مرحباً ${task.merchantName}، بخصوص متابعة الاتفاق مع كانتو.`,
+    );
 
     return (
       <article key={task.id} className="task-card">
         <div className="task-card-top">
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
           <span className="chip chip-team">{teamLabel(task.team)}</span>
+          {task.followUpKind ? (
+            <span className="badge badge-green">
+              {FOLLOW_UP_KIND_META[task.followUpKind].label}
+            </span>
+          ) : null}
         </div>
         <h3>{task.merchantName}</h3>
         <p className="task-meta">
@@ -289,6 +302,17 @@ export function FieldOpsClient({
               >
                 بدء الزيارة
               </button>
+              {isFollowUp && waLink ? (
+                <a
+                  href={waLink}
+                  className="button button-small button-whatsapp"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`تواصل واتساب مع ${task.merchantName}`}
+                >
+                  واتساب
+                </a>
+              ) : null}
               {canViewMerchants ? (
                 <Link
                   href={`/merchants/${merchant.id}`}

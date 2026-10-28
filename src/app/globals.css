@@ -4680,6 +4680,225 @@ body.visit-mode-active .app-shell {
   color: var(--red);
 }
 
+/* Weighted opinions, commission capture, contract signing */
+
+.field-commission input {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.opinion-hint {
+  margin-bottom: 10px;
+}
+
+.opinion-slider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opinion-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.opinion-slider.is-active {
+  border-color: #8f78ff;
+  background: var(--surface);
+}
+
+.opinion-slider-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.opinion-slider-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.opinion-slider-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.opinion-weight {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.opinion-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.opinion-slider input[type="range"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.opinion-custom {
+  margin-top: 10px;
+}
+
+.opinion-custom input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.opinion-custom input[type="text"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.opinion-weighted {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opinion-weighted-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opinion-weighted-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.opinion-weighted-head strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.opinion-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.opinion-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--purple), var(--primary));
+}
+
+.sign-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #e6cf7a;
+  border-radius: 14px;
+  background: #fffbea;
+}
+
+.sign-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sign-panel-head h3 {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.sign-panel p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+.button-sign {
+  align-self: flex-start;
+}
+
+.button-whatsapp {
+  border-color: #bfe3c6;
+  background: #e8f7ec;
+  color: #146c2e;
+  font-weight: 700;
+}
+
+.button-whatsapp:hover {
+  border-color: #9ed3a9;
+  background: #d9f2e1;
+}
+
+[data-theme="dark"] .opinion-slider {
+  border-color: var(--line);
+  background: #1f1f23;
+}
+
+[data-theme="dark"] .opinion-slider.is-active {
+  border-color: var(--purple);
+  background: #27272a;
+}
+
+[data-theme="dark"] .opinion-custom input[type="text"] {
+  border-color: var(--line-strong);
+  background: #1f1f23;
+  color: #fafafa;
+}
+
+[data-theme="dark"] .opinion-bar {
+  background: #27272a;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+[data-theme="dark"] .sign-panel {
+  border-color: #4c3b16;
+  background: #201a0c;
+}
+
+[data-theme="dark"] .sign-panel p {
+  color: #f0e4bd;
+}
+
+[data-theme="dark"] .button-whatsapp {
+  border-color: #1f5133;
+  background: #12291a;
+  color: #7ee2a0;
+}
+
+[data-theme="dark"] .button-whatsapp:hover {
+  border-color: #2c6b44;
+  background: #163522;
+}
+
 @media (max-width: 1023px) {
   .visit-mode-body {
     grid-template-columns: 1fr;
@@ -4729,6 +4948,7 @@ body.visit-mode-active .app-shell {
   .visit-contact-grid,
   .visit-followup-grid,
   .opinion-grid,
+  .opinion-slider-grid,
   .crm-metrics {
     grid-template-columns: 1fr;
   }

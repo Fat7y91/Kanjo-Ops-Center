@@ -2,9 +2,10 @@ import { z } from "zod";
 
 import {
   CITY_STAGES,
+  COMMISSION_OUTCOMES,
   CONTRACT_STATES,
   FIELD_TEAMS,
-  REP_OPINIONS,
+  FOLLOW_UP_KINDS,
 } from "@/lib/field-ops/types";
 
 const zonePointSchema = z.object({
@@ -94,33 +95,71 @@ const visitContactSchema = z.object({
   mobile: z.string().trim().max(40).default(""),
 });
 
-export const visitReportSchema = z.object({
-  outcome: z.enum(CONTRACT_STATES),
-  notes: z
-    .string()
-    .trim()
-    .min(10, "ملاحظات الزيارة يجب ألا تقل عن 10 أحرف.")
-    .max(4000),
-  taskId: z.string().trim().min(1).nullable().optional(),
-  startedAt: z.string().trim().min(1).nullable().optional(),
-  endedAt: z.string().trim().min(1).nullable().optional(),
-  durationSeconds: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .max(86_400)
-    .nullable()
-    .optional(),
-  startLocation: geoCaptureSchema.nullable().optional(),
-  endLocation: geoCaptureSchema.nullable().optional(),
-  contact: visitContactSchema.nullable().optional(),
-  opinions: z.array(z.enum(REP_OPINIONS)).max(12).default([]),
-  followUpAt: z.string().trim().min(1).nullable().optional(),
-  followUpKind: z.enum(["visit", "call"]).optional(),
-  followUpNote: z.string().trim().max(500).optional(),
-  source: z.enum(["task", "unplanned", "offline"]).optional(),
-  clientVisitId: z.string().trim().max(80).nullable().optional(),
-});
+/**
+ * Weighted rep opinion. `trait` is either a known trait key or a custom
+ * free-form label supplied by the rep; `weight` is a 0-100 intensity.
+ */
+const repOpinionSchema = z
+  .object({
+    trait: z.string().trim().min(1, "وسم الرأي مطلوب.").max(60),
+    weight: z.coerce
+      .number()
+      .int("وزن الرأي يجب أن يكون رقماً صحيحاً.")
+      .min(0, "الوزن لا يقل عن 0%.")
+      .max(100, "الوزن لا يتجاوز 100%."),
+    label: z.string().trim().max(60).optional(),
+  })
+  .refine((opinion) => opinion.weight > 0, {
+    message: "اختر وزناً أكبر من صفر لأي رأي مسجَّل.",
+  });
+
+export const visitReportSchema = z
+  .object({
+    outcome: z.enum(CONTRACT_STATES),
+    notes: z
+      .string()
+      .trim()
+      .min(10, "ملاحظات الزيارة يجب ألا تقل عن 10 أحرف.")
+      .max(4000),
+    taskId: z.string().trim().min(1).nullable().optional(),
+    startedAt: z.string().trim().min(1).nullable().optional(),
+    endedAt: z.string().trim().min(1).nullable().optional(),
+    durationSeconds: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(86_400)
+      .nullable()
+      .optional(),
+    startLocation: geoCaptureSchema.nullable().optional(),
+    endLocation: geoCaptureSchema.nullable().optional(),
+    contact: visitContactSchema.nullable().optional(),
+    opinions: z.array(repOpinionSchema).max(12).default([]),
+    agreedCommission: z.coerce
+      .number()
+      .min(1, "النسبة المتفق عليها يجب أن تكون بين 1% و100%.")
+      .max(100, "النسبة المتفق عليها يجب أن تكون بين 1% و100%.")
+      .nullable()
+      .optional(),
+    followUpAt: z.string().trim().min(1).nullable().optional(),
+    followUpKind: z.enum(FOLLOW_UP_KINDS).optional(),
+    followUpNote: z.string().trim().max(500).optional(),
+    source: z.enum(["task", "unplanned", "offline"]).optional(),
+    clientVisitId: z.string().trim().max(80).nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    // A negotiated outcome must always carry the number that was agreed on.
+    if (
+      COMMISSION_OUTCOMES.includes(value.outcome) &&
+      (value.agreedCommission == null || value.agreedCommission <= 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["agreedCommission"],
+        message: "النسبة المتفق عليها مطلوبة عند الاتفاق المبدئي أو النهائي.",
+      });
+    }
+  });
 
 export const visitSyncSchema = z.object({
   visits: z.array(visitReportSchema).min(1).max(50),
@@ -147,14 +186,33 @@ export const decisionSchema = z.object({
   note: z.string().trim().max(1000).optional().default(""),
 });
 
-export const merchantStateSchema = z.object({
-  state: z.enum(CONTRACT_STATES),
-  note: z
-    .string()
-    .trim()
-    .min(5, "مطلوب ملاحظة تغيير الحالة لا تقل عن 5 أحرف.")
-    .max(1000),
-});
+export const merchantStateSchema = z
+  .object({
+    state: z.enum(CONTRACT_STATES),
+    note: z
+      .string()
+      .trim()
+      .min(5, "مطلوب ملاحظة تغيير الحالة لا تقل عن 5 أحرف.")
+      .max(1000),
+    agreedCommission: z.coerce
+      .number()
+      .min(1, "النسبة النهائية يجب أن تكون بين 1% و100%.")
+      .max(100, "النسبة النهائية يجب أن تكون بين 1% و100%.")
+      .nullable()
+      .optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.state === "signed_contract" &&
+      (value.agreedCommission == null || value.agreedCommission <= 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["agreedCommission"],
+        message: "النسبة النهائية المقفلة مطلوبة عند اعتماد توقيع العقد.",
+      });
+    }
+  });
 
 export const merchantDocumentSchema = z.object({
   name: z.string().trim().min(2, "اسم المستند مطلوب.").max(160),

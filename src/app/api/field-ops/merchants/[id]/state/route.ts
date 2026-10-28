@@ -21,6 +21,7 @@ export async function PATCH(
       input.state,
       input.note,
       actorFromSession(session),
+      input.agreedCommission ?? null,
     );
     return NextResponse.json(result);
   } catch (error) {
