@@ -36,7 +36,8 @@ export type CatalogProductInput = {
   merchantId: string;
   vendorTypeId?: number | null;
   categoryKey?: string | null;
-  categoryId?: number | null;
+  /** Mandatory MDM category — products without one are rejected. */
+  categoryId: number;
   productType?: CatalogProductType;
   sku?: string;
   barcode?: string;

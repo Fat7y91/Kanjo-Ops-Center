@@ -52,9 +52,9 @@ export function ProductEntry({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // Auto-flush (on reconnect / interval) bypasses the manual button, so refresh
-  // the catalog list whenever a *new* outcome acknowledges drafts. Depending on
-  // the outcome object (not just its count) makes repeated 1-item flushes refire.
+  // Uploads are manual-only, so this refresh fires exactly when the rep presses
+  // "رفع الكل الآن". Depending on the outcome object (not just its count) makes
+  // repeated 1-item flushes refire.
   const lastOutcome = queue.lastOutcome;
   useEffect(() => {
     if (lastOutcome && lastOutcome.synced > 0) onSynced();
@@ -68,6 +68,9 @@ export function ProductEntry({
     }
     if (outcome.failed > 0) {
       setToast(`${outcome.failed} منتج لم يُرفع — ما زال في المسودة.`);
+    }
+    if (outcome.synced === 0 && outcome.failed === 0) {
+      setToast("لا يوجد اتصال — بقيت المسودات محفوظة محلياً.");
     }
   }
 

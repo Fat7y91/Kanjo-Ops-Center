@@ -8,6 +8,7 @@ import {
   enqueueDraft,
   type CatalogDraftPayload,
 } from "@/lib/catalog/draft-queue";
+import { categoryIdFromKey } from "@/lib/catalog/category";
 import {
   createSkuSeed,
   generateSku,
@@ -97,6 +98,14 @@ export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs)
       setError("اسم المنتج مطلوب (حرفان على الأقل).");
       return false;
     }
+    // Category is an MDM requirement, not optional metadata: block the save
+    // locally so the rep never queues an uncategorised draft that the server
+    // would later reject.
+    const categoryId = categoryIdFromKey(values.categoryKey);
+    if (categoryId === null) {
+      setError("اختر التصنيف قبل حفظ المنتج — التصنيف مطلوب.");
+      return false;
+    }
     const isVariable = values.productType === "variable";
 
     // Variable products are entered through the matrix: one queued draft per
@@ -172,7 +181,8 @@ export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs)
           merchantId: values.merchant.id,
           merchantName: values.merchant.name,
           vendorTypeId: values.merchant.vendorTypeId,
-          categoryKey: values.categoryKey || null,
+          categoryKey: values.categoryKey,
+          categoryId,
           productType: values.productType as CatalogProductType,
           sku: row.sku,
           barcode: /^\d{8,14}$/.test(row.sku) ? row.sku : "",

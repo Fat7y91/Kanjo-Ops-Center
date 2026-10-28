@@ -13,7 +13,11 @@ const baseProductFields = {
   merchantId: z.string().trim().min(1, "اختر التاجر."),
   vendorTypeId: z.number().int().positive().nullable().optional(),
   categoryKey: z.string().trim().max(40).nullable().optional(),
-  categoryId: z.number().int().positive().nullable().optional(),
+  /** MDM category is mandatory: a product can never be categorised later. */
+  categoryId: z
+    .number({ required_error: "التصنيف مطلوب." })
+    .int()
+    .positive("التصنيف مطلوب."),
   productType: catalogProductTypeSchema.default("simple"),
   sku: z.string().trim().max(64).default(""),
   barcode: z

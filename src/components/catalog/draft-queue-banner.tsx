@@ -40,7 +40,9 @@ export function DraftQueueBanner({
             {drafts.length} منتج في المسودة
           </span>
           <span className="cat-queue-sub">
-            {online ? "متصل — يمكن الرفع الآن" : "غير متصل — ستُرفع تلقائياً"}
+            {online
+              ? "محفوظة محلياً — الرفع يدوي فقط"
+              : "غير متصل — محفوظة محلياً حتى ترفعها يدوياً"}
             {failed.length > 0
               ? ` · ${failed.length} بحاجة إلى إعادة محاولة`
               : ""}

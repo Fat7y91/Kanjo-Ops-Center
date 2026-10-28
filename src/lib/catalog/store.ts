@@ -3,7 +3,6 @@ import { normalizeSearchText } from "@/lib/search/normalize";
 import {
   assertCategoryInVendor,
   assertVendorTypeExists,
-  listCategories,
 } from "@/lib/taxonomy/store";
 import {
   isCatalogEligibleContract,
@@ -130,23 +129,24 @@ export function createProduct(input: CatalogProductInput): CatalogProduct {
   const vendorTypeId = input.vendorTypeId ?? merchant.vendorTypeId;
   assertVendorTypeExists(vendorTypeId);
 
-  let categoryKey: string | null = null;
-  if (input.categoryKey) {
-    const category = listCategories(vendorTypeId).find(
-      (candidate) => candidate.key === input.categoryKey,
+  // Category is mandatory and must belong to the merchant's vendor type: a
+  // product can never be saved "uncategorised" and categorised later.
+  if (input.categoryId == null) {
+    throw new CatalogError(
+      "CATEGORY_REQUIRED",
+      "اختر التصنيف قبل حفظ المنتج.",
+      422,
     );
-    if (!category) {
-      throw new CatalogError(
-        "CATEGORY_NOT_IN_VENDOR_SCOPE",
-        "التصنيف غير تابع لنوع التاجر المحدد.",
-        422,
-      );
-    }
-    assertCategoryInVendor(vendorTypeId, category.id);
-    categoryKey = category.key;
-  } else if (input.categoryId != null) {
-    categoryKey = assertCategoryInVendor(vendorTypeId, input.categoryId).key;
   }
+  const category = assertCategoryInVendor(vendorTypeId, input.categoryId);
+  if (input.categoryKey && input.categoryKey !== category.key) {
+    throw new CatalogError(
+      "CATEGORY_MISMATCH",
+      "التصنيف المحدد لا يطابق معرّف التصنيف.",
+      422,
+    );
+  }
+  const categoryKey = category.key;
 
   const barcode = normalizeCode(input.barcode ?? "");
   if (

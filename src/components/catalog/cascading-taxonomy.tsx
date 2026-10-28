@@ -80,7 +80,9 @@ export function CascadingTaxonomy({
     <div className="cat-taxonomy">
       <div className="cat-field">
         <div className="cat-label-row">
-          <span className="cat-label">التصنيف</span>
+          <span className="cat-label">
+            التصنيف <span className="cat-required">مطلوب</span>
+          </span>
           <TaxonomyRequestButton
             kind="category"
             vendorTypes={vendorTypes}
