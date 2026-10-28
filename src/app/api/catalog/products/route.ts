@@ -6,6 +6,8 @@ import {
   readJson,
 } from "@/lib/auth/api";
 import { catalogRevision, createProduct, listProducts } from "@/lib/catalog/store";
+import { effectiveCityIds } from "@/lib/city-scope-query";
+import { getMerchantById } from "@/lib/field-ops/store";
 import { productCreateSchema } from "@/lib/schemas/catalog";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +21,15 @@ export async function GET() {
   const { session, response } = await authorizeAny(["view_catalog"]);
   if (!session) return response;
 
+  // Same city scope as the page: the client reload must never widen visibility.
+  const allowed = new Set(effectiveCityIds(session));
+  const products = listProducts().filter((product) => {
+    const merchant = getMerchantById(product.merchantId);
+    return merchant ? allowed.has(merchant.cityId) : false;
+  });
+
   return NextResponse.json(
-    { products: listProducts(), revision: catalogRevision() },
+    { products, revision: catalogRevision() },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

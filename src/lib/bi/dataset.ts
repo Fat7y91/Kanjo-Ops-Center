@@ -136,7 +136,9 @@ export function buildBiDataset(): BiDataset {
         cityId: merchant?.cityId ?? "unknown",
         cityName: cityName.get(merchant?.cityId ?? "") ?? "غير محدد",
         team: merchant?.team ?? "غير مسند",
-        state: product.state,
+        // BI only distinguishes published vs draft; review states fold into
+        // draft so the dashboard keeps one binary catalog-health signal.
+        state: product.state === "published" ? "published" : "draft",
         price: product.price,
         updatedAt: product.updatedAt,
       };

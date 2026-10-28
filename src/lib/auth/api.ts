@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 import { getServerSession } from "@/lib/auth/server-session";
 import { CatalogError } from "@/lib/catalog/store";
+import { ImageQaError } from "@/lib/catalog/image-qa";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
@@ -82,6 +83,12 @@ export function apiError(error: unknown): NextResponse {
     );
   }
   if (error instanceof CatalogError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof ImageQaError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },

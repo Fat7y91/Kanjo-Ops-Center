@@ -1,4 +1,8 @@
-export type CatalogProductState = "draft" | "published";
+export type CatalogProductState =
+  | "draft"
+  | "pending_review"
+  | "completed"
+  | "published";
 
 /** Taxonomy-mandated product shape. No free-form values are accepted. */
 export type CatalogProductType = "simple" | "variable";
@@ -67,9 +71,20 @@ export const PRODUCT_STATE_META: Record<
   CatalogProductState,
   { label: string; tone: string }
 > = {
+  draft: { label: "مسودة", tone: "badge" },
+  pending_review: { label: "بانتظار المراجعة", tone: "badge-gold" },
+  completed: { label: "مكتمل", tone: "badge-blue" },
   published: { label: "منشور", tone: "badge-green" },
-  draft: { label: "مسودة", tone: "badge-gold" },
 };
+
+/** Review states that expose the Image QA action bar. */
+export const IMAGE_QA_STATES: readonly CatalogProductState[] = [
+  "pending_review",
+];
+
+export function needsImageQa(state: CatalogProductState): boolean {
+  return IMAGE_QA_STATES.includes(state);
+}
 
 /** Contract states that are allowed to add products to the catalog. */
 export const CATALOG_ELIGIBLE_CONTRACT_STATES = [

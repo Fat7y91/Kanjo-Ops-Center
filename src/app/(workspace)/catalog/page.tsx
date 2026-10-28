@@ -20,6 +20,16 @@ export default async function CatalogPage() {
 
   const allowed = new Set(session ? effectiveCityIds(session) : []);
   const cityName = new Map(listCities().map((city) => [city.id, city.name]));
+  const merchantCity = new Map(
+    listMerchants().map((merchant) => [merchant.id, merchant.cityId]),
+  );
+
+  // City scope applies to the catalog too: a reviewer only sees products whose
+  // merchant sits inside their effective cities.
+  const products = listProducts().filter((product) => {
+    const cityId = merchantCity.get(product.merchantId);
+    return cityId !== undefined && allowed.has(cityId);
+  });
 
   // Only merchants whose contract is final or signed may receive products.
   const merchants = listMerchants()
@@ -43,11 +53,11 @@ export default async function CatalogPage() {
         eyebrow="حوكمة الكتالوج"
         title="كتالوج المنتجات"
         description="الأسعار وحالة النشر ومراجعة الجودة لمنتجات التجار. أدوات الإنشاء والحذف محكومة بالصلاحيات."
-        actions={<span className="badge">{listProducts().length} منتج</span>}
+        actions={<span className="badge">{products.length} منتج</span>}
       />
 
       <CatalogClient
-        initialProducts={listProducts()}
+        initialProducts={products}
         initialRevision={catalogRevision()}
         merchants={merchants}
         vendorTypes={listVendorTypes()}

@@ -1,0 +1,255 @@
+/* Catalog module — status filter tabs, product details, lightbox and the
+ * Image QA action bar.
+ *
+ * Imported by catalog.css.
+ */
+
+/* ── Interactive status filter tabs ───────────────────────────────────── */
+
+.cat-toolbar {
+  align-items: flex-start;
+}
+
+.cat-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cat-filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.cat-filter-tab:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.cat-filter-tab.is-active {
+  border-color: var(--purple);
+  background: var(--purple);
+  color: var(--primary-ink);
+}
+
+.cat-filter-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.cat-filter-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cat-filter-tab.is-active .cat-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Clickable card affordance ────────────────────────────────────────── */
+
+.product-card.is-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.product-card.is-clickable:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.product-card.is-clickable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.product-thumb {
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ── Product details modal ────────────────────────────────────────────── */
+
+.prod-detail {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.prod-detail-media {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.prod-detail-thumb {
+  width: 160px;
+  height: 160px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  cursor: zoom-in;
+}
+
+.prod-detail-thumb:disabled {
+  cursor: default;
+  color: var(--ink-soft);
+}
+
+.prod-detail-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.prod-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.prod-detail-grid dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.prod-detail-grid dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.prod-detail-variants h3 {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+}
+
+.prod-detail-variants ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prod-detail-variants li {
+  display: flex;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  font-size: 0.8rem;
+}
+
+.prod-detail-variants li span {
+  color: var(--ink-soft);
+}
+
+/* ── Lightbox ─────────────────────────────────────────────────────────── */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4vw;
+  background: rgba(9, 9, 11, 0.86);
+  cursor: zoom-out;
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  object-fit: contain;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 18px;
+  inset-inline-end: 20px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ── Image QA action bar ──────────────────────────────────────────────── */
+
+.img-qa-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--gold);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.img-qa-bar .form-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.img-qa-size {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .prod-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prod-detail-media {
+    align-items: flex-start;
+  }
+
+  .prod-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

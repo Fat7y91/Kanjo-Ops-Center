@@ -13,6 +13,9 @@ import {
 } from "@/lib/catalog/types";
 import { generateSku, normalizeCode } from "@/lib/catalog/sku";
 import { buildCatalogSeed } from "@/lib/catalog/data/seed";
+import { applyImageQa, type ImageQaPatch } from "@/lib/catalog/image-qa";
+
+export { ImageQaError } from "@/lib/catalog/image-qa";
 
 export class CatalogError extends Error {
   readonly code: string;
@@ -190,6 +193,23 @@ export function createProduct(input: CatalogProductInput): CatalogProduct {
   store.products.push(product);
   store.revision += 1;
   return clone(product);
+}
+
+/**
+ * Image QA transition.
+ *
+ * Delegates the state machine to `applyImageQa` so the rules stay pure and
+ * testable; this function only owns persistence and revision bumping.
+ */
+export function completeImageQa(
+  productId: string,
+  patch: ImageQaPatch,
+): CatalogProduct {
+  const store = getStore();
+  const product = store.products.find((item) => item.id === productId);
+  const updated = applyImageQa(product, patch, isoNow());
+  store.revision += 1;
+  return clone(updated);
 }
 
 export type SyncProductResult = {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Protect } from "@/components/auth/protect";
-import { ProductCard } from "@/components/catalog/product-card";
+import { CatalogGrid } from "@/components/catalog/catalog-grid";
 import { ProductEntry } from "@/components/catalog/product-entry";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import type { CatalogProduct } from "@/lib/catalog/types";
@@ -41,8 +41,8 @@ export function CatalogClient({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const draftCount = products.filter(
-    (product) => product.state === "draft",
+  const reviewCount = products.filter(
+    (product) => product.state === "pending_review",
   ).length;
 
   const reload = useCallback(async () => {
@@ -70,8 +70,8 @@ export function CatalogClient({
     <>
       <section className="toolbar-row">
         <span className="badge">{products.length} منتجات</span>
-        <span className={draftCount > 0 ? "badge badge-gold" : "badge"}>
-          {draftCount} مسودة
+        <span className={reviewCount > 0 ? "badge badge-gold" : "badge"}>
+          {reviewCount} بانتظار مراجعة الصورة
         </span>
         <span className="badge">rev {revision}</span>
         <div className="row-actions">
@@ -102,15 +102,12 @@ export function CatalogClient({
         onSynced={handleSynced}
       />
 
-      <section className="card-grid">
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-
-        {products.length === 0 ? (
-          <p className="empty-state">لا توجد منتجات في الكتالوج بعد.</p>
-        ) : null}
-      </section>
+      <CatalogGrid
+        products={products}
+        categories={categories}
+        variants={variants}
+        onProductsChange={setProducts}
+      />
 
       <section className="panel">
         <div className="panel-head">

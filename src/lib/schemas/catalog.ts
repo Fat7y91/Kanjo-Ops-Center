@@ -35,7 +35,9 @@ const baseProductFields = {
     .number()
     .min(0, "السعر لا يمكن أن يكون سالباً.")
     .max(100_000_000),
-  state: z.enum(["draft", "published"]).default("draft"),
+  state: z
+    .enum(["draft", "pending_review", "completed", "published"])
+    .default("draft"),
   reviewNote: z.string().trim().max(500).default(""),
 };
 
