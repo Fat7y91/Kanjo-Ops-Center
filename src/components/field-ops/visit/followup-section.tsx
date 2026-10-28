@@ -5,29 +5,34 @@ import {
   FOLLOW_UP_KIND_META,
 } from "@/lib/field-ops/types";
 import type { FollowUpKind } from "@/lib/field-ops/types";
+import { isCommunicationKind, sanitizePhone } from "@/lib/field-ops/phone";
 
 type FollowupSectionProps = {
   followUpAt: string;
   followUpKind: FollowUpKind;
   followUpNote: string;
-  /** Merchant's primary mobile, used to hint about a missing WhatsApp number. */
-  contactMobile: string;
+  followUpContactNumber: string;
+  /** Merchant's primary mobile, used as the auto-fill default. */
   merchantTeam: string | null;
   onAtChange: (value: string) => void;
   onKindChange: (value: FollowUpKind) => void;
   onNoteChange: (value: string) => void;
+  onContactNumberChange: (value: string) => void;
 };
 
 export function FollowupSection({
   followUpAt,
   followUpKind,
   followUpNote,
-  contactMobile,
+  followUpContactNumber,
   merchantTeam,
   onAtChange,
   onKindChange,
   onNoteChange,
+  onContactNumberChange,
 }: FollowupSectionProps) {
+  const needsNumber = isCommunicationKind(followUpKind);
+
   return (
     <section className="visit-form-section">
       <div className="visit-form-head">
@@ -68,13 +73,30 @@ export function FollowupSection({
             maxLength={200}
           />
         </label>
+        {needsNumber ? (
+          <label className="field">
+            <span>رقم هاتف المتابعة</span>
+            <input
+              type="tel"
+              value={followUpContactNumber}
+              onChange={(event) => onContactNumberChange(event.target.value)}
+              placeholder="01xxxxxxxxx"
+              inputMode="tel"
+              required={Boolean(followUpAt)}
+            />
+            <span className="field-hint">
+              إلزامي للمكالمة والواتساب. يُملأ تلقائياً من جهة الاتصال ويمكن
+              تعديله.
+            </span>
+          </label>
+        ) : null}
       </div>
       {followUpAt ? (
         <p className="inline-note">
           ستُنشأ مهمة مجدولة لفريق {merchantTeam ?? "غير مسند"} وتظهر في لوحة
           العمليات الميدانية.
-          {followUpKind === "whatsapp" && !contactMobile.trim()
-            ? " أضف رقم موبايل ليظهر زر واتساب المباشر."
+          {needsNumber && !sanitizePhone(followUpContactNumber)
+            ? " أضف رقم هاتف المتابعة لتظهر أزرار الاتصال والواتساب المباشرة."
             : ""}
         </p>
       ) : null}

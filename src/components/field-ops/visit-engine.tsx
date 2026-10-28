@@ -82,6 +82,7 @@ export function VisitEngine({
       followUpAt: report.followUpAt || null,
       followUpKind: report.followUpKind,
       followUpNote: report.followUpNote,
+      followUpContactNumber: report.followUpContactNumber || null,
       source: draft.taskId ? ("task" as const) : ("unplanned" as const),
       clientVisitId: draft.clientVisitId,
     };

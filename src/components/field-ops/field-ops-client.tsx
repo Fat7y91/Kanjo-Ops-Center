@@ -12,6 +12,7 @@ import {
   DecisionModal,
   JustificationModal,
 } from "@/components/field-ops/request-modals";
+import { FollowUpActions } from "@/components/field-ops/follow-up-actions";
 import type { FieldOpsBoard } from "@/lib/field-ops/board";
 import { useVisitQueue } from "@/lib/field-ops/offline-queue";
 import {
@@ -26,7 +27,6 @@ import {
   type MerchantSearchResult,
   type TransferRequest,
 } from "@/lib/field-ops/types";
-import { whatsappLink } from "@/lib/field-ops/whatsapp";
 
 type FieldOpsClientProps = {
   initialBoard: FieldOpsBoard;
@@ -250,12 +250,11 @@ export function FieldOpsClient({
     const state = merchant?.contractState ?? "no_agreement";
     const meta = CONTRACT_STATE_META[state];
     const otherTeam = merchant ? Boolean(merchant.team) && merchant.team !== viewerTeam : false;
-    const isFollowUp =
-      Boolean(task.followUpKind) || /متابعة/.test(task.instructions);
-    const waLink = whatsappLink(
-      merchant?.contact?.mobile,
-      `مرحباً ${task.merchantName}، بخصوص متابعة الاتفاق مع كانتو.`,
-    );
+    // Prefer the dialable number captured on the follow-up itself; fall back
+    // to the merchant's primary contact for older tasks created before the
+    // number was required.
+    const followUpNumber =
+      task.followUpContactNumber ?? merchant?.contact?.mobile ?? null;
 
     return (
       <article key={task.id} className="task-card">
@@ -302,17 +301,12 @@ export function FieldOpsClient({
               >
                 بدء الزيارة
               </button>
-              {isFollowUp && waLink ? (
-                <a
-                  href={waLink}
-                  className="button button-small button-whatsapp"
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`تواصل واتساب مع ${task.merchantName}`}
-                >
-                  واتساب
-                </a>
-              ) : null}
+              <FollowUpActions
+                kind={task.followUpKind}
+                number={followUpNumber}
+                merchantName={task.merchantName}
+                whatsappMessage={`مرحباً ${task.merchantName}، بخصوص متابعة الاتفاق مع كانتو.`}
+              />
               {canViewMerchants ? (
                 <Link
                   href={`/merchants/${merchant.id}`}

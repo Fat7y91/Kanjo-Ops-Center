@@ -1,5 +1,6 @@
 "use client";
 
+import { FollowUpActions } from "@/components/field-ops/follow-up-actions";
 import type { MerchantCrmSummary } from "@/lib/field-ops/store";
 import {
   CONTRACT_STATE_META,
@@ -13,7 +14,6 @@ import type {
   StateOverride,
   VisitReport,
 } from "@/lib/field-ops/types";
-import { whatsappLink } from "@/lib/field-ops/whatsapp";
 
 import { formatDateTime } from "@/lib/field-ops/format";
 import { TASK_STATUS_LABEL } from "@/lib/field-ops/profile-meta";
@@ -77,25 +77,11 @@ export function TasksFollowups({
                     {FOLLOW_UP_KIND_META[followUp.kind].label}
                   </span>
                   <span className="muted">{followUp.note}</span>
-                  {whatsappLink(
-                    summary.contact?.mobile,
-                    `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
-                  ) ? (
-                    <a
-                      href={
-                        whatsappLink(
-                          summary.contact?.mobile,
-                          `مرحباً ${merchant.name}، بخصوص متابعة الاتفاق.`,
-                        ) as string
-                      }
-                      className="button button-small button-whatsapp"
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`تواصل واتساب مع ${merchant.name}`}
-                    >
-                      واتساب
-                    </a>
-                  ) : null}
+                  <FollowUpActions
+                    kind={followUp.kind}
+                    number={followUp.contactNumber ?? summary.contact?.mobile}
+                    merchantName={merchant.name}
+                  />
                 </li>
               ))}
             </ul>

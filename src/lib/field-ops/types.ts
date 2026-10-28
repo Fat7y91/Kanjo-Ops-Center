@@ -209,6 +209,11 @@ export type FieldTask = {
    * correct channel action (e.g. a WhatsApp deep link).
    */
   followUpKind?: FollowUpKind | null;
+  /**
+   * E.164-ish contact captured for communication follow-ups (call/WhatsApp).
+   * Present only when `followUpKind` is `call` or `whatsapp`.
+   */
+  followUpContactNumber?: string | null;
   createdBy: string;
   createdByName: string;
   createdAt: string;
@@ -242,6 +247,7 @@ export type VisitReport = {
   opinions?: RepOpinion[];
   followUpAt?: string | null;
   followUpTaskId?: string | null;
+  followUpContactNumber?: string | null;
   source?: VisitSource;
   clientVisitId?: string | null;
 };
@@ -364,6 +370,8 @@ export type FollowUpTask = {
   dueAt: string;
   kind: FollowUpKind;
   note: string;
+  /** Required for `call`/`whatsapp`; digits only, no spaces or dashes. */
+  contactNumber?: string | null;
   status: "scheduled" | "completed";
   createdBy: string;
   createdByName: string;

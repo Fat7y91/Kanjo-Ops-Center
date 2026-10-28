@@ -194,6 +194,10 @@ export function createVisitReport(
 
   merchant.opinions = mergeOpinions(merchant.opinions ?? [], input.opinions ?? []);
 
+  // Normalise once: the form sends "" for non-communication follow-ups, and a
+  // blank string would otherwise be persisted and later treated as a number.
+  const followUpContactNumber = input.followUpContactNumber?.trim() || null;
+
   const report: VisitReport = {
     id: id("report"),
     merchantId: merchant.id,
@@ -217,6 +221,7 @@ export function createVisitReport(
     opinions: input.opinions ?? [],
     followUpAt: input.followUpAt ?? null,
     followUpTaskId: null,
+    followUpContactNumber,
     source:
       input.source ??
       (input.taskId ? "task" : input.clientVisitId ? "offline" : "task"),
@@ -236,6 +241,7 @@ export function createVisitReport(
       dueAt: input.followUpAt,
       kind: input.followUpKind ?? "visit",
       note: input.followUpNote?.trim() || input.notes.trim().slice(0, 160),
+      contactNumber: followUpContactNumber,
       status: "scheduled",
       createdBy: actor.id,
       createdByName: actor.name,
@@ -264,6 +270,7 @@ export function createVisitReport(
               : `زيارة متابعة مجدولة من زيارة ${report.repName}.`,
         status: "scheduled",
         followUpKind: followUp.kind,
+        followUpContactNumber,
         createdBy: actor.id,
         createdByName: actor.name,
         createdAt: isoNow(),

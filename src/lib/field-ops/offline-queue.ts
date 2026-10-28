@@ -30,6 +30,7 @@ export type QueuedVisitPayload = {
   followUpAt?: string | null;
   followUpKind?: "visit" | "call" | "whatsapp";
   followUpNote?: string;
+  followUpContactNumber?: string | null;
   source?: "task" | "unplanned" | "offline";
   clientVisitId?: string | null;
 };

@@ -15,14 +15,16 @@ import {
   type OutcomeOption,
 } from "@/components/field-ops/visit/outcome-options";
 import type { VisitDraft } from "@/components/field-ops/visit-mode";
+import { isCommunicationKind, sanitizePhone } from "@/lib/field-ops/phone";
 import {
   ADVANCED_OUTCOMES,
-  COMMISSION_OUTCOMES,
   type ContractState,
   type FollowUpKind,
   type Merchant,
   type RepOpinion,
 } from "@/lib/field-ops/types";
+
+import { validateVisitForm } from "./visit/validate-visit-form";
 
 export type VisitReportDraft = {
   outcome: ContractState;
@@ -33,6 +35,7 @@ export type VisitReportDraft = {
   followUpAt: string;
   followUpKind: FollowUpKind;
   followUpNote: string;
+  followUpContactNumber: string;
 };
 
 type VisitReportFormProps = {
@@ -77,10 +80,10 @@ export function VisitReportForm({
   const [followUpAt, setFollowUpAt] = useState("");
   const [followUpKind, setFollowUpKind] = useState<FollowUpKind>("visit");
   const [followUpNote, setFollowUpNote] = useState("");
+  const [followUpContactNumber, setFollowUpContactNumber] = useState("");
   const [error, setError] = useState("");
 
   const canUseAdvanced = visitCount > 0 || canManageState;
-  const needsCommission = COMMISSION_OUTCOMES.includes(outcome);
 
   // Reset the form whenever a new visit opens; the modal stays mounted so
   // React state would otherwise leak the previous merchant's answers.
@@ -110,6 +113,7 @@ export function VisitReportForm({
     setFollowUpAt("");
     setFollowUpKind("visit");
     setFollowUpNote("");
+    setFollowUpContactNumber("");
     setError("");
   }, [open, merchant, visitCount]);
 
@@ -128,6 +132,17 @@ export function VisitReportForm({
     (state) => state.enabled,
   );
 
+  function changeFollowUpKind(kind: FollowUpKind) {
+    setFollowUpKind(kind);
+    // Auto-fill the dialable number from the visit contact so a communication
+    // follow-up is immediately actionable. Only fills an empty field, so a rep
+    // who already typed an override keeps it.
+    if (isCommunicationKind(kind) && !followUpContactNumber.trim()) {
+      const fallback = sanitizePhone(contactMobile);
+      if (fallback) setFollowUpContactNumber(fallback);
+    }
+  }
+
   function patchOpinion(trait: string, patch: Partial<OpinionState>) {
     setOpinionState((current) => ({
       ...current,
@@ -139,78 +154,31 @@ export function VisitReportForm({
     event.preventDefault();
     setError("");
 
-    if (notes.trim().length < 10) {
-      setError("ملاحظات الزيارة يجب ألا تقل عن 10 أحرف.");
-      return;
-    }
-    if (ADVANCED_OUTCOMES.includes(outcome) && !canUseAdvanced) {
-      setError(
-        "«اتفاق نهائي» متاح فقط للتجار الذين لديهم زيارة سابقة مسجلة في سجلهم.",
-      );
-      return;
-    }
-
-    const commission = Number(agreedCommission);
-    if (
-      needsCommission &&
-      (!agreedCommission.trim() ||
-        !Number.isFinite(commission) ||
-        commission <= 0 ||
-        commission > 100)
-    ) {
-      setError("أدخل النسبة المتفق عليها بين 1% و100%.");
-      return;
-    }
-
-    if (customEnabled) {
-      if (!customLabel.trim()) {
-        setError("اكتب وصف الرأي المخصص أو ألغِ تفعيله.");
-        return;
-      }
-      if (customWeight <= 0) {
-        setError("وزن الرأي المخصص يجب أن يكون أكبر من صفر.");
-        return;
-      }
-    }
-
-    if (followUpAt && new Date(followUpAt).getTime() < Date.now() - 60_000) {
-      setError("موعد المتابعة يجب أن يكون في المستقبل.");
-      return;
-    }
-    if (followUpAt && !target.team) {
-      setError("لا يمكن جدولة مهمة متابعة قبل إسناد التاجر لفريق.");
-      return;
-    }
-
-    const opinions: RepOpinion[] = activeOpinions
-      .filter((state) => state.weight > 0)
-      .map((state) => ({
-        trait: state.trait,
-        weight: state.weight,
-        label: state.label,
-      }));
-    if (customEnabled && customLabel.trim() && customWeight > 0) {
-      opinions.push({
-        trait: "custom",
-        label: customLabel.trim(),
-        weight: customWeight,
-      });
-    }
-
-    onSubmit({
+    const result = validateVisitForm({
       outcome,
       notes,
-      contact: {
-        name: contactName,
-        role: contactRole,
-        mobile: contactMobile,
-      },
-      opinions,
-      agreedCommission: needsCommission ? commission : null,
+      contactName,
+      contactRole,
+      contactMobile,
+      opinionState,
+      customEnabled,
+      customLabel,
+      customWeight,
+      agreedCommission,
       followUpAt,
       followUpKind,
       followUpNote,
+      followUpContactNumber,
+      canUseAdvanced,
+      hasTeam: Boolean(target.team),
     });
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    onSubmit(result.payload);
   }
 
   return (
@@ -239,7 +207,7 @@ export function VisitReportForm({
         />
 
         <OutcomeSection
-          merchant={target}
+          merchant={merchant}
           visitCount={visitCount}
           canUseAdvanced={canUseAdvanced}
           outcomeOptions={outcomeOptions}
@@ -280,11 +248,12 @@ export function VisitReportForm({
           followUpAt={followUpAt}
           followUpKind={followUpKind}
           followUpNote={followUpNote}
-          contactMobile={contactMobile}
+          followUpContactNumber={followUpContactNumber}
           merchantTeam={merchant.team}
           onAtChange={setFollowUpAt}
-          onKindChange={setFollowUpKind}
+          onKindChange={changeFollowUpKind}
           onNoteChange={setFollowUpNote}
+          onContactNumberChange={setFollowUpContactNumber}
         />
 
         {error ? (

@@ -144,6 +144,17 @@ export const visitReportSchema = z
     followUpAt: z.string().trim().min(1).nullable().optional(),
     followUpKind: z.enum(FOLLOW_UP_KINDS).optional(),
     followUpNote: z.string().trim().max(500).optional(),
+    /*
+     * Dialable contact for call/WhatsApp follow-ups. Spaces, dashes and
+     * parentheses are removed before the value reaches the store so the board
+     * can build `tel:` and `wa.me` links without re-parsing.
+     */
+    followUpContactNumber: z
+      .string()
+      .trim()
+      .max(40)
+      .transform((value) => value.replace(/[\s\-()]/g, ""))
+      .optional(),
     source: z.enum(["task", "unplanned", "offline"]).optional(),
     clientVisitId: z.string().trim().max(80).nullable().optional(),
   })
@@ -158,6 +169,23 @@ export const visitReportSchema = z
         path: ["agreedCommission"],
         message: "النسبة المتفق عليها مطلوبة عند الاتفاق المبدئي أو النهائي.",
       });
+    }
+
+    // A scheduled communication follow-up is only actionable with a dialable
+    // number. No follow-up date means no task is created, so no number needed.
+    const kind = value.followUpKind;
+    const needsNumber =
+      Boolean(value.followUpAt) && (kind === "call" || kind === "whatsapp");
+    if (needsNumber) {
+      const digits = (value.followUpContactNumber ?? "").replace(/\D/g, "");
+      if (digits.length < 8) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["followUpContactNumber"],
+          message:
+            "رقم هاتف المتابعة مطلوب عند اختيار المكالمة أو الواتساب.",
+        });
+      }
     }
   });
 
