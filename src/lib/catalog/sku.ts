@@ -25,16 +25,36 @@ function randomChars(length: number): string {
   return output;
 }
 
+function skuScope(vendorTypeId?: number | null): string {
+  return vendorTypeId === undefined || vendorTypeId === null
+    ? "XX"
+    : String(vendorTypeId).padStart(2, "0");
+}
+
 /**
  * Human-readable SKU: `KJ-<vendorType>-<8 chars>`, e.g. `KJ-03-7KQ2M9XT`.
  * Vendor type is embedded so warehouse staff can eyeball the category.
  */
 export function generateSku(vendorTypeId?: number | null): string {
-  const scope =
-    vendorTypeId === undefined || vendorTypeId === null
-      ? "XX"
-      : String(vendorTypeId).padStart(2, "0");
-  return `KJ-${scope}-${randomChars(SKU_BODY_LENGTH)}`;
+  return `KJ-${skuScope(vendorTypeId)}-${randomChars(SKU_BODY_LENGTH)}`;
+}
+
+/** Stable prefix for a form session so every variant row shares one family. */
+export function createSkuSeed(length = 6): string {
+  return randomChars(length);
+}
+
+/**
+ * Deterministic SKU for one variant combination. The rep sees these codes in
+ * the matrix before saving, so the queue and the matrix can never disagree.
+ */
+export function buildSeededSku(
+  vendorTypeId: number | null | undefined,
+  seed: string,
+  index: number,
+): string {
+  const suffix = index.toString(36).toUpperCase().padStart(2, "0");
+  return `KJ-${skuScope(vendorTypeId)}-${seed}${suffix}`;
 }
 
 /**

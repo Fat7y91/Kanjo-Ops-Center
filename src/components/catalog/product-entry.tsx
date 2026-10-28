@@ -44,7 +44,7 @@ export function ProductEntry({
   onSynced,
 }: ProductEntryProps) {
   const queue = useCatalogDraftQueue();
-  const entry = useProductEntry({ refreshQueue: queue.refresh });
+  const entry = useProductEntry({ variants, refreshQueue: queue.refresh });
   const [toast, setToast] = useState("");
 
   useEffect(() => {

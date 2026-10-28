@@ -9,27 +9,42 @@ import {
   type CatalogDraftPayload,
 } from "@/lib/catalog/draft-queue";
 import {
+  createSkuSeed,
   generateSku,
   isValidBarcode,
   normalizeCode,
 } from "@/lib/catalog/sku";
-import type { CatalogProductType } from "@/lib/catalog/types";
+import type {
+  CatalogProductType,
+  CatalogVariantSelection,
+} from "@/lib/catalog/types";
+import {
+  buildVariantCombinations,
+  combinationName,
+  combinationSku,
+} from "@/lib/catalog/variants";
+import type { TaxonomyVariant } from "@/lib/taxonomy/types";
 
-const EMPTY_VALUES: ProductFormValues = {
-  name: "",
-  description: "",
-  merchant: null,
-  productType: "simple",
-  categoryKey: "",
-  price: "",
-  sku: "",
-  imageDataUrl: null,
-  attributes: {},
-};
+function emptyValues(): ProductFormValues {
+  return {
+    name: "",
+    description: "",
+    merchant: null,
+    productType: "simple",
+    categoryKey: "",
+    price: "",
+    sku: "",
+    imageDataUrl: null,
+    attributes: {},
+    variantPrices: {},
+    skuSeed: createSkuSeed(),
+  };
+}
 
 export type SaveMode = "close" | "another";
 
 type UseProductEntryArgs = {
+  variants: TaxonomyVariant[];
   refreshQueue: () => Promise<void>;
 };
 
@@ -40,8 +55,8 @@ type UseProductEntryArgs = {
  * 300-line rule and makes the "retain merchant on save-and-add-another"
  * behaviour a single, testable line.
  */
-export function useProductEntry({ refreshQueue }: UseProductEntryArgs) {
-  const [values, setValues] = useState<ProductFormValues>(EMPTY_VALUES);
+export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs) {
+  const [values, setValues] = useState<ProductFormValues>(emptyValues);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -56,6 +71,8 @@ export function useProductEntry({ refreshQueue }: UseProductEntryArgs) {
         merchant,
         categoryKey: "",
         attributes: {},
+        variantPrices: {},
+        skuSeed: createSkuSeed(),
       }));
     },
     [],
@@ -63,7 +80,7 @@ export function useProductEntry({ refreshQueue }: UseProductEntryArgs) {
 
   function resetDetails(keepMerchant: boolean) {
     setValues((current) => ({
-      ...EMPTY_VALUES,
+      ...emptyValues(),
       merchant: keepMerchant ? current.merchant : null,
       productType: current.productType,
     }));
@@ -80,53 +97,94 @@ export function useProductEntry({ refreshQueue }: UseProductEntryArgs) {
       setError("اسم المنتج مطلوب (حرفان على الأقل).");
       return false;
     }
-    const price = Number(values.price);
-    if (!Number.isFinite(price) || price < 0) {
-      setError("أدخل سعراً صحيحاً.");
-      return false;
-    }
-    if (!isValidBarcode(values.sku)) {
-      setError("الباركود يجب أن يكون من 8 إلى 14 رقماً.");
-      return false;
+    const isVariable = values.productType === "variable";
+
+    // Variable products are entered through the matrix: one queued draft per
+    // combination, each with its own price and deterministic SKU.
+    const combinations = isVariable
+      ? buildVariantCombinations({
+          attributes: values.attributes,
+          variants,
+        })
+      : [];
+
+    const rows: Array<{
+      name: string;
+      sku: string;
+      price: number;
+      attributes: CatalogVariantSelection[];
+    }> = [];
+
+    if (isVariable) {
+      if (combinations.length === 0) {
+        setError("اختر خياراً واحداً على الأقل لتوليد تركيبات المتغيرات.");
+        return false;
+      }
+      for (const [index, combination] of combinations.entries()) {
+        const raw = values.variantPrices[combination.key] ?? "";
+        const price = Number(raw);
+        if (!raw.trim() || !Number.isFinite(price) || price < 0) {
+          setError(
+            `أدخل سعراً صحيحاً لكل تركيبة — الناقص: ${
+              combinationName(values.name, combination.label) || "تركيبة"
+            }.`,
+          );
+          return false;
+        }
+        rows.push({
+          name: combinationName(values.name, combination.label),
+          sku: combinationSku(
+            values.merchant.vendorTypeId,
+            values.skuSeed,
+            index,
+          ),
+          price,
+          attributes: combination.selections,
+        });
+      }
+    } else {
+      const price = Number(values.price);
+      if (!Number.isFinite(price) || price < 0) {
+        setError("أدخل سعراً صحيحاً.");
+        return false;
+      }
+      if (!isValidBarcode(values.sku)) {
+        setError("الباركود يجب أن يكون من 8 إلى 14 رقماً.");
+        return false;
+      }
+      // Auto-SKU happens at save time, not upload time, so the rep sees the
+      // real code on the queued draft while still offline.
+      const typedCode = normalizeCode(values.sku);
+      rows.push({
+        name: values.name.trim(),
+        sku: typedCode || generateSku(values.merchant.vendorTypeId),
+        price,
+        attributes: [],
+      });
     }
 
     setBusy(true);
     try {
-      // Simple products carry no variant options, even if the rep toggled some
-      // before switching the type back.
-      const attributes =
-        values.productType === "variable"
-          ? Object.entries(values.attributes)
-              .filter(([, optionIds]) => optionIds.length > 0)
-              .map(([variantId, optionIds]) => ({
-                variantId: Number(variantId),
-                optionIds,
-              }))
-          : [];
+      for (const row of rows) {
+        const payload: CatalogDraftPayload = {
+          name: row.name,
+          description: values.description.trim(),
+          merchantId: values.merchant.id,
+          merchantName: values.merchant.name,
+          vendorTypeId: values.merchant.vendorTypeId,
+          categoryKey: values.categoryKey || null,
+          productType: values.productType as CatalogProductType,
+          sku: row.sku,
+          barcode: /^\d{8,14}$/.test(row.sku) ? row.sku : "",
+          imageDataUrl: values.imageDataUrl,
+          attributes: row.attributes,
+          price: row.price,
+          state: "draft",
+          reviewNote: "",
+        };
+        await enqueueDraft(payload);
+      }
 
-      // Auto-SKU happens at save time, not upload time, so the rep sees the
-      // real code on the queued draft while still offline.
-      const typedCode = normalizeCode(values.sku);
-      const sku = typedCode || generateSku(values.merchant.vendorTypeId);
-
-      const payload: CatalogDraftPayload = {
-        name: values.name.trim(),
-        description: values.description.trim(),
-        merchantId: values.merchant.id,
-        merchantName: values.merchant.name,
-        vendorTypeId: values.merchant.vendorTypeId,
-        categoryKey: values.categoryKey || null,
-        productType: values.productType as CatalogProductType,
-        sku,
-        barcode: /^\d{8,14}$/.test(sku) ? sku : "",
-        imageDataUrl: values.imageDataUrl,
-        attributes,
-        price,
-        state: "draft",
-        reviewNote: "",
-      };
-
-      await enqueueDraft(payload);
       await refreshQueue();
 
       resetDetails(mode === "another");

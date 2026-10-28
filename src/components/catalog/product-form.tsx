@@ -1,13 +1,17 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { BarcodeScanner } from "@/components/catalog/barcode-scanner";
 import { CascadingTaxonomy } from "@/components/catalog/cascading-taxonomy";
 import { MerchantPicker, type CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { ProductImageField } from "@/components/catalog/product-image-field";
+import { VariantMatrix } from "@/components/catalog/variant-matrix";
 import {
   PRODUCT_TYPE_META,
   type CatalogProductType,
 } from "@/lib/catalog/types";
+import { buildVariantCombinations } from "@/lib/catalog/variants";
 import type {
   TaxonomyCategory,
   TaxonomyVariant,
@@ -24,6 +28,10 @@ export type ProductFormValues = {
   sku: string;
   imageDataUrl: string | null;
   attributes: Record<number, number[]>;
+  /** Price per generated combination, keyed by `VariantCombination.key`. */
+  variantPrices: Record<string, string>;
+  /** Stable SKU family for every row of the matrix. */
+  skuSeed: string;
 };
 
 type ProductFormProps = {
@@ -64,6 +72,16 @@ export function ProductForm({
 }: ProductFormProps) {
   const locked = disabled || submitting;
   const isVariable = values.productType === "variable";
+  const combinations = useMemo(
+    () =>
+      isVariable
+        ? buildVariantCombinations({
+            attributes: values.attributes,
+            variants,
+          })
+        : [],
+    [isVariable, values.attributes, variants],
+  );
 
   return (
     <form
@@ -139,24 +157,26 @@ export function ProductForm({
             </div>
           </div>
 
-          <div className="cat-field">
-            <label className="cat-label" htmlFor="cat-price">
-              السعر (ج.م) <span className="cat-required">مطلوب</span>
-            </label>
-            <input
-              id="cat-price"
-              className="cat-input"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="0.01"
-              value={values.price}
-              onChange={(event) => onChange({ price: event.target.value })}
-              placeholder="0"
-              required
-              disabled={locked}
-            />
-          </div>
+          {isVariable ? null : (
+            <div className="cat-field">
+              <label className="cat-label" htmlFor="cat-price">
+                السعر (ج.م) <span className="cat-required">مطلوب</span>
+              </label>
+              <input
+                id="cat-price"
+                className="cat-input"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={values.price}
+                onChange={(event) => onChange({ price: event.target.value })}
+                placeholder="0"
+                required
+                disabled={locked}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -175,19 +195,35 @@ export function ProductForm({
         />
 
         {isVariable ? (
-          <p className="cat-hint">
-            اختر الخيارات المتاحة لكل متغير. تُرفق هذه الخيارات بالمنتج عند
-            المزامنة.
-          </p>
+          <VariantMatrix
+            baseName={values.name}
+            priceLabel="السعر (ج.م)"
+            combinations={combinations}
+            prices={values.variantPrices}
+            skuSeed={values.skuSeed}
+            vendorTypeId={values.merchant?.vendorTypeId ?? null}
+            onPriceChange={(key, value) =>
+              onChange({
+                variantPrices: { ...values.variantPrices, [key]: value },
+              })
+            }
+            disabled={locked}
+          />
         ) : null}
       </section>
 
       <section className="cat-block">
-        <BarcodeScanner
-          value={values.sku}
-          onChange={(sku) => onChange({ sku })}
-          disabled={locked}
-        />
+        {isVariable ? (
+          <p className="cat-hint">
+            كل تركيبة تحصل على SKU تلقائي مستقل، فلا حاجة لمسح باركود هنا.
+          </p>
+        ) : (
+          <BarcodeScanner
+            value={values.sku}
+            onChange={(sku) => onChange({ sku })}
+            disabled={locked}
+          />
+        )}
 
         <ProductImageField
           value={values.imageDataUrl}

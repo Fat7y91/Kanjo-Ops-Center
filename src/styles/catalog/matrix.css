@@ -1,0 +1,110 @@
+/* Catalog module — smart variant matrix.
+ *
+ * One row per generated option combination: name and SKU are read-only, the
+ * price cell is the only editable input.
+ *
+ * Imported by catalog.css.
+ */
+
+.cat-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cat-matrix-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cat-matrix-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.cat-matrix-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--purple);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cat-matrix-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.cat-matrix-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.cat-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  padding: 9px 12px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: start;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.cat-matrix-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.cat-matrix-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cat-matrix-table tbody tr:hover {
+  background: var(--surface-soft);
+}
+
+.cat-matrix-name {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.cat-matrix-sku {
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.cat-matrix-price {
+  width: 110px;
+  padding: 6px 9px;
+  text-align: end;
+}
+
+.cat-matrix-price::-webkit-outer-spin-button,
+.cat-matrix-price::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.cat-matrix-cap {
+  color: var(--gold-deep);
+  font-weight: 700;
+}
