@@ -1,0 +1,95 @@
+/* Catalog module — entry form shell, labels, inputs and field layout.
+ *
+ * Imported by catalog.css.
+ */
+
+/* ── Entry form ───────────────────────────────────────────────────────── */
+
+.cat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.cat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.cat-block:last-of-type {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.cat-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cat-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cat-label {
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.cat-required {
+  margin-inline-start: 4px;
+  color: var(--red);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.cat-optional {
+  margin-inline-start: 4px;
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.cat-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.cat-input:focus-visible {
+  border-color: var(--line-strong);
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.cat-textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.cat-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.cat-hint {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+

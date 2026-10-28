@@ -14,7 +14,12 @@ export function ProductCard({ product }: ProductCardProps) {
   return (
     <article className="product-card">
       <div className="product-thumb" aria-hidden="true">
-        <span>{product.name.slice(0, 2)}</span>
+        {product.imageDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.imageDataUrl} alt="" />
+        ) : (
+          <span>{product.name.slice(0, 2)}</span>
+        )}
       </div>
       <div className="product-body">
         <div className="panel-head compact">
@@ -24,10 +29,28 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
         </div>
+
+        {product.description ? (
+          <p className="product-description">{product.description}</p>
+        ) : null}
+
         <div className="product-meta">
           <strong>{formatPrice(product.price)}</strong>
-          <span>{product.reviewNote}</span>
+          <span className="product-sku" dir="ltr">
+            {product.sku}
+          </span>
         </div>
+
+        <div className="product-tags">
+          <span className="badge">{product.productType === "variable" ? "متغير" : "بسيط"}</span>
+          {product.barcode ? (
+            <span className="badge" dir="ltr">
+              {product.barcode}
+            </span>
+          ) : null}
+          <span className="badge">{product.reviewNote}</span>
+        </div>
+
         <div className="row-actions">
           <Protect require="edit_products">
             <button

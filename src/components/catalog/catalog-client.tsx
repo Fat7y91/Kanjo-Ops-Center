@@ -1,24 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Protect } from "@/components/auth/protect";
 import { ProductCard } from "@/components/catalog/product-card";
-import { ProductCreateModal } from "@/components/catalog/product-create-modal";
+import { ProductEntry } from "@/components/catalog/product-entry";
+import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import type { CatalogProduct } from "@/lib/catalog/types";
-
-type MerchantOption = { id: string; name: string };
+import type {
+  TaxonomyCategory,
+  TaxonomyVariant,
+  TaxonomyVendorType,
+} from "@/lib/taxonomy/types";
 
 type CatalogClientProps = {
   initialProducts: CatalogProduct[];
   initialRevision: number;
-  merchants: MerchantOption[];
+  merchants: CatalogMerchantOption[];
+  vendorTypes: TaxonomyVendorType[];
+  categories: TaxonomyCategory[];
+  variants: TaxonomyVariant[];
 };
 
 export function CatalogClient({
   initialProducts,
   initialRevision,
   merchants,
+  vendorTypes,
+  categories,
+  variants,
 }: CatalogClientProps) {
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
   const [revision, setRevision] = useState(initialRevision);
@@ -34,6 +44,27 @@ export function CatalogClient({
   const draftCount = products.filter(
     (product) => product.state === "draft",
   ).length;
+
+  const reload = useCallback(async () => {
+    try {
+      const response = await fetch("/api/catalog/products", {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const payload = (await response.json()) as {
+        products?: CatalogProduct[];
+        revision?: number;
+      };
+      if (payload.products) setProducts(payload.products);
+      if (typeof payload.revision === "number") setRevision(payload.revision);
+    } catch {
+      // Offline: the draft queue banner already communicates local state.
+    }
+  }, []);
+
+  const handleSynced = useCallback(() => {
+    void reload();
+  }, [reload]);
 
   return (
     <>
@@ -61,6 +92,16 @@ export function CatalogClient({
         </div>
       </section>
 
+      <ProductEntry
+        open={open}
+        merchants={merchants}
+        vendorTypes={vendorTypes}
+        categories={categories}
+        variants={variants}
+        onClose={() => setOpen(false)}
+        onSynced={handleSynced}
+      />
+
       <section className="card-grid">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />
@@ -81,24 +122,10 @@ export function CatalogClient({
         <p className="panel-note">
           يظهر زر «إضافة منتج» فقط لمن يملك <code>create_products</code> أو{" "}
           <code>manage_catalog</code>، ويتحقق الخادم من نفس القدرات قبل إنشاء
-          الطلب. المندوب الميداني لا يرى الزر ولا يستطيع تجاوز الخادم.
+          الطلب. التصنيفات والمتغيرات تُقرأ من التصنيف المركزي فقط، ولا يمكن
+          تجاوزها من الواجهة.
         </p>
       </section>
-
-      <ProductCreateModal
-        open={open}
-        merchants={merchants}
-        onClose={() => setOpen(false)}
-        onCreated={(product, nextRevision) => {
-          setProducts((current) =>
-            [...current, product].sort((left, right) =>
-              left.name.localeCompare(right.name, "ar"),
-            ),
-          );
-          if (nextRevision !== null) setRevision(nextRevision);
-          setToast(`تمت إضافة المنتج «${product.name}» إلى الكتالوج.`);
-        }}
-      />
 
       {toast ? (
         <div className="toast" role="status">

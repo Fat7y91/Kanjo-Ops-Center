@@ -1,0 +1,14 @@
+/* Catalog module: offline-first product entry.
+ *
+ * Manifest only: imported from globals.css after tokens.css. Domain rules live
+ * in `styles/catalog/*.css` and load in dependency order, base layout first and
+ * responsive overrides last.
+ *
+ * Selectors are namespaced with `cat-` / `product-` so they never collide with
+ * the BI or field-ops modules.
+ */
+
+@import "./catalog/cards.css";
+@import "./catalog/form.css";
+@import "./catalog/controls.css";
+@import "./catalog/responsive.css";

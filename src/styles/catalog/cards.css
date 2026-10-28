@@ -1,0 +1,117 @@
+/* Catalog module — product cards and the offline draft queue banner.
+ *
+ * Imported by catalog.css. Namespaced with `product-` / `cat-queue`.
+ */
+
+/* ── Product card additions ───────────────────────────────────────────── */
+
+.product-thumb img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.product-description {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.product-sku {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+}
+
+.product-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+/* ── Draft queue banner ───────────────────────────────────────────────── */
+
+.cat-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid #f0dc9f;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, #fdf6df, var(--surface));
+}
+
+.cat-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cat-queue-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cat-queue-count {
+  color: var(--gold-deep);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.cat-queue-sub {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.cat-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cat-queue-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.cat-queue-item-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cat-queue-item-main strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-queue-item-meta {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.cat-queue-error {
+  color: var(--red);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+

@@ -1,0 +1,51 @@
+/* Catalog module — form actions and responsive breakpoints.
+ *
+ * Loaded last so media overrides win over the base rules above.
+ */
+
+/* ── Form actions ─────────────────────────────────────────────────────── */
+
+.cat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.cat-actions-primary {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .cat-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cat-queue-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cat-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .cat-actions-primary {
+    flex-direction: column-reverse;
+  }
+}
+
+[data-theme="dark"] .cat-queue {
+  border-color: #4c3f12;
+  background: linear-gradient(90deg, #241d06, var(--surface));
+}
+
+[data-theme="dark"] .cat-queue-count {
+  color: var(--gold);
+}

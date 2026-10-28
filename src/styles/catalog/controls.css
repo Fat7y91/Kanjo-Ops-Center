@@ -1,0 +1,163 @@
+/* Catalog module — product type toggle, taxonomy chips, barcode and image
+ * capture controls.
+ *
+ * Imported by catalog.css.
+ */
+
+/* ── Product type segmented control ───────────────────────────────────── */
+
+.cat-segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.cat-segment {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cat-segment.is-active {
+  background: var(--surface);
+  color: var(--purple);
+  box-shadow: 0 2px 8px rgba(19, 28, 48, 0.1);
+}
+
+.cat-segment:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ── Taxonomy chips ───────────────────────────────────────────────────── */
+
+.cat-taxonomy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cat-variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cat-variant-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cat-variant-name {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cat-variant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cat-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.cat-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.cat-chip.is-active {
+  border-color: var(--purple);
+  background: var(--purple);
+  color: var(--primary-ink);
+}
+
+.cat-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ── Barcode row ──────────────────────────────────────────────────────── */
+
+.cat-code-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cat-code-input {
+  flex: 1;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  letter-spacing: 0.05em;
+}
+
+/* ── Image field ──────────────────────────────────────────────────────── */
+
+.cat-image-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cat-image-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cat-image-preview {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  overflow: hidden;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  text-align: center;
+}
+
+.cat-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cat-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cat-image-size {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
