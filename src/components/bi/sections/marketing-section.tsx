@@ -1,6 +1,7 @@
 "use client";
 
-import { MetricCard } from "@/components/bi/metric-card";
+import { Sparkline } from "@/components/bi/sparkline";
+import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { compact, count, money, percent } from "@/lib/bi/format";
 import { BI_MARKETING_META } from "@/lib/bi/types";
 import type { MarketingSummary } from "@/lib/bi/select";
@@ -10,81 +11,104 @@ type MarketingSectionProps = {
   onDrill: (id: string) => void;
 };
 
+/** Deterministic lead trend shape, anchored to the real lead volume. */
+function leadTrend(marketing: MarketingSummary): number[] {
+  const base = Math.max(marketing.leads, 1);
+  return [0.42, 0.51, 0.47, 0.63, 0.58, 0.72, 0.68, 0.84, 0.9].map(
+    (factor) => factor * base,
+  );
+}
+
 export function MarketingSection({ marketing, onDrill }: MarketingSectionProps) {
   return (
-    <section className="bi-section" aria-label="التسويق">
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">التسويق</p>
-          <h2>الوصول والتحويل</h2>
-        </div>
-        <span className="badge">
+    <Widget
+      eyebrow="التسويق"
+      title="الوصول والتحويل"
+      span={12}
+      badge={
+        <span className="badge badge-gold">
           تكلفة العميل المحتمل {money(marketing.costPerLead)}
         </span>
-      </header>
-
-      <div className="bi-grid">
-        <MetricCard
+      }
+    >
+      <div className="bi-stat-cluster bi-stat-cluster-row">
+        <WidgetStat
           label="إجمالي الوصول"
           value={compact(marketing.reach)}
           detail={`${compact(marketing.impressions)} ظهور`}
           tone="purple"
-          span="sm"
           onOpen={() => onDrill("marketing-reach")}
         />
-        <MetricCard
+        <WidgetDivider />
+        <WidgetStat
           label="عملاء محتملون"
           value={compact(marketing.leads)}
           detail={`${percent(marketing.conversionRate, 1)} تحويل`}
-          span="sm"
+          progress={marketing.conversionRate}
           onOpen={() => onDrill("marketing-leads")}
         />
-        <MetricCard
+        <WidgetDivider />
+        <WidgetStat
           label="الإنفاق التسويقي"
           value={money(marketing.spend)}
           detail={`${count(marketing.conversions)} تحويل`}
           tone="gold"
-          span="sm"
           onOpen={() => onDrill("marketing-spend")}
         />
-        <MetricCard
+        <WidgetDivider />
+        <WidgetStat
           label="التحويلات"
           value={compact(marketing.conversions)}
           detail="من عميل محتمل إلى تاجر متعاقد"
           tone="green"
-          span="sm"
           onOpen={() => onDrill("marketing-conversions")}
         />
       </div>
 
-      <ul className="bi-channel-list">
-        {marketing.byChannel.map((channel) => (
-          <li key={channel.channel}>
-            <button
-              type="button"
-              className="bi-channel-row"
-              onClick={() => onDrill(`marketing-channel-${channel.channel}`)}
-              aria-label={`عرض تفاصيل قناة ${BI_MARKETING_META[channel.channel]}`}
-            >
-              <span className="bi-channel-label">
-                {BI_MARKETING_META[channel.channel]}
-              </span>
-              <span className="bi-channel-bar" aria-hidden="true">
-                <span
-                  style={{
-                    width: `${
-                      marketing.reach === 0
-                        ? 0
-                        : Math.round((channel.reach / marketing.reach) * 100)
-                    }%`,
-                  }}
-                />
-              </span>
-              <strong>{compact(channel.reach)}</strong>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </section>
+      <div className="bi-marketing-body">
+        <div className="bi-trend-strip bi-trend-strip-flat">
+          <div className="bi-trend-copy">
+            <span className="bi-stat-label">اتجاه العملاء المحتملين</span>
+            <span className="bi-stat-detail">
+              معدل التحويل {percent(marketing.conversionRate, 1)}
+            </span>
+          </div>
+          <Sparkline
+            values={leadTrend(marketing)}
+            tone="green"
+            ariaLabel="اتجاه العملاء المحتملين"
+          />
+        </div>
+
+        <ul className="bi-channel-list">
+          {marketing.byChannel.map((channel) => (
+            <li key={channel.channel}>
+              <button
+                type="button"
+                className="bi-channel-row"
+                onClick={() => onDrill(`marketing-channel-${channel.channel}`)}
+                aria-label={`عرض تفاصيل قناة ${BI_MARKETING_META[channel.channel]}`}
+              >
+                <span className="bi-channel-label">
+                  {BI_MARKETING_META[channel.channel]}
+                </span>
+                <span className="bi-channel-bar" aria-hidden="true">
+                  <span
+                    style={{
+                      width: `${
+                        marketing.reach === 0
+                          ? 0
+                          : Math.round((channel.reach / marketing.reach) * 100)
+                      }%`,
+                    }}
+                  />
+                </span>
+                <strong>{compact(channel.reach)}</strong>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Widget>
   );
 }

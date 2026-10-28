@@ -122,9 +122,12 @@ export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
         />
       )}
 
-      <CatalogSection catalog={catalog} onDrill={openDrill} />
+      <div className="bi-row">
+        <CatalogSection catalog={catalog} onDrill={openDrill} />
 
-      <ComplianceSection breakdown={compliance} onDrill={openDrill} />
+        <ComplianceSection breakdown={compliance} onDrill={openDrill} />
+      </div>
+
 
       {canSeeMarketing ? (
         <MarketingSection marketing={marketing} onDrill={openDrill} />

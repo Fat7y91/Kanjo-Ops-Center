@@ -1,0 +1,116 @@
+/* Executive dashboard — negotiation scorecard and trend strips. */
+
+/* ── Negotiation ──────────────────────────────────────────────────────── */
+
+.bi-negotiation {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 2.4fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.bi-negotiation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  justify-content: center;
+  padding-inline-end: 16px;
+  border-inline-end: 1px solid var(--line);
+}
+
+.bi-negotiation-headline {
+  color: var(--purple);
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.bi-negotiation-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.bi-negotiation-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--line);
+}
+
+.bi-negotiation-stage:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.bi-negotiation-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+
+.bi-negotiation-stage-head:hover .bi-stat-label {
+  color: var(--ink);
+}
+
+.bi-negotiation-stage-head:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.bi-negotiation-foot {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+/* ── Trend strip ──────────────────────────────────────────────────────── */
+
+.bi-trend-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.bi-trend-strip-flat {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.bi-trend-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bi-sparkline {
+  flex: 0 0 auto;
+  width: 140px;
+  height: 34px;
+  direction: ltr;
+}
+
+.bi-marketing-body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: center;
+}
+

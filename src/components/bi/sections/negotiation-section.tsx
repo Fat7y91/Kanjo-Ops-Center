@@ -1,7 +1,7 @@
 "use client";
 
-import { MetricCard } from "@/components/bi/metric-card";
 import { TargetGauge } from "@/components/bi/target-gauge";
+import { Widget } from "@/components/bi/widget";
 import { count, percent } from "@/lib/bi/format";
 import type { NegotiationRow } from "@/lib/bi/select";
 import { BI_DEAL_STAGE_META } from "@/lib/bi/types";
@@ -12,11 +12,23 @@ type NegotiationSectionProps = {
   onDrill: (id: string) => void;
 };
 
+/** Ratio of achieved to target, clamped to a sane ceiling for the bar. */
+function ratioOf(row: NegotiationRow): number {
+  return row.target === 0 ? 0 : row.achieved / row.target;
+}
+
+function toneOf(row: NegotiationRow): "green" | "gold" | "red" | "default" {
+  if (row.target === 0) return "default";
+  if (row.achieved >= row.target) return "green";
+  return row.achieved / row.target >= 0.85 ? "gold" : "red";
+}
+
 /**
  * Targets vs actuals.
  *
- * Each negotiated stage gets its own gauge tile so the trio fills the grid
- * exactly and every gauge is an independent drill-down target.
+ * Previously four separate cards; now one widget whose three stage gauges sit
+ * side by side behind internal dividers, so the trio reads as a single
+ * negotiation scorecard and each gauge keeps its own drill-down.
  */
 export function NegotiationSection({
   rows,
@@ -31,54 +43,63 @@ export function NegotiationSection({
         withTarget.length;
 
   return (
-    <section className="bi-section" aria-label="كفاءة التفاوض">
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">كفاءة التفاوض</p>
-          <h2>الأهداف مقابل المحقّق</h2>
-        </div>
-        <span className="badge badge-gold">
+    <Widget
+      eyebrow="كفاءة التفاوض"
+      title="الأهداف مقابل المحقّق"
+      span={12}
+      badge={
+        <span
+          className={`badge ${attainment >= 0.98 ? "badge-green" : "badge-gold"}`}
+        >
           متوسط التحقيق {percent(attainment, 0)}
         </span>
-      </header>
+      }
+    >
+      <div className="bi-negotiation">
+        <div className="bi-negotiation-summary">
+          <span className="bi-stat-label">متوسط تحقيق العمولة</span>
+          <strong className="bi-negotiation-headline">
+            {percent(attainment, 1)}
+          </strong>
+          <span className="bi-stat-detail">
+            {count(withTarget.length)} مرحلة لها هدف محدد
+          </span>
+          <span className="bi-stat-track" aria-hidden="true">
+            <span
+              className="bi-stat-fill"
+              style={{ width: `${Math.min(attainment, 1) * 100}%` }}
+            />
+          </span>
+        </div>
 
-      <div className="bi-grid">
-        <MetricCard
-          label="متوسط تحقيق العمولة"
-          value={percent(attainment, 1)}
-          detail="مرجّح على مراحل الاتفاق المبدئي والنهائي والتوقيع"
-          tone={attainment >= 0.98 ? "green" : "gold"}
-          span="sm"
-          footer={
-            <span className="bi-card-foot">
-              {count(withTarget.length)} مرحلة لها هدف محدد
-            </span>
-          }
-        />
+        <div className="bi-negotiation-stages">
+          {rows.map((row) => {
+            const meta = BI_DEAL_STAGE_META[row.stage];
+            const ratio = ratioOf(row);
+            return (
+              <div className="bi-negotiation-stage" key={row.stage}>
+                <button
+                  type="button"
+                  className="bi-negotiation-stage-head"
+                  onClick={() => onDrill(`negotiation-${row.stage}`)}
+                  aria-label={`عرض تفاصيل مرحلة ${meta.label}`}
+                >
+                  <span className="bi-stat-label">{meta.label}</span>
+                  <span className={`bi-chip bi-chip-${toneOf(row)}`}>
+                    {row.target === 0 ? "لا هدف" : percent(ratio, 0)}
+                  </span>
+                </button>
 
-        {rows.map((row) => {
-          const meta = BI_DEAL_STAGE_META[row.stage];
-          return (
-            <MetricCard
-              key={row.stage}
-              label={`${meta.label} — هدف ${row.target.toFixed(1)}%`}
-              value={percent(row.target === 0 ? 0 : row.achieved / row.target, 0)}
-              detail={`${count(merchantsByStage[row.stage] ?? 0)} تاجر في المرحلة`}
-              tone={
-                row.target === 0
-                  ? "default"
-                  : row.achieved >= row.target
-                    ? "green"
-                    : "red"
-              }
-              span="sm"
-              onOpen={() => onDrill(`negotiation-${row.stage}`)}
-            >
-              <TargetGauge target={row.target} achieved={row.achieved} />
-            </MetricCard>
-          );
-        })}
+                <TargetGauge target={row.target} achieved={row.achieved} />
+
+                <span className="bi-negotiation-foot">
+                  {count(merchantsByStage[row.stage] ?? 0)} تاجر في المرحلة
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </section>
+    </Widget>
   );
 }

@@ -1,0 +1,173 @@
+/* Executive dashboard — stat clusters, micro progress bars, chips and the
+ * divider rules that replace inter-card gaps.
+ */
+
+/* ── Stat cluster: the dense replacement for one-card-per-number ──────── */
+
+.bi-stat-cluster {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.bi-stat-cluster-row {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.bi-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+
+.bi-stat-cluster-row > .bi-stat:first-child {
+  padding-inline-start: 0;
+}
+
+.bi-stat-cluster-row > .bi-stat:last-child {
+  padding-inline-end: 0;
+}
+
+.bi-stat.is-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.bi-stat.is-clickable:hover {
+  background: var(--surface-soft);
+}
+
+.bi-stat.is-clickable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.bi-stat-label {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bi-stat-value {
+  color: var(--ink);
+  font-size: clamp(1.15rem, 1.7vw, 1.5rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.bi-stat-detail {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.bi-stat-track {
+  display: block;
+  width: 100%;
+  height: 3px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.bi-stat-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--purple);
+}
+
+.bi-stat-green .bi-stat-value {
+  color: #15803d;
+}
+
+.bi-stat-green .bi-stat-fill {
+  background: #2ca36a;
+}
+
+.bi-stat-gold .bi-stat-value {
+  color: var(--gold-deep);
+}
+
+.bi-stat-gold .bi-stat-fill {
+  background: var(--gold);
+}
+
+.bi-stat-red .bi-stat-value {
+  color: #b91c1c;
+}
+
+.bi-stat-red .bi-stat-fill {
+  background: #d24b4b;
+}
+
+.bi-stat-purple .bi-stat-value {
+  color: var(--purple);
+}
+
+.bi-stat-purple .bi-stat-fill {
+  background: var(--purple);
+}
+
+.bi-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--line);
+}
+
+/* Stacked clusters need a horizontal rule, not a vertical one. */
+.bi-stat-cluster:not(.bi-stat-cluster-row) > .bi-divider {
+  width: 100%;
+  height: 1px;
+}
+
+/* ── Micro chips (inline status, replaces full badges inside widgets) ─── */
+
+.bi-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bi-chip-green {
+  border-color: #bfe7d1;
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.bi-chip-gold {
+  border-color: #f0dc9f;
+  background: #fdf6df;
+  color: var(--gold-deep);
+}
+
+.bi-chip-red {
+  border-color: #f2caca;
+  background: var(--red-soft);
+  color: var(--red);
+}
+

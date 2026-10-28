@@ -1,6 +1,6 @@
 "use client";
 
-import { MetricCard } from "@/components/bi/metric-card";
+import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { count, percent } from "@/lib/bi/format";
 import { BI_CATALOG_META } from "@/lib/bi/types";
 import type { CatalogSummary } from "@/lib/bi/select";
@@ -18,50 +18,31 @@ export function CatalogSection({ catalog, onDrill }: CatalogSectionProps) {
   ];
 
   return (
-    <section className="bi-section" aria-label="خط إدخال البيانات">
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">إدخال البيانات</p>
-          <h2>جاهزية الكتالوج</h2>
-        </div>
-        <span className="badge">{count(catalog.total)} سجل</span>
-      </header>
-
-      <div className="bi-grid">
-        <MetricCard
-          label="جاهزية الكتالوج"
+    <Widget
+      eyebrow="إدخال البيانات"
+      title="جاهزية الكتالوج"
+      span={6}
+      badge={<span className="badge">{count(catalog.total)} سجل</span>}
+    >
+      <div className="bi-stat-cluster bi-stat-cluster-row">
+        <WidgetStat
+          label="الجاهزية"
           value={percent(catalog.readiness, 0)}
-          detail="نسبة المنتجات المنشورة مقابل الإجمالي"
+          detail="المنتجات المنشورة مقابل الإجمالي"
           tone={catalog.readiness >= 0.8 ? "green" : "gold"}
-          span="lg"
+          progress={catalog.readiness}
           onOpen={() => onDrill("catalog-all")}
-        >
-          <div className="bi-stacked-bar" aria-hidden="true">
-            {states.map((state) => (
-              <span
-                key={state.key}
-                className={`bi-stacked-segment seg-${state.key}`}
-                style={{
-                  width: `${
-                    catalog.total === 0
-                      ? 0
-                      : Math.round((state.value / catalog.total) * 100)
-                  }%`,
-                }}
-              />
-            ))}
-          </div>
-        </MetricCard>
-
+        />
+        <WidgetDivider />
         {states.map((state) => (
-          <MetricCard
+          <WidgetStat
             key={state.key}
             label={BI_CATALOG_META[state.key].label}
             value={count(state.value)}
-            detail={`${percent(
+            detail={percent(
               catalog.total === 0 ? 0 : state.value / catalog.total,
               0,
-            )} من السجلات`}
+            )}
             tone={
               state.key === "published"
                 ? "green"
@@ -69,11 +50,26 @@ export function CatalogSection({ catalog, onDrill }: CatalogSectionProps) {
                   ? "gold"
                   : "red"
             }
-            span="xs"
             onOpen={() => onDrill(`catalog-${state.key}`)}
           />
         ))}
       </div>
-    </section>
+
+      <div className="bi-stacked-bar" aria-hidden="true">
+        {states.map((state) => (
+          <span
+            key={state.key}
+            className={`bi-stacked-segment seg-${state.key}`}
+            style={{
+              width: `${
+                catalog.total === 0
+                  ? 0
+                  : Math.round((state.value / catalog.total) * 100)
+              }%`,
+            }}
+          />
+        ))}
+      </div>
+    </Widget>
   );
 }

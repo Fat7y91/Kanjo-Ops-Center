@@ -1,7 +1,7 @@
 "use client";
 
 import { ComplianceDonut } from "@/components/bi/compliance-donut";
-import { MetricCard } from "@/components/bi/metric-card";
+import { Widget, WidgetStat } from "@/components/bi/widget";
 import { count, percent } from "@/lib/bi/format";
 import type { ComplianceBreakdown } from "@/lib/bi/select";
 
@@ -19,55 +19,32 @@ export function ComplianceSection({
     (minimum, item) => Math.min(minimum, item.complete),
     total,
   );
+  const rate = total === 0 ? 0 : fullyComplete / total;
 
   return (
-    <section className="bi-section" aria-label="الامتثال">
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">الامتثال</p>
-          <h2>حزمة المستندات القانونية</h2>
-        </div>
-        <span className="badge">
-          {count(fullyComplete)} ملف مكتمل بالكامل
-        </span>
-      </header>
-
-      <div className="bi-grid">
-        <MetricCard
-          label="اكتمال المستندات"
-          value={percent(total === 0 ? 0 : fullyComplete / total, 0)}
-          detail="السجل التجاري + البطاقة الضريبية + قائمة المنتجات"
-          span="lg"
-        >
+    <Widget
+      eyebrow="الامتثال"
+      title="حزمة المستندات القانونية"
+      span={6}
+      badge={<span className="badge">{count(fullyComplete)} ملف مكتمل</span>}
+    >
+      <div className="bi-split bi-split-tight">
+        <div className="bi-split-main">
           <ComplianceDonut
             breakdown={breakdown}
             onSelect={(key) => onDrill(`compliance-${key}`)}
           />
-        </MetricCard>
-
-        {breakdown.map((item) => (
-          <MetricCard
-            key={item.key}
-            label={labelFor(item.key)}
-            value={percent(item.rate, 0)}
-            detail={`${count(item.missing)} ملف ناقص`}
-            tone={item.rate >= 0.8 ? "green" : item.rate >= 0.5 ? "gold" : "red"}
-            span="xs"
-            onOpen={() => onDrill(`compliance-${item.key}`)}
+        </div>
+        <div className="bi-split-side">
+          <WidgetStat
+            label="اكتمال المستندات"
+            value={percent(rate, 0)}
+            detail="السجل التجاري + البطاقة الضريبية + قائمة المنتجات"
+            tone={rate >= 0.8 ? "green" : rate >= 0.5 ? "gold" : "red"}
+            progress={rate}
           />
-        ))}
+        </div>
       </div>
-    </section>
+    </Widget>
   );
-}
-
-function labelFor(key: ComplianceBreakdown["key"]): string {
-  switch (key) {
-    case "cr":
-      return "السجل التجاري";
-    case "tax":
-      return "البطاقة الضريبية";
-    default:
-      return "قائمة المنتجات";
-  }
 }

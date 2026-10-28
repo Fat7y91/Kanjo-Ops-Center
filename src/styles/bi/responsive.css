@@ -1,0 +1,114 @@
+/* Executive dashboard — responsive breakpoints.
+ *
+ * Loaded last so media overrides win over the base rules above.
+ */
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .bi-widget-4,
+  .bi-widget-5 {
+    grid-column: span 6;
+  }
+
+  .bi-widget-6,
+  .bi-widget-7,
+  .bi-widget-8 {
+    grid-column: 1 / -1;
+  }
+
+  .bi-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 820px) {
+  .bi-stat-cluster-row {
+    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .bi-stat-cluster-row > .bi-stat {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .bi-stat-cluster-row > .bi-stat:last-child {
+    border-bottom: 0;
+  }
+
+  .bi-stat-cluster-row > .bi-divider {
+    display: none;
+  }
+
+  .bi-negotiation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bi-negotiation-summary {
+    padding-inline-end: 0;
+    padding-bottom: 12px;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .bi-marketing-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .bi-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bi-widget-4,
+  .bi-widget-5,
+  .bi-widget-6,
+  .bi-widget-7,
+  .bi-widget-8,
+  .bi-widget-12 {
+    grid-column: 1 / -1;
+  }
+
+  .bi-negotiation-stages {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bi-negotiation-stage {
+    padding-inline-start: 0;
+    padding-top: 12px;
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .bi-negotiation-stage:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .bi-channel-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .bi-channel-bar {
+    display: none;
+  }
+
+  .bi-compliance-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+
+  .bi-compliance-bar {
+    display: none;
+  }
+
+  .bi-sparkline {
+    width: 100px;
+  }
+
+  .slideover-panel {
+    width: 100%;
+  }
+}

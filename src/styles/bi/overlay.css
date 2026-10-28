@@ -1,0 +1,110 @@
+/* Executive dashboard — locked placeholders and the drill-down slide-over. */
+
+/* ── Locked section ───────────────────────────────────────────────────── */
+
+.bi-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bi-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bi-section-head h2 {
+  font-size: 1rem;
+}
+
+.bi-locked {
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+/* ── Slide-over ───────────────────────────────────────────────────────── */
+
+.slideover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(12, 18, 32, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.slideover-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 100%);
+  height: 100%;
+  border-inline-start: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: -30px 0 80px rgba(9, 15, 28, 0.3);
+  animation: slideover-in 0.22s ease-out;
+}
+
+@keyframes slideover-in {
+  from {
+    transform: translateX(-32px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.slideover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.slideover-head h2 {
+  font-size: 1.12rem;
+}
+
+.slideover-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.bi-row-count {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.slideover-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 22px 28px;
+}
+
+.bi-table-wrap {
+  min-width: 0;
+}
+
+.bi-empty {
+  padding: 22px 4px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  text-align: center;
+}
+

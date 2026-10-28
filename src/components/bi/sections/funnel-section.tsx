@@ -1,7 +1,7 @@
 "use client";
 
-import { MetricCard } from "@/components/bi/metric-card";
 import { FunnelStageChart } from "@/components/bi/funnel-stage-chart";
+import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { count, percent } from "@/lib/bi/format";
 import type { FunnelStep } from "@/lib/bi/select";
 import type { BiDealStage } from "@/lib/bi/types";
@@ -21,26 +21,19 @@ export function FunnelSection({
 }: FunnelSectionProps) {
   const visited = steps.find((step) => step.stage === "visited")?.count ?? 0;
   const signed = steps.find((step) => step.stage === "signed")?.count ?? 0;
+  const provisional =
+    steps.find((step) => step.stage === "provisional")?.count ?? 0;
   const conversion = visited === 0 ? 0 : signed / visited;
 
   return (
-    <section className="bi-section" aria-label="مسار التجار">
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">مسار البيع</p>
-          <h2>دورة حياة التاجر</h2>
-        </div>
-        <span className="badge">{count(visited)} زيارة في النطاق</span>
-      </header>
-
-      <div className="bi-grid">
-        <MetricCard
-          label="قمع التحويل"
-          value={percent(conversion, 1)}
-          detail="من الزيارة إلى توقيع العقد"
-          tone="purple"
-          span="lg"
-        >
+    <Widget
+      eyebrow="مسار البيع"
+      title="دورة حياة التاجر"
+      span={12}
+      badge={<span className="badge">{count(visited)} زيارة في النطاق</span>}
+    >
+      <div className="bi-split">
+        <div className="bi-split-main">
           <FunnelStageChart
             steps={steps}
             activeStage={activeStage}
@@ -49,24 +42,44 @@ export function FunnelSection({
               onDrill(`funnel-${stage}`);
             }}
           />
-        </MetricCard>
+        </div>
 
-        <MetricCard
-          label="إجمالي التجار"
-          value={count(visited)}
-          detail="كل التجار المطابقين للفلاتر"
-          span="sm"
-          onOpen={() => onDrill("merchants-all")}
-        />
-        <MetricCard
-          label="عقود موقّعة"
-          value={count(signed)}
-          detail={`${percent(conversion, 1)} من الزيارات`}
-          tone="green"
-          span="sm"
-          onOpen={() => onDrill("funnel-signed")}
-        />
+        <div className="bi-split-side">
+          <div className="bi-stat-cluster">
+            <WidgetStat
+              label="معدل التحويل"
+              value={percent(conversion, 1)}
+              detail="من الزيارة إلى توقيع العقد"
+              tone="purple"
+              progress={conversion}
+            />
+            <WidgetDivider />
+            <WidgetStat
+              label="إجمالي التجار"
+              value={count(visited)}
+              detail="كل التجار المطابقين للفلاتر"
+              onOpen={() => onDrill("merchants-all")}
+            />
+            <WidgetDivider />
+            <WidgetStat
+              label="اتفاق مبدئي"
+              value={count(provisional)}
+              detail={`${percent(visited === 0 ? 0 : provisional / visited, 1)} من الزيارات`}
+              tone="gold"
+              onOpen={() => onDrill("funnel-provisional")}
+            />
+            <WidgetDivider />
+            <WidgetStat
+              label="عقود موقّعة"
+              value={count(signed)}
+              detail={`${percent(conversion, 1)} من الزيارات`}
+              tone="green"
+              progress={conversion}
+              onOpen={() => onDrill("funnel-signed")}
+            />
+          </div>
+        </div>
       </div>
-    </section>
+    </Widget>
   );
 }
