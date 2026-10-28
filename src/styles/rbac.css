@@ -1,0 +1,27 @@
+/* RBAC module — users / permission matrix.
+ *
+ * Imported by globals.css after tokens.css. The legacy matrix layout rules still
+ * live in globals.css; new selectors for the Users module belong here.
+ */
+
+.matrix-user-link {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.matrix-user-link:hover {
+  color: var(--purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.matrix-user-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.matrix-user-summary {
+  margin-bottom: 16px;
+}
