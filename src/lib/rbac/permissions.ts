@@ -223,6 +223,25 @@ export const PERMISSIONS = [
     description: "فتح مصفوفة الصلاحيات ومنح القدرات أو سحبها.",
     group: "الحوكمة",
   },
+  {
+    key: "view_financials",
+    label: "عرض البيانات المالية",
+    description:
+      "الاطلاع على الإيرادات والعمولات والمصروفات في مركز القيادة التنفيذي.",
+    group: "المالية",
+  },
+  {
+    key: "manage_expenses",
+    label: "إدارة المصروفات",
+    description: "تسجيل مصروفات التشغيل واعتمادها في دفتر المالية.",
+    group: "المالية",
+  },
+  {
+    key: "manage_marketing_metrics",
+    label: "إدارة مؤشرات التسويق",
+    description: "تحديث أرقام الوصول والحملات المستخدمة في لوحة التسويق.",
+    group: "التسويق",
+  },
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number]["key"];
