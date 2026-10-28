@@ -3,22 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
-import { formatCoordinates, formatDuration } from "@/lib/field-ops/geolocation";
+import { ContactSection } from "@/components/field-ops/visit/contact-section";
+import { FollowupSection } from "@/components/field-ops/visit/followup-section";
+import { OpinionSection } from "@/components/field-ops/visit/opinion-section";
+import { OutcomeSection } from "@/components/field-ops/visit/outcome-section";
+import {
+  OUTCOME_LABELS,
+  REP_OUTCOME_ORDER,
+  toOpinionState,
+  type OpinionState,
+  type OutcomeOption,
+} from "@/components/field-ops/visit/outcome-options";
+import type { VisitDraft } from "@/components/field-ops/visit-mode";
 import {
   ADVANCED_OUTCOMES,
   COMMISSION_OUTCOMES,
-  CONTRACT_STATE_META,
-  FOLLOW_UP_KINDS,
-  FOLLOW_UP_KIND_META,
-  REP_OPINIONS,
-  REP_OPINION_META,
   type ContractState,
   type FollowUpKind,
   type Merchant,
   type RepOpinion,
-  type RepOpinionTrait,
 } from "@/lib/field-ops/types";
-import type { VisitDraft } from "@/components/field-ops/visit-mode";
 
 export type VisitReportDraft = {
   outcome: ContractState;
@@ -43,81 +47,6 @@ type VisitReportFormProps = {
   onSubmit: (report: VisitReportDraft) => void;
 };
 
-type OutcomeOption = {
-  value: ContractState;
-  label: string;
-  description: string;
-  advanced: boolean;
-};
-
-/**
- * Reps can only choose the three non-signature outcomes. `signed_contract` is
- * deliberately absent: signing is an admin governance action on the CRM card.
- */
-const REP_OUTCOME_ORDER: ContractState[] = [
-  "no_agreement",
-  "provisional",
-  "final_contract",
-];
-
-const OUTCOME_LABELS: Record<ContractState, { label: string; description: string }> = {
-  no_agreement: {
-    label: "بدون تعاقد",
-    description: "الزيارة انتهت دون اتفاق. يستمر التاجر في المسار الطبيعي.",
-  },
-  provisional: {
-    label: "اتفاق مبدئي",
-    description: "قبول مبدئي للعمولة، مع حاجة لجولة نهائية.",
-  },
-  final_contract: {
-    label: "اتفاق نهائي",
-    description: "بنود نهائية متفق عليها. اعتماد التوقيع يتم من كارت التاجر.",
-  },
-  signed_contract: {
-    label: "توقيع العقد",
-    description: "اعتماد إداري فقط من كارت التاجر.",
-  },
-};
-
-const DEFAULT_WEIGHTS: Record<RepOpinionTrait, number> = {
-  cooperative: 60,
-  difficult: 40,
-  commission_conservative: 50,
-  marketing_interested: 50,
-  price_sensitive: 50,
-  expansion_ready: 50,
-};
-
-type OpinionState = {
-  trait: string;
-  label?: string;
-  weight: number;
-  enabled: boolean;
-};
-
-function toOpinionState(
-  opinions: RepOpinion[] | undefined,
-): Record<string, OpinionState> {
-  const next: Record<string, OpinionState> = {};
-  for (const trait of REP_OPINIONS) {
-    next[trait] = {
-      trait,
-      weight: DEFAULT_WEIGHTS[trait],
-      enabled: false,
-    };
-  }
-  for (const opinion of opinions ?? []) {
-    const existing = next[opinion.trait];
-    next[opinion.trait] = {
-      trait: opinion.trait,
-      label: opinion.label,
-      weight: opinion.weight > 0 ? opinion.weight : existing?.weight ?? 50,
-      enabled: true,
-    };
-  }
-  return next;
-}
-
 export function VisitReportForm({
   open,
   merchant,
@@ -133,7 +62,9 @@ export function VisitReportForm({
   const [notes, setNotes] = useState("");
   const [contactName, setContactName] = useState(merchant?.contact?.name ?? "");
   const [contactRole, setContactRole] = useState(merchant?.contact?.role ?? "");
-  const [contactMobile, setContactMobile] = useState(merchant?.contact?.mobile ?? "");
+  const [contactMobile, setContactMobile] = useState(
+    merchant?.contact?.mobile ?? "",
+  );
   const [opinionState, setOpinionState] = useState<Record<string, OpinionState>>(
     () => toOpinionState(merchant?.opinions),
   );
@@ -296,124 +227,27 @@ export function VisitReportForm({
       wide
     >
       <form className="form-stack visit-report-form" onSubmit={submit}>
-        {draft ? (
-          <section className="visit-summary-strip" aria-label="ملخص الزيارة">
-            <div>
-              <span>المدة</span>
-              <strong>{formatDuration(draft.durationSeconds)}</strong>
-            </div>
-            <div>
-              <span>موقع البداية</span>
-              <strong className="visit-coords">{formatCoordinates(draft.startLocation)}</strong>
-            </div>
-            <div>
-              <span>موقع النهاية</span>
-              <strong className="visit-coords">{formatCoordinates(draft.endLocation)}</strong>
-            </div>
-            <div>
-              <span>عدد الزيارات السابقة</span>
-              <strong>{visitCount}</strong>
-            </div>
-          </section>
-        ) : null}
+        <ContactSection
+          draft={draft}
+          visitCount={visitCount}
+          contactName={contactName}
+          contactRole={contactRole}
+          contactMobile={contactMobile}
+          onNameChange={setContactName}
+          onRoleChange={setContactRole}
+          onMobileChange={setContactMobile}
+        />
 
-        <section className="visit-form-section">
-          <div className="visit-form-head">
-            <p className="eyebrow">بيانات التواصل</p>
-            <span className="badge">تُحدَّث في كارت التاجر تلقائياً</span>
-          </div>
-          <div className="visit-contact-grid">
-            <label className="field">
-              <span>اسم مسؤول التواصل</span>
-              <input
-                type="text"
-                value={contactName}
-                onChange={(event) => setContactName(event.target.value)}
-                placeholder="من قابلته في الزيارة؟"
-              />
-            </label>
-            <label className="field">
-              <span>المسمى الوظيفي</span>
-              <input
-                type="text"
-                value={contactRole}
-                onChange={(event) => setContactRole(event.target.value)}
-                placeholder="المالك، مدير الفرع، مسؤول المشتريات…"
-              />
-            </label>
-            <label className="field">
-              <span>رقم الموبايل</span>
-              <input
-                type="tel"
-                value={contactMobile}
-                onChange={(event) => setContactMobile(event.target.value)}
-                placeholder="01xxxxxxxxx"
-                inputMode="tel"
-              />
-            </label>
-          </div>
-        </section>
-
-        <section className="visit-form-section">
-          <div className="visit-form-head">
-            <p className="eyebrow">نتيجة الزيارة</p>
-            <span className="badge badge-gold">
-              {visitCount === 0
-                ? "أول زيارة — خيار الاتفاق النهائي مخفي"
-                : `زيارة رقم ${visitCount + 1}`}
-            </span>
-          </div>
-
-          <div className="outcome-grid">
-            {outcomeOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`outcome-option${outcome === option.value ? " outcome-option-active" : ""}`}
-                onClick={() => setOutcome(option.value)}
-                aria-pressed={outcome === option.value}
-              >
-                <strong>{option.label}</strong>
-                <span>{option.description}</span>
-                {option.advanced ? (
-                  <em className="outcome-advanced-tag">يتطلب زيارة سابقة</em>
-                ) : null}
-              </button>
-            ))}
-          </div>
-
-          <p className="inline-note">
-            اعتماد توقيع العقد يتم حصرياً من كارت التاجر بواسطة مدير الحالات.
-          </p>
-
-          {ADVANCED_OUTCOMES.includes(outcome) && canUseAdvanced ? (
-            <p className="visit-advanced-note">
-              هذا الخيار يفترض وجود اتفاق سابق. تأكد من مطابقة الحالة الحالية
-              ({CONTRACT_STATE_META[merchant.contractState].label}) قبل الحفظ.
-            </p>
-          ) : null}
-
-          {needsCommission ? (
-            <label className="field field-commission">
-              <span>النسبة المتفق عليها (%)</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                step={0.5}
-                inputMode="decimal"
-                value={agreedCommission}
-                onChange={(event) => setAgreedCommission(event.target.value)}
-                placeholder="مثال: 12"
-                required
-              />
-              <span className="field-hint">
-                إلزامية عند الاتفاق المبدئي أو النهائي. تُحفظ في كارت التاجر
-                وتُقفل نهائياً عند اعتماد التوقيع.
-              </span>
-            </label>
-          ) : null}
-        </section>
+        <OutcomeSection
+          merchant={target}
+          visitCount={visitCount}
+          canUseAdvanced={canUseAdvanced}
+          outcomeOptions={outcomeOptions}
+          outcome={outcome}
+          agreedCommission={agreedCommission}
+          onOutcomeChange={setOutcome}
+          onCommissionChange={setAgreedCommission}
+        />
 
         <label className="field">
           <span>التقرير النوعي الكامل</span>
@@ -430,139 +264,28 @@ export function VisitReportForm({
           </span>
         </label>
 
-        <section className="visit-form-section">
-          <div className="visit-form-head">
-            <p className="eyebrow">رأي المندوب</p>
-            <span className="badge">{activeOpinions.length + (customEnabled ? 1 : 0)} وسم مفعّل</span>
-          </div>
-          <p className="field-hint opinion-hint">
-            فعّل ما ينطبق واضبط الوزن من 0% إلى 100%. الوزن يعبّر عن شدة
-            الملاحظة، ويُجمع في كارت التاجر بأعلى قيمة مسجلة لكل وسم.
-          </p>
-          <div className="opinion-slider-grid">
-            {REP_OPINIONS.map((trait) => {
-              const state = opinionState[trait];
-              const meta = REP_OPINION_META[trait];
-              return (
-                <div
-                  key={trait}
-                  className={`opinion-slider${state.enabled ? " is-active" : ""}`}
-                >
-                  <div className="opinion-slider-head">
-                    <label className="opinion-slider-toggle">
-                      <input
-                        type="checkbox"
-                        checked={state.enabled}
-                        onChange={(event) =>
-                          patchOpinion(trait, { enabled: event.target.checked })
-                        }
-                      />
-                      <span className={`badge ${meta.tone}`}>{meta.label}</span>
-                    </label>
-                    <strong className="opinion-weight">{state.weight}%</strong>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={state.weight}
-                    disabled={!state.enabled}
-                    onChange={(event) =>
-                      patchOpinion(trait, { weight: Number(event.target.value) })
-                    }
-                    aria-label={`وزن ${meta.label}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
+        <OpinionSection
+          opinionState={opinionState}
+          activeCount={activeOpinions.length}
+          customEnabled={customEnabled}
+          customLabel={customLabel}
+          customWeight={customWeight}
+          onPatch={patchOpinion}
+          onToggleCustom={setCustomEnabled}
+          onCustomLabelChange={setCustomLabel}
+          onCustomWeightChange={setCustomWeight}
+        />
 
-          <div className={`opinion-slider opinion-custom${customEnabled ? " is-active" : ""}`}>
-            <div className="opinion-slider-head">
-              <label className="opinion-slider-toggle">
-                <input
-                  type="checkbox"
-                  checked={customEnabled}
-                  onChange={(event) => setCustomEnabled(event.target.checked)}
-                />
-                <span className="badge badge-purple">أخرى / مخصص</span>
-              </label>
-              <strong className="opinion-weight">
-                {customEnabled ? `${customWeight}%` : "غير مفعّل"}
-              </strong>
-            </div>
-            <input
-              type="text"
-              value={customLabel}
-              disabled={!customEnabled}
-              onChange={(event) => setCustomLabel(event.target.value)}
-              placeholder="صف الملاحظة بكلماتك، مثال: يطلب حصرية التوزيع"
-              maxLength={60}
-            />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={customWeight}
-              disabled={!customEnabled}
-              onChange={(event) => setCustomWeight(Number(event.target.value))}
-              aria-label="وزن الرأي المخصص"
-            />
-          </div>
-        </section>
-
-        <section className="visit-form-section">
-          <div className="visit-form-head">
-            <p className="eyebrow">مهمة متابعة</p>
-            <span className="badge badge-purple">اختياري</span>
-          </div>
-          <div className="visit-followup-grid">
-            <label className="field">
-              <span>نوع المتابعة</span>
-              <select
-                value={followUpKind}
-                onChange={(event) =>
-                  setFollowUpKind(event.target.value as FollowUpKind)
-                }
-              >
-                {FOLLOW_UP_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>
-                    {FOLLOW_UP_KIND_META[kind].label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>الموعد</span>
-              <input
-                type="datetime-local"
-                value={followUpAt}
-                onChange={(event) => setFollowUpAt(event.target.value)}
-              />
-            </label>
-            <label className="field visit-followup-note">
-              <span>ملاحظة المتابعة</span>
-              <input
-                type="text"
-                value={followUpNote}
-                onChange={(event) => setFollowUpNote(event.target.value)}
-                placeholder="ما المطلوب في المتابعة؟"
-                maxLength={200}
-              />
-            </label>
-          </div>
-          {followUpAt ? (
-            <p className="inline-note">
-              ستُنشأ مهمة مجدولة لفريق {merchant.team ?? "غير مسند"} وتظهر في
-              لوحة العمليات الميدانية.
-              {followUpKind === "whatsapp" && !contactMobile.trim()
-                ? " أضف رقم موبايل ليظهر زر واتساب المباشر."
-                : ""}
-            </p>
-          ) : null}
-        </section>
+        <FollowupSection
+          followUpAt={followUpAt}
+          followUpKind={followUpKind}
+          followUpNote={followUpNote}
+          contactMobile={contactMobile}
+          merchantTeam={merchant.team}
+          onAtChange={setFollowUpAt}
+          onKindChange={setFollowUpKind}
+          onNoteChange={setFollowUpNote}
+        />
 
         {error ? (
           <p className="form-error" role="alert">
@@ -571,7 +294,12 @@ export function VisitReportForm({
         ) : null}
 
         <div className="form-actions">
-          <button type="button" className="button button-quiet" onClick={onClose} disabled={saving}>
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={onClose}
+            disabled={saving}
+          >
             إلغاء
           </button>
           <button type="submit" className="button button-primary" disabled={saving}>
