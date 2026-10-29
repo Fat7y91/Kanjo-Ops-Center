@@ -108,7 +108,16 @@ every secret as encrypted.
 | `SUPABASE_ANON_KEY` | Build + Runtime | No (public) | `getSupabaseBrowserClient()` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Runtime | Yes | `getSupabaseServerClient()` — RLS-bypassing Tier 4 writes |
 
-The service-role key must never be prefixed with `NEXT_PUBLIC_`.
+The service-role key must never be prefixed with `NEXT_PUBLIC_`. It is used by
+`app/api/admin/users/provision` to mint auth users, so leaking it would let
+anyone create an operator account.
+
+**Public signup must be disabled on the Supabase project.** Turn off email and
+phone signups (Dashboard → Authentication → Sign In / Providers, or
+`auth.enable_signup = false` in `supabase/config.toml`). Signup is not a product
+feature here: accounts are provisioned top-down only (§7.6). If the flag is
+left on, `POST /auth/v1/signup` remains reachable and would mint credential-only
+accounts with no `app.users` profile, no grants, and no city scope.
 
 ### Required once the Operations repositories are wired (Firebase)
 
@@ -218,8 +227,13 @@ migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (251), `seed-users.ts`, `modules.ts`.
+- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (251), `seed-users.ts`, `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §7.6.
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities).
+- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (nodejs runtime, `manage_permissions`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
+
+**Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§7.6).
 
 #### Why login is a Route Handler, not a Server Action
 
@@ -329,25 +343,30 @@ The tiers exist conceptually; these are the concrete gaps to close.
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
    - Operations → Firebase: catalog, field ops, live orders.
-2. **RBAC has a schema but no repository.** `supabase/migrations/` now defines
-   `app.users` and the grant tables (Section 7), but `src/lib/rbac/users.ts`
-   still reads the in-memory seed. Next step is a `rbac/repository.ts` that
-   reads `app.users` and falls back to seed data while the DB is unconfigured.
-3. **Repository seams are not yet created.** Only `catalog/repository.ts` and
+2. **RBAC has a schema but no read repository.** `supabase/migrations/` defines
+   `app.users` and the grant tables (Section 7), and provisioning writes to them
+   (§7.6), but `src/lib/rbac/users.ts` still reads the in-memory seed for every
+   read and for login. Next step is an `rbac/repository.ts` that reads
+   `app.users`, and a login path that verifies a password against Supabase Auth
+   instead of picking a user from a list.
+3. **Two create paths coexist.** `POST /api/admin/users` still writes to the
+   in-memory store and cannot mint credentials; `POST /api/admin/users/provision`
+   is the real one. Retire the former once the repository lands.
+4. **Repository seams are not yet created.** Only `catalog/repository.ts` and
    `kpi/repository.ts` exist. `rbac`, `field-ops`, `taxonomy` and `catalog/store`
    still mix business rules with persistence.
-4. **Service extraction started.** `src/lib/catalog/services/` now holds the
+5. **Service extraction started.** `src/lib/catalog/services/` now holds the
    variant and image-QA services, and `src/lib/catalog/repository.ts` is the
    reserved Tier 4 seam. Other domains still mix business and persistence in
    `src/lib/<domain>/store.ts`; extract pure rules into
    `src/lib/<domain>/services/` and leave only queries in `store/`.
-5. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
+6. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
    `catalog/rules.ts` and `catalog/repository.ts`.
-6. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
+7. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
    persistence together. Split and drop below 300.
-7. **Page components are still clients.** Move view state into `use-*.ts` so
+8. **Page components are still clients.** Move view state into `use-*.ts` so
    `page.tsx` stays a server container.
-8. **Files over the 300-line limit (backlog):**
+9. **Files over the 300-line limit (backlog):**
    - `src/components/field-ops/field-ops-client.tsx` — 831
    - `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` — 764
    - `src/components/field-ops/cities-client.tsx` — 760
@@ -359,9 +378,9 @@ The tiers exist conceptually; these are the concrete gaps to close.
    - `src/lib/field-ops/offline-queue.ts` — 344
    - `src/components/field-ops/ops-team-panel.tsx` — 327
    - `src/app/globals.css` — 4884 (extract to `src/styles/<domain>.css`)
-9. **Business rules need negative-space tests.** Domain functions are pure;
+10. **Business rules need negative-space tests.** Domain functions are pure;
    add unit coverage before wiring new persistence.
-10. **Schema has no automated test.** The RBAC migration was validated by hand
+11. **Schema has no automated test.** The RBAC migration was validated by hand
    against PostgreSQL 15. Port those checks into a repeatable SQL or pgTAP
    suite so the governor invariant cannot silently regress.
 
@@ -458,6 +477,119 @@ subject to policy. `has_permission()` and `is_active_user()` are
 
 Self-service profile edits must go through a dedicated RPC rather than a direct
 `UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
+
+### 7.6 No Self-Service Signup — Top-Down Provisioning
+
+**Public registration is strictly disabled.** There is no signup route, no
+`signUp()` call anywhere in the app, and no "create account" link on `/login`.
+An account can only come into existence when an authorised operator mints it.
+Kanjo is B2B operations software, not a consumer product: every identity is
+issued by someone who is accountable for it.
+
+Supabase's phone provider must stay closed to public signup. Set
+`auth.enable_signup = false` (Dashboard → Authentication → Providers, or
+`supabase/config.toml`) so the only remaining path is the Admin API used by
+Tier 3. Without that setting the REST `/auth/v1/signup` endpoint would still
+mint accounts behind the app's back.
+
+#### The hierarchy
+
+Provisioning follows clearance, and each level can only create *strictly
+below* itself:
+
+| Actor | Level | Creates | Scope it may grant |
+|---|---|---|---|
+| System Admin / Founder | 4 / 3 | Anyone below | Any city, any permission it holds |
+| City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
+| Field Rep | 1 | Nobody | — |
+
+Rules enforced for every creation, in both Tier 3 and SQL:
+
+1. **Strictly lower rank.** `actor.clearanceLevel > target.clearanceLevel`.
+   Equal or higher rank is refused, so peers cannot clone each other and
+   nobody self-escalates.
+2. **Permission subset.** The grantor can only hand out permissions they
+   themselves hold (`permissionsAreWithinActor`). No capability can be
+   invented during provisioning.
+3. **City subset.** A non-global actor can only assign cities from their own
+   `accessibleCities`. Global actors (level ≥ 3) may assign any city.
+4. **Global ranks are executive-only.** Levels 3–4 require a global actor.
+
+These live in `assertCanCreate()` in `src/lib/rbac/management.ts` and are
+already covered by the hierarchy helpers.
+
+#### The write path
+
+All four writes happen server-side; the service-role key never leaves the
+server.
+
+```
+POST /api/admin/users/provision        (protected Route Handler, nodejs)
+  → getServerSession()                 verify cookie + re-read live grants
+  → require manage_permissions         else 401 / 403
+  → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
+  → assertCanCreate(session, input)    rank / permission / city subset
+  → supabase.auth.admin.createUser()   SERVICE ROLE, phone + password
+      ├─ trigger: app.handle_auth_user_upsert mirrors phone/email
+      ├─ update app.users                profile: name, title, team, clearance
+      ├─ insert app.user_permissions     explicit capability grants
+      └─ insert app.user_city_scope      city assignments
+  → on any failure: auth.admin.deleteUser()  cascade rollback
+```
+
+Implementation:
+
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema`. Phone is E.164;
+  password is capped at 72 characters because bcrypt silently truncates beyond
+  that, and a silent truncation would make the stored credential differ from
+  what the operator typed.
+- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`. Pure
+  orchestration over the service-role client; no UI, no HTTP concerns.
+- `src/app/api/admin/users/provision/route.ts` — thin controller. It only
+  authenticates, delegates, and maps errors to status codes.
+
+The handler runs on the Node runtime, not Edge: `auth.admin.*` needs the
+service-role client, and this keeps parity with the rest of Tier 4. Do not call
+`redirect()` here — see §5 on `next-on-pages`.
+
+#### Deployment prerequisites
+
+Three project-level settings are required; none of them live in application code.
+
+1. **Expose the `app` schema to PostgREST.** The service writes through
+   `.schema("app")`, which only resolves if `app` is listed under
+   Dashboard → API → Exposed schemas (or `schemas = ["public", "app"]` in
+   `config.toml`). Without it every write fails with *The schema must be one of
+   the following*. Exposing `app` is safe: RLS is forced and the policies only
+   admit `authenticated` or `service_role`.
+2. **Grant `service_role` table privileges.** The foundation migration grants
+   `authenticated` only, so `20261029000100_rbac_service_role_grants.sql` adds
+   `usage` plus DML on the four `app` tables for `service_role`. `service_role`
+   also carries `BYPASSRLS` on Supabase, which is what makes the provisioning
+   writes succeed despite the forced policies.
+3. **Seed `app.permissions`.** `user_permissions.permission_key` is a foreign
+   key, so provisioning fails until the 38 keys from `permissions.ts` exist as
+   rows. Seed before creating the first account.
+
+#### Failure handling
+
+Provisioning is multi-step and must not leave a half-created account. The auth
+user is created first, because `app.users.id` is a foreign key to
+`auth.users.id`. If any profile, grant, or scope step fails, the auth user is
+deleted; `on delete cascade` removes the dependent rows. Partial accounts are
+therefore impossible, and the operator sees a retryable error rather than a
+zombie login.
+
+`granted_by` records the authorising operator for audit. It is set only when
+the session id is a real UUID, because seed/demo sessions use `u-*` ids.
+
+#### What replaces the old create flow
+
+The existing `POST /api/admin/users` writes to the in-memory `createUser()`
+store and collects an email. It stays until the RBAC repository lands, but it is
+**not** the production path: it cannot mint credentials. `createUser()` should
+gain a phone field and then delegate to `createUserAccount()` once the
+repository reads `app.users`.
 
 ---
 
