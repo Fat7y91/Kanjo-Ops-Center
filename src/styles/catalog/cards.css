@@ -103,12 +103,6 @@
   gap: 1px;
 }
 
-.cat-queue-item-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 6px;
-}
-
 .cat-queue-item-main strong {
   overflow: hidden;
   font-size: 0.82rem;

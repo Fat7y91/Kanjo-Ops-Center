@@ -105,9 +105,10 @@ export const PERMISSIONS = [
     group: "الكتالوج",
   },
   {
-    key: "edit_products",
-    label: "تعديل المنتجات",
-    description: "تغيير تفاصيل المنتجات والأسعار.",
+    key: "review_catalog_images",
+    label: "مراجعة وتعديل صور الكتالوج",
+    description:
+      "مراجعة صور المنتجات المعلّقة، تحسينها واعتمادها قبل النشر في الكتالوج.",
     group: "الكتالوج",
   },
   {

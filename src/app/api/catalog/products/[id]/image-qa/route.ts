@@ -13,7 +13,10 @@ import { getMerchantById } from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
 
-const REVIEW_CAPABILITIES = ["manage_catalog", "edit_products"] as const;
+const REVIEW_CAPABILITIES = [
+  "manage_catalog",
+  "review_catalog_images",
+] as const;
 
 const imageQaSchema = z.object({
   /** Data URL of the enhanced image; omitted when approving as-is. */

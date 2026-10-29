@@ -1,5 +1,6 @@
 "use client";
 
+import { DraftListItem } from "@/components/catalog/draft-list-item";
 import type { CatalogDraft } from "@/lib/catalog/draft-queue";
 
 type DraftQueueBannerProps = {
@@ -7,6 +8,7 @@ type DraftQueueBannerProps = {
   syncing: boolean;
   online: boolean;
   onUploadAll: () => void;
+  canEdit: boolean;
   onEdit: (draft: CatalogDraft) => void;
   onRemove: (clientProductId: string) => void;
 };
@@ -23,6 +25,7 @@ export function DraftQueueBanner({
   syncing,
   online,
   onUploadAll,
+  canEdit,
   onEdit,
   onRemove,
 }: DraftQueueBannerProps) {
@@ -64,39 +67,13 @@ export function DraftQueueBanner({
 
       <ul className="cat-queue-list">
         {drafts.map((draft) => (
-          <li key={draft.clientProductId} className="cat-queue-item">
-            <div className="cat-queue-item-main">
-              <strong>{draft.payload.name}</strong>
-              <span className="cat-queue-item-meta">
-                {draft.payload.merchantName} ·{" "}
-                {draft.payload.sku || "SKU تلقائي"}
-              </span>
-              {draft.lastError ? (
-                <span className="cat-queue-error" role="status">
-                  {draft.lastError}
-                  {draft.attempts > 0 ? ` (محاولة ${draft.attempts})` : ""}
-                </span>
-              ) : null}
-            </div>
-            <div className="cat-queue-item-actions">
-              <button
-                type="button"
-                className="button button-small button-quiet"
-                onClick={() => onEdit(draft)}
-                aria-label={`تعديل مسودة ${draft.payload.name}`}
-              >
-                تعديل
-              </button>
-              <button
-                type="button"
-                className="button button-small button-quiet"
-                onClick={() => onRemove(draft.clientProductId)}
-                aria-label={`حذف مسودة ${draft.payload.name}`}
-              >
-                حذف
-              </button>
-            </div>
-          </li>
+          <DraftListItem
+            key={draft.clientProductId}
+            draft={draft}
+            canEdit={canEdit}
+            onEdit={onEdit}
+            onRemove={onRemove}
+          />
         ))}
       </ul>
     </section>

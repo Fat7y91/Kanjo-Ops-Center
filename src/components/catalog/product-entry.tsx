@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { usePermission } from "@/components/auth/use-permission";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { DraftQueueBanner } from "@/components/catalog/draft-queue-banner";
 import { ProductForm } from "@/components/catalog/product-form";
@@ -45,6 +46,7 @@ export function ProductEntry({
   onOpen,
   onSynced,
 }: ProductEntryProps) {
+  const { hasAny } = usePermission();
   const queue = useCatalogDraftQueue();
   const entry = useProductEntry({
     merchants,
@@ -98,6 +100,7 @@ export function ProductEntry({
         syncing={queue.syncing}
         online={queue.online}
         onUploadAll={() => void uploadAll()}
+        canEdit={hasAny(["manage_catalog", "create_products"])}
         onEdit={(draft) => {
           void entry.editDraft(draft).then(() => {
             setToast(`جارٍ تعديل «${draft.payload.name}».`);

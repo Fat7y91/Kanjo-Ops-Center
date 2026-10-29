@@ -102,7 +102,7 @@ export function ProductCard({
         {needsImageQa(product.state) ? (
           <div onClick={stop}>
             <Protect
-              require={["manage_catalog", "edit_products"]}
+              require={["manage_catalog", "review_catalog_images"]}
               mode="any"
             >
               <ImageQaActions
@@ -125,26 +125,6 @@ export function ProductCard({
             >
               التفاصيل
             </button>
-            <Protect require="edit_products">
-              <button
-                type="button"
-                className="button button-small button-quiet"
-                disabled
-                title="تعديل المنتجات يمر عبر مسار المراجعة."
-              >
-                تعديل
-              </button>
-            </Protect>
-            <Protect require="delete_products">
-              <button
-                type="button"
-                className="button button-small button-danger"
-                disabled
-                title="الحذف يمر عبر مسار المراجعة."
-              >
-                حذف
-              </button>
-            </Protect>
           </div>
         )}
       </div>

@@ -112,7 +112,7 @@ export const SEED_USERS: AppUser[] = [
       "view_catalog",
       "manage_catalog",
       "create_products",
-      "edit_products",
+      "review_catalog_images",
     ],
     accessibleCities: [],
     clearanceLevel: 1,
