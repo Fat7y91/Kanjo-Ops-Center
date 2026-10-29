@@ -101,8 +101,11 @@ shadows, purple-700 / gold accents. Dark mode is driven by
   `product-form` 256, `cascading-taxonomy` 164, `use-product-entry` 270,
   `draft-list-item`, `draft-queue-banner`, `variant-matrix`, filter tabs).
 - Controller: `src/app/api/catalog/products/`, `+ [id]/image-qa`, `+ sync`.
-- Business: `src/lib/catalog/` — `filters.ts`, `image-qa.ts`, `variants.ts`,
-  `sku.ts`, `draft-queue.ts`, `category.ts`, `draft-types.ts`.
+- Business: `src/lib/catalog/services/variant-service.ts` (variant algebra) plus
+  `filters.ts`, `image-qa.ts`, `sku.ts`, `category.ts`, `draft-types.ts`.
+  `variants.ts` is a deprecated shim over the service.
+- Data access: `src/lib/catalog/offline-queue.ts` (draft queue) over
+  `draft-storage.ts` (IndexedDB/localStorage); `draft-queue.ts` is a shim.
 - Repository: `src/lib/catalog/store.ts` (279) — in-memory store + CRUD/sync.
 - Data: `src/lib/catalog/data/seed.ts` (85).
 - Schema: `src/lib/schemas/catalog.ts`.
@@ -150,10 +153,10 @@ shadows, purple-700 / gold accents. Dark mode is driven by
 
 The tiers exist conceptually; these are the concrete gaps to close.
 
-1. **No `src/services/` or `src/repositories/` folders yet.** Business and
-   persistence still share `src/lib/<domain>/store.ts`. Extract pure business
-   rules into `src/lib/<domain>/<domain>.ts` and leave only queries in
-   `store/`.
+1. **Service extraction started.** `src/lib/catalog/services/` now exists for
+   variants. Other domains still mix business and persistence in
+   `src/lib/<domain>/store.ts`; extract pure rules into
+   `src/lib/<domain>/services/` and leave only queries in `store/`.
 2. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
    `catalog/rules.ts` and `catalog/repository.ts`.
 3. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
@@ -180,7 +183,45 @@ allowed above the limit.
 
 ---
 
-## 6. The AI Workflow Loop (MANDATORY)
+## 6. Refactored Modules
+
+### Catalog — Smart Variant Matrix
+
+The variant entry flow is the reference implementation of the five tiers.
+Each tier owns exactly one concern:
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `src/components/catalog/variant-matrix.tsx` | Dumb grid. Receives `selectedAttributes` + hydrated `rows` as props, renders name/SKU read-only and uses `InputControl` for the price only. Dispatches `onPriceChange(key, value)` upward. |
+| 1 — UI | `src/components/catalog/product-form.tsx` | Presentation form. Consumes the controller hook; no domain math. |
+| 2 — Controller | `src/components/catalog/use-variant-matrix.ts` | Derives view state (matrix → hydrated rows → selected labels) and memoises it. |
+| 2 — Controller | `src/components/catalog/use-product-entry.ts` | Owns form state, validation order and save orchestration; calls the service, then the queue. |
+| 3 — Business | `src/lib/catalog/services/variant-service.ts` | Pure and zero-dependency: `generateVariantMatrix`, `hydrateVariantCombinations`, `finalizeVariantProducts`. No React, no IndexedDB. |
+| 4 — Data access | `src/lib/catalog/offline-queue.ts` | `enqueueDraft` / `enqueueDrafts` / `flushDrafts` + reads. Stores fully hydrated payloads only. |
+
+Data flow:
+
+```mermaid
+graph TD
+    A["VariantMatrix (T1)"] -->|onPriceChange| B["use-variant-matrix (T2)"]
+    B --> C["variant-service (T3)"]
+    C -->|hydrated rows| A
+    B -->|finalizeVariantProducts| D["use-product-entry (T2)"]
+    D -->|enqueueDrafts| E["offline-queue (T4)"]
+```
+
+Rules locked in by this refactor:
+
+- Names (`base + attributes`) and SKUs (`KJ-<vendor>-<seed><seq>`) are produced
+  once, in Tier 3, so the matrix and the queued draft can never disagree.
+- The UI never imports from `src/lib/catalog/*` except read-only types and the
+  hydrated row shape.
+- `src/lib/catalog/variants.ts` and `src/lib/catalog/draft-queue.ts` are now
+  deprecated re-export shims; new code imports the service / queue directly.
+
+---
+
+## 7. The AI Workflow Loop (MANDATORY)
 
 Every AI session on this branch follows this loop. No exceptions.
 
