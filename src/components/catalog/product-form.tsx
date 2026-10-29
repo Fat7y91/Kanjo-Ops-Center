@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { BarcodeScanner } from "@/components/catalog/barcode-scanner";
 import { Button } from "@/components/ui/button";
 import { CascadingTaxonomy } from "@/components/catalog/cascading-taxonomy";
 import { MerchantPicker, type CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { ProductImageField } from "@/components/catalog/product-image-field";
 import { VariantMatrix } from "@/components/catalog/variant-matrix";
+import { useVariantMatrix } from "@/components/catalog/use-variant-matrix";
 import {
   TextAreaField,
   TextField,
@@ -17,7 +16,6 @@ import {
   PRODUCT_TYPE_META,
   type CatalogProductType,
 } from "@/lib/catalog/types";
-import { buildVariantCombinations } from "@/lib/catalog/variants";
 import type {
   TaxonomyCategory,
   TaxonomyVariant,
@@ -78,16 +76,15 @@ export function ProductForm({
 }: ProductFormProps) {
   const locked = disabled || submitting;
   const isVariable = values.productType === "variable";
-  const combinations = useMemo(
-    () =>
-      isVariable
-        ? buildVariantCombinations({
-            attributes: values.attributes,
-            variants,
-          })
-        : [],
-    [isVariable, values.attributes, variants],
-  );
+  const matrix = useVariantMatrix({
+    enabled: isVariable,
+    baseName: values.name,
+    attributes: values.attributes,
+    prices: values.variantPrices,
+    skuSeed: values.skuSeed,
+    vendorTypeId: values.merchant?.vendorTypeId ?? null,
+    variants,
+  });
 
   return (
     <form
@@ -183,12 +180,11 @@ export function ProductForm({
 
         {isVariable ? (
           <VariantMatrix
-            baseName={values.name}
+            selectedAttributes={matrix.selectedAttributes}
+            rows={matrix.rows}
+            limit={matrix.limit}
             priceLabel="السعر (ج.م)"
-            combinations={combinations}
             prices={values.variantPrices}
-            skuSeed={values.skuSeed}
-            vendorTypeId={values.merchant?.vendorTypeId ?? null}
             onPriceChange={(key, value) =>
               onChange({
                 variantPrices: { ...values.variantPrices, [key]: value },

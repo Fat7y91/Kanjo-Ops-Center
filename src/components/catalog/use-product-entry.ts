@@ -4,28 +4,26 @@ import { useCallback, useState } from "react";
 
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import type { ProductFormValues } from "@/components/catalog/product-form";
+import { categoryIdFromKey } from "@/lib/catalog/category";
 import {
-  enqueueDraft,
+  enqueueDrafts,
   removeDraft,
   type CatalogDraft,
   type CatalogDraftPayload,
-} from "@/lib/catalog/draft-queue";
-import { categoryIdFromKey } from "@/lib/catalog/category";
+} from "@/lib/catalog/offline-queue";
 import {
   createSkuSeed,
   generateSku,
   isValidBarcode,
   normalizeCode,
 } from "@/lib/catalog/sku";
-import type {
-  CatalogProductType,
-  CatalogVariantSelection,
-} from "@/lib/catalog/types";
 import {
-  buildVariantCombinations,
-  combinationName,
-  combinationSku,
-} from "@/lib/catalog/variants";
+  VariantError,
+  finalizeVariantProducts,
+  generateVariantMatrix,
+  type FinalVariantProduct,
+} from "@/lib/catalog/services/variant-service";
+import type { CatalogProductType } from "@/lib/catalog/types";
 import type { TaxonomyVariant } from "@/lib/taxonomy/types";
 
 function emptyValues(): ProductFormValues {
@@ -141,7 +139,8 @@ export function useProductEntry({
   async function save(mode: SaveMode): Promise<boolean> {
     setError("");
 
-    if (!values.merchant) {
+    const merchant = values.merchant;
+    if (!merchant) {
       setError("اختر التاجر أولاً.");
       return false;
     }
@@ -160,47 +159,37 @@ export function useProductEntry({
     const isVariable = values.productType === "variable";
 
     // Variable products are entered through the matrix: one queued draft per
-    // combination, each with its own price and deterministic SKU.
-    const combinations = isVariable
-      ? buildVariantCombinations({
-          attributes: values.attributes,
-          variants,
-        })
-      : [];
-
-    const rows: Array<{
-      name: string;
-      sku: string;
-      price: number;
-      attributes: CatalogVariantSelection[];
-    }> = [];
+    // combination, each with its own price and deterministic SKU. All naming,
+    // SKU and price rules live in the Tier 3 service; this controller only
+    // turns a typed error into a rep-facing message.
+    const rows: FinalVariantProduct[] = [];
 
     if (isVariable) {
+      const combinations = generateVariantMatrix({
+        attributes: values.attributes,
+        variants,
+      });
       if (combinations.length === 0) {
         setError("اختر خياراً واحداً على الأقل لتوليد تركيبات المتغيرات.");
         return false;
       }
-      for (const [index, combination] of combinations.entries()) {
-        const raw = values.variantPrices[combination.key] ?? "";
-        const price = Number(raw);
-        if (!raw.trim() || !Number.isFinite(price) || price < 0) {
-          setError(
-            `أدخل سعراً صحيحاً لكل تركيبة — الناقص: ${
-              combinationName(values.name, combination.label) || "تركيبة"
-            }.`,
-          );
-          return false;
-        }
-        rows.push({
-          name: combinationName(values.name, combination.label),
-          sku: combinationSku(
-            values.merchant.vendorTypeId,
-            values.skuSeed,
-            index,
-          ),
-          price,
-          attributes: combination.selections,
-        });
+      try {
+        rows.push(
+          ...finalizeVariantProducts({
+            baseName: values.name,
+            vendorTypeId: merchant.vendorTypeId,
+            skuSeed: values.skuSeed,
+            combinations,
+            prices: values.variantPrices,
+          }),
+        );
+      } catch (caught) {
+        setError(
+          caught instanceof VariantError
+            ? caught.message
+            : "تعذر تجهيز تركيبات المتغيرات.",
+        );
+        return false;
       }
     } else {
       const price = Number(values.price);
@@ -217,7 +206,7 @@ export function useProductEntry({
       const typedCode = normalizeCode(values.sku);
       rows.push({
         name: values.name.trim(),
-        sku: typedCode || generateSku(values.merchant.vendorTypeId),
+        sku: typedCode || generateSku(merchant.vendorTypeId),
         price,
         attributes: [],
       });
@@ -225,26 +214,26 @@ export function useProductEntry({
 
     setBusy(true);
     try {
-      for (const row of rows) {
-        const payload: CatalogDraftPayload = {
-          name: row.name,
-          description: values.description.trim(),
-          merchantId: values.merchant.id,
-          merchantName: values.merchant.name,
-          vendorTypeId: values.merchant.vendorTypeId,
-          categoryKey: values.categoryKey,
-          categoryId,
-          productType: values.productType as CatalogProductType,
-          sku: row.sku,
-          barcode: /^\d{8,14}$/.test(row.sku) ? row.sku : "",
-          imageDataUrl: values.imageDataUrl,
-          attributes: row.attributes,
-          price: row.price,
-          state: "draft",
-          reviewNote: "",
-        };
-        await enqueueDraft(payload);
-      }
+      // Hand fully hydrated products (name + SKU + price already resolved) to
+      // the Tier 4 queue in one pass.
+      const payloads: CatalogDraftPayload[] = rows.map((row) => ({
+        name: row.name,
+        description: values.description.trim(),
+        merchantId: merchant.id,
+        merchantName: merchant.name,
+        vendorTypeId: merchant.vendorTypeId,
+        categoryKey: values.categoryKey,
+        categoryId,
+        productType: values.productType as CatalogProductType,
+        sku: row.sku,
+        barcode: /^\d{8,14}$/.test(row.sku) ? row.sku : "",
+        imageDataUrl: values.imageDataUrl,
+        attributes: row.attributes,
+        price: row.price,
+        state: "draft",
+        reviewNote: "",
+      }));
+      await enqueueDrafts(payloads);
 
       await refreshQueue();
 

@@ -1,54 +1,39 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { InputControl } from "@/components/ui/form-inputs";
-import {
-  MAX_VARIANT_COMBINATIONS,
-  combinationName,
-  combinationSku,
-  type VariantCombination,
-} from "@/lib/catalog/variants";
+import type { HydratedVariantCombination } from "@/lib/catalog/services/variant-service";
 
 type VariantMatrixProps = {
-  baseName: string;
+  /** Attribute group labels the rep selected, e.g. ["الحجم", "الطعم"]. */
+  selectedAttributes: string[];
+  /** Fully hydrated rows: name + SKU already resolved by the business layer. */
+  rows: HydratedVariantCombination[];
+  /** Row cap supplied by the caller; only used for the cap hint. */
+  limit: number;
   priceLabel: string;
-  combinations: VariantCombination[];
+  /** Raw price strings keyed by row key. */
   prices: Record<string, string>;
-  skuSeed: string;
-  vendorTypeId: number | null;
   disabled?: boolean;
   onPriceChange: (key: string, value: string) => void;
 };
 
 /**
- * Read-only name + SKU, editable price.
+ * Dumb presentation grid for generated variant combinations.
  *
- * The matrix is derived state: every row exists because the rep selected
- * option chips above, so the only input the rep owns here is the price.
+ * Every row is derived state produced by the service layer, so the rep owns
+ * exactly one input here: the price. This component performs no domain
+ * calculation and dispatches price edits upward unchanged.
  */
 export function VariantMatrix({
-  baseName,
+  selectedAttributes,
+  rows,
+  limit,
   priceLabel,
-  combinations,
   prices,
-  skuSeed,
-  vendorTypeId,
   disabled = false,
   onPriceChange,
 }: VariantMatrixProps) {
-  const rows = useMemo(
-    () =>
-      combinations.map((combination, index) => ({
-        key: combination.key,
-        name: combinationName(baseName, combination.label),
-        sku: combinationSku(vendorTypeId, skuSeed, index),
-        price: prices[combination.key] ?? "",
-      })),
-    [baseName, combinations, prices, skuSeed, vendorTypeId],
-  );
-
-  if (combinations.length === 0) {
+  if (rows.length === 0) {
     return (
       <p className="cat-hint">
         اختر خياراً واحداً على الأقل من المتغيرات أعلاه لتوليد جدول التركيبات.
@@ -63,13 +48,17 @@ export function VariantMatrix({
           تركيبات المتغيرات
           <span className="cat-matrix-count">{rows.length}</span>
         </span>
-        <span className="cat-hint">أدخل السعر فقط — الاسم و SKU يُولّدان تلقائياً.</span>
+        <span className="cat-hint">
+          {selectedAttributes.length > 0
+            ? `الخصائص: ${selectedAttributes.join(" · ")} — أدخل السعر فقط.`
+            : "أدخل السعر فقط — الاسم و SKU يُولّدان تلقائياً."}
+        </span>
       </div>
 
-      {rows.length >= MAX_VARIANT_COMBINATIONS ? (
+      {rows.length >= limit ? (
         <p className="cat-hint cat-matrix-cap">
-          تم بلوغ الحد الأقصى ({MAX_VARIANT_COMBINATIONS} تركيبة). قلّل الخيارات
-          المحددة لإظهار الباقي.
+          تم بلوغ الحد الأقصى ({limit} تركيبة). قلّل الخيارات المحددة لإظهار
+          الباقي.
         </p>
       ) : null}
 
@@ -99,7 +88,7 @@ export function VariantMatrix({
                       inputMode="decimal"
                       min={0}
                       step="0.01"
-                      value={row.price}
+                      value={prices[row.key] ?? ""}
                       onChange={(event) =>
                         onPriceChange(row.key, event.target.value)
                       }
