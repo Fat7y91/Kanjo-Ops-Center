@@ -153,7 +153,7 @@ states; call sites never hand-roll purple/gold classes.
 | `button.tsx` | 57 | `Button` | Every action / submit |
 | `dropdown-menu.tsx` | 99 | `DropdownMenu` | Row and context actions |
 | `tabs.tsx` | 97 | `Tabs` | Section / filter switchers |
-| `form-inputs.tsx` | 224 | `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField`, `InputControl` | Form controls |
+| `form-inputs.tsx` | 234 | `Field`, `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField`, `InputControl` | Form controls |
 | `select-menus.tsx` | 237 | `SelectMenu`, `ComboField` | Selects and searchable pickers |
 | `chip-toggle.tsx` | 33 | `ChipToggle` | Multi-select chips |
 | `page-header.tsx` | 24 | `PageHeader` | Page titles |
@@ -168,6 +168,24 @@ interactive-purple / gold accents. Selected tabs use the interactive purple with
 white text (AA) so contrast never depends on the pastel wash alone. Dark mode is
 driven by `data-theme="dark"` on `<html>` (see `tailwind.config.ts` `darkMode`
 selector).
+
+### Primitive rule: every `Label` needs a provider
+
+Headless UI's `Label`, `Description` and `Switch.Label` read from a React
+context. Rendering one without a parent that supplies it throws at render time
+and takes down the whole route:
+
+> `You used a <Label /> component, but it is not inside a relevant parent.`
+
+This string comes from `@headlessui/react`, not from Recharts, even when the
+crashing route happens to contain charts. Rules:
+
+- Wrap labelling in `Field` (which renders Headless UI `Field`), or inside
+  `Listbox` / `Combobox` / `Switch.Group`. Never render a bare `Label`.
+- `Field` must stay a `HeadlessField`; downgrading it to a `<div>` re-breaks
+  every `SelectMenu` that passes a `label`, including `/agent-kpi`.
+- A primitive that takes a `label` prop owns the provider, so call sites cannot
+  get this wrong.
 
 ---
 
@@ -266,6 +284,10 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Business: `src/lib/bi/` — `dataset.ts` (190), `select.ts`, `tables.ts`,
   `drill.ts`, `export.ts`, `format.ts`, `mock.ts`, `types.ts`.
 - BI folds Field Ops review states into the `draft` bucket for reporting.
+- Charts guard their own empty state. `FunnelStageChart` skips Recharts when
+  every slice is `0`, and `ComplianceDonut` when every `complete` is `0`,
+  rendering `.bi-chart-empty` / `.bi-donut-empty` instead. Never mount a
+  `Funnel`/`Pie` with `LabelList`/`Cell` children over zero rows.
 
 ### Agent KPI (Tier 1–5)
 - UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus

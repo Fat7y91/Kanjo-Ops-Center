@@ -17,49 +17,54 @@ export function ComplianceDonut({
   const complete = breakdown.reduce((total, item) => total + item.complete, 0);
   const total = breakdown.reduce((sum, item) => sum + item.total, 0);
   const rate = total === 0 ? 0 : Math.round((complete / total) * 100);
+  const hasData = complete > 0;
 
   return (
     <div className="bi-compliance">
       <div className="bi-donut">
-        <ResponsiveContainer width="100%" height={190}>
-          <PieChart>
-            <Tooltip
-              formatter={(value, name) => [`${value} تاجر`, name]}
-              contentStyle={{
-                borderRadius: 10,
-                border: "1px solid var(--line)",
-                background: "var(--surface)",
-                fontSize: 12,
-              }}
-            />
-            <Pie
-              data={breakdown.map((item) => ({
-                key: item.key,
-                name: BI_DOCUMENT_META[item.key].label,
-                value: item.complete,
-                fill: BI_DOCUMENT_META[item.key].color,
-              }))}
-              dataKey="value"
-              nameKey="name"
-              innerRadius={52}
-              outerRadius={78}
-              paddingAngle={2}
-              isAnimationActive={false}
-              onClick={(entry) => {
-                const key = (entry as { key?: BiDocumentKey }).key;
-                if (key) onSelect(key);
-              }}
-            >
-              {breakdown.map((item) => (
-                <Cell
-                  key={item.key}
-                  fill={BI_DOCUMENT_META[item.key].color}
-                  cursor="pointer"
-                />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
+        {hasData ? (
+          <ResponsiveContainer width="100%" height={190}>
+            <PieChart>
+              <Tooltip
+                formatter={(value, name) => [`${value} تاجر`, name]}
+                contentStyle={{
+                  borderRadius: 10,
+                  border: "1px solid var(--line)",
+                  background: "var(--surface)",
+                  fontSize: 12,
+                }}
+              />
+              <Pie
+                data={breakdown.map((item) => ({
+                  key: item.key,
+                  name: BI_DOCUMENT_META[item.key].label,
+                  value: item.complete,
+                  fill: BI_DOCUMENT_META[item.key].color,
+                }))}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={52}
+                outerRadius={78}
+                paddingAngle={2}
+                isAnimationActive={false}
+                onClick={(entry) => {
+                  const key = (entry as { key?: BiDocumentKey }).key;
+                  if (key) onSelect(key);
+                }}
+              >
+                {breakdown.map((item) => (
+                  <Cell
+                    key={item.key}
+                    fill={BI_DOCUMENT_META[item.key].color}
+                    cursor="pointer"
+                  />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="bi-donut-empty" aria-hidden="true" />
+        )}
         <div className="bi-donut-center">
           <strong>{rate}%</strong>
           <span>اكتمال الحزمة</span>

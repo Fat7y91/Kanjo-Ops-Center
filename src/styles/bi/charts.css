@@ -15,6 +15,16 @@
   direction: ltr;
 }
 
+.bi-chart-empty {
+  display: grid;
+  height: 230px;
+  margin: 0;
+  place-items: center;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 .bi-legend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -97,6 +107,13 @@
   position: relative;
   width: 100%;
   direction: ltr;
+}
+
+.bi-donut-empty {
+  height: 190px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 50%;
+  opacity: 0.5;
 }
 
 .bi-donut-center {

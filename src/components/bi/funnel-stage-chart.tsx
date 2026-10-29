@@ -44,46 +44,55 @@ export function FunnelStageChart({
     fill: STAGE_COLORS[step.stage],
   }));
 
+  // A funnel whose slices are all zero renders nothing, which would leave the
+  // LabelList children attached to an invisible shape. Skip Recharts entirely
+  // and show an explicit empty state instead.
+  const hasData = data.some((entry) => entry.count > 0);
+
   return (
     <div className="bi-chart">
       <div className="bi-chart-canvas">
-        <ResponsiveContainer width="100%" height={230}>
-          <FunnelChart>
-            <Tooltip
-              formatter={(value) => [`${value} تاجر`, "العدد"]}
-              contentStyle={{
-                borderRadius: 10,
-                border: "1px solid var(--line)",
-                background: "var(--surface)",
-                fontSize: 12,
-              }}
-            />
-            <Funnel
-              dataKey="count"
-              data={data}
-              isAnimationActive={false}
-              onClick={(entry) => {
-                const stage = (entry as { stage?: BiDealStage }).stage;
-                if (stage) onSelect(stage);
-              }}
-            >
-              <LabelList
-                position="right"
-                fill="var(--ink)"
-                stroke="none"
-                dataKey="name"
-                fontSize={11}
+        {hasData ? (
+          <ResponsiveContainer width="100%" height={230}>
+            <FunnelChart>
+              <Tooltip
+                formatter={(value) => [`${value} تاجر`, "العدد"]}
+                contentStyle={{
+                  borderRadius: 10,
+                  border: "1px solid var(--line)",
+                  background: "var(--surface)",
+                  fontSize: 12,
+                }}
               />
-              <LabelList
-                position="left"
-                fill="var(--ink-soft)"
-                stroke="none"
+              <Funnel
                 dataKey="count"
-                fontSize={11}
-              />
-            </Funnel>
-          </FunnelChart>
-        </ResponsiveContainer>
+                data={data}
+                isAnimationActive={false}
+                onClick={(entry) => {
+                  const stage = (entry as { stage?: BiDealStage }).stage;
+                  if (stage) onSelect(stage);
+                }}
+              >
+                <LabelList
+                  position="right"
+                  fill="var(--ink)"
+                  stroke="none"
+                  dataKey="name"
+                  fontSize={11}
+                />
+                <LabelList
+                  position="left"
+                  fill="var(--ink-soft)"
+                  stroke="none"
+                  dataKey="count"
+                  fontSize={11}
+                />
+              </Funnel>
+            </FunnelChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="bi-chart-empty">لا توجد تجار في النطاق المحدد بعد.</p>
+        )}
       </div>
 
       <ul className="bi-legend">

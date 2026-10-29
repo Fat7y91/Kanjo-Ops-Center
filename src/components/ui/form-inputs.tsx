@@ -2,6 +2,7 @@
 
 import {
   Checkbox as HeadlessCheckbox,
+  Field as HeadlessField,
   Input as HeadlessInput,
   Label as HeadlessLabel,
   Switch as HeadlessSwitch,
@@ -27,7 +28,14 @@ export type FieldProps = {
   children: ReactNode;
 };
 
-/** Label + hint wrapper shared by every form control. */
+/**
+ * Label + hint wrapper shared by every form control.
+ *
+ * Wrapped in Headless UI `Field`, which provides the `Label` context.
+ * Rendering `Label` without that provider throws
+ * "You used a <Label /> component, but it is not inside a relevant parent."
+ * and crashes the whole route at render time.
+ */
 export function Field({
   label,
   hint,
@@ -37,7 +45,7 @@ export function Field({
   children,
 }: FieldProps) {
   return (
-    <div className={cx("flex min-w-0 flex-col gap-1.5", className)}>
+    <HeadlessField className={cx("flex min-w-0 flex-col gap-1.5", className)}>
       {label ? (
         <HeadlessLabel
           htmlFor={htmlFor}
@@ -57,7 +65,7 @@ export function Field({
           {hint}
         </span>
       ) : null}
-    </div>
+    </HeadlessField>
   );
 }
 
@@ -149,38 +157,40 @@ export function CheckboxField({
   ...props
 }: CheckboxFieldProps) {
   return (
-    <HeadlessLabel className="flex cursor-pointer items-start gap-2.5">
-      <HeadlessCheckbox
-        className={cx(
-          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] text-white transition duration-200 ease-out data-[checked]:border-[color:var(--kanjo-purple-interactive)] data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
-          className,
-        )}
-        {...props}
-      >
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="size-3.5 opacity-0 data-[checked]:opacity-100"
-          aria-hidden="true"
+    <HeadlessField>
+      <HeadlessLabel className="flex cursor-pointer items-start gap-2.5">
+        <HeadlessCheckbox
+          className={cx(
+            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] text-white transition duration-200 ease-out data-[checked]:border-[color:var(--kanjo-purple-interactive)] data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+            className,
+          )}
+          {...props}
         >
-          <path d="M3 8.5 6.5 12 13 4.5" />
-        </svg>
-      </HeadlessCheckbox>
-      <span className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[color:var(--ink)]">
-          {label}
-        </span>
-        {hint ? (
-          <span className="text-[0.72rem] text-[color:var(--ink-soft)]">
-            {hint}
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-3.5 opacity-0 data-[checked]:opacity-100"
+            aria-hidden="true"
+          >
+            <path d="M3 8.5 6.5 12 13 4.5" />
+          </svg>
+        </HeadlessCheckbox>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-sm font-semibold text-[color:var(--ink)]">
+            {label}
           </span>
-        ) : null}
-      </span>
-    </HeadlessLabel>
+          {hint ? (
+            <span className="text-[0.72rem] text-[color:var(--ink-soft)]">
+              {hint}
+            </span>
+          ) : null}
+        </span>
+      </HeadlessLabel>
+    </HeadlessField>
   );
 }
 
