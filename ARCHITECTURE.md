@@ -203,6 +203,8 @@ crashing route happens to contain charts. Rules:
   cache and an in-memory fallback when IndexedDB is unavailable.
 - `src/lib/db/firebase/admin.ts` — service-account Admin SDK for Operations
   writes. `server-only`; Node runtime only.
+- `supabase/migrations/20261029000000_rbac_foundation.sql` — the validated
+  `app` schema (RBAC tables, triggers, RLS). See Section 7.
 
 Status: the clients exist, but **no domain repository consumes them yet**. The
 in-memory stores below remain the live implementation until each domain is
@@ -216,7 +218,7 @@ migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (37 keys), `users.ts` (251), `seed-users.ts`, `modules.ts`.
+- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (251), `seed-users.ts`, `modules.ts`.
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
 #### Why login is a Route Handler, not a Server Action
@@ -327,21 +329,25 @@ The tiers exist conceptually; these are the concrete gaps to close.
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
    - Operations → Firebase: catalog, field ops, live orders.
-2. **Repository seams are not yet created.** Only `catalog/repository.ts` and
+2. **RBAC has a schema but no repository.** `supabase/migrations/` now defines
+   `app.users` and the grant tables (Section 7), but `src/lib/rbac/users.ts`
+   still reads the in-memory seed. Next step is a `rbac/repository.ts` that
+   reads `app.users` and falls back to seed data while the DB is unconfigured.
+3. **Repository seams are not yet created.** Only `catalog/repository.ts` and
    `kpi/repository.ts` exist. `rbac`, `field-ops`, `taxonomy` and `catalog/store`
    still mix business rules with persistence.
-3. **Service extraction started.** `src/lib/catalog/services/` now holds the
+4. **Service extraction started.** `src/lib/catalog/services/` now holds the
    variant and image-QA services, and `src/lib/catalog/repository.ts` is the
    reserved Tier 4 seam. Other domains still mix business and persistence in
    `src/lib/<domain>/store.ts`; extract pure rules into
    `src/lib/<domain>/services/` and leave only queries in `store/`.
-4. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
+5. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
    `catalog/rules.ts` and `catalog/repository.ts`.
-5. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
+6. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
    persistence together. Split and drop below 300.
-6. **Page components are still clients.** Move view state into `use-*.ts` so
+7. **Page components are still clients.** Move view state into `use-*.ts` so
    `page.tsx` stays a server container.
-7. **Files over the 300-line limit (backlog):**
+8. **Files over the 300-line limit (backlog):**
    - `src/components/field-ops/field-ops-client.tsx` — 831
    - `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` — 764
    - `src/components/field-ops/cities-client.tsx` — 760
@@ -353,15 +359,109 @@ The tiers exist conceptually; these are the concrete gaps to close.
    - `src/lib/field-ops/offline-queue.ts` — 344
    - `src/components/field-ops/ops-team-panel.tsx` — 327
    - `src/app/globals.css` — 4884 (extract to `src/styles/<domain>.css`)
-8. **Business rules need negative-space tests.** Domain functions are pure;
+9. **Business rules need negative-space tests.** Domain functions are pure;
    add unit coverage before wiring new persistence.
+10. **Schema has no automated test.** The RBAC migration was validated by hand
+   against PostgreSQL 15. Port those checks into a repeatable SQL or pgTAP
+   suite so the governor invariant cannot silently regress.
 
 Generated data exception: `src/lib/taxonomy/data.generated.ts` is the only file
 allowed above the limit.
 
 ---
 
-## 7. Refactored Modules
+## 7. Data Persistence — Hybrid Schema Contract
+
+Tier 5 is deliberately split between two systems. Nothing may be stored in both.
+
+| Concern | System | Why |
+|---|---|---|
+| Identity, RBAC, city scope | Supabase (PostgreSQL) | Transactional, foreign keys, auditable writes |
+| Contracts, wallets, ledgers, commissions | Supabase (PostgreSQL) | ACID money movement; a lost write is a financial incident |
+| Catalog, merchants, tasks, visits, city geometry | Firebase (Firestore) | Offline-first writes, realtime sync, GeoJSON payloads |
+| Taxonomy | Firebase (Firestore) | Grows without migrations; edited by field staff |
+
+Rule: any entity that participates in a money movement or an authorization
+decision is SQL. Anything that is primarily edited offline in the field is
+NoSQL. A document never spans both stores.
+
+### 7.1 RBAC Schema
+
+Source of truth for the TypeScript side stays `src/lib/rbac/`. The database
+mirrors it, it does not redefine it: `app.permissions` seeds from
+`permissions.ts` (38 keys, 9 groups), and `app.users.clearance_level` follows
+`hierarchy.ts` (1–4).
+
+The migration lives at `supabase/migrations/20261029000000_rbac_foundation.sql`.
+It creates the `app` schema, four tables, three triggers, two RLS helpers, and
+policies. It is validated end-to-end against PostgreSQL 15.
+
+| Table | Purpose |
+|---|---|
+| `app.permissions` | Capability catalogue, one row per key |
+| `app.users` | Operator profile + authorization state |
+| `app.user_permissions` | Explicit capability grants (no roles table) |
+| `app.user_city_scope` | Per-operator city restriction |
+
+Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
+
+### 7.2 Identity: phone + password, and nothing else
+
+Login is **phone number + password**. Email is optional profile data and is
+therefore neither required nor unique.
+
+- Credentials are owned by Supabase `auth.users`. Kanjo never stores a password
+  hash of its own; there is no custom password column anywhere in `app`.
+- `app.users.id` is a foreign key to `auth.users.id`, and `app.users.phone`
+  mirrors `auth.users.phone` through the `auth_user_upsert_profile` trigger.
+- Phone is constrained to E.164 (`^\+[1-9][0-9]{7,14}$`) and is unique.
+- The same trigger raises `AUTH_PHONE_REQUIRED` if an auth user appears without
+  a phone, so a phone-less account can never be created.
+- `email` accepts NULL and carries no unique index. Duplicate emails are legal.
+
+### 7.3 Authorization invariants enforced in SQL
+
+These mirror the pure functions in `src/lib/rbac/`, so the rules hold even if a
+write bypasses the application.
+
+| Invariant | Mechanism |
+|---|---|
+| `global_scope` never drifts from clearance | `generated always as (clearance_level >= 3) stored` |
+| Clearance stays within 1–4 | `users_clearance_range` check |
+| At least one active `manage_permissions` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
+| Ordinary profile edits stay legal | Guards fire only on governor-removal events, so the first operator can be bootstrapped |
+| Stale sessions can be invalidated | `auth_revision` counter |
+
+The governor guard is the SQL twin of `assertActiveGovernor()` in
+`src/lib/rbac/users.ts`. It rejects removing or deactivating the last active
+governor, but permits any unrelated update — an earlier draft fired on every
+update and made bootstrapping the first operator impossible.
+
+### 7.4 Cross-database reference
+
+`app.user_city_scope.city_id` has **no foreign key**. City documents live in
+Firestore, so referential integrity is a Tier 3 responsibility. The column is
+`text` and is validated only as non-empty at the database layer.
+
+### 7.5 Row Level Security
+
+All four tables have RLS enabled *and* forced, so even the table owner is
+subject to policy. `has_permission()` and `is_active_user()` are
+`security definer` to avoid a policy on `app.users` recursing into itself.
+
+| Surface | Policy |
+|---|---|
+| `app.permissions` | Read by any active operator; writes are service-role only |
+| `app.users` | Read own row, or all rows with `manage_permissions`; writes are governor-only |
+| `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_permissions` |
+| `app.user_city_scope` | Same shape as grants |
+
+Self-service profile edits must go through a dedicated RPC rather than a direct
+`UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
+
+---
+
+## 8. Refactored Modules
 
 ### Catalog — Smart Variant Matrix
 
@@ -438,7 +538,7 @@ Rules locked in by this pipeline:
 
 ---
 
-## 8. Agent KPI Dashboard — 4-Stage City Lifecycle
+## 9. Agent KPI Dashboard — 4-Stage City Lifecycle
 
 The dashboard is the second full 5-tier reference implementation (after Image
 QA). The same rep is scored differently depending on the operational stage of
@@ -495,7 +595,7 @@ graph TD
 
 ---
 
-## 9. The AI Workflow Loop (MANDATORY)
+## 10. The AI Workflow Loop (MANDATORY)
 
 Every AI session on this branch follows this loop. No exceptions.
 
