@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { formatBytes, prepareImage } from "@/lib/catalog/image";
 
 type ProductImageFieldProps = {
@@ -64,18 +65,16 @@ export function ProductImageField({
             hidden
             onChange={(event) => void handleFile(event.target.files?.[0])}
           />
-          <button
-            type="button"
-            className="button button-small button-quiet"
+          <Button
+            size="sm"
             onClick={() => inputRef.current?.click()}
             disabled={disabled || busy}
           >
             {busy ? "جارٍ المعالجة…" : value ? "استبدال الصورة" : "التقاط / رفع"}
-          </button>
+          </Button>
           {value ? (
-            <button
-              type="button"
-              className="button button-small button-quiet"
+            <Button
+              size="sm"
               onClick={() => {
                 onChange(null);
                 setBytes(0);
@@ -84,7 +83,7 @@ export function ProductImageField({
               disabled={disabled || busy}
             >
               إزالة
-            </button>
+            </Button>
           ) : null}
           {value && bytes > 0 ? (
             <span className="cat-image-size">{formatBytes(bytes)}</span>

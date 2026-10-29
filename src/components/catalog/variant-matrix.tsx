@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 
+import { InputControl } from "@/components/ui/form-inputs";
 import {
   MAX_VARIANT_COMBINATIONS,
   combinationName,
@@ -91,9 +92,9 @@ export function VariantMatrix({
                     <code className="cat-matrix-sku">{row.sku}</code>
                   </td>
                   <td>
-                    <input
+                    <InputControl
                       id={inputId}
-                      className="cat-input cat-matrix-price"
+                      className="cat-matrix-price py-1.5 text-xs"
                       type="number"
                       inputMode="decimal"
                       min={0}

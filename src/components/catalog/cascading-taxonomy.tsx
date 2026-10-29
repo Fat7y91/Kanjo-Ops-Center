@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 
 import { TaxonomyRequestButton } from "@/components/taxonomy/taxonomy-request-button";
+import { ChipToggle } from "@/components/ui/chip-toggle";
+import { ComboField } from "@/components/ui/select-menus";
 import type {
   TaxonomyCategory,
   TaxonomyVariant,
@@ -97,21 +99,17 @@ export function CascadingTaxonomy({
             أرسل طلب إضافة للمراجعة المركزية.
           </p>
         ) : (
-          <select
-            className="cat-input"
-            value={categoryKey}
-            onChange={(event) => onCategoryChange(event.target.value)}
+          <ComboField
+            value={categoryKey || null}
+            onChange={onCategoryChange}
+            placeholder="ابحث عن التصنيف…"
             disabled={disabled}
-            required
-          >
-            <option value="">اختر التصنيف…</option>
-            {scopedCategories.map((category) => (
-              <option key={category.key} value={category.key}>
-                {category.name_ar}
-                {category.name_en ? ` — ${category.name_en}` : ""}
-              </option>
-            ))}
-          </select>
+            options={scopedCategories.map((category) => ({
+              value: category.key,
+              label: category.name_ar,
+              hint: category.name_en ?? undefined,
+            }))}
+          />
         )}
       </div>
 
@@ -140,18 +138,15 @@ export function CascadingTaxonomy({
                       {variant.options.map((option) => {
                         const active = selected.includes(option.option_id);
                         return (
-                          <button
+                          <ChipToggle
                             key={option.option_id}
-                            type="button"
-                            className={`cat-chip${active ? " is-active" : ""}`}
-                            aria-pressed={active}
-                            onClick={() =>
+                            label={option.option_name_ar}
+                            checked={active}
+                            disabled={disabled}
+                            onChange={() =>
                               toggleOption(variant.variant_id, option.option_id)
                             }
-                            disabled={disabled}
-                          >
-                            {option.option_name_ar}
-                          </button>
+                          />
                         );
                       })}
                     </div>

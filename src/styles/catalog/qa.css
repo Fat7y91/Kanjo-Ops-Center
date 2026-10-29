@@ -1,5 +1,4 @@
-/* Catalog module — status filter tabs, product details, lightbox and the
- * Image QA action bar.
+/* Catalog module — product details, lightbox and the Image QA action bar.
  *
  * Imported by catalog.css.
  */
@@ -8,59 +7,6 @@
 
 .cat-toolbar {
   align-items: flex-start;
-}
-
-.cat-filter-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.cat-filter-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-family: inherit;
-  font-size: 0.76rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.14s ease;
-}
-
-.cat-filter-tab:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-
-.cat-filter-tab.is-active {
-  border-color: var(--primary);
-  background: var(--primary);
-  color: var(--primary-ink);
-}
-
-.cat-filter-tab:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.cat-filter-count {
-  min-width: 20px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--surface-soft);
-  color: inherit;
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-align: center;
-}
-
-.cat-filter-tab.is-active .cat-filter-count {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 /* ── Clickable card affordance ────────────────────────────────────────── */

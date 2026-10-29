@@ -3,10 +3,16 @@
 import { useMemo } from "react";
 
 import { BarcodeScanner } from "@/components/catalog/barcode-scanner";
+import { Button } from "@/components/ui/button";
 import { CascadingTaxonomy } from "@/components/catalog/cascading-taxonomy";
 import { MerchantPicker, type CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { ProductImageField } from "@/components/catalog/product-image-field";
 import { VariantMatrix } from "@/components/catalog/variant-matrix";
+import {
+  TextAreaField,
+  TextField,
+  ToggleField,
+} from "@/components/ui/form-inputs";
 import {
   PRODUCT_TYPE_META,
   type CatalogProductType,
@@ -104,78 +110,59 @@ export function ProductForm({
       </section>
 
       <section className="cat-block">
-        <div className="cat-field">
-          <label className="cat-label" htmlFor="cat-name">
-            اسم المنتج <span className="cat-required">مطلوب</span>
-          </label>
-          <input
-            id="cat-name"
-            className="cat-input"
-            value={values.name}
-            onChange={(event) => onChange({ name: event.target.value })}
-            placeholder="مثال: زيت زيتون عضوي 1 لتر"
-            maxLength={140}
-            required
-            disabled={locked}
-          />
-        </div>
+        <TextField
+          id="cat-name"
+          label="اسم المنتج"
+          required
+          value={values.name}
+          onChange={(event) => onChange({ name: event.target.value })}
+          placeholder="مثال: زيت زيتون عضوي 1 لتر"
+          maxLength={140}
+          disabled={locked}
+        />
 
-        <div className="cat-field">
-          <label className="cat-label" htmlFor="cat-description">
-            الوصف
-          </label>
-          <textarea
-            id="cat-description"
-            className="cat-input cat-textarea"
-            value={values.description}
-            onChange={(event) => onChange({ description: event.target.value })}
-            placeholder="وصف مختصر للمنتج (اختياري)"
-            rows={3}
-            maxLength={2000}
-            disabled={locked}
-          />
-        </div>
+        <TextAreaField
+          id="cat-description"
+          label="الوصف"
+          value={values.description}
+          onChange={(event) => onChange({ description: event.target.value })}
+          placeholder="وصف مختصر للمنتج (اختياري)"
+          rows={3}
+          maxLength={2000}
+          disabled={locked}
+        />
 
         <div className="cat-form-grid">
           <div className="cat-field">
-            <span className="cat-label">نوع المنتج</span>
-            <div className="cat-segmented" role="group" aria-label="نوع المنتج">
-              {(["simple", "variable"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={`cat-segment${
-                    values.productType === type ? " is-active" : ""
-                  }`}
-                  aria-pressed={values.productType === type}
-                  onClick={() => onChange({ productType: type })}
-                  disabled={locked}
-                >
-                  {PRODUCT_TYPE_META[type].label}
-                </button>
-              ))}
-            </div>
+            <ToggleField
+              label="منتج متغير"
+              hint={`${
+                PRODUCT_TYPE_META[
+                  values.productType as CatalogProductType
+                ].description
+              }`}
+              checked={isVariable}
+              disabled={locked}
+              onChange={(next) =>
+                onChange({ productType: next ? "variable" : "simple" })
+              }
+            />
           </div>
 
           {isVariable ? null : (
-            <div className="cat-field">
-              <label className="cat-label" htmlFor="cat-price">
-                السعر (ج.م) <span className="cat-required">مطلوب</span>
-              </label>
-              <input
-                id="cat-price"
-                className="cat-input"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.01"
-                value={values.price}
-                onChange={(event) => onChange({ price: event.target.value })}
-                placeholder="0"
-                required
-                disabled={locked}
-              />
-            </div>
+            <TextField
+              id="cat-price"
+              label="السعر (ج.م)"
+              required
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              value={values.price}
+              onChange={(event) => onChange({ price: event.target.value })}
+              placeholder="0"
+              disabled={locked}
+            />
           )}
         </div>
       </section>
@@ -239,30 +226,20 @@ export function ProductForm({
       ) : null}
 
       <div className="cat-actions">
-        <button
-          type="button"
-          className="button button-quiet"
-          onClick={onCancel}
-          disabled={submitting}
-        >
+        <Button variant="quiet" onClick={onCancel} disabled={submitting}>
           إلغاء
-        </button>
+        </Button>
         <div className="cat-actions-primary">
-          <button
-            type="button"
-            className="button button-quiet"
+          <Button
+            variant="quiet"
             onClick={() => onSave("another")}
             disabled={locked}
           >
             حفظ وإضافة منتج آخر
-          </button>
-          <button
-            type="submit"
-            className="button button-primary"
-            disabled={locked}
-          >
+          </Button>
+          <Button type="submit" variant="primary" disabled={locked}>
             حفظ وإغلاق
-          </button>
+          </Button>
         </div>
       </div>
     </form>

@@ -31,6 +31,20 @@ These rules are mandatory for every task on `feat/v2-enterprise-architecture`.
 
 When a task touches a file over the limit, the first commit must be a pure extraction with no behavior change, verified by `npm run typecheck` and `npm run build`. Feature work follows in a separate commit.
 
+## 5. Design system enforcement
+
+**DESIGN SYSTEM ENFORCEMENT:** Never use native `<button>`, `<input>`, `<select>`, or raw Tailwind dropdowns. You MUST import and use the Headless UI primitives from `src/components/ui/` for all future UI development.
+
+| Need | Import |
+|---|---|
+| Action / submit | `Button` from `@/components/ui/button` |
+| Row or context actions | `DropdownMenu` from `@/components/ui/dropdown-menu` |
+| Section switcher | `Tabs` from `@/components/ui/tabs` |
+| Text, textarea, checkbox, switch | `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField` from `@/components/ui/form-inputs` |
+| Select / searchable picker | `SelectMenu`, `ComboField` from `@/components/ui/select-menus` |
+
+New primitives belong in `src/components/ui/` and must stay under the 300-line limit. Brand styling lives inside each primitive via Headless UI `data-*` attributes, so call sites never hand-roll purple/gold classes.
+
 ## Verification
 
 Every refactor commit must pass:

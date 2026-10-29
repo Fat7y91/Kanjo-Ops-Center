@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { InputControl } from "@/components/ui/form-inputs";
 import { isValidBarcode, normalizeCode } from "@/lib/catalog/sku";
 
 type BarcodeScannerProps = {
@@ -78,9 +80,9 @@ export function BarcodeScanner({
       </label>
 
       <div className="cat-code-row">
-        <input
+        <InputControl
           id={inputId}
-          className="cat-input cat-code-input"
+          className="cat-code-input h-9 py-1.5 text-sm"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onBlur={() => onChange(normalizeCode(value))}
@@ -91,14 +93,13 @@ export function BarcodeScanner({
           disabled={disabled}
           dir="ltr"
         />
-        <button
-          type="button"
-          className="button button-small button-quiet"
+        <Button
+          size="sm"
           onClick={() => void startCameraScan()}
           disabled={disabled || scanning}
         >
           {scanning ? "جارٍ المسح…" : "مسح"}
-        </button>
+        </Button>
       </div>
 
       <p className="cat-hint">

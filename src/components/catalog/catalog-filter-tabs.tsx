@@ -1,5 +1,6 @@
 "use client";
 
+import { Tabs } from "@/components/ui/tabs";
 import {
   CATALOG_FILTER_ORDER,
   catalogFilterCounts,
@@ -22,10 +23,11 @@ const FILTER_LABEL: Record<CatalogFilter, string> = {
 };
 
 /**
- * Status summary as interactive filter tabs.
+ * Status summary rendered with the shared `Tabs` primitive.
  *
  * Zero-count states stay visible but disabled so the reviewer keeps a stable
- * mental map of the pipeline instead of tabs appearing and disappearing.
+ * mental map of the pipeline instead of tabs appearing and disappearing. The
+ * tab panels are intentionally empty: the grid below renders the filtered list.
  */
 export function CatalogFilterTabs({
   products,
@@ -33,31 +35,27 @@ export function CatalogFilterTabs({
   onChange,
 }: CatalogFilterTabsProps) {
   const counts = catalogFilterCounts(products);
+  const selectedIndex = Math.max(
+    CATALOG_FILTER_ORDER.indexOf(active),
+    0,
+  );
 
   return (
-    <div
-      className="cat-filter-tabs"
-      role="tablist"
-      aria-label="تصفية المنتجات حسب الحالة"
-    >
-      {CATALOG_FILTER_ORDER.map((filter) => {
-        const count = counts[filter];
-        const disabled = filter !== "all" && count === 0;
-        return (
-          <button
-            key={filter}
-            type="button"
-            role="tab"
-            aria-selected={active === filter}
-            className={`cat-filter-tab${active === filter ? " is-active" : ""}`}
-            onClick={() => onChange(filter)}
-            disabled={disabled}
-          >
-            <span>{FILTER_LABEL[filter]}</span>
-            <span className="cat-filter-count">{count}</span>
-          </button>
-        );
-      })}
-    </div>
+    <Tabs
+      items={CATALOG_FILTER_ORDER.map((filter) => ({
+        id: filter,
+        label: FILTER_LABEL[filter],
+        badge: counts[filter],
+        disabled: filter !== "all" && counts[filter] === 0,
+        content: null,
+      }))}
+      selectedIndex={selectedIndex}
+      onChange={(index) => {
+        const next = CATALOG_FILTER_ORDER[index];
+        if (next) onChange(next);
+      }}
+      showPanels={false}
+      listClassName="rounded-full bg-[color:var(--surface)] p-1 shadow-sm"
+    />
   );
 }
