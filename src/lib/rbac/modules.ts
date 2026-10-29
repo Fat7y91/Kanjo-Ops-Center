@@ -2,6 +2,7 @@ import type { Permission } from "./permissions";
 
 export type ModuleIcon =
   | "overview"
+  | "kpi"
   | "cities"
   | "merchants"
   | "catalog"
@@ -73,6 +74,15 @@ export const MODULES: readonly ModuleDefinition[] = [
       "التصنيف المركزي المرتبط بمعرّفات لوحة المستهلك وطلبات الإضافة.",
     permission: "manage_taxonomy",
     icon: "taxonomy",
+  },
+  {
+    href: "/agent-kpi",
+    label: "مؤشرات المناديب",
+    shortLabel: "المؤشرات",
+    description:
+      "تقييم أداء المناديب وفق مرحلة دورة حياة المدينة والترتيب داخل المدينة.",
+    permission: "view_agent_kpi",
+    icon: "kpi",
   },
   {
     href: "/field-ops",

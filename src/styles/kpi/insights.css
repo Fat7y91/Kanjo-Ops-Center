@@ -1,0 +1,63 @@
+/* AI insight panel — ranked tips vs the city top performer. */
+
+.kpi-insights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kpi-insight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.kpi-insight[data-tone="focus"] {
+  border-inline-start-color: color-mix(in srgb, var(--kanjo-purple-interactive) 70%, transparent);
+  background: var(--kanjo-pastel);
+}
+
+.kpi-insight[data-tone="strength"] {
+  border-inline-start-color: var(--green);
+  background: var(--green-soft);
+}
+
+.kpi-insight strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.kpi-insight p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.kpi-insight-tag {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--kanjo-surface);
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.kpi-insight[data-tone="focus"] .kpi-insight-tag {
+  background: color-mix(in srgb, var(--kanjo-purple-interactive) 16%, transparent);
+  color: var(--kanjo-pastel-ink);
+}
+
+.kpi-insight[data-tone="strength"] .kpi-insight-tag {
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+}

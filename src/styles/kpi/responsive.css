@@ -1,0 +1,35 @@
+/* KPI responsive overrides — loaded last. */
+
+@media (max-width: 1180px) {
+  .kpi-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .kpi-filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+
+  .kpi-panel {
+    padding: 18px 16px;
+  }
+
+  .kpi-agent-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .kpi-score {
+    align-self: flex-start;
+  }
+
+  .kpi-metric-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .kpi-stage-rail {
+    gap: 6px;
+  }
+}

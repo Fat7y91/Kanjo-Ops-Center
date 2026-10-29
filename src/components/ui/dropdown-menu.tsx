@@ -31,17 +31,17 @@ export type DropdownMenuProps = {
 
 const ITEM_TONE: Record<"default" | "danger", string> = {
   default:
-    "text-[color:var(--ink)] data-[focus]:bg-[color:var(--kanjo-pastel)] data-[focus]:text-[color:var(--kanjo-pastel-ink)]",
+    "text-[color:var(--ink)] hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-pastel-ink)] data-[focus]:bg-[color:var(--kanjo-pastel)] data-[focus]:text-[color:var(--kanjo-pastel-ink)]",
   danger:
-    "text-[color:var(--red)] data-[focus]:bg-[color:var(--red-soft)] data-[focus]:text-[color:var(--red)]",
+    "text-[color:var(--red)] hover:bg-[color:var(--red-soft)] data-[focus]:bg-[color:var(--red-soft)] data-[focus]:text-[color:var(--red)]",
 };
 
 /**
  * Branded Headless UI menu.
  *
- * The trigger keeps an explicit foreground in every state, so opening the menu
- * can never pair a light surface with light text. The panel and its items share
- * the same rounded geometry and a soft floating shadow.
+ * The trigger keeps an explicit foreground in every state: hover and open both
+ * paint the interactive purple with white text, so the label never disappears
+ * into a white surface. The panel and its items share soft rounded geometry.
  */
 export function DropdownMenu({
   label,
@@ -57,9 +57,10 @@ export function DropdownMenu({
         {...buttonProps}
         className={cx(
           "inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink)] transition duration-200 ease-out",
-          "hover:border-[color:var(--kanjo-focus-ring-strong)] hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-pastel-ink)]",
+          "hover:border-[color:var(--kanjo-purple-interactive)] hover:bg-[color:var(--kanjo-interactive-hover)] hover:text-white",
+          "data-[hover]:border-[color:var(--kanjo-purple-interactive)] data-[hover]:bg-[color:var(--kanjo-interactive-hover)] data-[hover]:text-white",
           "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)]",
-          "data-[open]:border-[color:var(--kanjo-purple-interactive)] data-[open]:bg-[color:var(--kanjo-purple-interactive)] data-[open]:text-white data-[open]:shadow-[var(--shadow-md)]",
+          "data-[open]:border-[color:var(--kanjo-interactive-active)] data-[open]:bg-[color:var(--kanjo-interactive-active)] data-[open]:text-white data-[open]:shadow-[var(--shadow-md)]",
           "active:bg-[color:var(--kanjo-interactive-active)] active:text-white",
           "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
           buttonClassName,
@@ -81,7 +82,7 @@ export function DropdownMenu({
             disabled={item.disabled}
             onClick={item.onSelect}
             className={cx(
-              "flex w-full items-center gap-2 rounded-xl px-3.5 py-2 text-end text-sm font-semibold transition duration-150 ease-out",
+              "flex w-full items-center gap-2 rounded-lg px-3.5 py-2 text-end text-sm font-semibold transition duration-150 ease-out",
               "focus:outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
               ITEM_TONE[item.tone ?? "default"],
             )}

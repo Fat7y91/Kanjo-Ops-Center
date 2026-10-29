@@ -145,6 +145,13 @@ export const PERMISSIONS = [
     group: "العمليات الميدانية",
   },
   {
+    key: "view_agent_kpi",
+    label: "عرض لوحة مؤشرات المناديب",
+    description:
+      "فتح لوحة مؤشرات الأداء الأربع مراحل وتصفية المناديب والفرق والمدن.",
+    group: "العمليات الميدانية",
+  },
+  {
     key: "manage_tasks",
     label: "إدارة المهام",
     description:

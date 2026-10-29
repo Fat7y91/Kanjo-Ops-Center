@@ -3,6 +3,8 @@ import type { ModuleIcon as ModuleIconName } from "@/lib/rbac/modules";
 const paths: Record<ModuleIconName, string> = {
   overview:
     "M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z",
+  kpi:
+    "M4 20V6m0 14h16M8 20v-8m4 8V9m4 11v-5m4 5V4M6 9l4-3 3 2 5-4",
   cities:
     "M3 20h18M5 20V9l5-3 5 3v11M15 20v-7l4-2 4 2v7M8 12v2M8 16v2M12 12v2M12 16v2M18 15v2M18 18v2",
   merchants:

@@ -1,0 +1,12 @@
+/* Agent KPI Dashboard (لوحة مؤشرات المناديب).
+ *
+ * Manifest for the KPI module styles. Imported from globals.css after
+ * catalog.css so tokens are guaranteed to be loaded. Selectors are namespaced
+ * with `kpi-` to avoid collisions with BI, catalog and field-ops modules.
+ */
+
+@import "./kpi/layout.css";
+@import "./kpi/metrics.css";
+@import "./kpi/ranking.css";
+@import "./kpi/insights.css";
+@import "./kpi/responsive.css";

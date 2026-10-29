@@ -1,0 +1,103 @@
+/* Competitive ranking — strictly city-scoped. */
+
+.kpi-rank-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--kanjo-gold) 34%, transparent);
+  border-radius: var(--radius-card);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--kanjo-gold) 12%, var(--kanjo-surface)),
+    var(--kanjo-surface)
+  );
+  box-shadow: var(--shadow);
+}
+
+.kpi-rank-label {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kpi-rank-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--kanjo-purple-base);
+  font-weight: 900;
+}
+
+.kpi-rank-value strong {
+  font-size: 2.4rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.kpi-rank-value span {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.kpi-rank-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.kpi-rank-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--kanjo-purple-interactive),
+    var(--kanjo-gold)
+  );
+}
+
+.kpi-rank-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.kpi-rank-foot strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.kpi-top-performer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed color-mix(in srgb, var(--kanjo-gold) 45%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--kanjo-gold) 8%, transparent);
+  font-size: 0.78rem;
+}
+
+.kpi-top-performer span {
+  color: var(--ink-soft);
+}
+
+.kpi-top-performer strong {
+  color: var(--kanjo-purple-base);
+  font-weight: 800;
+}
+
+[data-theme="dark"] .kpi-rank-value,
+[data-theme="dark"] .kpi-top-performer strong {
+  color: var(--ink);
+}

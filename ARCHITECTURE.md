@@ -69,8 +69,8 @@ states; call sites never hand-roll purple/gold classes.
 | File | Lines | Exports | Use for |
 |---|---|---|---|
 | `button.tsx` | 57 | `Button` | Every action / submit |
-| `dropdown-menu.tsx` | 97 | `DropdownMenu` | Row and context actions |
-| `tabs.tsx` | 96 | `Tabs` | Section / filter switchers |
+| `dropdown-menu.tsx` | 99 | `DropdownMenu` | Row and context actions |
+| `tabs.tsx` | 97 | `Tabs` | Section / filter switchers |
 | `form-inputs.tsx` | 224 | `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField`, `InputControl` | Form controls |
 | `select-menus.tsx` | 237 | `SelectMenu`, `ComboField` | Selects and searchable pickers |
 | `chip-toggle.tsx` | 33 | `ChipToggle` | Multi-select chips |
@@ -79,10 +79,13 @@ states; call sites never hand-roll purple/gold classes.
 | `skeletons.tsx` | 183 | skeleton set | Loading states |
 | `cx.ts` | 4 | `cx` | Class merge helper |
 
-Aesthetic contract: rounded-full pills for tabs/menus, high-contrast purple
-focus/open states (`bg-purple-800` + white text, never white-on-white), soft
-shadows, purple-700 / gold accents. Dark mode is driven by
-`data-theme="dark"` on `<html>` (see `tailwind.config.ts` `darkMode` selector).
+Aesthetic contract: rounded-full pills for tabs and menu triggers, rounded-lg
+inside menu panels, high-contrast purple focus/open/hover states
+(`--kanjo-interactive-hover` + white text, never white-on-white), soft shadows,
+interactive-purple / gold accents. Selected tabs use the interactive purple with
+white text (AA) so contrast never depends on the pastel wash alone. Dark mode is
+driven by `data-theme="dark"` on `<html>` (see `tailwind.config.ts` `darkMode`
+selector).
 
 ---
 
@@ -145,9 +148,27 @@ shadows, purple-700 / gold accents. Dark mode is driven by
   `drill.ts`, `export.ts`, `format.ts`, `mock.ts`, `types.ts`.
 - BI folds Field Ops review states into the `draft` bucket for reporting.
 
+### Agent KPI (Tier 1–5)
+- UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus
+  `components/{kpi-filter-bar,kpi-agent-card,kpi-metric-grid,kpi-rank-card,kpi-insights-panel}.tsx`.
+- Controller: page-level authorization (`view_agent_kpi`), URL filter parsing
+  (`parseKpiFilters`), and scope resolution (`resolveKpiScope`). Reps are pinned
+  to themselves; admins (`globalScope` or clearance ≥ 3) may filter city/team/rep.
+- Business: `src/lib/kpi/services/agent-kpi-service.ts` (snapshots, city-scoped
+  rank, top-performer), `metrics.ts` (stage arithmetic + scoring),
+  `insights.ts` (gap heuristics), `scope.ts` (filter/scope rules). All pure.
+- Repository: `src/lib/kpi/repository.ts` composes field-ops + catalog + RBAC
+  stores into a `KpiDataset`. No math, no authorization.
+- Data: `src/lib/kpi/data/facts-seed.ts` stands in for the Consumer shift/GMV
+  and app-usage feeds until those systems publish an API.
+- Ranking is **strictly city-scoped**; scores from different cities are never
+  compared. Metrics are chosen from the city stage:
+  `preparation → contracting → data_entry → live_operations`.
+- CSS: `src/styles/kpi.css` manifest over `src/styles/kpi/{layout,metrics,ranking,insights,responsive}.css`.
+
 ### CSS
 - Manifest: `src/app/globals.css` (4884 lines — still over limit, extraction backlog).
-- Domains: `src/styles/{tokens,bi,catalog,field-ops-actions,rbac}.css` plus
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
 
@@ -265,9 +286,64 @@ Rules locked in by this pipeline:
 
 ---
 
+## 7. Agent KPI Dashboard — 4-Stage City Lifecycle
+
+The dashboard is the second full 5-tier reference implementation (after Image
+QA). The same rep is scored differently depending on the operational stage of
+their city, because the work itself is different at each stage.
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `agent-kpi/page.tsx` | Server container: `requirePermission("view_agent_kpi")`, builds dataset, resolves scope, renders cards. |
+| 1 — UI | `components/kpi-filter-bar.tsx` | Client shell; writes city/team/rep/window into the URL. No math. |
+| 1 — UI | `components/kpi-agent-card.tsx` | Layout: identity, stage rail, metric grid, usage strip, insights + rank. |
+| 1 — UI | `components/kpi-metric-grid.tsx`, `kpi-rank-card.tsx`, `kpi-insights-panel.tsx` | Dumb presentational blocks. |
+| 2 — Controller | `src/lib/kpi/scope.ts` | `parseKpiFilters`, `resolveKpiScope`, `buildKpiFilterOptions`, `isKpiAdmin`. Turns viewer + filters into a `KpiScope`. |
+| 3 — Business | `src/lib/kpi/services/agent-kpi-service.ts` | `buildKpiReport`, `getAgentSnapshot`, `selectAgents`; computes 0-100 score and city rank. |
+| 3 — Business | `src/lib/kpi/metrics.ts` | Pure stage arithmetic (`computeFacts`) and `scoreFacts`; `stageMetrics`/`usageMetrics` shape the UI contract. |
+| 3 — Business | `src/lib/kpi/insights.ts` | `buildInsights` compares the agent with the city top performer. |
+| 4 — Repository | `src/lib/kpi/repository.ts` | `loadKpiDataset` merges field-ops/catalog/RBAC into one dataset. |
+| 5 — Database | field-ops/catalog stores + `kpi/data/facts-seed.ts` | Underlying records; the seed stands in for the consumer feeds. |
+
+### Stage metric contract
+
+| Stage | Metrics |
+|---|---|
+| Preparation (`preparation`) | merchants scouted, avg description length |
+| Negotiation (`contracting`) | merchants visited, total visits, follow-ups, reports written, avg report length, target %, final contract %, provisional contract %, avg visit duration |
+| Data entry (`data_entry`) | merchants digitized, total products, images uploaded, products missing images, catalog accuracy, avg description length |
+| Live ops (`live_operations`) | daily shift orders, total GMV, tickets resolved, merchants contacted, rejected orders, active merchants, cash from merchants, cash from drivers |
+| Global (all stages) | app usage: active minutes, active days, sessions, avg session |
+
+### Rules locked in by this module
+
+- **No cross-city ranking.** `rank.total` is always the count of agents whose
+  `cityId` equals the subject's. A Giza rep is never compared to a Cairo rep.
+- **Reps cannot widen scope.** `resolveKpiScope` ignores URL filters for a viewer
+  without `globalScope`/clearance ≥ 3 and returns a self-only scope.
+- **Stage drives metrics, not the viewer.** Metrics come from `agent.stage`
+  (the city stage), so a Cairo rep and a Mansoura rep see different cards.
+- **Controllers never compute.** The page passes a `KpiScope` to the service and
+  renders `KpiSnapshot` objects verbatim.
+- **Feed gap is explicit.** `scouts`/`liveOps`/`usage` are seeded fixtures until
+  the Consumer app exposes shift/GMV tickets and usage tracking; replacing them
+  only touches `repository.ts`.
+
+Data flow:
+
+```mermaid
+graph TD
+    A["agent-kpi/page.tsx (T1)"] --> B["scope.ts (T2)"]
+    A --> C["repository.ts (T4)"]
+    C --> D["field-ops + catalog + rbac stores (T5)"]
+    B --> E["agent-kpi-service.ts (T3)"]
+    E --> F["metrics.ts + insights.ts (T3)"]
+    F --> A
+```
+
 ---
 
-## 7. The AI Workflow Loop (MANDATORY)
+## 8. The AI Workflow Loop (MANDATORY)
 
 Every AI session on this branch follows this loop. No exceptions.
 
