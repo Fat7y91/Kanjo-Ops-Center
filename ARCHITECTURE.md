@@ -57,6 +57,11 @@ Two databases, chosen by domain, never by convenience:
 - Configuration is read lazily inside the getters, so `next build` and
   `/login` succeed even when no database secrets are configured.
 
+**Decision: Supabase is the committed SQL engine for Financial/ERP.** Its
+PostgreSQL foundation gives real transactions, constraints and referential
+integrity for ledgers, wallets and commissions, and its real-time channel keeps
+wallet/commission balances live without polling. Firebase is not a candidate
+for this domain.
 
 ---
 
@@ -187,11 +192,31 @@ migrated one at a time.
 
 ### Auth & RBAC (T1→T5)
 - `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `apiError`, `readJson` (Controller helpers).
+- `src/lib/auth/login.ts` — `resolveLoginRequest` / `safeNextPath`: pure login resolution that never calls `redirect()`.
+- `src/app/api/auth/login/route.ts` — `POST` login Route Handler; sets the cookie and returns `NextResponse.redirect`.
+- `src/app/api/auth/logout/route.ts` — `POST` logout Route Handler; clears the cookie and redirects.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` (37 keys), `users.ts` (251), `seed-users.ts`, `modules.ts`.
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
+
+#### Why login is a Route Handler, not a Server Action
+
+`next-on-pages` cannot resolve `redirect()` inside an Edge Server Action; it
+throws `Invariant: Missing initURL` and the POST returns HTTP 500. Login and
+logout therefore POST to plain route handlers. Rules locked in:
+
+- **Never call `redirect()` from a Server Action on this branch.** Return a path
+  and let the caller navigate, or use a Route Handler.
+- The handlers build an absolute redirect URL from `x-forwarded-host` /
+  `x-forwarded-proto`, because Cloudflare terminates TLS upstream and the
+  internal request URL carries the wrong origin.
+- `safeNextPath` rejects `//host` and absolute URLs, so `?next=` cannot be used
+  as an open redirect.
+- `src/app/login/actions.ts` is a deprecated, redirect-free shim; the forms now
+  target `/api/auth/login` and `/api/auth/logout` directly.
+
 
 ### Catalog (Tier 1–5)
 - UI: `src/components/catalog/` (`catalog-client` 121, `product-card` 133,

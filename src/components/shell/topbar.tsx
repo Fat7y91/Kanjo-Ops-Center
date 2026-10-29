@@ -1,6 +1,5 @@
 "use client";
 
-import { logoutAction } from "@/app/login/actions";
 import { useEffect, useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
@@ -107,7 +106,7 @@ export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
             <span>{user.title}</span>
           </div>
         )}
-        <form action={logoutAction}>
+        <form action="/api/auth/logout" method="post">
           <button type="submit" className="button button-quiet button-small">
             تسجيل الخروج
           </button>

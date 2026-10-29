@@ -1,4 +1,3 @@
-import { loginAction } from "@/app/login/actions";
 import { clearanceLabel, clearanceTone } from "@/lib/rbac/hierarchy";
 import { listUsers } from "@/lib/rbac/users";
 
@@ -42,7 +41,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </p>
         )}
 
-        <form action={loginAction} className="account-list">
+        <form
+          action="/api/auth/login"
+          method="post"
+          className="account-list"
+        >
           <input type="hidden" name="next" value={nextPath} />
           {users.map((user) => (
             <button
