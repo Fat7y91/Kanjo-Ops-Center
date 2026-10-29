@@ -2,14 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError, authorizeAny, readJson } from "@/lib/auth/api";
-import {
-  CatalogError,
-  catalogRevision,
-  completeImageQa,
-  listProducts,
-} from "@/lib/catalog/store";
+import { commitImageQa, findCatalogRecord } from "@/lib/catalog/repository";
+import { ImageQaError } from "@/lib/catalog/services/image-qa-service";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { getMerchantById } from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +20,11 @@ const imageQaSchema = z.object({
 });
 
 /**
- * Image QA transition endpoint.
+ * Image QA transition endpoint (Tier 2 controller).
  *
- * Moves a `pending_review` product to `completed`, optionally replacing its
- * image. The store enforces the state machine so a stale client cannot complete
- * a product twice or skip review entirely.
+ * Authorization, payload validation and HTTP shaping only. The city-scope check
+ * and the state machine come from the Tier 3 service, and the write goes
+ * through the Tier 4 repository.
  */
 export async function POST(
   request: Request,
@@ -42,17 +37,20 @@ export async function POST(
     const { id } = await context.params;
     const patch = imageQaSchema.parse(await readJson(request));
 
-    // Reviewers may only act on products inside their effective city scope.
-    const allowed = new Set(effectiveCityIds(session));
-    const product = listProducts().find((candidate) => candidate.id === id);
-    const merchant = product ? getMerchantById(product.merchantId) : null;
-    if (!product || !merchant || !allowed.has(merchant.cityId)) {
-      throw new CatalogError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
+    const record = findCatalogRecord(id);
+    const cityScope = effectiveCityIds(session);
+    if (
+      !record ||
+      record.cityId === null ||
+      !cityScope.includes(record.cityId)
+    ) {
+      throw new ImageQaError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
     }
 
-    const updated = completeImageQa(id, patch);
+    const { product, revision } = commitImageQa(id, patch);
+
     return NextResponse.json(
-      { product: updated, revision: catalogRevision() },
+      { product, revision },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

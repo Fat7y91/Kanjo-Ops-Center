@@ -100,18 +100,22 @@ shadows, purple-700 / gold accents. Dark mode is driven by
 - UI: `src/components/catalog/` (`catalog-client` 121, `product-card` 133,
   `product-form` 256, `cascading-taxonomy` 164, `use-product-entry` 270,
   `draft-list-item`, `draft-queue-banner`, `variant-matrix`, filter tabs).
-- Controller: `src/app/api/catalog/products/`, `+ [id]/image-qa`, `+ sync`.
-- Business: `src/lib/catalog/services/variant-service.ts` (variant algebra) plus
-  `filters.ts`, `image-qa.ts`, `sku.ts`, `category.ts`, `draft-types.ts`.
-  `variants.ts` is a deprecated shim over the service.
+- Controller: `src/app/api/catalog/products/`, `+ [id]/image-qa`, `+ sync`, and
+  the QA server actions in `src/app/(workspace)/catalog/qa/actions.ts`.
+- Business: `src/lib/catalog/services/variant-service.ts` (variant algebra) and
+  `services/image-qa-service.ts` (image review state machine + city scope), plus
+  `filters.ts`, `sku.ts`, `category.ts`, `draft-types.ts`. `variants.ts` and
+  `image-qa.ts` are deprecated shims over the services.
 - Data access: `src/lib/catalog/offline-queue.ts` (draft queue) over
   `draft-storage.ts` (IndexedDB/localStorage); `draft-queue.ts` is a shim.
-- Repository: `src/lib/catalog/store.ts` (279) — in-memory store + CRUD/sync.
+- Repository: `src/lib/catalog/store.ts` (279) — in-memory store + CRUD/sync;
+  `src/lib/catalog/repository.ts` — merchant-city resolution + QA commits.
 - Data: `src/lib/catalog/data/seed.ts` (85).
 - Schema: `src/lib/schemas/catalog.ts`.
 - State enum: `draft → pending_review → completed → published`.
 - Image QA gated by `manage_catalog | review_catalog_images`; drafts edit gated
   by `manage_catalog | create_products`.
+- QA workspace lives at `/catalog/qa` (nav module `review_catalog_images`).
 
 ### Field Ops (Tier 1–5)
 - UI: `src/components/field-ops/` (client shells, modals, visit engine, geo
@@ -153,8 +157,9 @@ shadows, purple-700 / gold accents. Dark mode is driven by
 
 The tiers exist conceptually; these are the concrete gaps to close.
 
-1. **Service extraction started.** `src/lib/catalog/services/` now exists for
-   variants. Other domains still mix business and persistence in
+1. **Service extraction started.** `src/lib/catalog/services/` now holds the
+   variant and image-QA services, and `src/lib/catalog/repository.ts` is the
+   reserved Tier 4 seam. Other domains still mix business and persistence in
    `src/lib/<domain>/store.ts`; extract pure rules into
    `src/lib/<domain>/services/` and leave only queries in `store/`.
 2. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
@@ -218,6 +223,47 @@ Rules locked in by this refactor:
   hydrated row shape.
 - `src/lib/catalog/variants.ts` and `src/lib/catalog/draft-queue.ts` are now
   deprecated re-export shims; new code imports the service / queue directly.
+
+### Catalog — Image Quality Assurance (QA) Pipeline
+
+The QA workspace proves the 5-tier model end-to-end with server actions.
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `src/app/(workspace)/catalog/qa/page.tsx` | Server container: `requirePermission("review_catalog_images")`, calls the service, renders stats + board. |
+| 1 — UI | `src/components/catalog/image-qa-board.tsx` | Client shell; owns lightbox state and message timeout only. |
+| 1 — UI | `src/components/catalog/image-qa-card.tsx` | Dumb card: image, price, SKU and the three exits (تحميل / رفع المحسنة / اعتماد مباشر) built from `Button` + `DropdownMenu`. |
+| 2 — Controller | `src/app/(workspace)/catalog/qa/actions.ts` | `"use server"` actions enforce RBAC, validate the data URL, call the service, `revalidatePath`. |
+| 2 — Controller | `src/components/catalog/use-image-qa-board.ts` | Client glue: busy state, optimistic removal, `prepareImage` before upload. No domain rules. |
+| 2 — Controller | `src/app/api/catalog/products/[id]/image-qa/route.ts` | Legacy REST entry point; same service + repository, same guards. |
+| 3 — Business | `src/lib/catalog/services/image-qa-service.ts` | `ImageQaError`, `getPendingReviewProducts`, `approveImage`, `uploadEnhancedImage`, plus pure `assertImageQaTransition` / `applyImageQa`. Repository is injected — zero Tier 4 imports. |
+| 4 — Repository | `src/lib/catalog/repository.ts` | `listCatalogRecords` / `findCatalogRecord` (merchant→city) and `commitImageQa`. Only layer that touches `catalog/store.ts`. |
+| 5 — Database | `src/lib/catalog/store.ts` + `data/seed.ts` | In-memory global store and seed fixtures. |
+
+Data flow:
+
+```mermaid
+graph TD
+    A["qa/page.tsx (T1 server)"] --> B["image-qa-service (T3)"]
+    B --> C["catalog/repository (T4)"]
+    C --> D["catalog/store (T5)"]
+    E["ImageQaCard (T1)"] -->|server action| F["qa/actions.ts (T2)"]
+    F --> B
+```
+
+Rules locked in by this pipeline:
+
+- `pending_review → completed` only; any other starting state raises
+  `IMAGE_QA_NOT_PENDING` (verified: a replay returns 422).
+- City scope is enforced twice: in the service (`getPendingReviewProducts`,
+  `approveImage`, `uploadEnhancedImage`) and in the legacy route. An
+  out-of-scope reviewer receives `PRODUCT_NOT_FOUND` (verified).
+- RBAC: page and actions both require `manage_catalog | review_catalog_images`;
+  a user without it is redirected to `/forbidden` (verified).
+- All buttons in the QA surfaces use the `Button` primitive; row extras use
+  `DropdownMenu`.
+
+---
 
 ---
 

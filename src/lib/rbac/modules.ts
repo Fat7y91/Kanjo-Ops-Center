@@ -57,6 +57,15 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "catalog",
   },
   {
+    href: "/catalog/qa",
+    label: "مراجعة صور الكتالوج",
+    shortLabel: "جودة الصور",
+    description:
+      "اعتماد صور المنتجات أو رفع نسخة محسّنة قبل النشر في الكتالوج.",
+    permission: "review_catalog_images",
+    icon: "catalog",
+  },
+  {
     href: "/catalog/taxonomy",
     label: "تصنيفات الكتالوج",
     shortLabel: "التصنيفات",

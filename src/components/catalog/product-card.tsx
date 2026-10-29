@@ -4,6 +4,7 @@ import type { MouseEvent } from "react";
 
 import { ImageQaActions } from "@/components/catalog/image-qa-actions";
 import { Protect } from "@/components/auth/protect";
+import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/catalog/format";
 import {
   PRODUCT_STATE_META,
@@ -45,8 +46,8 @@ export function ProductCard({
       className="product-card is-clickable"
       onClick={() => onOpenDetails(product)}
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         className="product-thumb"
         onClick={(event) => {
           stop(event);
@@ -65,7 +66,7 @@ export function ProductCard({
         ) : (
           <span>{product.name.slice(0, 2)}</span>
         )}
-      </button>
+      </Button>
 
       <div className="product-body">
         <div className="panel-head compact">
@@ -118,13 +119,13 @@ export function ProductCard({
           </div>
         ) : (
           <div className="row-actions" onClick={stop}>
-            <button
-              type="button"
-              className="button button-small button-quiet"
+            <Button
+              size="sm"
+              variant="quiet"
               onClick={() => onOpenDetails(product)}
             >
               التفاصيل
-            </button>
+            </Button>
           </div>
         )}
       </div>

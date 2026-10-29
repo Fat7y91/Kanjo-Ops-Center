@@ -13,9 +13,12 @@ import {
 } from "@/lib/catalog/types";
 import { generateSku, normalizeCode } from "@/lib/catalog/sku";
 import { buildCatalogSeed } from "@/lib/catalog/data/seed";
-import { applyImageQa, type ImageQaPatch } from "@/lib/catalog/image-qa";
+import {
+  applyImageQa,
+  type ImageQaPatch,
+} from "@/lib/catalog/services/image-qa-service";
 
-export { ImageQaError } from "@/lib/catalog/image-qa";
+export { ImageQaError } from "@/lib/catalog/services/image-qa-service";
 
 export class CatalogError extends Error {
   readonly code: string;

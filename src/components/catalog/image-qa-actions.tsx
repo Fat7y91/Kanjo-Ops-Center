@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import type { CatalogProduct } from "@/lib/catalog/types";
 import { formatBytes, prepareImage } from "@/lib/catalog/image";
 
@@ -63,33 +64,33 @@ export function ImageQaActions({
         }}
       />
 
-      <button
-        type="button"
-        className="button button-small button-quiet"
+      <Button
+        size="sm"
+        variant="quiet"
         onClick={onDownload}
         disabled={!hasImage || busy || preparing}
         title={hasImage ? undefined : "لا توجد صورة لتحميلها."}
       >
         تحميل الصورة الأصلية
-      </button>
+      </Button>
 
-      <button
-        type="button"
-        className="button button-small button-quiet"
+      <Button
+        size="sm"
+        variant="quiet"
         onClick={() => inputRef.current?.click()}
         disabled={busy || preparing}
       >
         {preparing ? "جارٍ المعالجة…" : "رفع الصورة المحسنة"}
-      </button>
+      </Button>
 
-      <button
-        type="button"
-        className="button button-small button-primary"
+      <Button
+        size="sm"
+        variant="primary"
         onClick={onApprove}
         disabled={busy || preparing}
       >
         اعتماد مباشر
-      </button>
+      </Button>
 
       {pendingBytes > 0 ? (
         <span className="img-qa-size">{formatBytes(pendingBytes)}</span>

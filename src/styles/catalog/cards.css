@@ -5,6 +5,14 @@
 
 /* ── Product card additions ───────────────────────────────────────────── */
 
+/* The thumbnail is a Button primitive now: reset its padding/overflow so the
+ * fixed 74px hit target and image crop stay intact. */
+.product-thumb {
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+}
+
 .product-thumb img {
   width: 100%;
   height: 100%;
