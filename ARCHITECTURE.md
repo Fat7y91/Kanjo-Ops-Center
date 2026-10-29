@@ -27,8 +27,8 @@ graph TD
 | 1 — UI | Render, view state, handlers. No domain rules, no I/O. | `src/app/**/page.tsx`, `src/components/**`, `src/components/ui/**` | T2 |
 | 2 — Controller | Auth/authorization, input validation (Zod), status codes, shaping responses. No business rules. | `src/app/api/**/route.ts`, `src/lib/auth/api.ts` | T3 |
 | 3 — Business | Domain rules, invariants, calculations. Zero DB or UI imports. | `src/lib/<domain>/*.ts` | T4 (types only ideally) |
-| 4 — Repository | Only layer that reads/writes the store. Doc mapping and queries. | `src/lib/<domain>/store/**`, `src/lib/<domain>/firestore.ts` | T5 |
-| 5 — Database | Firestore / in-memory global store / seeds. | external + `src/lib/**/data/seed.ts` | — |
+| 4 — Repository | Only layer that reads/writes a database. Doc mapping and queries. | `src/lib/<domain>/repository.ts`, `src/lib/<domain>/store/**` | T5 |
+| 5 — Database | Hybrid: Supabase (PostgreSQL) for Financial/ERP, Firebase for Operations. Connecting clients live in `src/lib/db/`. | external + `src/lib/**/data/seed.ts` | — |
 
 ### Tier rules in practice
 
@@ -38,6 +38,25 @@ graph TD
   `use-*.ts` hook under the same domain folder.
 - Domain functions are synchronous where possible and throw typed errors
   (`CatalogError`, `FieldOpsError`) that the controller maps with `apiError()`.
+
+### Hybrid Database Strategy
+
+Two databases, chosen by domain, never by convenience:
+
+| Domain | Database | Tier 5 clients |
+|---|---|---|
+| Financial / ERP — users, RBAC, ledgers, wallets, commissions | Supabase (PostgreSQL) | `src/lib/db/supabase/{config,client,server}.ts` |
+| Operations — live order tracking, complex catalog, offline-first field data | Firebase (Firestore) | `src/lib/db/firebase/{config,client,admin}.ts` |
+
+- A repository talks to exactly one database. Cross-domain reads are composed
+  one tier up (Tier 3), never with a SQL join against Firestore.
+- `src/lib/db/supabase/server.ts` and `src/lib/db/firebase/admin.ts` import
+  `server-only`; importing either from a client component is a build error.
+- `firebase-admin` cannot run on the Edge Runtime. A controller that uses it
+  MUST declare `export const runtime = "nodejs"`. All other routes stay `edge`.
+- Configuration is read lazily inside the getters, so `next build` and
+  `/login` succeed even when no database secrets are configured.
+
 
 ---
 
@@ -61,7 +80,65 @@ Full text: `AGENTS.md`.
 
 ---
 
-## 3. UI Primitive Library — `src/components/ui/`
+## 3. Environment & Configuration
+
+All variables are read lazily by `src/lib/db/env.ts` and the domain config
+modules, so a missing value fails at first use — never at import or build time.
+Set them in Cloudflare Pages under **Settings → Variables and Secrets**; mark
+every secret as encrypted.
+
+### Required today (application boot)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `SESSION_SECRET` | Runtime | Yes | HMAC-SHA256 session cookie signing. Must be ≥ 16 chars; production throws otherwise. `src/lib/auth/session.ts` |
+
+`NODE_ENV` is supplied by Next.js / Cloudflare — never configure it manually.
+
+### Required once the Financial/ERP repositories are wired (Supabase)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `SUPABASE_URL` | Runtime | No | Project REST endpoint, e.g. `https://<ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | Build + Runtime | No (public) | `getSupabaseBrowserClient()` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Runtime | Yes | `getSupabaseServerClient()` — RLS-bypassing Tier 4 writes |
+
+The service-role key must never be prefixed with `NEXT_PUBLIC_`.
+
+### Required once the Operations repositories are wired (Firebase)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | Build + Runtime | No (public) | Optional analytics |
+| `NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY` | Build + Runtime | No (public) | Optional App Check |
+| `FIREBASE_PROJECT_ID` | Runtime | No | `getFirebaseProjectId()`, admin app |
+| `FIREBASE_CLIENT_EMAIL` | Runtime | Yes | Admin credential (when not using the JSON blob) |
+| `FIREBASE_PRIVATE_KEY` | Runtime | Yes | Admin credential; literal `\n` sequences are restored |
+| `FIREBASE_SERVICE_ACCOUNT` | Runtime | Yes | Alternative: full service-account JSON as one value |
+
+`NEXT_PUBLIC_*` values are inlined at build time, so changing one requires a
+redeploy, not just a restart. The Admin SDK variables are only needed by routes
+declared `runtime = "nodejs"`.
+
+### Do not add to the Pages environment
+
+`FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`,
+`FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID`, `FIREBASE_MEASUREMENT_ID`,
+`FIREBASE_APP_CHECK_SITE_KEY`, `KANJO_DRIVE_SCRIPT_URL`,
+`KANJO_DRIVE_SCRIPT_TOKEN` belong to the legacy static site in `public/` and
+its build scripts. The `SYNC_DRY_RUN` / `DRY_RUN` / `BACKUP_PATH` /
+`CLAIMS_WRITE_DELAY_MS` family belongs to the GitHub Actions maintenance
+scripts. Neither group is read by the Next.js app.
+
+---
+
+## 4. UI Primitive Library — `src/components/ui/`
 
 All Headless UI backed. Brand styling lives inside each primitive via `data-*`
 states; call sites never hand-roll purple/gold classes.
@@ -89,7 +166,24 @@ selector).
 
 ---
 
-## 4. Current Module Placement
+## 5. Current Module Placement
+
+### Database Clients (Tier 5)
+- `src/lib/db/env.ts` — `optionalEnv`, `requireEnv`, `requireAnyEnv`,
+  `MissingEnvError`. Every client resolves configuration through this module.
+- `src/lib/db/supabase/config.ts` — lazy `SUPABASE_*` readers + `hasSupabaseConfig`.
+- `src/lib/db/supabase/client.ts` — anon-key browser client (RLS enforced).
+- `src/lib/db/supabase/server.ts` — service-role client for Tier 4 Financial/ERP
+  repositories. `server-only`.
+- `src/lib/db/firebase/config.ts` — lazy `NEXT_PUBLIC_FIREBASE_*` readers.
+- `src/lib/db/firebase/client.ts` — memoised web app + Firestore with persistent
+  cache and an in-memory fallback when IndexedDB is unavailable.
+- `src/lib/db/firebase/admin.ts` — service-account Admin SDK for Operations
+  writes. `server-only`; Node runtime only.
+
+Status: the clients exist, but **no domain repository consumes them yet**. The
+in-memory stores below remain the live implementation until each domain is
+migrated one at a time.
 
 ### Auth & RBAC (T1→T5)
 - `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `apiError`, `readJson` (Controller helpers).
@@ -174,22 +268,33 @@ selector).
 
 ---
 
-## 5. Migration Gaps (target end-state)
+## 6. Migration Gaps (target end-state)
 
 The tiers exist conceptually; these are the concrete gaps to close.
 
-1. **Service extraction started.** `src/lib/catalog/services/` now holds the
+1. **In-memory stores are still the live Tier 5.** Every domain
+   (`rbac/users.ts`, `catalog/store.ts`, `field-ops/store/`, `taxonomy/store.ts`,
+   `kpi/repository.ts`) reads a process-local global. On Cloudflare these are
+   per-isolate, so data is neither durable nor consistent across requests. The
+   connection clients now exist in `src/lib/db/`; the remaining work is to move
+   each domain behind a `repository.ts` that uses them, one domain per commit:
+   - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
+   - Operations → Firebase: catalog, field ops, live orders.
+2. **Repository seams are not yet created.** Only `catalog/repository.ts` and
+   `kpi/repository.ts` exist. `rbac`, `field-ops`, `taxonomy` and `catalog/store`
+   still mix business rules with persistence.
+3. **Service extraction started.** `src/lib/catalog/services/` now holds the
    variant and image-QA services, and `src/lib/catalog/repository.ts` is the
    reserved Tier 4 seam. Other domains still mix business and persistence in
    `src/lib/<domain>/store.ts`; extract pure rules into
    `src/lib/<domain>/services/` and leave only queries in `store/`.
-2. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
+4. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
    `catalog/rules.ts` and `catalog/repository.ts`.
-3. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
+5. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
    persistence together. Split and drop below 300.
-4. **Page components are still clients.** Move view state into `use-*.ts` so
+6. **Page components are still clients.** Move view state into `use-*.ts` so
    `page.tsx` stays a server container.
-5. **Files over the 300-line limit (backlog):**
+7. **Files over the 300-line limit (backlog):**
    - `src/components/field-ops/field-ops-client.tsx` — 831
    - `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` — 764
    - `src/components/field-ops/cities-client.tsx` — 760
@@ -201,7 +306,7 @@ The tiers exist conceptually; these are the concrete gaps to close.
    - `src/lib/field-ops/offline-queue.ts` — 344
    - `src/components/field-ops/ops-team-panel.tsx` — 327
    - `src/app/globals.css` — 4884 (extract to `src/styles/<domain>.css`)
-6. **Business rules need negative-space tests.** Domain functions are pure;
+8. **Business rules need negative-space tests.** Domain functions are pure;
    add unit coverage before wiring new persistence.
 
 Generated data exception: `src/lib/taxonomy/data.generated.ts` is the only file
@@ -209,7 +314,7 @@ allowed above the limit.
 
 ---
 
-## 6. Refactored Modules
+## 7. Refactored Modules
 
 ### Catalog — Smart Variant Matrix
 
@@ -259,7 +364,7 @@ The QA workspace proves the 5-tier model end-to-end with server actions.
 | 2 — Controller | `src/app/api/catalog/products/[id]/image-qa/route.ts` | Legacy REST entry point; same service + repository, same guards. |
 | 3 — Business | `src/lib/catalog/services/image-qa-service.ts` | `ImageQaError`, `getPendingReviewProducts`, `approveImage`, `uploadEnhancedImage`, plus pure `assertImageQaTransition` / `applyImageQa`. Repository is injected — zero Tier 4 imports. |
 | 4 — Repository | `src/lib/catalog/repository.ts` | `listCatalogRecords` / `findCatalogRecord` (merchant→city) and `commitImageQa`. Only layer that touches `catalog/store.ts`. |
-| 5 — Database | `src/lib/catalog/store.ts` + `data/seed.ts` | In-memory global store and seed fixtures. |
+| 5 — Database | `src/lib/catalog/store.ts` + `data/seed.ts` | In-memory global store and seed fixtures. **Target:** Firebase Firestore via `src/lib/db/firebase/` (catalog is an Operations domain). |
 
 Data flow:
 
@@ -286,7 +391,7 @@ Rules locked in by this pipeline:
 
 ---
 
-## 7. Agent KPI Dashboard — 4-Stage City Lifecycle
+## 8. Agent KPI Dashboard — 4-Stage City Lifecycle
 
 The dashboard is the second full 5-tier reference implementation (after Image
 QA). The same rep is scored differently depending on the operational stage of
@@ -303,7 +408,7 @@ their city, because the work itself is different at each stage.
 | 3 — Business | `src/lib/kpi/metrics.ts` | Pure stage arithmetic (`computeFacts`) and `scoreFacts`; `stageMetrics`/`usageMetrics` shape the UI contract. |
 | 3 — Business | `src/lib/kpi/insights.ts` | `buildInsights` compares the agent with the city top performer. |
 | 4 — Repository | `src/lib/kpi/repository.ts` | `loadKpiDataset` merges field-ops/catalog/RBAC into one dataset. |
-| 5 — Database | field-ops/catalog stores + `kpi/data/facts-seed.ts` | Underlying records; the seed stands in for the consumer feeds. |
+| 5 — Database | field-ops/catalog stores + `kpi/data/facts-seed.ts` | Underlying records; the seed stands in for the consumer feeds. **Target:** Firebase for field ops and catalog; Supabase for financial KPIs. |
 
 ### Stage metric contract
 
@@ -343,7 +448,7 @@ graph TD
 
 ---
 
-## 8. The AI Workflow Loop (MANDATORY)
+## 9. The AI Workflow Loop (MANDATORY)
 
 Every AI session on this branch follows this loop. No exceptions.
 
