@@ -55,7 +55,7 @@ export function CatalogFilterTabs({
         if (next) onChange(next);
       }}
       showPanels={false}
-      listClassName="rounded-full bg-[color:var(--surface)] p-1 shadow-sm"
+      listClassName="shadow-sm"
     />
   );
 }

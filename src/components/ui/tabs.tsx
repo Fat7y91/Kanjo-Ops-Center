@@ -33,9 +33,9 @@ export type TabsProps = {
 /**
  * Kanjo tabs.
  *
- * Used for mutually exclusive views (pipeline states, settings sections) so
- * keyboard navigation and ARIA wiring come from Headless UI, not hand-rolled
- * `role="tab"` buttons.
+ * The list and every tab share one pill geometry (`rounded-full`) so the active
+ * state never shows a sharp-cornered button inside a rounded track. Focus rings
+ * sit inside the padding, keeping the silhouette intact.
  */
 export function Tabs({
   items,
@@ -55,7 +55,7 @@ export function Tabs({
     >
       <TabList
         className={cx(
-          "flex flex-wrap items-center gap-1 rounded-xl bg-[color:var(--surface-soft)] p-1",
+          "inline-flex flex-wrap items-center gap-1 rounded-full border border-[color:var(--line)] bg-[color:var(--surface-soft)] p-1",
           listClassName,
         )}
       >
@@ -64,14 +64,17 @@ export function Tabs({
             key={item.id}
             disabled={item.disabled}
             className={cx(
-              "group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-bold text-[color:var(--ink-soft)] transition duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/40 disabled:cursor-not-allowed disabled:opacity-45",
-              "data-[selected]:bg-[color:var(--surface)] data-[selected]:text-purple-700 data-[selected]:shadow-sm dark:data-[selected]:text-purple-300",
+              "group inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink-soft)] transition duration-150 ease-out",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/40 focus-visible:ring-offset-0",
               "data-[hover]:text-[color:var(--ink)]",
+              "data-[selected]:bg-purple-50 data-[selected]:text-purple-700 data-[selected]:shadow-sm data-[selected]:ring-1 data-[selected]:ring-inset data-[selected]:ring-purple-200",
+              "dark:data-[selected]:bg-purple-500/20 dark:data-[selected]:text-purple-100 dark:data-[selected]:ring-purple-500/30",
+              "disabled:cursor-not-allowed disabled:opacity-45",
             )}
           >
             <span>{item.label}</span>
             {item.badge !== undefined ? (
-              <span className="rounded-full bg-[color:var(--surface-soft)] px-2 py-0.5 text-[0.68rem] font-bold text-[color:var(--ink-soft)] group-data-[selected]:bg-purple-50 group-data-[selected]:text-purple-700 dark:group-data-[selected]:bg-purple-500/20 dark:group-data-[selected]:text-purple-200">
+              <span className="rounded-full bg-[color:var(--surface)] px-2 py-0.5 text-[0.68rem] font-bold leading-none text-[color:var(--ink-soft)] group-data-[selected]:bg-white group-data-[selected]:text-purple-700 dark:group-data-[selected]:bg-white/15 dark:group-data-[selected]:text-purple-100">
                 {item.badge}
               </span>
             ) : null}
