@@ -15,7 +15,6 @@ import type {
 
 type CatalogClientProps = {
   initialProducts: CatalogProduct[];
-  initialRevision: number;
   merchants: CatalogMerchantOption[];
   vendorTypes: TaxonomyVendorType[];
   categories: TaxonomyCategory[];
@@ -24,14 +23,12 @@ type CatalogClientProps = {
 
 export function CatalogClient({
   initialProducts,
-  initialRevision,
   merchants,
   vendorTypes,
   categories,
   variants,
 }: CatalogClientProps) {
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
-  const [revision, setRevision] = useState(initialRevision);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState("");
 
@@ -41,10 +38,6 @@ export function CatalogClient({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const reviewCount = products.filter(
-    (product) => product.state === "pending_review",
-  ).length;
-
   const reload = useCallback(async () => {
     try {
       const response = await fetch("/api/catalog/products", {
@@ -53,10 +46,8 @@ export function CatalogClient({
       if (!response.ok) return;
       const payload = (await response.json()) as {
         products?: CatalogProduct[];
-        revision?: number;
       };
       if (payload.products) setProducts(payload.products);
-      if (typeof payload.revision === "number") setRevision(payload.revision);
     } catch {
       // Offline: the draft queue banner already communicates local state.
     }
@@ -69,11 +60,6 @@ export function CatalogClient({
   return (
     <>
       <section className="toolbar-row">
-        <span className="badge">{products.length} منتجات</span>
-        <span className={reviewCount > 0 ? "badge badge-gold" : "badge"}>
-          {reviewCount} بانتظار مراجعة الصورة
-        </span>
-        <span className="badge">rev {revision}</span>
         <div className="row-actions">
           <Protect
             require={["create_products", "manage_catalog"]}
@@ -99,6 +85,7 @@ export function CatalogClient({
         categories={categories}
         variants={variants}
         onClose={() => setOpen(false)}
+        onOpen={() => setOpen(true)}
         onSynced={handleSynced}
       />
 

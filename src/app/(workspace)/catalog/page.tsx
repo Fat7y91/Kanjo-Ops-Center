@@ -2,7 +2,7 @@ import { CatalogClient } from "@/components/catalog/catalog-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
 import { getServerSession } from "@/lib/auth/server-session";
-import { catalogRevision, listProducts } from "@/lib/catalog/store";
+import { listProducts } from "@/lib/catalog/store";
 import { isCatalogEligibleContract } from "@/lib/catalog/types";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listCities, listMerchants } from "@/lib/field-ops/store";
@@ -53,12 +53,10 @@ export default async function CatalogPage() {
         eyebrow="حوكمة الكتالوج"
         title="كتالوج المنتجات"
         description="الأسعار وحالة النشر ومراجعة الجودة لمنتجات التجار. أدوات الإنشاء والحذف محكومة بالصلاحيات."
-        actions={<span className="badge">{products.length} منتج</span>}
       />
 
       <CatalogClient
         initialProducts={products}
-        initialRevision={catalogRevision()}
         merchants={merchants}
         vendorTypes={listVendorTypes()}
         categories={listCategories()}

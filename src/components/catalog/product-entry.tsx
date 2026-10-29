@@ -25,6 +25,7 @@ type ProductEntryProps = {
   categories: TaxonomyCategory[];
   variants: TaxonomyVariant[];
   onClose: () => void;
+  onOpen: () => void;
   onSynced: () => void;
 };
 
@@ -41,10 +42,15 @@ export function ProductEntry({
   categories,
   variants,
   onClose,
+  onOpen,
   onSynced,
 }: ProductEntryProps) {
   const queue = useCatalogDraftQueue();
-  const entry = useProductEntry({ variants, refreshQueue: queue.refresh });
+  const entry = useProductEntry({
+    merchants,
+    variants,
+    refreshQueue: queue.refresh,
+  });
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -92,6 +98,12 @@ export function ProductEntry({
         syncing={queue.syncing}
         online={queue.online}
         onUploadAll={() => void uploadAll()}
+        onEdit={(draft) => {
+          void entry.editDraft(draft).then(() => {
+            setToast(`جارٍ تعديل «${draft.payload.name}».`);
+            onOpen();
+          });
+        }}
         onRemove={(clientProductId) => {
           void removeDraft(clientProductId).then(queue.refresh);
         }}

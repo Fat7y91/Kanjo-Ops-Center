@@ -38,8 +38,8 @@
 }
 
 .cat-filter-tab.is-active {
-  border-color: var(--purple);
-  background: var(--purple);
+  border-color: var(--primary);
+  background: var(--primary);
   color: var(--primary-ink);
 }
 

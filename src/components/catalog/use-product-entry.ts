@@ -6,6 +6,8 @@ import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker
 import type { ProductFormValues } from "@/components/catalog/product-form";
 import {
   enqueueDraft,
+  removeDraft,
+  type CatalogDraft,
   type CatalogDraftPayload,
 } from "@/lib/catalog/draft-queue";
 import { categoryIdFromKey } from "@/lib/catalog/category";
@@ -45,6 +47,7 @@ function emptyValues(): ProductFormValues {
 export type SaveMode = "close" | "another";
 
 type UseProductEntryArgs = {
+  merchants: CatalogMerchantOption[];
   variants: TaxonomyVariant[];
   refreshQueue: () => Promise<void>;
 };
@@ -56,7 +59,11 @@ type UseProductEntryArgs = {
  * 300-line rule and makes the "retain merchant on save-and-add-another"
  * behaviour a single, testable line.
  */
-export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs) {
+export function useProductEntry({
+  merchants,
+  variants,
+  refreshQueue,
+}: UseProductEntryArgs) {
   const [values, setValues] = useState<ProductFormValues>(emptyValues);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -85,6 +92,50 @@ export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs)
       merchant: keepMerchant ? current.merchant : null,
       productType: current.productType,
     }));
+  }
+
+  // Editing pulls a queued draft back into the form and drops it from the
+  // queue; saving re-queues it with the rep's corrections.
+  async function editDraft(draft: CatalogDraft) {
+    const payload = draft.payload;
+    const merchant =
+      merchants.find((option) => option.id === payload.merchantId) ?? null;
+
+    const attributes: Record<number, number[]> = {};
+    const variantPrices: Record<string, string> = {};
+    for (const selection of payload.attributes) {
+      for (const optionId of selection.optionIds) {
+        attributes[selection.variantId] = [
+          ...(attributes[selection.variantId] ?? []),
+          optionId,
+        ];
+      }
+    }
+    if (payload.attributes.length > 0) {
+      const key = payload.attributes
+        .map(
+          (selection) => `${selection.variantId}:${selection.optionIds[0]}`,
+        )
+        .join("|");
+      variantPrices[key] = String(payload.price);
+    }
+
+    setError("");
+    setValues({
+      name: payload.name,
+      description: payload.description,
+      merchant,
+      productType: payload.productType,
+      categoryKey: payload.categoryKey ?? "",
+      price: String(payload.price),
+      sku: payload.barcode || payload.sku,
+      imageDataUrl: payload.imageDataUrl,
+      attributes,
+      variantPrices,
+      skuSeed: createSkuSeed(),
+    });
+    await removeDraft(draft.clientProductId);
+    await refreshQueue();
   }
 
   async function save(mode: SaveMode): Promise<boolean> {
@@ -213,6 +264,7 @@ export function useProductEntry({ variants, refreshQueue }: UseProductEntryArgs)
     busy,
     patch,
     changeMerchant,
+    editDraft,
     save,
   };
 }

@@ -7,6 +7,7 @@ type DraftQueueBannerProps = {
   syncing: boolean;
   online: boolean;
   onUploadAll: () => void;
+  onEdit: (draft: CatalogDraft) => void;
   onRemove: (clientProductId: string) => void;
 };
 
@@ -22,6 +23,7 @@ export function DraftQueueBanner({
   syncing,
   online,
   onUploadAll,
+  onEdit,
   onRemove,
 }: DraftQueueBannerProps) {
   if (drafts.length === 0) return null;
@@ -76,14 +78,24 @@ export function DraftQueueBanner({
                 </span>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="button button-small button-quiet"
-              onClick={() => onRemove(draft.clientProductId)}
-              aria-label={`حذف مسودة ${draft.payload.name}`}
-            >
-              حذف
-            </button>
+            <div className="cat-queue-item-actions">
+              <button
+                type="button"
+                className="button button-small button-quiet"
+                onClick={() => onEdit(draft)}
+                aria-label={`تعديل مسودة ${draft.payload.name}`}
+              >
+                تعديل
+              </button>
+              <button
+                type="button"
+                className="button button-small button-quiet"
+                onClick={() => onRemove(draft.clientProductId)}
+                aria-label={`حذف مسودة ${draft.payload.name}`}
+              >
+                حذف
+              </button>
+            </div>
           </li>
         ))}
       </ul>
