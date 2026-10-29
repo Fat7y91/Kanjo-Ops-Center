@@ -64,17 +64,16 @@ export function Tabs({
             key={item.id}
             disabled={item.disabled}
             className={cx(
-              "group inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink-soft)] transition duration-150 ease-out",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/40 focus-visible:ring-offset-0",
-              "data-[hover]:text-[color:var(--ink)]",
-              "data-[selected]:bg-purple-50 data-[selected]:text-purple-700 data-[selected]:shadow-sm data-[selected]:ring-1 data-[selected]:ring-inset data-[selected]:ring-purple-200",
-              "dark:data-[selected]:bg-purple-500/20 dark:data-[selected]:text-purple-100 dark:data-[selected]:ring-purple-500/30",
+              "group inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink-soft)] transition duration-200 ease-out",
+              "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] focus-visible:ring-offset-0",
+              "data-[hover]:text-[color:var(--kanjo-purple-interactive)]",
+              "data-[selected]:bg-[color:var(--kanjo-pastel)] data-[selected]:text-[color:var(--kanjo-pastel-ink)] data-[selected]:shadow-[var(--shadow-sm)] data-[selected]:ring-1 data-[selected]:ring-inset data-[selected]:ring-[color:var(--kanjo-focus-ring)]",
               "disabled:cursor-not-allowed disabled:opacity-45",
             )}
           >
             <span>{item.label}</span>
             {item.badge !== undefined ? (
-              <span className="rounded-full bg-[color:var(--surface)] px-2 py-0.5 text-[0.68rem] font-bold leading-none text-[color:var(--ink-soft)] group-data-[selected]:bg-white group-data-[selected]:text-purple-700 dark:group-data-[selected]:bg-white/15 dark:group-data-[selected]:text-purple-100">
+              <span className="rounded-full bg-[color:var(--surface)] px-2 py-0.5 text-[0.68rem] font-bold leading-none text-[color:var(--ink-soft)] group-data-[selected]:bg-[color:var(--kanjo-surface)] group-data-[selected]:text-[color:var(--kanjo-pastel-ink)]">
                 {item.badge}
               </span>
             ) : null}

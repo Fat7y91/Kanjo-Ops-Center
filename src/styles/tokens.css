@@ -1,68 +1,149 @@
+/* ==========================================================================
+   Kanjo V2 Design Tokens
+   --------------------------------------------------------------------------
+   V1 brand DNA + 2026 SaaS geometry. This file is the single source of truth
+   for colour, radius, elevation and type. Components must reference these
+   variables (or the Tailwind `kanjo-*` aliases) — never raw hex values.
+
+   Brand contract:
+     purple-base        #230535  backgrounds / headings / navigation shell
+     purple-interactive #6D28D9  buttons, focus rings, active states ONLY
+     gold               #FFD700  accents and active text on dark surfaces
+     surface            #FFFFFF  raised content
+     canvas             #F8FAFC  app background (slate-50)
+   ========================================================================== */
+
 :root {
   color-scheme: light;
+
+  /* ── Brand palette ──────────────────────────────────────────────────── */
+  --kanjo-purple-base: #230535;
+  --kanjo-purple-interactive: #6d28d9;
+  --kanjo-interactive-hover: #5b21b6;
+  --kanjo-interactive-active: #4c1d95;
+  --kanjo-gold: #ffd700;
+  --kanjo-gold-deep: #7a5b00;
+  --kanjo-surface: #ffffff;
+  --kanjo-canvas: #f8fafc;
+
+  /* Pastel pair for non-primary pills: bg-purple-50 + text-purple-900. */
+  --kanjo-pastel: #f5f3ff;
+  --kanjo-pastel-ink: #4c1d95;
+
+  /* Interaction surfaces derived from the interactive purple. */
+  --kanjo-field-border: rgba(109, 40, 217, 0.16);
+  --kanjo-focus-ring: rgba(109, 40, 217, 0.2);
+  --kanjo-focus-ring-strong: rgba(109, 40, 217, 0.4);
+
+  /* ── Semantic aliases (consumed by app + domain CSS) ─────────────────── */
   --ink: #0f172a;
   --ink-soft: #64748b;
-  --canvas: #f8fafc;
-  --surface: #ffffff;
+  --canvas: var(--kanjo-canvas);
+  --surface: var(--kanjo-surface);
   --surface-soft: #f1f5f9;
-  --surface-raised: #ffffff;
+  --surface-raised: var(--kanjo-surface);
   --line: #e2e8f0;
   --line-strong: #cbd5e1;
-  --nav: #170a2b;
-  --nav-soft: #24103f;
-  --gold: #ffd700;
-  --gold-deep: #7a5b00;
-  --purple: #6d28d9;
-  --primary: #5b21b6;
+  --nav: var(--kanjo-purple-base);
+  --nav-soft: #35104f;
+  --nav-ink: #ffffff;
+  --nav-ink-soft: #b9c2d4;
+  --nav-ink-muted: #8e9ab0;
+  --nav-line: rgba(255, 255, 255, 0.1);
+  --gold: var(--kanjo-gold);
+  --gold-deep: var(--kanjo-gold-deep);
+  --gold-contrast: #161106;
+  --purple: var(--kanjo-purple-interactive);
+  --primary: var(--kanjo-purple-interactive);
   --primary-ink: #ffffff;
-  --primary-hover: #4c1d95;
-  --focus: rgba(109, 40, 217, 0.28);
+  --primary-hover: var(--kanjo-interactive-hover);
+  --focus: var(--kanjo-focus-ring-strong);
+  --info: #1d4ed8;
   --green: #15803d;
   --green-soft: #f0fdf4;
   --red: #b91c1c;
   --red-soft: #fef2f2;
-  --gradient-primary: linear-gradient(135deg, #6d28d9, #4c1d95);
-  --gradient-gold: linear-gradient(145deg, #f5d27a, #c08a18);
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow: 0 4px 24px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 10px 34px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 24px 64px rgba(15, 23, 42, 0.14);
-  --radius-sm: 10px;
+
+  /* ── Gradients ──────────────────────────────────────────────────────── */
+  --gradient-primary: linear-gradient(
+    135deg,
+    var(--kanjo-purple-interactive),
+    var(--kanjo-interactive-active)
+  );
+  --gradient-gold: linear-gradient(
+    145deg,
+    #f5d27a,
+    var(--kanjo-gold-deep)
+  );
+
+  /* ── Elevation: deep, diffused, purple-tinted ───────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(35, 5, 53, 0.05);
+  --shadow: 0 10px 40px -10px rgba(35, 5, 53, 0.08);
+  --shadow-md: 0 16px 48px -12px rgba(35, 5, 53, 0.12);
+  --shadow-lg: 0 24px 80px -12px rgba(35, 5, 53, 0.25);
+  --shadow-modal: 0 24px 80px -12px rgba(35, 5, 53, 0.25);
+
+  /* ── Geometry ───────────────────────────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
   --radius: 16px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-lg: 16px;
   --radius-xl: 24px;
+  --radius-input: 12px;
+  --radius-card: 16px;
+  --radius-modal: 24px;
+
+  /* ── Type ───────────────────────────────────────────────────────────── */
+  --font-sans:
+    var(--font-cairo), "Cairo", "Segoe UI", "Helvetica Neue", Arial, system-ui,
+    sans-serif;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
+
+  /* Brand hues stay recognisable on dark canvases. */
+  --kanjo-surface: #1e293b;
+  --kanjo-canvas: #0f172a;
+  --kanjo-pastel: rgba(109, 40, 217, 0.18);
+  --kanjo-pastel-ink: #ddd6fe;
+  --kanjo-field-border: rgba(167, 139, 250, 0.24);
+  --kanjo-focus-ring: rgba(167, 139, 250, 0.25);
+  --kanjo-focus-ring-strong: rgba(167, 139, 250, 0.45);
+
   --ink: #f8fafc;
   --ink-soft: #94a3b8;
-  --canvas: #0f172a;
-  --surface: #1e293b;
+  --canvas: var(--kanjo-canvas);
+  --surface: var(--kanjo-surface);
   --surface-soft: #273449;
   --surface-raised: #24324a;
   --line: #334155;
   --line-strong: #475569;
-  --nav: #170a2b;
-  --nav-soft: #24103f;
-  --gold: #ffd700;
+  --nav: var(--kanjo-purple-base);
+  --nav-soft: #35104f;
+  --nav-ink: #ffffff;
+  --nav-ink-soft: #cbd5e1;
+  --nav-ink-muted: #94a3b8;
+  --nav-line: rgba(255, 255, 255, 0.12);
+  --gold: var(--kanjo-gold);
   --gold-deep: #ffd75e;
+  --gold-contrast: #161106;
   --purple: #c4b5fd;
-  --primary: #7c3aed;
+  --primary: var(--kanjo-purple-interactive);
   --primary-ink: #ffffff;
-  --primary-hover: #8b5cf6;
-  --focus: rgba(167, 139, 250, 0.35);
+  --primary-hover: #7c3aed;
+  --focus: var(--kanjo-focus-ring-strong);
+  --info: #93c5fd;
   --green: #4ade80;
   --green-soft: rgba(74, 222, 128, 0.12);
   --red: #f87171;
   --red-soft: rgba(248, 113, 113, 0.12);
-  --gradient-primary: linear-gradient(135deg, #7c3aed, #5b21b6);
-  --gradient-gold: linear-gradient(145deg, #f5d27a, #c08a18);
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.32);
-  --shadow-md: 0 12px 36px rgba(0, 0, 0, 0.42);
-  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.55);
+  --shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 16px 48px -12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 80px -12px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 24px 80px -12px rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="dark"] body {
@@ -83,16 +164,12 @@ body {
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
-  font-family:
-    "Segoe UI",
-    "Helvetica Neue",
-    Arial,
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-sans);
   font-size: 15px;
+  font-weight: 400;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -101,8 +178,10 @@ a {
 }
 
 button,
-input {
-  font: inherit;
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 button {
@@ -111,9 +190,9 @@ button {
 
 code {
   padding: 2px 6px;
-  border-radius: 6px;
-  background: #eef1f8;
-  color: #3f2bb3;
+  border-radius: var(--radius-sm);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 0.84em;
 }
@@ -127,17 +206,26 @@ p {
 }
 
 h1 {
+  color: var(--kanjo-purple-base);
   font-size: clamp(1.9rem, 3vw, 2.5rem);
+  font-weight: 900;
   letter-spacing: -0.035em;
   line-height: 1.1;
 }
 
 h2 {
+  color: var(--kanjo-purple-base);
   font-size: 1.1rem;
+  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 h3 {
   font-size: 0.96rem;
+  font-weight: 700;
 }
 
+[data-theme="dark"] h1,
+[data-theme="dark"] h2 {
+  color: var(--ink);
+}

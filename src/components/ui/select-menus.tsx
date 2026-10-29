@@ -23,13 +23,13 @@ export type SelectOption<T extends string | number> = {
 };
 
 const TRIGGER =
-  "flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--line-strong)] bg-[color:var(--surface)] px-3.5 py-2.5 text-start text-sm text-[color:var(--ink)] transition duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/25 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55 data-[open]:border-purple-600";
+  "flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] px-3.5 py-2.5 text-start text-sm text-[color:var(--ink)] shadow-[var(--shadow-sm)] transition duration-200 ease-out hover:border-[color:var(--kanjo-focus-ring-strong)] focus-visible:border-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55 data-[open]:border-[color:var(--kanjo-purple-interactive)]";
 
 const PANEL =
-  "z-50 max-h-64 w-[var(--button-width)] overflow-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1 shadow-lg transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
+  "z-50 max-h-64 w-[var(--button-width)] overflow-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
 
 const OPTION =
-  "flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--ink)] transition duration-150 ease-out data-[focus]:bg-purple-50 data-[focus]:text-purple-800 dark:data-[focus]:bg-purple-500/15 dark:data-[focus]:text-purple-200 data-[selected]:font-bold data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";
+  "flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--ink)] transition duration-150 ease-out data-[focus]:bg-[color:var(--kanjo-pastel)] data-[focus]:text-[color:var(--kanjo-pastel-ink)] data-[selected]:font-bold data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";
 
 export type SelectMenuProps<T extends string | number> = {
   value: T | null;
@@ -104,7 +104,7 @@ export function SelectMenu<T extends string | number>({
             </span>
             <svg
               viewBox="0 0 16 16"
-              className="size-3.5 text-purple-700 opacity-0 data-[selected]:opacity-100"
+              className="size-3.5 text-[color:var(--kanjo-purple-interactive)] opacity-0 data-[selected]:opacity-100"
               fill="none"
               stroke="currentColor"
               strokeWidth="2.2"

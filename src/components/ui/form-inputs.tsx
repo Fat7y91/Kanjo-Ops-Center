@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 
 const CONTROL =
-  "block w-full rounded-xl border border-[color:var(--line-strong)] bg-[color:var(--surface)] px-3.5 py-2.5 text-sm text-[color:var(--ink)] transition duration-150 ease-out placeholder:text-[color:var(--ink-soft)] focus:border-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-600/25 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55";
+  "block w-full rounded-xl border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] px-3.5 py-2.5 text-sm text-[color:var(--ink)] shadow-[var(--shadow-sm)] transition duration-200 ease-out placeholder:text-[color:var(--ink-soft)] hover:border-[color:var(--kanjo-focus-ring-strong)] focus:border-[color:var(--kanjo-purple-interactive)] focus:outline-none focus:ring-4 focus:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55";
 
 export type FieldProps = {
   label?: ReactNode;
@@ -152,7 +152,7 @@ export function CheckboxField({
     <HeadlessLabel className="flex cursor-pointer items-start gap-2.5">
       <HeadlessCheckbox
         className={cx(
-          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border border-[color:var(--line-strong)] bg-[color:var(--surface)] text-white transition duration-150 ease-out data-[checked]:border-purple-700 data-[checked]:bg-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/40 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] text-white transition duration-200 ease-out data-[checked]:border-[color:var(--kanjo-purple-interactive)] data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
           className,
         )}
         {...props}
@@ -212,7 +212,7 @@ export function ToggleField({
       </span>
       <HeadlessSwitch
         className={cx(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-[color:var(--line-strong)] transition duration-200 ease-out data-[checked]:bg-purple-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-600/40 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-[color:var(--line-strong)] transition duration-200 ease-out data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
           className,
         )}
         {...props}

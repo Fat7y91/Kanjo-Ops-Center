@@ -22,7 +22,7 @@ export function ChipToggle({ label, className, ...props }: ChipToggleProps) {
   return (
     <HeadlessCheckbox
       className={cx(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink-soft)] transition duration-150 ease-out data-[checked]:border-purple-700 data-[checked]:bg-purple-700 data-[checked]:text-white data-[focus]:outline-none data-[focus]:ring-2 data-[focus]:ring-purple-600/40 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink-soft)] transition duration-200 ease-out hover:border-[color:var(--kanjo-focus-ring-strong)] hover:text-[color:var(--kanjo-purple-interactive)] data-[checked]:border-[color:var(--kanjo-purple-interactive)] data-[checked]:bg-[color:var(--kanjo-purple-interactive)] data-[checked]:text-white data-[checked]:shadow-[var(--shadow-sm)] data-[focus]:outline-none data-[focus]:ring-4 data-[focus]:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
         className,
       )}
       {...props}
