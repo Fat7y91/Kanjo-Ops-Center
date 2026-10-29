@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const contracts = [
   {

@@ -7,6 +7,7 @@ import { createMerchant, listCities, listMerchants } from "@/lib/field-ops/store
 import { merchantCreateSchema } from "@/lib/schemas/field-ops";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   const session = await getServerSession();

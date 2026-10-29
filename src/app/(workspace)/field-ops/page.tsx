@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/guard";
 import { buildBoard } from "@/lib/field-ops/board";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function FieldOpsPage() {
   const session = await requirePermission("view_field_ops");

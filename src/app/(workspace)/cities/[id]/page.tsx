@@ -15,6 +15,7 @@ import {
 } from "@/lib/rbac/hierarchy";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type CityDetailsPageProps = {
   params: Promise<{ id: string }>;

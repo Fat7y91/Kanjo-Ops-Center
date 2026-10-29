@@ -9,6 +9,7 @@ import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const cairo = Cairo({
   subsets: ["arabic", "latin"],

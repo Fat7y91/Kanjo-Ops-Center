@@ -5,6 +5,7 @@ import { taxonomyDirectCreateSchema } from "@/lib/schemas/taxonomy";
 import { createTaxonomyEntry } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function POST(request: Request) {
   const { session, response } = await authorize("manage_taxonomy");

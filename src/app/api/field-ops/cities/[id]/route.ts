@@ -5,6 +5,7 @@ import { cityCreateSchema } from "@/lib/schemas/field-ops";
 import { updateCity } from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function PATCH(
   request: Request,

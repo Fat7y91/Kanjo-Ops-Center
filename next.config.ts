@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   allowedDevOrigins: [".monkeycode-ai.live"],
   experimental: {
+    globalNotFound: true,
     // Keep recently visited RSC payloads in the client router cache so
     // sidebar navigation and back/forward are instant instead of refetching.
     staleTimes: {

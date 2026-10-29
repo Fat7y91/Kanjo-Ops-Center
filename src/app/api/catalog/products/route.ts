@@ -11,6 +11,7 @@ import { getMerchantById } from "@/lib/field-ops/store";
 import { productCreateSchema } from "@/lib/schemas/catalog";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const PRODUCT_CREATE_CAPABILITIES = [
   "create_products",

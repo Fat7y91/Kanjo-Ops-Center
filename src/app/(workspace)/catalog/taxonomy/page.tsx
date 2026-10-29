@@ -10,6 +10,7 @@ import {
 import { TaxonomyCenter } from "./taxonomy-center";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function CatalogTaxonomyPage() {
   const session = await requirePermission("manage_taxonomy");

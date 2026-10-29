@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/guard";
 import { buildBiDataset } from "@/lib/bi/dataset";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function OverviewPage() {
   const session = await requirePermission("view_overview");

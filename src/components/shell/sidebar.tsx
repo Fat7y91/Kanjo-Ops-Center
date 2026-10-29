@@ -14,7 +14,7 @@ type SidebarProps = {
 };
 
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const { hasPermission, permissions, revision } = usePermission();
 
   const visibleModules = MODULES.filter((module) =>

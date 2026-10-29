@@ -17,6 +17,7 @@ import { getUserById } from "@/lib/rbac/users";
 import { cityManagerAssignSchema } from "@/lib/schemas/field-ops";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 function deniedResponse(error: unknown) {
   if (error instanceof RbacDeniedError) {

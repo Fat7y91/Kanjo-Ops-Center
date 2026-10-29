@@ -22,6 +22,7 @@ import {
 import { userPatchSchema } from "@/lib/schemas/rbac";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type RouteContext = {
   params: Promise<{ id: string }>;

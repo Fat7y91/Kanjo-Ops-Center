@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   const session = await getServerSession();

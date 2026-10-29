@@ -6,6 +6,7 @@ import { visitCountFor } from "@/lib/field-ops/store";
 import { searchMerchants } from "@/lib/search/merchant-search";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /**
  * Global merchant search for the Visit Engine.

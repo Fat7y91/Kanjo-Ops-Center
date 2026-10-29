@@ -5,6 +5,7 @@ import { analyzePolygon } from "@/lib/geo/intelligence";
 import { geoIntelligenceSchema } from "@/lib/schemas/geo-intelligence";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function POST(request: Request) {
   const { session, response } = await authorize("view_city_analytics");

@@ -13,6 +13,7 @@ import {
 import { getRbacRevision, listUsers } from "@/lib/rbac/users";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function PermissionsPage() {
   const session = await requirePermission("manage_permissions");

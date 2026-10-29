@@ -18,6 +18,7 @@ import {
 import { teamLabel } from "@/lib/field-ops/types";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type MerchantPageProps = {
   params: Promise<{ id: string }>;

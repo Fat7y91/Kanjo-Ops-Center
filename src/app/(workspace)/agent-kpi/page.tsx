@@ -16,6 +16,7 @@ import {
 } from "@/lib/kpi/scope";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type AgentKpiPageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

@@ -4,6 +4,7 @@ import { authorize } from "@/lib/auth/api";
 import { buildBoard } from "@/lib/field-ops/board";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   const { session, response } = await authorize("view_field_ops");

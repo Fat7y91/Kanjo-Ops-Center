@@ -13,6 +13,7 @@ import {
 } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function CatalogPage() {
   await requirePermission("view_catalog");

@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/guard";
 import { scopedCities } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export default async function CitiesPage() {
   const session = await requirePermission("view_cities");

@@ -5,6 +5,7 @@ import { taxonomyApproveSchema } from "@/lib/schemas/taxonomy";
 import { approveTaxonomyRequest } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function POST(
   request: Request,

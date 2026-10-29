@@ -7,6 +7,7 @@ import { getPendingReviewProducts } from "@/lib/catalog/services/image-qa-servic
 import { effectiveCityIds } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /**
  * Image Quality Assurance workspace (Tier 1 server container).

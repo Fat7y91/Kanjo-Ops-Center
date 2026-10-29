@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/auth/guard";
 import { UserDetailLoading } from "@/components/admin/user-detail-loading";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type UserPageProps = {
   params: Promise<{ id: string }>;

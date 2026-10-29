@@ -21,6 +21,7 @@ import {
 import { userCreateSchema } from "@/lib/schemas/rbac";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   const session = await getServerSession();

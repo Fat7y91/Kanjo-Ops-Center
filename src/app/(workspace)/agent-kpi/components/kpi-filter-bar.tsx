@@ -47,7 +47,7 @@ export function KpiFilterBar({
   selfLabel,
 }: KpiFilterBarProps) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
@@ -57,7 +57,7 @@ export function KpiFilterBar({
   );
 
   function push(next: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
     for (const [key, value] of Object.entries(next)) {
       if (!value || value === ALL) params.delete(key);
       else params.set(key, value);

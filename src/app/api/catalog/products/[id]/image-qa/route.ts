@@ -7,6 +7,7 @@ import { ImageQaError } from "@/lib/catalog/services/image-qa-service";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const REVIEW_CAPABILITIES = [
   "manage_catalog",

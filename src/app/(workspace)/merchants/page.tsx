@@ -11,6 +11,7 @@ import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
 import { listVendorTypes } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type MerchantsPageProps = {
   searchParams: Promise<{ q?: string }>;

@@ -3,6 +3,7 @@ import { clearanceLabel, clearanceTone } from "@/lib/rbac/hierarchy";
 import { listUsers } from "@/lib/rbac/users";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 type LoginPageProps = {
   searchParams: Promise<{

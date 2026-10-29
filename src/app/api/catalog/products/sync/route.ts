@@ -5,6 +5,7 @@ import { catalogRevision, syncProducts } from "@/lib/catalog/store";
 import { catalogSyncSchema } from "@/lib/schemas/catalog";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const PRODUCT_CREATE_CAPABILITIES = [
   "create_products",

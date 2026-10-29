@@ -6,6 +6,7 @@ import { createCity } from "@/lib/field-ops/store";
 import { scopedCities } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   const { session, response } = await authorize("view_cities");
