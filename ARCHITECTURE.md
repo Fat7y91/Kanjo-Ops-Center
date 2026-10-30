@@ -105,8 +105,13 @@ every secret as encrypted.
 | Key | Scope | Secret | Used by |
 |---|---|---|---|
 | `SUPABASE_URL` | Runtime | No | Project REST endpoint, e.g. `https://<ref>.supabase.co` |
-| `SUPABASE_ANON_KEY` | Build + Runtime | No (public) | `getSupabaseBrowserClient()` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Runtime | Yes | `getSupabaseServerClient()` — RLS-bypassing Tier 4 writes |
+| `SUPABASE_ANON_KEY` | Build + Runtime | No (public) | `getSupabaseBrowserClient()`; `signInWithPassword()` during login |
+| `SUPABASE_SERVICE_ROLE_KEY` | Runtime | Yes | `getSupabaseServerClient()` — RLS-bypassing Tier 4 reads/writes, auth admin |
+
+Login needs **all three**. The anon key verifies the password; the service-role
+key reads the profile back from `app.users`. Missing any of them goes to
+`/login?error=login-disabled` rather than silently falling back to the seed
+roster.
 
 The service-role key must never be prefixed with `NEXT_PUBLIC_`. It is used by
 `app/api/admin/users/provision` to mint auth users, so leaking it would let
@@ -221,13 +226,15 @@ migrated one at a time.
 
 ### Auth & RBAC (T1→T5)
 - `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `apiError`, `readJson` (Controller helpers).
-- `src/lib/auth/login.ts` — `resolveLoginRequest` / `safeNextPath`: pure login resolution that never calls `redirect()`.
+- `src/lib/auth/login.ts` — `resolveLoginRequest` / `safeNextPath`: verifies phone + password via `signInWithPassword`, then mints the app session. Never calls `redirect()`.
+- `src/app/login/login-form.tsx` — phone + password form (client).
+- `src/app/login/page.tsx` — login container.
 - `src/app/api/auth/login/route.ts` — `POST` login Route Handler; sets the cookie and returns `NextResponse.redirect`.
 - `src/app/api/auth/logout/route.ts` — `POST` logout Route Handler; clears the cookie and redirects.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (251), `seed-users.ts`, `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §7.6.
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities).
 - `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (nodejs runtime, `manage_permissions`).
@@ -343,21 +350,21 @@ The tiers exist conceptually; these are the concrete gaps to close.
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
    - Operations → Firebase: catalog, field ops, live orders.
-2. **RBAC has a schema but no read repository, and password login is unimplemented.**
-   `supabase/migrations/` defines `app.users` and the grant tables (Section 7),
-   and provisioning writes to them (§7.6), but `src/lib/rbac/users.ts` still
-   reads the in-memory seed for every read. `resolveLoginRequest()` authenticates
-   by picking a `userId` from a rendered roster — there is no password field and
-   no `signInWithPassword()` call, so a Supabase-provisioned founder cannot sign
-   in yet. This is the current top blocker: add `rbac/repository.ts` for reads,
-   then a phone + password login that exchanges credentials for a Supabase
-   session and maps it to `ActiveSession`.
-3. **Two create paths coexist.** `POST /api/admin/users` still writes to the
-   in-memory store and cannot mint credentials; `POST /api/admin/users/provision`
-   is the real one. Retire the former once the repository lands.
-4. **Repository seams are not yet created.** Only `catalog/repository.ts` and
-   `kpi/repository.ts` exist. `rbac`, `field-ops`, `taxonomy` and `catalog/store`
-   still mix business rules with persistence.
+2. **RBAC reads and writes are now Supabase-backed.** `rbac/repository.ts`
+   implements the Tier 4 seam and `rbac/users.ts` is an async facade over it.
+   The seed roster is consulted only when Supabase is not configured; once it
+   is, a missing row means "no such operator" rather than a demo fallback.
+   Password login uses `signInWithPassword`. Remaining: the write paths in
+   `field-ops/store/cities.ts` still mutate the in-memory city store alongside
+   RBAC grants, so a grant can succeed while the city assignment is process-local.
+3. **Two create paths coexist.** `POST /api/admin/users` still calls the
+   seed-only `createUser()`, which now throws when Supabase is configured;
+   `POST /api/admin/users/provision` is the real one. The admin UI still posts
+   to the former, so account creation from the UI is broken until it is
+   repointed at the provisioning endpoint.
+4. **Repository seams are partially created.** `catalog/repository.ts`,
+   `kpi/repository.ts` and `rbac/repository.ts` exist. `field-ops` and
+   `taxonomy` still mix business rules with persistence.
 5. **Service extraction started.** `src/lib/catalog/services/` now holds the
    variant and image-QA services, and `src/lib/catalog/repository.ts` is the
    reserved Tier 4 seam. Other domains still mix business and persistence in
@@ -597,19 +604,25 @@ path and fires `app.handle_auth_user_upsert`. A SQL-only bootstrap is impossible
 for the same reason: `encrypted_password` must be a GoTrue-compatible bcrypt
 hash plus a matching identity row, which is implementation detail, not API.
 
-#### Known blocker: password login is not wired
+#### Password login
 
-The bootstrap creates a real credential, but **the app cannot yet use it**.
-`resolveLoginRequest()` in `src/lib/auth/login.ts` takes a `userId` from the
-form and calls `getUserById()` against the in-memory seed store; there is no
-password field and no `signInWithPassword()` call anywhere in `src/`. The login
-page renders a demo roster of seed users.
+Login is now real. `resolveLoginRequest()` in `src/lib/auth/login.ts`:
 
-So until the login path is replaced, a Supabase-provisioned account can be
-created and stored correctly but cannot authenticate. That work is migration
-gap 2: a `rbac/repository.ts` for reads plus a password login that exchanges
-phone + password for a Supabase session, then maps the session to an
-`ActiveSession`.
+1. calls `supabase.auth.signInWithPassword({ phone, password })` with the anon
+   key, so Supabase verifies the credential and Kanjo never sees a hash;
+2. reads the profile back from `app.users` through the service-role repository;
+3. refuses if the profile is missing or `active = false` — a valid Supabase
+   credential with no authorisation row is not a valid operator;
+4. mints the HMAC session cookie from the repository's grants and revision.
+
+Login therefore requires **all three** Supabase variables (`URL`, `ANON_KEY`,
+`SERVICE_ROLE_KEY`). With only the anon key, the profile read would fall back to
+the seed roster and every correct password would fail, which is
+indistinguishable from a wrong password. A missing configuration redirects to
+`/login?error=login-disabled` instead.
+
+The login page is a phone + password form (`login-form.tsx`). The demo roster
+picker is gone, and `login.css` replaces the dead `.account-*` rules.
 
 #### Failure handling
 

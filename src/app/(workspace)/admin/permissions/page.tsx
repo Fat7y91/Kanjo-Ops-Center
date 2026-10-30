@@ -19,8 +19,8 @@ export default async function PermissionsPage() {
   const session = await requirePermission("manage_permissions");
   const actor = toClearanceActor(session);
   const global = isGlobalActor(actor);
-  const manageable = filterManageableUsers(actor, listUsers());
-  const revision = getRbacRevision();
+  const manageable = filterManageableUsers(actor, await listUsers());
+  const revision = await getRbacRevision();
   const cities = listCities().filter(
     (city) => global || actor.accessibleCities.includes(city.id),
   );

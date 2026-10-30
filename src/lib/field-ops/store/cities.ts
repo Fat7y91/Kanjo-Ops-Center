@@ -33,7 +33,10 @@ export function getCityById(cityId: string): City | null {
   return city ? clone(city) : null;
 }
 
-export function createCity(input: CityCreateInput, actor: Actor): City {
+export async function createCity(
+  input: CityCreateInput,
+  actor: Actor,
+): Promise<City> {
   const store = getStore();
   const normalized = normalizeSearchText(input.name);
   if (
@@ -75,7 +78,7 @@ export function createCity(input: CityCreateInput, actor: Actor): City {
   };
 
   store.cities.push(city);
-  addUserCityScope(actor.id, city.id);
+  await addUserCityScope(actor.id, city.id);
   bump();
   return clone(city);
 }
@@ -125,25 +128,27 @@ export function updateCity(cityId: string, input: CityCreateInput): City {
   return clone(city);
 }
 
-export function listCityManagers(cityId: string): AppUser[] {
+export async function listCityManagers(cityId: string): Promise<AppUser[]> {
   const city = getStore().cities.find((candidate) => candidate.id === cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
-  return city.opsManagers
-    .map((userId) => getUserById(userId))
-    .filter((user): user is AppUser => Boolean(user));
+  const resolved = await Promise.all(
+    city.opsManagers.map((userId) => getUserById(userId)),
+  );
+  return resolved.filter((user): user is AppUser => Boolean(user));
 }
 
-export function listAssignableManagers(): AppUser[] {
-  return listUsers().filter((user) => user.active);
+export async function listAssignableManagers(): Promise<AppUser[]> {
+  const users = await listUsers();
+  return users.filter((user) => user.active);
 }
 
-export function assignCityManagers(
+export async function assignCityManagers(
   cityId: string,
   userIds: readonly string[],
-): City {
+): Promise<City> {
   const store = getStore();
   const city = store.cities.find((candidate) => candidate.id === cityId);
   if (!city) {
@@ -161,22 +166,24 @@ export function assignCityManagers(
     );
   }
 
-  const users = uniqueIds.map((userId) => {
-    const user = getUserById(userId);
-    if (!user || !user.active) {
-      throw new FieldOpsError(
-        "MANAGER_NOT_FOUND",
-        "أحد المشغّلين المحددين غير موجود أو غير نشط.",
-        422,
-      );
-    }
-    return user;
-  });
+  const users = await Promise.all(
+    uniqueIds.map(async (userId) => {
+      const user = await getUserById(userId);
+      if (!user || !user.active) {
+        throw new FieldOpsError(
+          "MANAGER_NOT_FOUND",
+          "أحد المشغّلين المحددين غير موجود أو غير نشط.",
+          422,
+        );
+      }
+      return user;
+    }),
+  );
 
   const next = new Set(city.opsManagers);
   for (const user of users) {
     next.add(user.id);
-    addUserCityScope(user.id, cityId);
+    await addUserCityScope(user.id, cityId);
   }
   city.opsManagers = Array.from(next);
 
@@ -184,7 +191,10 @@ export function assignCityManagers(
   return clone(city);
 }
 
-export function revokeCityManager(cityId: string, userId: string): City {
+export async function revokeCityManager(
+  cityId: string,
+  userId: string,
+): Promise<City> {
   const city = getStore().cities.find((candidate) => candidate.id === cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
@@ -201,7 +211,7 @@ export function revokeCityManager(cityId: string, userId: string): City {
   city.opsManagers = city.opsManagers.filter(
     (managerId) => managerId !== userId,
   );
-  removeUserCityScope(userId, cityId);
+  await removeUserCityScope(userId, cityId);
   bump();
   return clone(city);
 }

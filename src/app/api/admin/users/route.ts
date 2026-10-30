@@ -37,8 +37,8 @@ export async function GET() {
 
   return NextResponse.json(
     {
-      users: filterManageableUsers(actor, listUsers()),
-      revision: getRbacRevision(),
+      users: filterManageableUsers(actor, await listUsers()),
+      revision: await getRbacRevision(),
       viewerId: session.user.id,
       viewer: {
         clearanceLevel: actor.clearanceLevel,
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
     assertCanCreate(session, input);
 
-    const user = createUser({
+    const user = await createUser({
       name: input.name,
       email: input.email,
       title: input.title,
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { user, revision: getRbacRevision() },
+      { user, revision: await getRbacRevision() },
       { status: 201 },
     );
   } catch (error) {

@@ -40,8 +40,8 @@ export default async function CityDetailsPage({
       />
       <CityDetailsClient
         city={city}
-        managers={listCityManagers(city.id)}
-        assignable={filterGovernableUsers(actor, listAssignableManagers())}
+        managers={await listCityManagers(city.id)}
+        assignable={filterGovernableUsers(actor, await listAssignableManagers())}
         canEdit={session.permissions.includes("update_city_zone")}
       />
     </>

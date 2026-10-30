@@ -7,10 +7,7 @@ import {
   verifySessionToken,
 } from "@/lib/auth/session";
 import type { ActiveSession } from "@/lib/rbac/types";
-import {
-  getRbacRevision,
-  getUserById,
-} from "@/lib/rbac/users";
+import { getRbacRevision, getUserById } from "@/lib/rbac/users";
 
 export async function getServerSession(): Promise<ActiveSession | null> {
   const cookieStore = await cookies();
@@ -20,7 +17,7 @@ export async function getServerSession(): Promise<ActiveSession | null> {
   const payload = await verifySessionToken(token);
   if (!payload) return null;
 
-  const user = getUserById(payload.sub);
+  const user = await getUserById(payload.sub);
   if (!user || !user.active) return null;
 
   return {
@@ -35,12 +32,12 @@ export async function getServerSession(): Promise<ActiveSession | null> {
     accessibleCities: [...user.accessibleCities],
     clearanceLevel: user.clearanceLevel,
     globalScope: user.globalScope,
-    revision: getRbacRevision(),
+    revision: await getRbacRevision(),
   };
 }
 
 export async function writeSessionCookie(userId: string): Promise<void> {
-  const user = getUserById(userId);
+  const user = await getUserById(userId);
   if (!user || !user.active) {
     throw new Error("Cannot create a session for an inactive user.");
   }
@@ -48,7 +45,7 @@ export async function writeSessionCookie(userId: string): Promise<void> {
   const token = await createSessionToken(
     user.id,
     user.permissions,
-    getRbacRevision(),
+    await getRbacRevision(),
   );
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions);

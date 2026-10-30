@@ -1,5 +1,4 @@
-import { clearanceLabel, clearanceTone } from "@/lib/rbac/hierarchy";
-import { listUsers } from "@/lib/rbac/users";
+import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -13,7 +12,6 @@ type LoginPageProps = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const users = listUsers().filter((user) => user.active);
   const nextPath =
     typeof params.next === "string" && params.next.startsWith("/")
       ? params.next
@@ -31,59 +29,16 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </div>
 
         <p className="login-intro">
-          اختر حساباً تجريبياً. كل رابط وإجراء ومسار في V2 محكوم بأعلام قدرات
-          دقيقة تُستمد من الجلسة النشطة، وليس من مسمى وظيفي أو دور ثابت.
+          سجّل الدخول برقم الهاتف وكلمة المرور. تُمنح الحسابات من الإدارة العليا
+          فقط، ولا يوجد تسجيل ذاتي. كل رابط وإجراء محكوم بصلاحيات دقيقة تُستمد
+          من جلستك النشطة، وليس من مسمى وظيفي.
         </p>
 
-        {params.error && (
-          <p className="form-error" role="alert">
-            هذا الحساب غير متاح. اختر ملفاً آخر.
-          </p>
-        )}
-
-        <form
-          action="/api/auth/login"
-          method="post"
-          className="account-list"
-        >
-          <input type="hidden" name="next" value={nextPath} />
-          {users.map((user) => (
-            <button
-              key={user.id}
-              type="submit"
-              name="userId"
-              value={user.id}
-              className="account-card"
-            >
-              <span className="account-avatar">
-                {user.name
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)}
-              </span>
-              <span className="account-copy">
-                <strong>{user.name}</strong>
-                <span className="account-title">{user.title}</span>
-                <span className="account-email">{user.email}</span>
-              </span>
-              <span className="account-badges">
-                <span
-                  className={`badge ${clearanceTone(user.clearanceLevel)}`}
-                >
-                  L{user.clearanceLevel} · {clearanceLabel(user.clearanceLevel)}
-                </span>
-                <span className="account-capabilities">
-                  {user.permissions.length} صلاحية
-                </span>
-              </span>
-            </button>
-          ))}
-        </form>
+        <LoginForm nextPath={nextPath} error={params.error} />
 
         <p className="login-note">
-          تُوقّع الجلسات بـ HMAC-SHA256 ويُعاد التحقق منها في كل طلب إلى الخادم.
-          تنتقل تغييرات الصلاحيات إلى العملاء المفتوحين خلال خمس ثوانٍ.
+          تُتحقق كلمة المرور عبر Supabase Auth، وتُوقّع جلسة التطبيق بـ
+          HMAC-SHA256 ويُعاد التحقق منها في كل طلب إلى الخادم.
         </p>
       </section>
     </main>

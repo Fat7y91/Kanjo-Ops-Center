@@ -31,16 +31,16 @@ export async function DELETE(
         "هذه المدينة خارج نطاق مدنك.",
       );
     }
-    const target = getUserById(userId);
+    const target = await getUserById(userId);
     if (!target) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     assertCanGovern(session, target);
 
-    const city = revokeCityManager(id, userId);
+    const city = await revokeCityManager(id, userId);
     return NextResponse.json({
       city,
-      managers: listCityManagers(city.id),
+      managers: await listCityManagers(city.id),
     });
   } catch (error) {
     if (error instanceof RbacDeniedError) {

@@ -30,9 +30,9 @@ function isFieldAgent(user: AppUser): boolean {
   );
 }
 
-export function loadKpiDataset(): KpiDataset {
+export async function loadKpiDataset(): Promise<KpiDataset> {
   const cities = new Map(listCities().map((city) => [city.id, city]));
-  const users = listUsers().filter(isFieldAgent);
+  const users = (await listUsers()).filter(isFieldAgent);
 
   const agents: KpiAgent[] = users.flatMap((user) => {
     const cityId = user.accessibleCities[0];
@@ -92,16 +92,17 @@ export function loadKpiDataset(): KpiDataset {
 }
 
 /** Resolve a session user to the KPI agent record that represents them. */
-export function findAgentForUser(userId: string): KpiAgent | null {
-  return loadKpiDataset().agents.find((agent) => agent.id === userId) ?? null;
+export async function findAgentForUser(userId: string): Promise<KpiAgent | null> {
+  const dataset = await loadKpiDataset();
+  return dataset.agents.find((agent) => agent.id === userId) ?? null;
 }
 
 /** Cities that currently hold at least one KPI agent, for the filter bar. */
-export function listKpiCities(): KpiCity[] {
-  return loadKpiDataset().cities;
+export async function listKpiCities(): Promise<KpiCity[]> {
+  return (await loadKpiDataset()).cities;
 }
 
 /** Agent roster used by the admin filter (id/name/team/city only). */
-export function listKpiAgents(): KpiAgent[] {
-  return loadKpiDataset().agents;
+export async function listKpiAgents(): Promise<KpiAgent[]> {
+  return (await loadKpiDataset()).agents;
 }

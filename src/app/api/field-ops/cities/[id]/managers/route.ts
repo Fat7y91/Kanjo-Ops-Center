@@ -50,8 +50,8 @@ export async function GET(
     const actor = toClearanceActor(session);
     return NextResponse.json(
       {
-        managers: listCityManagers(id),
-        assignable: filterGovernableUsers(actor, listAssignableManagers()),
+        managers: await listCityManagers(id),
+        assignable: filterGovernableUsers(actor, await listAssignableManagers()),
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -82,7 +82,7 @@ export async function POST(
     const input = cityManagerAssignSchema.parse(await readJson(request));
 
     for (const userId of input.userIds) {
-      const target = getUserById(userId);
+      const target = await getUserById(userId);
       if (!target) {
         throw new RbacDeniedError(
           "USER_NOT_FOUND",
@@ -93,10 +93,10 @@ export async function POST(
       assertCanGovern(session, target);
     }
 
-    const city = assignCityManagers(id, input.userIds);
+    const city = await assignCityManagers(id, input.userIds);
     return NextResponse.json({
       city,
-      managers: listCityManagers(city.id),
+      managers: await listCityManagers(city.id),
     });
   } catch (error) {
     return deniedResponse(error);

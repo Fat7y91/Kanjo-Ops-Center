@@ -1,0 +1,25 @@
+/* ── Login ───────────────────────────────────────────────────────────────
+ *
+ * Phone + password sign-in. The former demo-roster picker is gone, so the
+ * `.account-list` / `.account-card` rules that supported it were removed.
+ * `.account-avatar` stays in globals.css because the admin user card still
+ * borrows it.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 22px 0;
+}
+
+.login-form button[type="submit"] {
+  width: 100%;
+  margin-top: 4px;
+}
+
+@media (max-width: 640px) {
+  .login-form {
+    gap: 14px;
+  }
+}

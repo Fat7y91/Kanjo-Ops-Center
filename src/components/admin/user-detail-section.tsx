@@ -17,8 +17,8 @@ type UserDetailSectionProps = {
 };
 
 /** Streamed body: resolves the user after the shell has already painted. */
-export function UserDetailSection({ id, session }: UserDetailSectionProps) {
-  const user = getUserById(id);
+export async function UserDetailSection({ id, session }: UserDetailSectionProps) {
+  const user = await getUserById(id);
   const actor = toClearanceActor(session);
   if (!user || !canManageUser(actor, user)) notFound();
 

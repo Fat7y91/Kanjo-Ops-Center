@@ -69,7 +69,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const target = getUserById(id);
+  const target = await getUserById(id);
   if (!target) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -133,7 +133,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         patch.permissions !== undefined ? patch.permissions : undefined,
     });
 
-    const updated = updateUser(id, {
+    const updated = await updateUser(id, {
       permissions: nextPermissions,
       clearanceLevel: patch.clearanceLevel,
       accessibleCities: patch.accessibleCities,
@@ -142,7 +142,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({
       user: updated,
-      revision: getRbacRevision(),
+      revision: await getRbacRevision(),
     });
   } catch (error) {
     return respondToError(error);
@@ -156,7 +156,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const target = getUserById(id);
+  const target = await getUserById(id);
   if (!target) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -170,10 +170,10 @@ export async function DELETE(_request: Request, context: RouteContext) {
       }
     }
 
-    const removed = deleteUser(id);
+    const removed = await deleteUser(id);
     return NextResponse.json({
       user: removed,
-      revision: getRbacRevision(),
+      revision: await getRbacRevision(),
     });
   } catch (error) {
     return respondToError(error);

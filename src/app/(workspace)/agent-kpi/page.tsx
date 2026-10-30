@@ -33,7 +33,7 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
   const session = await requirePermission("view_agent_kpi");
   const params = await searchParams;
 
-  const dataset = loadKpiDataset();
+  const dataset = await loadKpiDataset();
   const allowedCityIds = effectiveCityIds(session);
   const filters = normalizeFilters(parseKpiFilters(params));
 

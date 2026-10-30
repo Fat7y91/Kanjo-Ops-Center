@@ -1,78 +1,61 @@
+import { isPermission, type Permission } from "./permissions";
 import {
-  isPermission,
-  type Permission,
-} from "./permissions";
-import { SEED_USERS } from "./seed-users";
+  deleteUserProfile,
+  getRbacRevision as getRemoteRevision,
+  getUserProfile,
+  isRbacDatabaseConfigured,
+  listUserProfiles,
+  updateUserProfile,
+  type UserPatchInput,
+} from "./repository";
+import {
+  assertActiveGovernor,
+  cloneUser,
+  getSeedStore,
+  normalizeLevel,
+  PermissionInvariantError,
+} from "./seed-store";
 import type { AppUser } from "./types";
 
-export class PermissionInvariantError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PermissionInvariantError";
+/**
+ * RBAC read/write facade.
+ *
+ * Supabase is authoritative whenever it is configured (see `repository.ts`).
+ * The in-memory seed roster is only used when there is no database attached, so
+ * local dev and CI builds still render without credentials. The two sources are
+ * never merged: a configured database fully replaces the seed, and a missing
+ * row means "no such operator" rather than "use a demo account".
+ */
+export { PermissionInvariantError };
+
+export async function listUsers(): Promise<AppUser[]> {
+  // An empty table is a valid answer ("no operators provisioned yet"), so the
+  // presence of the database — not the row count — decides which source wins.
+  if (isRbacDatabaseConfigured()) {
+    const remote = await listUserProfiles();
+    return (remote ?? []).map(cloneUser);
   }
-}
 
-type RbacStore = {
-  users: Map<string, AppUser>;
-  revision: number;
-};
-
-const globalStore = globalThis as typeof globalThis & {
-  __kanjoV2RbacStoreV2?: RbacStore;
-};
-
-function cloneUser(user: AppUser): AppUser {
-  const clearanceLevel = normalizeLevel(user.clearanceLevel ?? 1);
-  return {
-    ...user,
-    permissions: [...user.permissions],
-    accessibleCities: [...user.accessibleCities],
-    clearanceLevel,
-    globalScope: user.globalScope ?? clearanceLevel >= 3,
-  };
-}
-
-function getStore(): RbacStore {
-  if (!globalStore.__kanjoV2RbacStoreV2) {
-    globalStore.__kanjoV2RbacStoreV2 = {
-      users: new Map(SEED_USERS.map((user) => [user.id, cloneUser(user)])),
-      revision: 1,
-    };
-  }
-  return globalStore.__kanjoV2RbacStoreV2;
-}
-
-function normalizeLevel(value: number): number {
-  return Math.max(1, Math.min(4, Math.trunc(value)));
-}
-
-function assertActiveGovernor(store: RbacStore, candidateId: string): void {
-  const remainingGovernors = Array.from(store.users.values()).filter(
-    (user) =>
-      user.id !== candidateId &&
-      user.active &&
-      user.permissions.includes("manage_permissions"),
-  );
-  if (remainingGovernors.length === 0) {
-    throw new PermissionInvariantError(
-      "At least one active operator must retain manage_permissions.",
-    );
-  }
-}
-
-export function listUsers(): AppUser[] {
-  return Array.from(getStore().users.values())
+  return Array.from(getSeedStore().users.values())
     .map(cloneUser)
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export function getUserById(id: string): AppUser | null {
-  const user = getStore().users.get(id);
+export async function getUserById(id: string): Promise<AppUser | null> {
+  // Never fall back to the seed once a database is attached: a missing row must
+  // mean "no such operator", not "resolve a demo account instead".
+  if (isRbacDatabaseConfigured()) {
+    const remote = await getUserProfile(id);
+    return remote ? cloneUser(remote) : null;
+  }
+
+  const user = getSeedStore().users.get(id);
   return user ? cloneUser(user) : null;
 }
 
-export function getRbacRevision(): number {
-  return getStore().revision;
+export async function getRbacRevision(): Promise<number> {
+  if (isRbacDatabaseConfigured()) return getRemoteRevision();
+  return getSeedStore().revision;
 }
 
 export type CreateUserInput = {
@@ -85,8 +68,20 @@ export type CreateUserInput = {
   clearanceLevel: number;
 };
 
-export function createUser(input: CreateUserInput): AppUser {
-  const store = getStore();
+/**
+ * Legacy in-memory create. Supabase-backed creation happens in
+ * `services/provisioning-service.ts`, which mints the auth credential first.
+ * This remains for seed mode only and refuses to run against a real database,
+ * because it cannot create a login credential.
+ */
+export async function createUser(input: CreateUserInput): Promise<AppUser> {
+  if (isRbacDatabaseConfigured()) {
+    throw new PermissionInvariantError(
+      "Use createUserAccount() to provision accounts against Supabase.",
+    );
+  }
+
+  const store = getSeedStore();
   const email = input.email.trim().toLowerCase();
 
   if (
@@ -135,16 +130,13 @@ export function createUser(input: CreateUserInput): AppUser {
   return cloneUser(created);
 }
 
-export type UserPatch = {
-  permissions?: readonly Permission[];
-  clearanceLevel?: number;
-  accessibleCities?: readonly string[];
-  active?: boolean;
-};
+export type UserPatch = UserPatchInput;
 
-export function updateUser(id: string, patch: UserPatch): AppUser {
-  const store = getStore();
-  const current = store.users.get(id);
+export async function updateUser(
+  id: string,
+  patch: UserPatch,
+): Promise<AppUser> {
+  const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
   const nextPermissions =
@@ -160,9 +152,7 @@ export function updateUser(id: string, patch: UserPatch): AppUser {
     patch.accessibleCities === undefined
       ? current.accessibleCities
       : Array.from(
-          new Set(
-            patch.accessibleCities.map((cityId) => cityId.trim()),
-          ),
+          new Set(patch.accessibleCities.map((cityId) => cityId.trim())),
         ).filter(Boolean);
 
   const staysGovernor =
@@ -171,12 +161,33 @@ export function updateUser(id: string, patch: UserPatch): AppUser {
     current.active && current.permissions.includes("manage_permissions");
 
   if (wasGovernor && !staysGovernor) {
-    assertActiveGovernor(store, id);
+    assertActiveGovernor(await listUsers(), id);
+  }
+
+  if (isRbacDatabaseConfigured()) {
+    await updateUserProfile(id, {
+      permissions: nextPermissions,
+      clearanceLevel: nextLevel,
+      accessibleCities: nextCities,
+      active: nextActive,
+    });
+  } else {
+    const store = getSeedStore();
+    store.users.set(id, {
+      ...current,
+      permissions: nextPermissions,
+      accessibleCities: nextCities,
+      clearanceLevel: nextLevel,
+      globalScope: nextLevel >= 3,
+      active: nextActive,
+      updatedAt: new Date().toISOString(),
+    });
+    store.revision += 1;
   }
 
   // Demoting below L3 drops the global bypass but keeps the explicit city
   // list, so the operator retains only the geography they can still see.
-  const updated: AppUser = {
+  return {
     ...current,
     permissions: nextPermissions,
     accessibleCities: nextCities,
@@ -185,46 +196,49 @@ export function updateUser(id: string, patch: UserPatch): AppUser {
     active: nextActive,
     updatedAt: new Date().toISOString(),
   };
-
-  store.users.set(id, updated);
-  store.revision += 1;
-  return cloneUser(updated);
 }
 
-export function deleteUser(id: string): AppUser {
-  const store = getStore();
-  const current = store.users.get(id);
+export async function deleteUser(id: string): Promise<AppUser> {
+  const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
   if (current.active && current.permissions.includes("manage_permissions")) {
-    assertActiveGovernor(store, id);
+    assertActiveGovernor(await listUsers(), id);
   }
 
-  store.users.delete(id);
-  store.revision += 1;
+  if (isRbacDatabaseConfigured()) {
+    await deleteUserProfile(id);
+  } else {
+    const store = getSeedStore();
+    store.users.delete(id);
+    store.revision += 1;
+  }
+
   return cloneUser(current);
 }
 
-export function addUserCityScope(id: string, cityId: string): AppUser {
-  const current = getUserById(id);
+export async function addUserCityScope(
+  id: string,
+  cityId: string,
+): Promise<AppUser> {
+  const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
-  if (current.accessibleCities.includes(cityId)) {
-    return current;
-  }
+  if (current.accessibleCities.includes(cityId)) return current;
 
   return updateUser(id, {
     accessibleCities: [...current.accessibleCities, cityId],
   });
 }
 
-export function removeUserCityScope(id: string, cityId: string): AppUser {
-  const current = getUserById(id);
+export async function removeUserCityScope(
+  id: string,
+  cityId: string,
+): Promise<AppUser> {
+  const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
-  if (!current.accessibleCities.includes(cityId)) {
-    return current;
-  }
+  if (!current.accessibleCities.includes(cityId)) return current;
 
   return updateUser(id, {
     accessibleCities: current.accessibleCities.filter(
@@ -240,12 +254,12 @@ export function normalizePermissions(values: readonly unknown[]): Permission[] {
 }
 
 /**
- * Replace a user's capability set. The store is process-local for this scaffold;
- * swap this module for a durable repository without touching any UI or guard.
+ * Replace a user's capability set. Writes go to Supabase when configured;
+ * otherwise they mutate the seed store in this isolate.
  */
-export function updateUserPermissions(
+export async function updateUserPermissions(
   id: string,
   permissions: readonly Permission[],
-): AppUser {
+): Promise<AppUser> {
   return updateUser(id, { permissions });
 }
