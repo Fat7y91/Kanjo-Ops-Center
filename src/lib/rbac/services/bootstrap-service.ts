@@ -82,9 +82,15 @@ export async function bootstrapFounder(
   phone: string,
   password: string,
 ): Promise<BootstrapResult> {
+  console.log("[bootstrap] ensureAuthUser:start");
   const userId = await ensureAuthUser(client, phone, password);
+  console.log("[bootstrap] ensureAuthUser:ok", { userId });
+
   await attachProfile(client, userId, phone);
+  console.log("[bootstrap] attachProfile:ok");
+
   const permissionsGranted = await grantAllPermissions(client, userId);
+  console.log("[bootstrap] grantAllPermissions:ok", { permissionsGranted });
 
   return {
     id: userId,
@@ -149,8 +155,10 @@ async function ensureAuthUser(
   password: string,
 ): Promise<string> {
   const existing = await findProfileId(client, phone);
+  console.log("[bootstrap] findProfileId:ok", { found: Boolean(existing) });
 
   if (existing) {
+    console.log("[bootstrap] auth.admin.updateUserById:start");
     const { error } = await client.auth.admin.updateUserById(existing, {
       password,
       phone_confirm: true,
@@ -166,6 +174,7 @@ async function ensureAuthUser(
     return existing;
   }
 
+  console.log("[bootstrap] auth.admin.createUser:start");
   const { data, error } = await client.auth.admin.createUser({
     phone,
     password,
@@ -236,6 +245,7 @@ async function attachProfile(
   userId: string,
   phone: string,
 ): Promise<void> {
+  console.log("[bootstrap] upsert app.users:start");
   const { error } = await client
     .schema("app")
     .from("users")
@@ -265,6 +275,9 @@ async function grantAllPermissions(
     granted_by: userId,
   }));
 
+  console.log("[bootstrap] upsert app.user_permissions:start", {
+    rows: rows.length,
+  });
   const { error } = await client
     .schema("app")
     .from("user_permissions")
