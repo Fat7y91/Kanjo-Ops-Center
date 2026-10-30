@@ -10,7 +10,7 @@ import {
 import { RbacDeniedError } from "@/lib/rbac/management";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 /**
  * Top-down account provisioning. Public signup is disabled, so this is the
