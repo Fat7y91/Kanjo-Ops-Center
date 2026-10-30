@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { PERMISSION_KEYS } from "@/lib/rbac/permissions";
+import { describeError, readDiagnostics } from "@/lib/rbac/services/bootstrap-diagnostics";
 
 /**
  * One-shot Founder bootstrap. Exists because the only way to create a working
@@ -41,33 +42,12 @@ export class BootstrapError extends Error {
   }
 }
 
-/** Flattens a PostgREST/GoTrue error into something readable in a response. */
-function describe(error: unknown): string {
-  if (!error || typeof error !== "object") return String(error);
-  const e = error as {
-    message?: string;
-    code?: string;
-    details?: string;
-    hint?: string;
-    status?: number;
-  };
-  return [
-    e.code ? `[${e.code}]` : "",
-    e.message ?? "",
-    e.details ? `details: ${e.details}` : "",
-    e.hint ? `hint: ${e.hint}` : "",
-    e.status ? `http: ${e.status}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
 /**
  * PGRST106 means the `app` schema is not exposed to PostgREST. It is the most
  * common setup miss, so it gets an explicit hint rather than a bare 502.
  */
 function readFailure(error: unknown, message: string): BootstrapError {
-  const detail = describe(error);
+  const detail = describeError(error);
   const hint = detail.includes("PGRST106")
     ? "Expose the app schema: Supabase → Settings → API → Exposed schemas."
     : null;
@@ -168,7 +148,7 @@ async function ensureAuthUser(
         "AUTH_UPDATE_FAILED",
         "تعذر إعادة تعيين بيانات الدخول للحساب.",
         502,
-        describe(error),
+        describeError(error),
       );
     }
     return existing;
@@ -195,11 +175,19 @@ async function ensureAuthUser(
     if (!updateError) return orphanId;
   }
 
+  // A failed createUser is almost always the auth mirror trigger being blocked
+  // by FORCE RLS on app.users; attach the setup facts that prove it.
+  const diagnostics = await readDiagnostics(client);
   throw new BootstrapError(
     "AUTH_CREATE_FAILED",
     "تعذر إنشاء حساب الدخول.",
     502,
-    describe(error),
+    [
+      describeError(error),
+      diagnostics ? `diagnostics: ${JSON.stringify(diagnostics)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | "),
   );
 }
 

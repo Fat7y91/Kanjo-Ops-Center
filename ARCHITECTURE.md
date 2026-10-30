@@ -540,7 +540,7 @@ All four writes happen server-side; the service-role key never leaves the
 server.
 
 ```
-POST /api/admin/users/provision        (protected Route Handler, nodejs)
+POST /api/admin/users/provision        (protected Route Handler, edge)
   → getServerSession()                 verify cookie + re-read live grants
   → require manage_permissions         else 401 / 403
   → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
@@ -564,8 +564,9 @@ Implementation:
 - `src/app/api/admin/users/provision/route.ts` — thin controller. It only
   authenticates, delegates, and maps errors to status codes.
 
-The handler runs on the Node runtime, not Edge: `auth.admin.*` needs the
-service-role client, and this keeps parity with the rest of Tier 4. Do not call
+The handler declares `runtime = "edge"`. `auth.admin.*` works there because
+`@supabase/supabase-js` is fetch-based; a route left on the Node runtime breaks
+`next-on-pages`, which requires every route to opt into Edge. Do not call
 `redirect()` here — see §5 on `next-on-pages`.
 
 #### Deployment prerequisites
@@ -587,6 +588,18 @@ Three project-level settings are required; none of them live in application code
    key, so provisioning fails until the 38 keys from `permissions.ts` exist as
    rows. `20261029000200_seed_permissions.sql` seeds them idempotently from the
    live catalogue; run it before creating the first account.
+4. **Keep the auth-mirror trigger outside RLS.** `app.users` uses
+   `force row level security`, which applies even to the table owner. A
+   `SECURITY DEFINER` function only escapes RLS when its owner holds
+   `BYPASSRLS`; Supabase's migration-running role does not. When the foundation
+   migration was applied by such a role, `app.handle_auth_user_upsert()` was
+   rejected with *new row violates row-level security policy*, and GoTrue
+   reported it only as `[unexpected_failure] Database error creating new user`
+   (HTTP 500) — with no hint that RLS was involved. `20261029000300_fix_auth_mirror_rls.sql`
+   grants the trigger's owning role explicit `insert`/`select`/`update`
+   policies. The same migration adds `app.bootstrap_diagnostics()`, which
+   reports the trigger owner, whether it bypasses RLS, whether RLS is forced,
+   and the policy list, so this failure is self-explaining.
 
 #### Bootstrapping the first Founder (chicken-and-egg)
 
@@ -602,6 +615,14 @@ It is idempotent and re-convergent: it creates the auth user (or resets the
 password on an existing phone), sets `clearance_level = 4`, and grants every row
 in `app.permissions`. Granting all permissions does not violate the governor
 invariant — the guard only blocks *removing* the last governor.
+
+When the repository cannot be cloned locally, the same logic is available as
+one temporary Edge route, `GET /api/admin/bootstrap`. It mints the credential
+through the Admin API, sets level 4, and grants all 38 capabilities. Two safety
+rails apply: the founder password is read from `BOOTSTRAP_PASSWORD` and never
+committed, and the route refuses to run while another active governor exists,
+so it cannot mint a second all-powerful account. Delete the route once the
+founder can sign in — it is scaffolding, not a product surface.
 
 **Never write directly into `auth.users`.** Supabase owns credential storage;
 an INSERT there bypasses GoTrue's password hashing and its `auth.identities`

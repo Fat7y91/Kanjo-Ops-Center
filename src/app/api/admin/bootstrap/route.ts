@@ -146,7 +146,16 @@ export async function GET(request: Request) {
     console.log("[bootstrap] caught", { steps, detail });
 
     if (error instanceof BootstrapError) {
-      return fail(error.code, error.message, error.detail, { steps });
+      // A mirror-trigger failure is the one cause the Admin API cannot explain
+      // on its own, so pair it with the action that fixes it.
+      const remedy =
+        error.code === "AUTH_CREATE_FAILED"
+          ? "Apply supabase/migrations/20261029000300_fix_auth_mirror_rls.sql, which grants the auth-mirror trigger's owner policies on app.users. FORCE RLS blocks the SECURITY DEFINER trigger otherwise."
+          : undefined;
+      return fail(error.code, error.message, error.detail, {
+        steps,
+        ...(remedy ? { remedy } : {}),
+      });
     }
 
     // Anything unhandled: report the real class, message and a trimmed stack so
