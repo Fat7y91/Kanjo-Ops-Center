@@ -57,6 +57,18 @@ function readFailure(error: unknown, message: string): BootstrapError {
 const FULL_NAME = "المؤسس";
 const CLEARANCE_LEVEL = 4;
 
+/**
+ * Canonical E.164 form: one leading '+' then digits. Mirrors
+ * app.normalize_phone() so the phone we send to the Admin API, the phone we
+ * store in app.users, and the value GoTrue keeps in auth.users all agree.
+ */
+export function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return null;
+  const canonical = `+${digits}`;
+  return /^\+[1-9][0-9]{7,14}$/.test(canonical) ? canonical : null;
+}
+
 export async function bootstrapFounder(
   client: SupabaseClient,
   phone: string,

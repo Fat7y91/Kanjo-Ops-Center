@@ -5,6 +5,7 @@ import {
   bootstrapFounder,
   BootstrapError,
   hasOtherActiveGovernor,
+  normalizePhone,
 } from "@/lib/rbac/services/bootstrap-service";
 
 export const dynamic = "force-dynamic";
@@ -114,9 +115,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const phone = process.env.BOOTSTRAP_PHONE?.trim() || DEFAULT_PHONE;
-    if (!/^\+[1-9][0-9]{7,14}$/.test(phone)) {
-      return fail("INVALID_PHONE", "رقم الهاتف ليس بصيغة E.164.", phone);
+    const rawPhone = process.env.BOOTSTRAP_PHONE?.trim() || DEFAULT_PHONE;
+    const phone = normalizePhone(rawPhone);
+    if (!phone) {
+      return fail(
+        "INVALID_PHONE",
+        "رقم الهاتف ليس بصيغة E.164.",
+        `input: ${rawPhone}`,
+      );
     }
 
     steps.push("init client");
@@ -150,7 +156,7 @@ export async function GET(request: Request) {
       // on its own, so pair it with the action that fixes it.
       const remedy =
         error.code === "AUTH_CREATE_FAILED"
-          ? "Two known causes. RLS: apply 20261029000300_fix_auth_mirror_rls.sql. Email constraint: GoTrue stores '' for phone-only signup, which users_email_shape rejects, so apply 20261029000400_fix_auth_mirror_email.sql. The probe in detail names which one is still active."
+          ? "Three known causes, in order: (1) RLS blocking the mirror trigger -> 20261029000300; (2) GoTrue storing '' for phone-only signup, rejected by users_email_shape -> 20261029000400; (3) GoTrue storing the phone WITHOUT '+', rejected by users_phone_e164 -> 20261029000500. The probe in detail reports which surface is still wrong."
           : undefined;
       return fail(error.code, error.message, error.detail, {
         steps,

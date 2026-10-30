@@ -611,6 +611,16 @@ Three project-level settings are required; none of them live in application code
    written before the fix, and adds `app.bootstrap_probe()` which reports the
    constraint definition and how many blank emails remain. Real addresses are
    still validated, and a malformed one is still rejected.
+6. **Canonicalize the phone before the E.164 check.** Supabase's
+   `auth.users.phone` holds the number *without* the leading `+`
+   (`201040491882`), while the Admin API accepts it *with* the `+`
+   (`+201040491882`). The trigger copied the stored value verbatim, so
+   `users_phone_e164` (`^\+[1-9][0-9]{7,14}$`) rejected it — the same opaque
+   500 a third time. `20261029000500_fix_auth_mirror_phone.sql` adds
+   `app.normalize_phone()`, which reduces any input to one `+` plus digits, and
+   the trigger now writes that canonical form. `app.bootstrap_probe()` reports
+   the shape of GoTrue's newest stored phone plus any non-canonical rows, since
+   `auth` is not an exposed schema and cannot be queried from PostgREST.
 
 #### Bootstrapping the first Founder (chicken-and-egg)
 
