@@ -25,13 +25,53 @@ export type BootstrapResult = {
 export class BootstrapError extends Error {
   readonly code: string;
   readonly status: number;
+  readonly detail: string | null;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    detail: string | null = null,
+  ) {
     super(message);
     this.name = "BootstrapError";
     this.code = code;
     this.status = status;
+    this.detail = detail;
   }
+}
+
+/** Flattens a PostgREST/GoTrue error into something readable in a response. */
+function describe(error: unknown): string {
+  if (!error || typeof error !== "object") return String(error);
+  const e = error as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+    status?: number;
+  };
+  return [
+    e.code ? `[${e.code}]` : "",
+    e.message ?? "",
+    e.details ? `details: ${e.details}` : "",
+    e.hint ? `hint: ${e.hint}` : "",
+    e.status ? `http: ${e.status}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * PGRST106 means the `app` schema is not exposed to PostgREST. It is the most
+ * common setup miss, so it gets an explicit hint rather than a bare 502.
+ */
+function readFailure(error: unknown, message: string): BootstrapError {
+  const detail = describe(error);
+  const hint = detail.includes("PGRST106")
+    ? "Expose the app schema: Supabase → Settings → API → Exposed schemas."
+    : null;
+  return new BootstrapError("READ_FAILED", message, 502, hint ?? detail);
 }
 
 const FULL_NAME = "المؤسس";
@@ -74,7 +114,7 @@ export async function hasOtherActiveGovernor(
     .eq("permission_key", "manage_permissions");
 
   if (grantError) {
-    throw new BootstrapError("READ_FAILED", "تعذر قراءة حالة التهيئة.", 502);
+    throw readFailure(grantError, "تعذر قراءة حالة التهيئة.");
   }
 
   const governorIds = (grants ?? []).map(
@@ -92,7 +132,7 @@ export async function hasOtherActiveGovernor(
     .limit(1);
 
   if (userError) {
-    throw new BootstrapError("READ_FAILED", "تعذر قراءة حالة التهيئة.", 502);
+    throw readFailure(userError, "تعذر قراءة حالة التهيئة.");
   }
 
   return Array.isArray(active) && active.length > 0;
@@ -120,6 +160,7 @@ async function ensureAuthUser(
         "AUTH_UPDATE_FAILED",
         "تعذر إعادة تعيين بيانات الدخول للحساب.",
         502,
+        describe(error),
       );
     }
     return existing;
@@ -145,7 +186,12 @@ async function ensureAuthUser(
     if (!updateError) return orphanId;
   }
 
-  throw new BootstrapError("AUTH_CREATE_FAILED", "تعذر إنشاء حساب الدخول.", 502);
+  throw new BootstrapError(
+    "AUTH_CREATE_FAILED",
+    "تعذر إنشاء حساب الدخول.",
+    502,
+    describe(error),
+  );
 }
 
 async function findProfileId(
@@ -160,7 +206,7 @@ async function findProfileId(
     .maybeSingle<{ id: string }>();
 
   if (error) {
-    throw new BootstrapError("PROFILE_READ_FAILED", "تعذر قراءة ملف المشغّل.", 502);
+    throw readFailure(error, "تعذر قراءة ملف المشغّل.");
   }
 
   return data?.id ?? null;
@@ -205,7 +251,7 @@ async function attachProfile(
     );
 
   if (error) {
-    throw new BootstrapError("PROFILE_WRITE_FAILED", "تعذر حفظ ملف المشغّل.", 502);
+    throw readFailure(error, "تعذر حفظ ملف المشغّل.");
   }
 }
 
@@ -228,7 +274,7 @@ async function grantAllPermissions(
     });
 
   if (error) {
-    throw new BootstrapError("GRANT_FAILED", "تعذر منح صلاحيات المؤسس.", 502);
+    throw readFailure(error, "تعذر منح صلاحيات المؤسس.");
   }
 
   return rows.length;
