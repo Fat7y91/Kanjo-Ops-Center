@@ -150,7 +150,7 @@ export async function GET(request: Request) {
       // on its own, so pair it with the action that fixes it.
       const remedy =
         error.code === "AUTH_CREATE_FAILED"
-          ? "Apply supabase/migrations/20261029000300_fix_auth_mirror_rls.sql, which grants the auth-mirror trigger's owner policies on app.users. FORCE RLS blocks the SECURITY DEFINER trigger otherwise."
+          ? "Two known causes. RLS: apply 20261029000300_fix_auth_mirror_rls.sql. Email constraint: GoTrue stores '' for phone-only signup, which users_email_shape rejects, so apply 20261029000400_fix_auth_mirror_email.sql. The probe in detail names which one is still active."
           : undefined;
       return fail(error.code, error.message, error.detail, {
         steps,

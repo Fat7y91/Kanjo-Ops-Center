@@ -600,6 +600,17 @@ Three project-level settings are required; none of them live in application code
    policies. The same migration adds `app.bootstrap_diagnostics()`, which
    reports the trigger owner, whether it bypasses RLS, whether RLS is forced,
    and the policy list, so this failure is self-explaining.
+5. **Normalize the blank email GoTrue sends.** `auth.users.email` is nullable,
+   but GoTrue stores an empty string rather than `NULL` for a phone-only
+   account. The mirror trigger copied that value verbatim and
+   `users_email_shape` rejected it, producing the same opaque
+   `Database error creating new user` / HTTP 500 — again indistinguishable from
+   the RLS failure until the diagnostics showed `owner_bypassrls: true`.
+   `20261029000400_fix_auth_mirror_email.sql` replaces the trigger with one that
+   maps blank email to `NULL` (`nullif(btrim(email), '')`), backfills any rows
+   written before the fix, and adds `app.bootstrap_probe()` which reports the
+   constraint definition and how many blank emails remain. Real addresses are
+   still validated, and a malformed one is still rejected.
 
 #### Bootstrapping the first Founder (chicken-and-egg)
 

@@ -40,13 +40,23 @@ export function describeError(error: unknown): string {
 export async function readDiagnostics(
   client: SupabaseClient,
 ): Promise<Record<string, unknown> | null> {
+  const [diagnostics, probe] = await Promise.all([
+    callRpc(client, "bootstrap_diagnostics"),
+    callRpc(client, "bootstrap_probe"),
+  ]);
+
+  return { ...diagnostics, probe };
+}
+
+async function callRpc(
+  client: SupabaseClient,
+  fn: string,
+): Promise<Record<string, unknown>> {
   try {
-    const { data, error } = await client
-      .schema("app")
-      .rpc("bootstrap_diagnostics");
-    if (error) return { diagnostics_error: describeError(error) };
-    return (data as Record<string, unknown> | null) ?? null;
+    const { data, error } = await client.schema("app").rpc(fn);
+    if (error) return { diagnostics_error: `${fn}: ${describeError(error)}` };
+    return (data as Record<string, unknown> | null) ?? {};
   } catch (error) {
-    return { diagnostics_error: describeError(error) };
+    return { diagnostics_error: `${fn}: ${describeError(error)}` };
   }
 }
