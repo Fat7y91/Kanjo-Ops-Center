@@ -351,8 +351,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
           zoom={9}
         />
         <p className="panel-note">
-          تُحفظ الحدود كنقاط جغرافية مغلقة قابلة للتخزين في Firestore. اختر
-          مدينة أدناه لمراجعة مرحلتها التشغيلية وعدد السكان والمنافسين.
+          اختر مدينة أدناه لمراجعة مرحلتها التشغيلية وعدد السكان والمنافسين.
         </p>
       </section>
 

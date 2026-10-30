@@ -902,18 +902,6 @@
   font-size: 0.72rem;
 }
 
-.login-intro {
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-}
-
-.login-note {
-  padding-top: 16px;
-  border-top: 1px dashed var(--line);
-  color: #7b8598;
-  font-size: 0.75rem;
-}
-
 .form-error {
   margin: 14px 0;
   padding: 10px 12px;

@@ -13,14 +13,14 @@ type LoginFormProps = {
 const MESSAGES: Record<string, string> = {
   "invalid-credentials": "رقم الهاتف أو كلمة المرور غير صحيحة.",
   "invalid-request": "تعذر قراءة الطلب. حاول مرة أخرى.",
-  "login-disabled":
-    "لم يُضبط الاتصال بـ Supabase. يجب تعيين SUPABASE_URL و SUPABASE_ANON_KEY.",
+  "login-disabled": "تسجيل الدخول غير متاح حالياً. تواصل مع المسؤول.",
   "unknown-user": "هذا الحساب غير متاح.",
 };
 
 /**
- * Phone + password sign-in. There is no signup path and no account picker:
- * accounts are provisioned top-down by an authorised operator.
+ * Phone + password sign-in. Accounts are provisioned top-down; there is no
+ * signup path and no account picker. Copy here is user-facing only — technical
+ * details belong in code comments or ARCHITECTURE.md.
  */
 export function LoginForm({ nextPath, error }: LoginFormProps) {
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +47,6 @@ export function LoginForm({ nextPath, error }: LoginFormProps) {
           name="phone"
           type="tel"
           label="رقم الهاتف"
-          hint="بصيغة دولية تبدأ بعلامة +، مثل +201000000000."
           placeholder="+201000000000"
           autoComplete="tel"
           inputMode="tel"

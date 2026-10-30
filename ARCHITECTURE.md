@@ -80,6 +80,12 @@ for this domain.
    raw Tailwind dropdowns. Use the primitives in `src/components/ui/`.
 6. **Verification** — every refactor commit must pass `npm run typecheck` and
    `npm run build` (dev server must be stopped for the build).
+7. **Production UI only** — never render architectural explanations,
+   implementation notes, stack names, env var names, or placeholder/"dummy"
+   paragraphs in React components. The DOM is for the end user: labels, values,
+   states, and actions. Rationale, trade-offs and backend mechanics belong in
+   `ARCHITECTURE.md`, code comments, or commit messages. If a reviewer would say
+   "why is this text in the product?", delete it.
 
 Full text: `AGENTS.md`.
 

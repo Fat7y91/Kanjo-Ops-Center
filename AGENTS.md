@@ -45,6 +45,10 @@ When a task touches a file over the limit, the first commit must be a pure extra
 
 New primitives belong in `src/components/ui/` and must stay under the 300-line limit. Brand styling lives inside each primitive via Headless UI `data-*` attributes, so call sites never hand-roll purple/gold classes.
 
+## 6. Production UI, no architectural copy
+
+The DOM is for the end user. Never render architectural explanations, implementation notes, stack names, env var names, security mechanism descriptions, or placeholder/"dummy" paragraphs inside React components. UI copy is limited to labels, values, states, and actions. Rationale, trade-offs and backend mechanics belong in `ARCHITECTURE.md`, code comments, or commit messages. If a reviewer would ask "why is this text in the product?", delete it.
+
 ## Verification
 
 Every refactor commit must pass:
