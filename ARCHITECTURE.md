@@ -343,12 +343,15 @@ The tiers exist conceptually; these are the concrete gaps to close.
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
    - Operations → Firebase: catalog, field ops, live orders.
-2. **RBAC has a schema but no read repository.** `supabase/migrations/` defines
-   `app.users` and the grant tables (Section 7), and provisioning writes to them
-   (§7.6), but `src/lib/rbac/users.ts` still reads the in-memory seed for every
-   read and for login. Next step is an `rbac/repository.ts` that reads
-   `app.users`, and a login path that verifies a password against Supabase Auth
-   instead of picking a user from a list.
+2. **RBAC has a schema but no read repository, and password login is unimplemented.**
+   `supabase/migrations/` defines `app.users` and the grant tables (Section 7),
+   and provisioning writes to them (§7.6), but `src/lib/rbac/users.ts` still
+   reads the in-memory seed for every read. `resolveLoginRequest()` authenticates
+   by picking a `userId` from a rendered roster — there is no password field and
+   no `signInWithPassword()` call, so a Supabase-provisioned founder cannot sign
+   in yet. This is the current top blocker: add `rbac/repository.ts` for reads,
+   then a phone + password login that exchanges credentials for a Supabase
+   session and maps it to `ActiveSession`.
 3. **Two create paths coexist.** `POST /api/admin/users` still writes to the
    in-memory store and cannot mint credentials; `POST /api/admin/users/provision`
    is the real one. Retire the former once the repository lands.
@@ -569,7 +572,44 @@ Three project-level settings are required; none of them live in application code
    writes succeed despite the forced policies.
 3. **Seed `app.permissions`.** `user_permissions.permission_key` is a foreign
    key, so provisioning fails until the 38 keys from `permissions.ts` exist as
-   rows. Seed before creating the first account.
+   rows. `20261029000200_seed_permissions.sql` seeds them idempotently from the
+   live catalogue; run it before creating the first account.
+
+#### Bootstrapping the first Founder (chicken-and-egg)
+
+Provisioning is governor-only, so the very first account cannot be created
+through the UI. It is created out of band with
+`scripts/bootstrap-founder.mjs`, which uses the Admin API:
+
+```
+node --env-file=.env.local scripts/bootstrap-founder.mjs
+```
+
+It is idempotent and re-convergent: it creates the auth user (or resets the
+password on an existing phone), sets `clearance_level = 4`, and grants every row
+in `app.permissions`. Granting all permissions does not violate the governor
+invariant — the guard only blocks *removing* the last governor.
+
+**Never write directly into `auth.users`.** Supabase owns credential storage;
+an INSERT there bypasses GoTrue's password hashing and its `auth.identities`
+rows, yielding an account that cannot sign in. The Admin API is the supported
+path and fires `app.handle_auth_user_upsert`. A SQL-only bootstrap is impossible
+for the same reason: `encrypted_password` must be a GoTrue-compatible bcrypt
+hash plus a matching identity row, which is implementation detail, not API.
+
+#### Known blocker: password login is not wired
+
+The bootstrap creates a real credential, but **the app cannot yet use it**.
+`resolveLoginRequest()` in `src/lib/auth/login.ts` takes a `userId` from the
+form and calls `getUserById()` against the in-memory seed store; there is no
+password field and no `signInWithPassword()` call anywhere in `src/`. The login
+page renders a demo roster of seed users.
+
+So until the login path is replaced, a Supabase-provisioned account can be
+created and stored correctly but cannot authenticate. That work is migration
+gap 2: a `rbac/repository.ts` for reads plus a password login that exchanges
+phone + password for a Supabase session, then maps the session to an
+`ActiveSession`.
 
 #### Failure handling
 
