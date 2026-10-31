@@ -6,6 +6,7 @@ import { AccountsError } from "@/lib/accounts/store";
 import { CatalogError } from "@/lib/catalog/store";
 import { ImageQaError } from "@/lib/catalog/image-qa";
 import { MarketingError } from "@/lib/marketing/store";
+import { MissingEnvError } from "@/lib/db/env";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
@@ -112,6 +113,15 @@ export function apiError(error: unknown): NextResponse {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },
+    );
+  }
+  if (error instanceof MissingEnvError) {
+    // Configuration is a deployment concern, not a client mistake: answer 503
+    // with a neutral message and keep the missing key in the server log only.
+    console.error(error);
+    return NextResponse.json(
+      { error: "الخدمة غير متاحة حالياً. حاول لاحقاً.", code: "UNAVAILABLE" },
+      { status: 503 },
     );
   }
   if (error instanceof ZodError) {

@@ -263,8 +263,9 @@ migrated one at a time.
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` (43 keys / 10 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
-- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities).
-- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (nodejs runtime, `manage_permissions`).
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; team required only for level 1).
+- `src/lib/rbac/teams.ts` — `listTeams()` = `BASE_TEAMS` ∪ teams already in the roster.
+- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_permissions`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
 **Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§8.6).
@@ -333,6 +334,11 @@ logout therefore POST to plain route handlers. Rules locked in:
 - UI: `src/app/(workspace)/overview/`, `src/components/` charts.
 - Business: `src/lib/bi/` — `dataset.ts` (190), `select.ts`, `tables.ts`,
   `drill.ts`, `export.ts`, `format.ts`, `mock.ts`, `types.ts`.
+- Overview header is sticky: `ExecutiveDashboard` accepts an optional `header`
+  node and renders it inside `.bi-sticky-head`, pinned at
+  `top: var(--topbar-height)`. `--topbar-height` is a token (72px), overridden
+  to 64px at ≤1023px where the shell topbar shrinks. The page header and the
+  filter bar travel in that slot so filters stay reachable while scrolling.
 - BI catalog health is binary: `published` versus `missing`. Review-only states
   (`pending_review`, `completed`) fold into `missing` because they are not yet
   live in the consumer catalog. There is no "draft" product state: a product is
@@ -414,18 +420,36 @@ logout therefore POST to plain route handlers. Rules locked in:
 
 ### Marketing Measurement (Tier 1–5)
 - UI: `src/app/(workspace)/marketing/page.tsx` plus
-  `components/marketing/{marketing-view,marketing-entry-form,settings-panel}.tsx`.
-- Data: `src/lib/marketing/{store,types}.ts`. Manual entries are append-only.
-- Platform vs channel: `platform` (`meta`, `tiktok`, `google`, `snapchat`,
+  `components/marketing/{marketing-view,marketing-entry-form,campaign-form,campaign-card,settings-panel}.tsx`.
+  Five tabs: campaigns, new campaign, daily results, records, platform settings.
+- Data: `src/lib/marketing/{store,types,platforms}.ts`. Manual entries are
+  append-only.
+- Campaign is the unit of work: a campaign owns the plan (name, platform,
+  channel, budget, lead/conversion targets, date window) and every daily entry
+  points at one campaign. `platform` (`meta`, `tiktok`, `google`, `snapchat`,
   `offline`) is who bills us; `channel` (`instagram`, `tiktok`, `google`,
-  `referral`, `field`) is where the audience saw the ad. One platform can run
-  several channels, so they are separate columns, and the dashboard filters on
-  platform while still grouping by channel.
+  `referral`, `field`) is where the audience saw the ad. The guard trigger
+  copies platform/channel from the campaign onto each entry so the two can
+  never drift, and the dashboard filters on platform while grouping by channel.
+- Status ladder: `active ⇄ paused → closed`. `closed` is terminal — enforced in
+  TS (`setCampaignStatus`) and by `app.marketing_campaign_terminal`, so a
+  closed campaign's figures can never move again.
+- Progress is always derived from entries via `campaignProgress()` /
+  `app.marketing_campaign_totals` (spend, leads, conversions, budget left);
+  nothing is stored twice.
+- Credentials: `platforms.ts` holds a per-platform field spec (regex per field)
+  and `verifyPlatformCredentials()` runs the format check server-side.
+  `updatePlatformSettings()` refuses `enabled: true` unless verification
+  passes; the PUT route answers 422 otherwise. `offline` is manual-only and
+  never needs credentials.
 - API keys are write-only: the store keeps the raw value server-side and
   exposes `apiKeyConfigured` only. SQL stores `api_key_ciphertext` and the
   client reads the `marketing_platform_settings_public` view.
-- SQL: `20261030000300_marketing.sql`. The funnel is constrained:
-  `clicks ≤ impressions` and `conversions ≤ clicks`.
+- SQL: `20261030000300_marketing.sql` (entries) and
+  `20261030000600_marketing_campaigns.sql` (campaigns, entry `campaign_id` /
+  `leads` / `note`, guard trigger, terminal trigger, totals view). The funnel is
+  constrained: `clicks ≤ impressions`, `conversions ≤ clicks` and
+  `leads ≤ clicks`.
 
 ### Data Entry (Tier 1 + 2)
 - UI: `src/app/(workspace)/data-entry/page.tsx` plus
@@ -435,7 +459,7 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Shares the `view_catalog` capability and the same city scope as the catalog.
 
 ### CSS
-- Manifest: `src/app/globals.css` (4884 lines — still over limit, extraction backlog).
+- Manifest: `src/app/globals.css` (4807 lines — still over limit, extraction backlog).
 - Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,marketing,data-entry}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
@@ -465,11 +489,11 @@ The tiers exist conceptually; these are the concrete gaps to close.
    Password login uses `signInWithPassword`. Remaining: the write paths in
    `field-ops/store/cities.ts` still mutate the in-memory city store alongside
    RBAC grants, so a grant can succeed while the city assignment is process-local.
-3. **Two create paths coexist.** `POST /api/admin/users` still calls the
-   seed-only `createUser()`, which now throws when Supabase is configured;
-   `POST /api/admin/users/provision` is the real one. The admin UI still posts
-   to the former, so account creation from the UI is broken until it is
-   repointed at the provisioning endpoint.
+3. **Create paths.** The admin UI now posts to
+   `POST /api/admin/users/provision` (the real path) and re-reads the roster
+   afterwards. The legacy `POST /api/admin/users` still calls the seed-only
+   `createUser()`, which throws when Supabase is configured; it is kept only
+   for the not-yet-migrated callers and should be removed once they are gone.
 4. **Repository seams are partially created.** `catalog/repository.ts`,
    `kpi/repository.ts` and `rbac/repository.ts` exist. `field-ops` and
    `taxonomy` still mix business rules with persistence.
@@ -621,6 +645,13 @@ below* itself:
 | City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
 | Field Rep | 1 | Nobody | — |
 
+The add-user dialog (`CreateUserModal`) collects phone, password, full name,
+optional email, job title, team (when level 1), city scope and the individual
+capability grants, grouped by `PERMISSION_GROUPS`. The client never posts to
+the legacy `POST /api/admin/users`; provisioning goes through the route above
+and the roster is re-read afterwards, because the auth account, grants and
+scope are all assigned server-side.
+
 Rules enforced for every creation, in both Tier 3 and SQL:
 
 1. **Strictly lower rank.** `actor.clearanceLevel > target.clearanceLevel`.
@@ -660,7 +691,12 @@ Implementation:
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema`. Phone is E.164;
   password is capped at 72 characters because bcrypt silently truncates beyond
   that, and a silent truncation would make the stored credential differ from
-  what the operator typed.
+  what the operator typed. Email is optional profile data (never an identity,
+  never unique); `team` is required only when `clearanceLevel === 1`, because
+  a courier is always dispatched through a team.
+- `src/lib/rbac/teams.ts` — `BASE_TEAMS` merged with the live roster
+  (`TEAM_LABELS` ∪ teams already in use) via `listTeams()`, so the add-user
+  dialog offers a known set without hiding a team that is already assigned.
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`. Pure
   orchestration over the service-role client; no UI, no HTTP concerns.
 - `src/app/api/admin/users/provision/route.ts` — thin controller. It only
