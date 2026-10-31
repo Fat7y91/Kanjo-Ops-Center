@@ -1,8 +1,8 @@
 import {
+  canAssignLevel,
   canGovernUser,
   canManageUser,
   isGlobalActor,
-  outranks,
   permissionsAreWithinActor,
   scopeIsWithinActor,
   toClearanceActor,
@@ -73,10 +73,10 @@ export function assertCanCreate(
 ): void {
   const actor = actorFor(session);
 
-  if (!outranks(actor, { clearanceLevel: input.clearanceLevel })) {
+  if (!canAssignLevel(actor, input.clearanceLevel)) {
     throw new RbacDeniedError(
       "CLEARANCE_DENIED",
-      "لا يمكنك إنشاء مشغّل برتبة تعادل رتبتك أو تتجاوزها.",
+      "لا يمكنك إنشاء مشغّل برتبة تتجاوز رتبتك.",
     );
   }
 
@@ -116,11 +116,11 @@ export function assertCanPatch(
 
   if (
     patch.clearanceLevel !== undefined &&
-    !outranks(actor, { clearanceLevel: patch.clearanceLevel })
+    !canAssignLevel(actor, patch.clearanceLevel)
   ) {
     throw new RbacDeniedError(
       "CLEARANCE_DENIED",
-      "الرتبة الجديدة يجب أن تبقى أدنى من رتبتك.",
+      "الرتبة الجديدة تتجاوز الرتبة التي يمكنك إسنادها.",
     );
   }
 

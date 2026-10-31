@@ -17,8 +17,9 @@ export const runtime = "edge";
  * only way an operator account can come into existence.
  *
  * Guarded by `manage_permissions`; `createUserAccount` additionally enforces
- * that the caller outranks the requested level and can only grant a subset of
- * their own permissions and cities.
+ * that the caller may assign the requested level (executives up to their own
+ * rank, everyone else strictly below) and can only grant a subset of their own
+ * permissions and cities.
  */
 export async function POST(request: Request) {
   const session = await getServerSession();

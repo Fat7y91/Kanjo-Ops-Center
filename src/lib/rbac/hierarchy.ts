@@ -71,8 +71,19 @@ export function clearanceTone(level: number): string {
   );
 }
 
-export function isGlobalActor(actor: ClearanceActor): boolean {
-  return actor.globalScope || actor.clearanceLevel >= 4;
+/** Executive tier: the co-founding rank and above. */
+export const EXECUTIVE_LEVEL = 3;
+
+export function isExecutive(level: number): boolean {
+  return level >= EXECUTIVE_LEVEL;
+}
+
+export function isGlobalActor(
+  actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
+): boolean {
+  // Level 3+ is global by definition (`app.users.global_scope` is generated from
+  // it in SQL), so the flag can only ever widen access, never narrow it.
+  return actor.globalScope || isExecutive(actor.clearanceLevel);
 }
 
 export function outranks(
@@ -80,6 +91,22 @@ export function outranks(
   target: Pick<AppUser, "clearanceLevel">,
 ): boolean {
   return actor.clearanceLevel > target.clearanceLevel;
+}
+
+/**
+ * Whether the actor stands above the target rank.
+ *
+ * Normally that means strictly above. An executive (level >= 3) may also act on
+ * a peer at their own level, because the co-founders share custody of the L3/L4
+ * ranks; self-management is still blocked separately by `assertCanManage`.
+ */
+export function governsLevel(
+  actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
+  target: Pick<AppUser, "clearanceLevel">,
+): boolean {
+  return isExecutive(actor.clearanceLevel)
+    ? actor.clearanceLevel >= target.clearanceLevel
+    : actor.clearanceLevel > target.clearanceLevel;
 }
 
 export function sharesCityScope(
@@ -99,7 +126,7 @@ export function canGovernUser(
   actor: ClearanceActor,
   target: Pick<AppUser, "clearanceLevel" | "accessibleCities">,
 ): boolean {
-  return outranks(actor, target) && sharesCityScope(actor, target);
+  return governsLevel(actor, target) && sharesCityScope(actor, target);
 }
 
 export function canManageUser(
@@ -124,8 +151,32 @@ export function filterGovernableUsers<T extends Pick<AppUser, "clearanceLevel" |
   return users.filter((user) => canGovernUser(actor, user));
 }
 
-export function maxAssignableLevel(actor: ClearanceActor): number {
-  return Math.max(0, Math.min(MAX_CLEARANCE_LEVEL, actor.clearanceLevel - 1));
+/**
+ * Highest clearance an actor may hand out.
+ *
+ * Global actors (executives, level ≥ 3) may mint peers at their own level: the
+ * company is run by co-founders who each need a level 4 account. Every other
+ * actor stays strictly below themselves, so a city manager cannot clone a peer
+ * or lift a rep to their own rank.
+ */
+export function maxAssignableLevel(
+  actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
+): number {
+  // Peer-minting is an executive privilege keyed to the rank itself, never to
+  // the `global_scope` flag, so a mis-set flag cannot let a city manager clone
+  // an account at their own level.
+  const ceiling = isExecutive(actor.clearanceLevel)
+    ? actor.clearanceLevel
+    : actor.clearanceLevel - 1;
+  return Math.max(0, Math.min(MAX_CLEARANCE_LEVEL, ceiling));
+}
+
+/** True when the actor may assign the given clearance level. */
+export function canAssignLevel(
+  actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
+  level: number,
+): boolean {
+  return level >= 1 && level <= maxAssignableLevel(actor);
 }
 
 export function assignableLevels(actor: ClearanceActor): ClearanceDefinition[] {

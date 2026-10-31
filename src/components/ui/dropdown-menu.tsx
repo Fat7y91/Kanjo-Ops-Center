@@ -72,7 +72,7 @@ export function DropdownMenu({
       <MenuItems
         transition
         anchor={align === "end" ? "bottom end" : "bottom start"}
-        className="z-50 w-48 origin-top [--anchor-gap:6px] rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--kanjo-focus-ring)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0"
+        className="z-[100] w-48 origin-top [--anchor-gap:6px] rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--kanjo-focus-ring)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0"
       >
         {items.map((item) => (
           <MenuItem

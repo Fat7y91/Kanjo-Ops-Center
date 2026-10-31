@@ -261,7 +261,7 @@ migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (43 keys / 10 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; team required only for level 1).
 - `src/lib/rbac/teams.ts` — `listTeams()` = `BASE_TEAMS` ∪ teams already in the roster.
@@ -550,7 +550,7 @@ NoSQL. A document never spans both stores.
 
 Source of truth for the TypeScript side stays `src/lib/rbac/`. The database
 mirrors it, it does not redefine it: `app.permissions` seeds from
-`permissions.ts` (43 keys, 10 groups), and `app.users.clearance_level` follows
+`permissions.ts` (43 keys, 9 groups), and `app.users.clearance_level` follows
 `hierarchy.ts` (1–4).
 
 The migration lives at `supabase/migrations/20261029000000_rbac_foundation.sql`.
@@ -636,14 +636,21 @@ mint accounts behind the app's back.
 
 #### The hierarchy
 
-Provisioning follows clearance, and each level can only create *strictly
-below* itself:
+Provisioning follows clearance, and each level can only create at or below
+itself: the executive tier may mint peers.
 
 | Actor | Level | Creates | Scope it may grant |
 |---|---|---|---|
-| System Admin / Founder | 4 / 3 | Anyone below | Any city, any permission it holds |
+| System Admin / Founder | 4 / 3 | Up to its own level (L3/L4 are peers) | Any city, any permission it holds |
 | City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
 | Field Rep | 1 | Nobody | — |
+
+Kanjo is run by seven co-founders, so rank 3 and 4 are a shared custody tier:
+each partner needs their own level 4 account. `maxAssignableLevel()` returns
+the actor's own level for rank ≥ 3 and `level − 1` below that. Peer-minting is
+keyed to the rank, never to `global_scope`, so a mis-set flag cannot let a city
+manager clone an account at their own level. Self-management stays blocked
+separately (`assertCanManage` rejects `target.id === actor.id`).
 
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual
@@ -652,11 +659,15 @@ the legacy `POST /api/admin/users`; provisioning goes through the route above
 and the roster is re-read afterwards, because the auth account, grants and
 scope are all assigned server-side.
 
-Rules enforced for every creation, in both Tier 3 and SQL:
+Rules enforced for every creation:
 
-1. **Strictly lower rank.** `actor.clearanceLevel > target.clearanceLevel`.
-   Equal or higher rank is refused, so peers cannot clone each other and
-   nobody self-escalates.
+1. **Assignable rank.** `canAssignLevel(actor, level)` — executives (level ≥ 3)
+   may assign up to their own level so co-founders can provision each other;
+   everyone else stays strictly below themselves, so a city manager cannot
+   clone a peer or lift a rep to their own rank. This one rule lives only in
+   Tier 3: provisioning writes through the service-role client, which bypasses
+   RLS and carries no actor identity, so a database trigger could not tell who
+   is granting. The other three rules below are enforced in both tiers.
 2. **Permission subset.** The grantor can only hand out permissions they
    themselves hold (`permissionsAreWithinActor`). No capability can be
    invented during provisioning.
@@ -664,8 +675,8 @@ Rules enforced for every creation, in both Tier 3 and SQL:
    `accessibleCities`. Global actors (level ≥ 3) may assign any city.
 4. **Global ranks are executive-only.** Levels 3–4 require a global actor.
 
-These live in `assertCanCreate()` in `src/lib/rbac/management.ts` and are
-already covered by the hierarchy helpers.
+These live in `assertCanCreate()` in `src/lib/rbac/management.ts`, backed by the
+helpers in `hierarchy.ts`.
 
 #### The write path
 

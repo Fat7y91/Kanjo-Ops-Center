@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import type { AppUser } from "@/lib/rbac/types";
 import { useUserCapabilities } from "@/components/admin/use-user-capabilities";
+import { maxAssignableLevel } from "@/lib/rbac/hierarchy";
 import {
   COURIER_LEVEL,
   emptyForm,
@@ -121,7 +122,12 @@ export function usePermissionMatrix(args: Args) {
 
   return {
     ...caps,
-    maxAssignable: Math.max(0, args.viewerLevel - 1),
+    // Same helper the server guard uses, so the badge and the accepted ranks
+    // cannot disagree (executives may assign up to their own level).
+    maxAssignable: maxAssignableLevel({
+      clearanceLevel: args.viewerLevel,
+      globalScope: args.viewerGlobalScope,
+    }),
     createForm,
     createOpen,
     savingCreate,

@@ -11,6 +11,7 @@ import {
   moduleAllows,
   MODULES,
 } from "@/lib/rbac/modules";
+import { PERMISSION_KEYS } from "@/lib/rbac/permissions";
 
 type SidebarProps = {
   open: boolean;
@@ -86,7 +87,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         <div className="capability-meter">
           <span className="live-dot" />
           <div>
-            <strong>{permissions.size} صلاحية</strong>
+            <strong>
+              {permissions.size} / {PERMISSION_KEYS.length} صلاحية
+            </strong>
             <span>إصدار الصلاحيات {revision}</span>
           </div>
         </div>

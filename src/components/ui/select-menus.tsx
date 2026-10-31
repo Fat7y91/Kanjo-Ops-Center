@@ -25,8 +25,14 @@ export type SelectOption<T extends string | number> = {
 const TRIGGER =
   "flex w-full items-center justify-between gap-2 rounded-xl border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] px-3.5 py-2.5 text-start text-sm text-[color:var(--ink)] shadow-[var(--shadow-sm)] transition duration-200 ease-out hover:border-[color:var(--kanjo-focus-ring-strong)] focus-visible:border-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55 data-[open]:border-[color:var(--kanjo-purple-interactive)]";
 
+/**
+ * Option panels are anchored in a portal at the document root, so their
+ * stacking order must clear every overlay they can be opened from. The dialog
+ * backdrop renders at z-index 70; at `z-50` the list painted behind it, which
+ * made every dropdown inside a modal look like it had a single option.
+ */
 const PANEL =
-  "z-50 max-h-64 w-[var(--button-width)] overflow-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
+  "z-[100] max-h-64 w-[var(--button-width)] overflow-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
 
 const OPTION =
   "flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--ink)] transition duration-150 ease-out data-[focus]:bg-[color:var(--kanjo-pastel)] data-[focus]:text-[color:var(--kanjo-pastel-ink)] data-[selected]:font-bold data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";

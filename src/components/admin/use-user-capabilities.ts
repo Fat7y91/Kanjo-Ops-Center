@@ -9,7 +9,7 @@ import type {
   CityOption,
   LevelOption,
 } from "@/components/admin/user-form-types";
-import { clearanceLabel } from "@/lib/rbac/hierarchy";
+import { clearanceLabel, governsLevel } from "@/lib/rbac/hierarchy";
 import type { Permission } from "@/lib/rbac/permissions";
 import type { AppUser } from "@/lib/rbac/types";
 
@@ -56,12 +56,14 @@ export function useUserCapabilities({
     setSeenRevision(initialRevision);
   }, [initialRevision, initialUsers, seenRevision]);
 
+  // The server has already resolved the assignable ladder from the actor's own
+  // rank, so it is rendered as-is. Re-filtering here with `< viewerLevel` would
+  // hide the executive's own tier and reintroduce the mismatch between what the
+  // dropdown offers and what `assertCanCreate` accepts.
   const levelOptions = useMemo(
     () =>
-      assignableLevels
-        .filter((level) => level.level < viewerLevel)
-        .sort((left, right) => right.level - left.level),
-    [assignableLevels, viewerLevel],
+      [...assignableLevels].sort((left, right) => right.level - left.level),
+    [assignableLevels],
   );
 
   const levelLabel = useMemo(() => {
@@ -82,9 +84,18 @@ export function useUserCapabilities({
   );
 
 
+  // Mirrors `canGovernUser` on the server so a peer minted by an executive is
+  // not dropped from the roster when a live permission event re-filters it.
   const withinViewer = useCallback(
     (user: AppUser): boolean => {
-      if (viewerLevel <= user.clearanceLevel) return false;
+      if (
+        !governsLevel(
+          { clearanceLevel: viewerLevel, globalScope: viewerGlobalScope },
+          user,
+        )
+      ) {
+        return false;
+      }
       if (viewerGlobalScope) return true;
       if (user.accessibleCities.length === 0) return true;
       return user.accessibleCities.some((cityId) =>
