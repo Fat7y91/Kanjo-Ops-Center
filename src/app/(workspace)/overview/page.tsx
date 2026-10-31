@@ -9,14 +9,14 @@ export const runtime = "edge";
 export default async function OverviewPage() {
   const session = await requirePermission("view_overview");
   const firstName = session.user.name.split(" ")[0];
-  const dataset = buildBiDataset();
+  const dataset = await buildBiDataset();
 
   return (
     <>
       <PageHeader
         eyebrow="مركز القيادة التنفيذي"
         title={`لوحة القيادة، ${firstName}`}
-        description="كل مؤشر أدناه قابل للنقر: افتح أي بطاقة للوصول إلى السجلات التي بُنيت عليها الأرقام وتصديرها. الفلاتر الموحدة تحكم كل الأقسام معاً."
+        description="حالة الشبكة والتفاوض والمالية والتسويق في لقطة واحدة."
         actions={
           <span className="badge badge-gold">
             مستوى التصريح {session.clearanceLevel}

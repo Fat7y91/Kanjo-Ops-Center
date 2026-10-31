@@ -50,24 +50,37 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
   color: inherit;
   cursor: pointer;
   text-align: start;
+  transition:
+    border-color 0.18s ease-out,
+    background 0.18s ease-out,
+    color 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.bi-negotiation-stage-head:hover {
+  border-color: var(--purple);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+  transform: translateY(-1px);
 }
 
 .bi-negotiation-stage-head:hover .bi-stat-label {
-  color: var(--ink);
+  color: var(--kanjo-pastel-ink);
 }
 
 .bi-negotiation-stage-head:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 .bi-negotiation-foot {

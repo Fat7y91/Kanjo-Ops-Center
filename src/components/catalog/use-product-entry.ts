@@ -230,7 +230,7 @@ export function useProductEntry({
         imageDataUrl: values.imageDataUrl,
         attributes: row.attributes,
         price: row.price,
-        state: "draft",
+        state: "pending_review",
         reviewNote: "",
       }));
       await enqueueDrafts(payloads);
@@ -240,7 +240,7 @@ export function useProductEntry({
       resetDetails(mode === "another");
       return true;
     } catch {
-      setError("تعذر حفظ المسودة محلياً. تحقق من مساحة التخزين.");
+      setError("تعذر حفظ المنتج محلياً. تحقق من مساحة التخزين.");
       return false;
     } finally {
       setBusy(false);

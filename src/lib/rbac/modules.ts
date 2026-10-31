@@ -9,7 +9,11 @@ export type ModuleIcon =
   | "taxonomy"
   | "field-ops"
   | "contracts"
-  | "permissions";
+  | "permissions"
+  | "accounts"
+  | "payroll"
+  | "marketing"
+  | "data-entry";
 
 export type ModuleDefinition = {
   href: string;
@@ -17,6 +21,13 @@ export type ModuleDefinition = {
   shortLabel: string;
   description: string;
   permission: Permission;
+  /**
+   * Additional capabilities that also open the module. The treasury is the
+   * first case: a full accountant (`view_accounts`) and a deposit-only city
+   * manager (`record_deposits`) both need the same route, but for different
+   * reasons, and the page narrows what each may see.
+   */
+  alsoGrantedBy?: readonly Permission[];
   icon: ModuleIcon;
 };
 
@@ -101,6 +112,39 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "contracts",
   },
   {
+    href: "/accounts",
+    label: "الحسابات البنكية",
+    shortLabel: "الحسابات",
+    description: "أرصدة الحسابات البنكية وحركات الودائع والمصروفات.",
+    permission: "view_accounts",
+    alsoGrantedBy: ["manage_accounts", "record_deposits"],
+    icon: "accounts",
+  },
+  {
+    href: "/payroll",
+    label: "الرواتب والعمولات",
+    shortLabel: "الرواتب",
+    description: "مسير الرواتب وبدلات الانتقال وعمولات التعاقد المتدرجة.",
+    permission: "view_payroll",
+    icon: "payroll",
+  },
+  {
+    href: "/marketing",
+    label: "التسويق",
+    shortLabel: "التسويق",
+    description: "إدخال أرقام الحملات وإعدادات منصات الإعلان.",
+    permission: "manage_marketing_metrics",
+    icon: "marketing",
+  },
+  {
+    href: "/data-entry",
+    label: "إدخال البيانات",
+    shortLabel: "الإدخال",
+    description: "استعراض التجار أولاً ثم منتجات كل تاجر وأسعاره.",
+    permission: "view_catalog",
+    icon: "data-entry",
+  },
+  {
     href: "/admin/permissions",
     label: "الصلاحيات",
     shortLabel: "الصلاحيات",
@@ -111,6 +155,17 @@ export const MODULES: readonly ModuleDefinition[] = [
 ];
 
 export const PUBLIC_PATHS: readonly string[] = ["/login", "/forbidden"];
+
+/** True when any capability the module accepts is held. */
+export function moduleAllows(
+  module: ModuleDefinition,
+  permissions: readonly Permission[],
+): boolean {
+  if (permissions.includes(module.permission)) return true;
+  return (module.alsoGrantedBy ?? []).some((permission) =>
+    permissions.includes(permission),
+  );
+}
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -132,11 +187,20 @@ export function permissionForPath(pathname: string): Permission | null {
   return moduleForPath(pathname)?.permission ?? null;
 }
 
+/**
+ * Every capability that opens a path, so the middleware can accept a session
+ * holding any one of them instead of only the module's headline permission.
+ */
+export function permissionsForPath(pathname: string): Permission[] {
+  if (pathname === "/") return ["view_overview"];
+  const module = moduleForPath(pathname);
+  if (!module) return [];
+  return [module.permission, ...(module.alsoGrantedBy ?? [])];
+}
+
 export function firstPermittedPath(
   permissions: readonly Permission[],
 ): string {
-  const first = MODULES.find((module) =>
-    permissions.includes(module.permission),
-  );
+  const first = MODULES.find((module) => moduleAllows(module, permissions));
   return first?.href ?? "/forbidden";
 }

@@ -32,8 +32,13 @@ type ExecutiveDashboardProps = {
   dataset: BiDataset;
 };
 
-/** Executive clearance is the capability that unlocks finance + marketing. */
-const EXECUTIVE_LEVEL = 4;
+/**
+ * Finance and marketing are executive surfaces. Founder (3) and System Admin
+ * (4) both see them; city managers and reps do not. The capability check runs
+ * alongside the level check, so a demotion removes access even if the level
+ * lingers.
+ */
+const EXECUTIVE_LEVEL = 3;
 
 export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
   const { hasPermission, clearanceLevel } = usePermission();
@@ -91,6 +96,8 @@ export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
         filters={filters}
         cities={dataset.cities}
         teams={dataset.teams}
+        reps={dataset.reps}
+        vendorTypes={dataset.vendorTypes}
         resultCount={scoped.merchants.length}
         onChange={updateFilters}
         onReset={() => {
@@ -113,7 +120,11 @@ export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
       />
 
       {canSeeFinance ? (
-        <FinanceSection finance={finance} onDrill={openDrill} />
+        <FinanceSection
+          finance={finance}
+          treasury={dataset.treasury}
+          onDrill={openDrill}
+        />
       ) : (
         <LockedSection
           title="الأداء المالي"

@@ -9,6 +9,11 @@ import {
   type BiTable,
 } from "./types";
 import type { BiScopedData } from "./select";
+import type {
+  BiAccountRow,
+  BiLedgerRow,
+  BiPayslipRow,
+} from "./types";
 
 const MERCHANT_COLUMNS: BiColumn[] = [
   { key: "name", label: "التاجر" },
@@ -162,5 +167,73 @@ export function complianceTable(
       }
       return row;
     }),
+  };
+}
+
+export function accountsTable(accounts: BiAccountRow[]): BiTable {
+  return {
+    id: "accounts-balance",
+    title: "أرصدة الحسابات",
+    description: "",
+    columns: [
+      { key: "bankName", label: "البنك" },
+      { key: "iban", label: "الآيبان" },
+      { key: "currency", label: "العملة" },
+      { key: "deposits", label: "الإيداعات", type: "currency", align: "end" },
+      { key: "expenses", label: "المصروفات", type: "currency", align: "end" },
+      { key: "balance", label: "الرصيد", type: "currency", align: "end" },
+    ],
+    rows: accounts.map((account) => ({
+      bankName: account.bankName,
+      iban: account.iban,
+      currency: account.currency,
+      deposits: account.deposits,
+      expenses: account.expenses,
+      balance: account.balance,
+    })),
+  };
+}
+
+export function ledgerTable(entries: BiLedgerRow[]): BiTable {
+  return {
+    id: "accounts-expenses",
+    title: "حركات المصروفات",
+    description: "",
+    columns: [
+      { key: "bankName", label: "البنك" },
+      { key: "label", label: "البيان" },
+      { key: "amount", label: "المبلغ", type: "currency", align: "end" },
+      { key: "currency", label: "العملة" },
+      { key: "occurredAt", label: "التاريخ", type: "date", align: "end" },
+    ],
+    rows: entries.map((entry) => ({
+      bankName: entry.bankName,
+      label: entry.label,
+      amount: entry.amount,
+      currency: entry.currency,
+      occurredAt: entry.occurredAt,
+    })),
+  };
+}
+
+export function payrollTable(payslips: BiPayslipRow[]): BiTable {
+  return {
+    id: "finance-pending",
+    title: "الرواتب المستحقة",
+    description: "",
+    columns: [
+      { key: "userName", label: "المشغّل" },
+      { key: "title", label: "المسمى" },
+      { key: "gross", label: "الاستحقاق", type: "currency", align: "end" },
+      { key: "deductions", label: "الخصومات", type: "currency", align: "end" },
+      { key: "net", label: "الصافي", type: "currency", align: "end" },
+    ],
+    rows: payslips.map((slip) => ({
+      userName: slip.userName,
+      title: slip.title,
+      gross: slip.gross,
+      deductions: slip.deductions,
+      net: slip.net,
+    })),
   };
 }

@@ -42,6 +42,14 @@ export type BiScopedData = {
   expenses: BiDataset["expenses"];
   marketing: BiDataset["marketing"];
   catalog: BiDataset["catalog"];
+  /**
+   * Treasury facts are company-wide: a bank account or payslip is not owned by
+   * a city or a team, so the universal filter bar does not narrow them. They
+   * ride along untouched so the drill-down panels stay in sync with the cards.
+   */
+  accounts: BiDataset["accounts"];
+  ledger: BiDataset["ledger"];
+  payslips: BiDataset["payslips"];
 };
 
 /**
@@ -60,12 +68,17 @@ export function scopeDataset(
   const cityOk = (cityId: string) =>
     !filters.cityId || cityId === filters.cityId;
   const teamOk = (team: string) => !filters.team || team === filters.team;
+  const repOk = (repId: string | null) => !filters.repId || repId === filters.repId;
+  const vendorTypeOk = (vendorTypeId: number | null) =>
+    filters.vendorTypeId === null || vendorTypeId === filters.vendorTypeId;
 
   return {
     merchants: dataset.merchants.filter(
       (row) =>
         cityOk(row.cityId) &&
         teamOk(row.team) &&
+        repOk(row.repId) &&
+        vendorTypeOk(row.vendorTypeId) &&
         withinRange(row.lastVisitAt ?? row.visitedAt, start),
     ),
     expenses: dataset.expenses.filter(
@@ -78,11 +91,15 @@ export function scopeDataset(
       (row) =>
         cityOk(row.cityId) &&
         teamOk(row.team) &&
+        (!filters.platform || row.platform === filters.platform) &&
         withinRange(row.occurredAt, start),
     ),
     catalog: dataset.catalog.filter(
       (row) => cityOk(row.cityId) && teamOk(row.team),
     ),
+    accounts: dataset.accounts,
+    ledger: dataset.ledger,
+    payslips: dataset.payslips,
   };
 }
 
@@ -269,7 +286,6 @@ export function buildMarketing(
 
 export type CatalogSummary = {
   published: number;
-  draft: number;
   missing: number;
   total: number;
   readiness: number;
@@ -279,12 +295,10 @@ export function buildCatalog(
   rows: BiScopedData["catalog"],
 ): CatalogSummary {
   const published = rows.filter((row) => row.state === "published").length;
-  const draft = rows.filter((row) => row.state === "draft").length;
   const missing = rows.filter((row) => row.state === "missing").length;
-  const total = published + draft + missing;
+  const total = published + missing;
   return {
     published,
-    draft,
     missing,
     total,
     readiness: total === 0 ? 0 : published / total,

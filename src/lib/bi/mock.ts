@@ -1,4 +1,5 @@
 import {
+  BI_CHANNEL_PLATFORM,
   BI_EXPENSE_CATEGORIES,
   BI_MARKETING_CHANNELS,
   type BiExpenseRow,
@@ -106,6 +107,7 @@ export function buildMockMarketing(scopes: MockScope[]): BiMarketingRow[] {
         rows.push({
           id: `mkt-${scope.cityId}-${channel}-${month}`,
           channel,
+          platform: BI_CHANNEL_PLATFORM[channel],
           campaign: CAMPAIGNS[Math.floor(random() * CAMPAIGNS.length)],
           impressions,
           reach,

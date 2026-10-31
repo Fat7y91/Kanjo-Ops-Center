@@ -32,7 +32,7 @@ export function ProductCreateModal({
   const [name, setName] = useState("");
   const [merchantId, setMerchantId] = useState(merchants[0]?.id ?? "");
   const [price, setPrice] = useState("");
-  const [state, setState] = useState<CatalogProductState>("draft");
+  const [state, setState] = useState<CatalogProductState>("pending_review");
   const [reviewNote, setReviewNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,7 +42,7 @@ export function ProductCreateModal({
     setName("");
     setMerchantId(merchants[0]?.id ?? "");
     setPrice("");
-    setState("draft");
+    setState("pending_review");
     setReviewNote("");
     setError("");
     setSaving(false);
@@ -156,7 +156,6 @@ export function ProductCreateModal({
               }
               disabled={saving}
             >
-              <option value="draft">مسودة</option>
               <option value="published">منشور</option>
             </select>
           </label>

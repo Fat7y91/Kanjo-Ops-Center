@@ -1,5 +1,4 @@
 export type CatalogProductState =
-  | "draft"
   | "pending_review"
   | "completed"
   | "published";
@@ -71,7 +70,6 @@ export const PRODUCT_STATE_META: Record<
   CatalogProductState,
   { label: string; tone: string }
 > = {
-  draft: { label: "مسودة", tone: "badge" },
   pending_review: { label: "بانتظار المراجعة", tone: "badge-gold" },
   completed: { label: "مكتمل", tone: "badge-blue" },
   published: { label: "منشور", tone: "badge-green" },

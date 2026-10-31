@@ -11,10 +11,69 @@ export const BI_RANGE_LABELS: Record<BiRange, string> = {
   all: "كل الفترات",
 };
 
+export const BI_MARKETING_CHANNELS = [
+  "instagram",
+  "tiktok",
+  "google",
+  "referral",
+  "field",
+] as const;
+export type BiMarketingChannel = (typeof BI_MARKETING_CHANNELS)[number];
+
+export const BI_MARKETING_META: Record<BiMarketingChannel, string> = {
+  instagram: "إنستجرام",
+  tiktok: "تيك توك",
+  google: "إعلانات جوجل",
+  referral: "إحالات",
+  field: "تسويق ميداني",
+};
+
+/**
+ * Ad platform, one level above the channel.
+ *
+ * A channel is where the audience sees us; a platform is the network that bills
+ * us for it. Splitting them lets one platform run several channels without
+ * duplicating spend.
+ */
+export const BI_MARKETING_PLATFORMS = [
+  "meta",
+  "tiktok",
+  "google",
+  "snapchat",
+  "offline",
+] as const;
+export type BiMarketingPlatform = (typeof BI_MARKETING_PLATFORMS)[number];
+
+export const BI_MARKETING_PLATFORM_META: Record<BiMarketingPlatform, string> = {
+  meta: "ميتا",
+  tiktok: "تيك توك",
+  google: "جوجل",
+  snapchat: "سناب شات",
+  offline: "مباشر",
+};
+
+export const BI_CHANNEL_PLATFORM: Record<
+  BiMarketingChannel,
+  BiMarketingPlatform
+> = {
+  instagram: "meta",
+  tiktok: "tiktok",
+  google: "google",
+  referral: "offline",
+  field: "offline",
+};
+
+
 export const biFiltersSchema = z.object({
   range: z.enum(BI_RANGES),
   cityId: z.string().nullable(),
   team: z.string().nullable(),
+  /** Assigned field rep ("courier") who owns the merchant relationship. */
+  repId: z.string().nullable(),
+  /** Central taxonomy vendor type, so the dashboard can slice by category. */
+  vendorTypeId: z.number().int().nullable(),
+  /** Ad platform, one level above channel. */
+  platform: z.enum(BI_MARKETING_PLATFORMS).nullable(),
 });
 export type BiFilters = z.infer<typeof biFiltersSchema>;
 
@@ -22,6 +81,9 @@ export const DEFAULT_BI_FILTERS: BiFilters = {
   range: "90d",
   cityId: null,
   team: null,
+  repId: null,
+  vendorTypeId: null,
+  platform: null,
 };
 
 /** Merchant lifecycle funnel, in presentation order. */
@@ -70,6 +132,9 @@ export const biMerchantRowSchema = z.object({
   cityId: z.string(),
   cityName: z.string(),
   team: z.string(),
+  repId: z.string().nullable(),
+  repName: z.string().nullable(),
+  vendorTypeId: z.number().nullable(),
   vendorType: z.string(),
   stage: z.enum(BI_DEAL_STAGES),
   monthlyValue: z.number().nonnegative(),
@@ -109,26 +174,10 @@ export const biExpenseRowSchema = z.object({
 });
 export type BiExpenseRow = z.infer<typeof biExpenseRowSchema>;
 
-export const BI_MARKETING_CHANNELS = [
-  "instagram",
-  "tiktok",
-  "google",
-  "referral",
-  "field",
-] as const;
-export type BiMarketingChannel = (typeof BI_MARKETING_CHANNELS)[number];
-
-export const BI_MARKETING_META: Record<BiMarketingChannel, string> = {
-  instagram: "إنستجرام",
-  tiktok: "تيك توك",
-  google: "إعلانات جوجل",
-  referral: "إحالات",
-  field: "تسويق ميداني",
-};
-
 export const biMarketingRowSchema = z.object({
   id: z.string(),
   channel: z.enum(BI_MARKETING_CHANNELS),
+  platform: z.enum(BI_MARKETING_PLATFORMS),
   campaign: z.string(),
   impressions: z.number().nonnegative(),
   reach: z.number().nonnegative(),
@@ -143,7 +192,7 @@ export const biMarketingRowSchema = z.object({
 });
 export type BiMarketingRow = z.infer<typeof biMarketingRowSchema>;
 
-export const BI_CATALOG_STATES = ["published", "draft", "missing"] as const;
+export const BI_CATALOG_STATES = ["published", "missing"] as const;
 export type BiCatalogState = (typeof BI_CATALOG_STATES)[number];
 
 export const BI_CATALOG_META: Record<
@@ -151,7 +200,6 @@ export const BI_CATALOG_META: Record<
   { label: string; tone: string }
 > = {
   published: { label: "منشور", tone: "badge-green" },
-  draft: { label: "مسودة", tone: "badge-gold" },
   missing: { label: "غير مسجّل", tone: "badge-red" },
 };
 
@@ -180,14 +228,68 @@ export type BiCityOption = z.infer<typeof biCityOptionSchema>;
  * so filtering stays instant and the drill-down tables always match the card
  * that opened them.
  */
+export const biAccountRowSchema = z.object({
+  id: z.string(),
+  bankName: z.string(),
+  iban: z.string(),
+  currency: z.enum(["EGP", "SAR"]),
+  deposits: z.number(),
+  expenses: z.number(),
+  balance: z.number(),
+});
+export type BiAccountRow = z.infer<typeof biAccountRowSchema>;
+
+export const biLedgerRowSchema = z.object({
+  id: z.string(),
+  bankName: z.string(),
+  label: z.string(),
+  amount: z.number(),
+  currency: z.enum(["EGP", "SAR"]),
+  occurredAt: z.string(),
+});
+export type BiLedgerRow = z.infer<typeof biLedgerRowSchema>;
+
+export const biPayslipRowSchema = z.object({
+  userId: z.string(),
+  userName: z.string(),
+  title: z.string(),
+  gross: z.number(),
+  deductions: z.number(),
+  net: z.number(),
+});
+export type BiPayslipRow = z.infer<typeof biPayslipRowSchema>;
+
+export const biTreasurySchema = z.object({
+  currency: z.enum(["EGP", "SAR"]),
+  deposits: z.number(),
+  expenses: z.number(),
+  balance: z.number(),
+  pendingPayroll: z.number().nonnegative(),
+});
+export type BiTreasury = z.infer<typeof biTreasurySchema>;
+
 export const biDatasetSchema = z.object({
   generatedAt: z.string(),
   cities: z.array(biCityOptionSchema),
   teams: z.array(z.string()),
+  reps: z.array(z.object({ id: z.string(), name: z.string() })),
+  vendorTypes: z.array(
+    z.object({ id: z.number(), name: z.string() }),
+  ),
   merchants: z.array(biMerchantRowSchema),
   expenses: z.array(biExpenseRowSchema),
   marketing: z.array(biMarketingRowSchema),
   catalog: z.array(biCatalogRowSchema),
+  /**
+   * Treasury position, computed on the server and shipped with the payload so
+   * the dashboard client never imports the accounts or payroll stores. Client
+   * imports of server stores would create a second, divergent copy of the
+   * ledger in the browser bundle.
+   */
+  treasury: z.array(biTreasurySchema),
+  accounts: z.array(biAccountRowSchema),
+  ledger: z.array(biLedgerRowSchema),
+  payslips: z.array(biPayslipRowSchema),
 });
 export type BiDataset = z.infer<typeof biDatasetSchema>;
 

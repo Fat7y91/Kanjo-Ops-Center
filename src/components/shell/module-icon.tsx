@@ -19,6 +19,14 @@ const paths: Record<ModuleIconName, string> = {
     "M6 3h9l4 4v14H6V3Zm9 0v5h4M9 12h6M9 16h6",
   permissions:
     "M12 3 5 6v5c0 4.4 2.9 8.4 7 10 4.1-1.6 7-5.6 7-10V6l-7-3Zm-2.5 9 1.8 1.8 3.8-4",
+  accounts:
+    "M3 10h18M5 10V7l7-4 7 4v3M3 10v9h18v-9M8 14h3M8 17h6",
+  payroll:
+    "M4 6h16v12H4V6Zm0 4h16M7 14h4M15 14h2",
+  marketing:
+    "M4 10v4h3l6 4V6l-6 4H4Zm13-2a4 4 0 0 1 0 8M17 5a8 8 0 0 1 0 14",
+  "data-entry":
+    "M5 4h10l4 4v12H5V4Zm10 0v4h4M8 12h8M8 16h5",
 };
 
 export function ModuleIcon({ name }: { name: ModuleIconName }) {

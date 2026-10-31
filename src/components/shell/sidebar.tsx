@@ -6,7 +6,11 @@ import { usePathname } from "next/navigation";
 import { usePermission } from "@/components/auth/use-permission";
 import { ModuleIcon } from "@/components/shell/module-icon";
 import { NavLinkStatus } from "@/components/shell/nav-link-status";
-import { firstPermittedPath, MODULES } from "@/lib/rbac/modules";
+import {
+  firstPermittedPath,
+  moduleAllows,
+  MODULES,
+} from "@/lib/rbac/modules";
 
 type SidebarProps = {
   open: boolean;
@@ -15,10 +19,10 @@ type SidebarProps = {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname() ?? "";
-  const { hasPermission, permissions, revision } = usePermission();
+  const { permissions, revision } = usePermission();
 
   const visibleModules = MODULES.filter((module) =>
-    hasPermission(module.permission),
+    moduleAllows(module, Array.from(permissions)),
   );
   const homeHref = firstPermittedPath(Array.from(permissions));
 

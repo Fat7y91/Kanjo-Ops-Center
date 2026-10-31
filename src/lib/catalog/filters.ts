@@ -7,7 +7,6 @@ export const CATALOG_FILTER_ORDER: readonly CatalogFilter[] = [
   "all",
   "pending_review",
   "completed",
-  "draft",
   "published",
 ];
 
@@ -17,7 +16,6 @@ export function catalogFilterCounts(
 ): Record<CatalogFilter, number> {
   const counts: Record<CatalogFilter, number> = {
     all: products.length,
-    draft: 0,
     pending_review: 0,
     completed: 0,
     published: 0,

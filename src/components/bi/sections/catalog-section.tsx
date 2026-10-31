@@ -13,14 +13,13 @@ type CatalogSectionProps = {
 export function CatalogSection({ catalog, onDrill }: CatalogSectionProps) {
   const states = [
     { key: "published" as const, value: catalog.published },
-    { key: "draft" as const, value: catalog.draft },
     { key: "missing" as const, value: catalog.missing },
   ];
 
   return (
     <Widget
-      eyebrow="إدخال البيانات"
-      title="جاهزية الكتالوج"
+      eyebrow="الكتالوج"
+      title="جاهزية المنتجات"
       span={6}
       badge={<span className="badge">{count(catalog.total)} سجل</span>}
     >
@@ -43,13 +42,7 @@ export function CatalogSection({ catalog, onDrill }: CatalogSectionProps) {
               catalog.total === 0 ? 0 : state.value / catalog.total,
               0,
             )}
-            tone={
-              state.key === "published"
-                ? "green"
-                : state.key === "draft"
-                  ? "gold"
-                  : "red"
-            }
+            tone={state.key === "published" ? "green" : "red"}
             onOpen={() => onDrill(`catalog-${state.key}`)}
           />
         ))}

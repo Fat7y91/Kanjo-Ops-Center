@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
-import { isPublicPath, permissionForPath } from "@/lib/rbac/modules";
+import { isPublicPath, permissionsForPath } from "@/lib/rbac/modules";
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -21,12 +21,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const requiredPermission = permissionForPath(pathname);
-  if (requiredPermission && !payload.perms.includes(requiredPermission)) {
+  const accepted = permissionsForPath(pathname);
+  if (
+    accepted.length > 0 &&
+    !accepted.some((permission) => payload.perms.includes(permission))
+  ) {
     const forbiddenUrl = request.nextUrl.clone();
     forbiddenUrl.pathname = "/forbidden";
     forbiddenUrl.search = "";
-    forbiddenUrl.searchParams.set("permission", requiredPermission);
+    forbiddenUrl.searchParams.set("permission", accepted[0]);
     forbiddenUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(forbiddenUrl);
   }

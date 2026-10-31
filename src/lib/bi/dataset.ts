@@ -1,6 +1,12 @@
 import { listCities, listMerchants, listVisitReports } from "@/lib/field-ops/store";
+import { listVendorTypes } from "@/lib/taxonomy/store";
 import { listProducts } from "@/lib/catalog/store";
 import type { Merchant } from "@/lib/field-ops/types";
+
+import { buildFounderFinancials } from "@/lib/accounts/founder";
+import { listBankAccounts, listLedgerEntries } from "@/lib/accounts/store";
+import { summarizeAll } from "@/lib/accounts/ledger";
+import { buildPayslips } from "@/lib/payroll/store";
 
 import { buildMockExpenses, buildMockMarketing } from "./mock";
 import { sum } from "./select";
@@ -69,7 +75,7 @@ function achievedCommission(
  * Aggregates the live field-ops and catalog stores into a single typed BI
  * payload, then layers deterministic mock finance/marketing facts on top.
  */
-export function buildBiDataset(): BiDataset {
+export async function buildBiDataset(): Promise<BiDataset> {
   const cities = listCities();
   const cityName = new Map(cities.map((city) => [city.id, city.name]));
   const merchants = listMerchants();
@@ -85,10 +91,20 @@ export function buildBiDataset(): BiDataset {
   const visitedByMerchant = new Map<string, string>();
   const negotiatedByMerchant = new Map<string, number>();
   const negotiatedAt = new Map<string, string>();
+  const repByMerchant = new Map<string, { id: string; name: string }>();
+  const repVisitAt = new Map<string, string>();
   for (const report of reports) {
     const previous = visitedByMerchant.get(report.merchantId);
     if (!previous || report.createdAt > previous) {
       visitedByMerchant.set(report.merchantId, report.createdAt);
+    }
+    const latestRep = repVisitAt.get(report.merchantId);
+    if (!latestRep || report.createdAt > latestRep) {
+      repVisitAt.set(report.merchantId, report.createdAt);
+      repByMerchant.set(report.merchantId, {
+        id: report.repId,
+        name: report.repName,
+      });
     }
     if (report.agreedCommission != null) {
       const newest = negotiatedAt.get(report.merchantId);
@@ -108,6 +124,9 @@ export function buildBiDataset(): BiDataset {
       cityId: merchant.cityId,
       cityName: cityName.get(merchant.cityId) ?? merchant.cityId,
       team: merchant.team ?? "غير مسند",
+      repId: repByMerchant.get(merchant.id)?.id ?? null,
+      repName: repByMerchant.get(merchant.id)?.name ?? null,
+      vendorTypeId: merchant.vendorTypeId ?? null,
       vendorType: merchant.vendorType,
       stage: stageFor(merchant),
       monthlyValue: merchant.monthlyValue,
@@ -136,9 +155,10 @@ export function buildBiDataset(): BiDataset {
         cityId: merchant?.cityId ?? "unknown",
         cityName: cityName.get(merchant?.cityId ?? "") ?? "غير محدد",
         team: merchant?.team ?? "غير مسند",
-        // BI only distinguishes published vs draft; review states fold into
-        // draft so the dashboard keeps one binary catalog-health signal.
-        state: product.state === "published" ? "published" : "draft",
+        // BI distinguishes published from still-unpublished; review states fold
+        // into "missing" so the dashboard keeps one binary catalog-health
+        // signal.
+        state: product.state === "published" ? "published" : "missing",
         price: product.price,
         updatedAt: product.updatedAt,
       };
@@ -172,9 +192,68 @@ export function buildBiDataset(): BiDataset {
     ),
   }));
 
+  const repOptions = Array.from(
+    new Map(
+      Array.from(repByMerchant.values()).map((rep) => [rep.id, rep]),
+    ).values(),
+  ).sort((left, right) => left.name.localeCompare(right.name));
+
+  const financials = buildFounderFinancials();
+  const treasury = financials.accounts.map((snapshot) => ({
+    currency: snapshot.currency,
+    deposits: snapshot.deposits,
+    expenses: snapshot.expenses,
+    balance: snapshot.balance,
+    pendingPayroll:
+      financials.pending.find(
+        (obligation) => obligation.currency === snapshot.currency,
+      )?.amount ?? 0,
+  }));
+
+  const bankAccounts = listBankAccounts();
+  const ledgerEntries = listLedgerEntries();
+  const accounts = summarizeAll(bankAccounts, ledgerEntries).map(
+    (summary) => ({
+      id: summary.account.id,
+      bankName: summary.account.bankName,
+      iban: summary.account.iban,
+      currency: summary.account.currency,
+      deposits: summary.deposits,
+      expenses: summary.expenses,
+      balance: summary.balance,
+    }),
+  );
+  const bankNames = new Map(
+    bankAccounts.map((account) => [account.id, account.bankName]),
+  );
+  const ledger = ledgerEntries
+    .filter((entry) => entry.kind === "expense")
+    .map((entry) => ({
+      id: entry.id,
+      bankName: bankNames.get(entry.accountId) ?? "—",
+      label: entry.label,
+      amount: entry.amount,
+      currency: entry.currency,
+      occurredAt: entry.occurredAt,
+    }));
+  const payslips = buildPayslips().map((slip) => ({
+    userId: slip.profile.userId,
+    userName: slip.profile.userName,
+    title: slip.profile.title,
+    gross: slip.result.gross,
+    deductions: slip.result.deductions,
+    net: slip.result.net,
+  }));
+
+  const vendorTypes = listVendorTypes()
+    .filter((vendor) => vendor.active)
+    .map((vendor) => ({ id: vendor.id, name: vendor.name_ar }));
+
   return biDatasetSchema.parse({
     generatedAt: new Date().toISOString(),
     cities: cities.map((city) => ({ id: city.id, name: city.name })),
+    reps: repOptions,
+    vendorTypes,
     teams: Array.from(
       new Set(
         merchantRows
@@ -186,5 +265,9 @@ export function buildBiDataset(): BiDataset {
     expenses: buildMockExpenses(scopes),
     marketing: buildMockMarketing(scopes),
     catalog: catalogRows,
+    treasury,
+    accounts,
+    ledger,
+    payslips,
   });
 }

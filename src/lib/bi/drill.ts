@@ -10,10 +10,13 @@ import {
 } from "./types";
 import type { BiScopedData } from "./select";
 import {
+  accountsTable,
   catalogTable,
   complianceTable,
   expensesTable,
+  ledgerTable,
   marketingTable,
+  payrollTable,
   merchantTable,
 } from "./tables";
 
@@ -83,10 +86,7 @@ export function resolveDrill(
   }
 
   if (id.startsWith("catalog-")) {
-    const state = id.slice("catalog-".length) as
-      | "published"
-      | "draft"
-      | "missing";
+    const state = id.slice("catalog-".length) as "published" | "missing";
     const meta = BI_CATALOG_META[state];
     if (!meta) return null;
     return {
@@ -146,6 +146,27 @@ export function resolveDrill(
         title: "المصروفات",
         description: "كل بنود المصروفات داخل الفترة والنطاق.",
         table: expensesTable(scoped.expenses),
+      };
+    case "accounts-balance":
+      return {
+        eyebrow: "الخزينة",
+        title: "أرصدة الحسابات البنكية",
+        description: "الرصيد الحالي لكل حساب محسوب من دفتر الحركات.",
+        table: accountsTable(scoped.accounts),
+      };
+    case "accounts-expenses":
+      return {
+        eyebrow: "الخزينة",
+        title: "المصروفات المدفوعة",
+        description: "كل حركة مصروف مسجّلة في دفتر الحسابات.",
+        table: ledgerTable(scoped.ledger),
+      };
+    case "finance-pending":
+      return {
+        eyebrow: "المالية",
+        title: "الرواتب المستحقة",
+        description: "صافي مسير الشهر لكل مشغّل قبل الصرف.",
+        table: payrollTable(scoped.payslips),
       };
     case "finance-net":
       return {

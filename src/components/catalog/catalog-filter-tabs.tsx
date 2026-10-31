@@ -16,7 +16,6 @@ type CatalogFilterTabsProps = {
 
 const FILTER_LABEL: Record<CatalogFilter, string> = {
   all: "الكل",
-  draft: PRODUCT_STATE_META.draft.label,
   pending_review: PRODUCT_STATE_META.pending_review.label,
   completed: PRODUCT_STATE_META.completed.label,
   published: PRODUCT_STATE_META.published.label,
