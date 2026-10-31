@@ -72,8 +72,6 @@ export const biFiltersSchema = z.object({
   repId: z.string().nullable(),
   /** Central taxonomy vendor type, so the dashboard can slice by category. */
   vendorTypeId: z.number().int().nullable(),
-  /** Ad platform, one level above channel. */
-  platform: z.enum(BI_MARKETING_PLATFORMS).nullable(),
 });
 export type BiFilters = z.infer<typeof biFiltersSchema>;
 
@@ -83,7 +81,6 @@ export const DEFAULT_BI_FILTERS: BiFilters = {
   team: null,
   repId: null,
   vendorTypeId: null,
-  platform: null,
 };
 
 /** Merchant lifecycle funnel, in presentation order. */

@@ -20,6 +20,11 @@ export async function GET() {
   );
 }
 
+/**
+ * Saving with `enabled: true` runs the platform credential verifier. A key that
+ * does not match the network's format is rejected before any row is written, so
+ * the sync switch can never report "connected" for an unverified credential.
+ */
 export async function PUT(request: Request) {
   const { session, response } = await authorize("manage_marketing_metrics");
   if (!session) return response;

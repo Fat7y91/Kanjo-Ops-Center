@@ -1,12 +1,11 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { TextField } from "@/components/ui/form-inputs";
-import { ToggleField } from "@/components/ui/form-inputs";
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { TextField, ToggleField } from "@/components/ui/form-inputs";
+import { PLATFORM_SPECS } from "@/lib/marketing/platforms";
 import type { PlatformSettings } from "@/lib/marketing/types";
-import { BI_MARKETING_PLATFORM_META } from "@/lib/bi/types";
 
 type SettingsPanelProps = {
   settings: PlatformSettings[];
@@ -15,8 +14,8 @@ type SettingsPanelProps = {
 
 type Draft = {
   enabled: boolean;
-  apiKey: string;
   webhookUrl: string;
+  credentials: Record<string, string>;
 };
 
 export function SettingsPanel({ settings, onDone }: SettingsPanelProps) {
@@ -26,8 +25,8 @@ export function SettingsPanel({ settings, onDone }: SettingsPanelProps) {
         setting.platform,
         {
           enabled: setting.enabled,
-          apiKey: "",
           webhookUrl: setting.webhookUrl,
+          credentials: {},
         },
       ]),
     ),
@@ -42,25 +41,39 @@ export function SettingsPanel({ settings, onDone }: SettingsPanelProps) {
     }));
   }
 
-  async function save(platform: string) {
+  function patchCredential(platform: string, key: string, value: string) {
+    setDrafts((current) => ({
+      ...current,
+      [platform]: {
+        ...current[platform],
+        credentials: { ...current[platform].credentials, [key]: value },
+      },
+    }));
+  }
+
+  async function save(platform: string, enabledOverride?: boolean) {
+    const draft = drafts[platform];
+    if (!draft) return;
     setBusy(platform);
     setError("");
     try {
-      const draft = drafts[platform];
       const response = await fetch("/api/marketing/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           platform,
-          enabled: draft.enabled,
-          apiKey: draft.apiKey || undefined,
+          enabled: enabledOverride ?? draft.enabled,
+          credentials: draft.credentials,
           webhookUrl: draft.webhookUrl,
         }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "تعذر الحفظ.");
-      onDone(`تم تحديث إعدادات ${BI_MARKETING_PLATFORM_META[platform as keyof typeof BI_MARKETING_PLATFORM_META]}.`);
-      patch(platform, { apiKey: "" });
+      if (enabledOverride !== undefined) {
+        patch(platform, { enabled: enabledOverride });
+      }
+      patch(platform, { credentials: {} });
+      onDone(enabledOverride ? "تم التحقق من الاتصال وتفعيل المزامنة." : "تم حفظ الإعدادات.");
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "تعذر الحفظ.",
@@ -78,58 +91,78 @@ export function SettingsPanel({ settings, onDone }: SettingsPanelProps) {
         </p>
       ) : null}
 
-      {settings.map((setting) => {
-        const draft = drafts[setting.platform];
+      {PLATFORM_SPECS.map((spec) => {
+        const setting = settings.find((item) => item.platform === spec.platform);
+        const draft = drafts[spec.platform];
         if (!draft) return null;
+        const configured = setting?.apiKeyConfigured ?? false;
+        const isBusy = busy === spec.platform;
+
         return (
-          <article className="marketing-setting" key={setting.platform}>
+          <article className="marketing-setting" key={spec.platform}>
             <header>
-              <h3>{BI_MARKETING_PLATFORM_META[setting.platform]}</h3>
-              <span className="badge">
-                {setting.apiKeyConfigured ? "مفتاح مُهيّأ" : "بلا مفتاح"}
+              <h3>{spec.label}</h3>
+              <span className={`badge ${configured ? "badge-green" : ""}`}>
+                {spec.manualOnly
+                  ? "إدخال يدوي"
+                  : configured
+                    ? "مفتاح موثّق"
+                    : "بلا مفتاح"}
               </span>
             </header>
 
-            <ToggleField
-              label="تفعيل المزامنة"
-              checked={draft.enabled}
-              onChange={(enabled) => patch(setting.platform, { enabled })}
-            />
+            <p className="marketing-spec-note">{spec.instructions}</p>
 
-            <TextField
-              label="مفتاح API"
-              hint={
-                setting.apiKeyConfigured
-                  ? "اتركه فارغاً للاحتفاظ بالمفتاح الحالي."
-                  : "أدخل مفتاح المنصة."
-              }
-              type="password"
-              value={draft.apiKey}
-              onChange={(event) =>
-                patch(setting.platform, { apiKey: event.target.value })
-              }
-              dir="ltr"
-              autoComplete="off"
-            />
+            {spec.manualOnly ? null : (
+              <>
+                {spec.fields.map((field) => (
+                  <TextField
+                    key={field.key}
+                    label={field.label}
+                    hint={
+                      configured && !draft.credentials[field.key]
+                        ? `${field.hint} اتركه فارغاً للاحتفاظ بالقيمة الحالية.`
+                        : field.hint
+                    }
+                    type={field.secret ? "password" : "text"}
+                    value={draft.credentials[field.key] ?? ""}
+                    onChange={(event) =>
+                      patchCredential(spec.platform, field.key, event.target.value)
+                    }
+                    dir="ltr"
+                    autoComplete="off"
+                    placeholder={field.patternHint}
+                  />
+                ))}
 
-            <TextField
-              label="رابط الويب هوك"
-              value={draft.webhookUrl}
-              onChange={(event) =>
-                patch(setting.platform, { webhookUrl: event.target.value })
-              }
-              dir="ltr"
-              placeholder="https://"
-            />
+                <TextField
+                  label="رابط الويب هوك"
+                  value={draft.webhookUrl}
+                  onChange={(event) =>
+                    patch(spec.platform, { webhookUrl: event.target.value })
+                  }
+                  dir="ltr"
+                  placeholder="https://"
+                />
 
-            <Button
-              size="sm"
-              variant="quiet"
-              disabled={busy === setting.platform}
-              onClick={() => save(setting.platform)}
-            >
-              {busy === setting.platform ? "جارٍ الحفظ…" : "حفظ"}
-            </Button>
+                <ToggleField
+                  label="تفعيل المزامنة"
+                  hint="لا يُفعّل إلا بعد التحقق من صحة بيانات الاتصال."
+                  checked={draft.enabled}
+                  onChange={(enabled) => void save(spec.platform, enabled)}
+                  disabled={isBusy}
+                />
+
+                <Button
+                  size="sm"
+                  variant="quiet"
+                  disabled={isBusy}
+                  onClick={() => void save(spec.platform)}
+                >
+                  {isBusy ? "جارٍ التحقق…" : "حفظ الإعدادات"}
+                </Button>
+              </>
+            )}
           </article>
         );
       })}

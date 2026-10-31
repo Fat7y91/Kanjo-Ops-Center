@@ -1,10 +1,128 @@
-/* Marketing campaign entry and platform settings. */
+/* Marketing campaigns: campaign cards, daily results and per-platform setup. */
 
 .marketing-view {
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
+
+/* ── Campaign board ─────────────────────────────────────────────────────── */
+
+.marketing-campaigns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.marketing-campaign {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--kanjo-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.marketing-campaign-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.marketing-campaign-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.marketing-campaign-meta {
+  margin: 2px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.marketing-campaign-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.marketing-campaign-stats dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.marketing-campaign-stats dd {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.marketing-target {
+  margin-inline-start: 4px;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.marketing-budget {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.marketing-budget-track {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.marketing-budget-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--purple);
+}
+
+.marketing-budget-fill.is-over {
+  background: var(--red);
+}
+
+.marketing-budget-note {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.marketing-campaign-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.marketing-campaign-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
 
 .marketing-entry-form {
   display: flex;
@@ -19,9 +137,17 @@
   gap: 12px;
 }
 
+.marketing-targets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* ── Platform setup ────────────────────────────────────────────────────── */
+
 .marketing-settings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
 }
 
@@ -44,9 +170,19 @@
 
 .marketing-setting h3 {
   margin: 0;
+  color: var(--ink);
   font-size: 0.95rem;
   font-weight: 800;
-  color: var(--ink);
+}
+
+.marketing-spec-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.5;
 }
 
 .marketing-locked {
@@ -59,7 +195,9 @@
 }
 
 @media (max-width: 720px) {
-  .marketing-entry-grid {
+  .marketing-entry-grid,
+  .marketing-targets,
+  .marketing-campaign-stats {
     grid-template-columns: minmax(0, 1fr);
   }
 }
