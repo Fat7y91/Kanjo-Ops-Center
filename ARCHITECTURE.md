@@ -261,7 +261,7 @@ migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` (43 keys / 10 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities).
 - `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (nodejs runtime, `manage_permissions`).
@@ -333,7 +333,20 @@ logout therefore POST to plain route handlers. Rules locked in:
 - UI: `src/app/(workspace)/overview/`, `src/components/` charts.
 - Business: `src/lib/bi/` — `dataset.ts` (190), `select.ts`, `tables.ts`,
   `drill.ts`, `export.ts`, `format.ts`, `mock.ts`, `types.ts`.
-- BI folds Field Ops review states into the `draft` bucket for reporting.
+- BI catalog health is binary: `published` versus `missing`. Review-only states
+  (`pending_review`, `completed`) fold into `missing` because they are not yet
+  live in the consumer catalog. There is no "draft" product state: a product is
+  created directly into `pending_review`.
+- `dataset.ts` is server-only and ships a fully-denormalized payload. Treasury
+  facts (`treasury`, `accounts`, `ledger`, `payslips`) are computed there from
+  the accounts and payroll stores and travel inside `BiDataset`, so browser
+  components never import a server store. Importing a store client-side would
+  bundle a second, divergent ledger into the JS and let the dashboard disagree
+  with `/accounts`.
+- `tables.ts` builders are pure: they accept dataset slices (`accountsTable`,
+  `ledgerTable`, `payrollTable`) rather than reading stores themselves. Drills
+  receive the same slices through `BiScopedData`. Treasury rows are
+  company-wide, so `scopeDataset` passes them through unfiltered.
 - Charts guard their own empty state. `FunnelStageChart` skips Recharts when
   every slice is `0`, and `ComplianceDonut` when every `complete` is `0`,
   rendering `.bi-chart-empty` / `.bi-donut-empty` instead. Never mount a
@@ -361,9 +374,69 @@ logout therefore POST to plain route handlers. Rules locked in:
   `KpiError("EMPTY_SCOPE")`; the page catches it and renders `KpiEmptyState`.
   Letting it escape produced an RSC application error (digest 788090452).
 
+### Accounts / Treasury (Tier 1–5)
+- UI: `src/app/(workspace)/accounts/page.tsx` (server container) plus
+  `components/accounts/{accounts-view,account-card,account-form,ledger-entry-form}.tsx`.
+- Business: `src/lib/accounts/ledger.ts` — `summarizeAccount`, `summarizeAll`,
+  `totalByCurrency`. Balance is always `Σdeposits − Σexpenses`, never stored.
+- Data: `src/lib/accounts/{store,seed,types,format}.ts`. `store.ts` is the
+  process-local Tier 4 seam; `20261030000100_accounts_ledger.sql` is its SQL
+  mirror. Per-currency totals: EGP and SAR never sum together.
+- App/Edge: `GET|POST /api/accounts` and `POST /api/accounts/ledger`.
+  `manage_accounts` implies read, so a manager can resolve the account it
+  writes to.
+- Access tiers (`src/lib/accounts/access.ts`, pure): treasury has two
+  audiences, both derived from capabilities, never job titles.
+  - **Full book** — holding `view_accounts` or `manage_accounts`. Sees every
+    account in both countries, every movement, the derived balance and expense
+    totals. This is the Founder / System Admin / Head of Accounts audience.
+  - **Deposit-only** — holding `record_deposits`. Opens the module to record
+    deposits into Egyptian accounts only. `visibleAccounts` drops non-Egyptian
+    accounts, `visibleEntries` drops every expense row, and the page renders no
+    balance and no expense total. `assertCanRecord` rejects an expense or a
+    Saudi account before the store is touched, so editing the request body
+    cannot escalate the tier.
+- The ledger is append-only at both tiers: TypeScript exposes no update/delete,
+  and `app.ledger_reject_mutation()` blocks UPDATE/DELETE even for the owner.
+  A correction is a new opposing entry.
+
+### Payroll (Tier 1–5)
+- UI: `src/app/(workspace)/payroll/page.tsx` plus
+  `components/payroll/{payroll-view,payroll-table}.tsx`.
+- Business: `src/lib/payroll/engine.ts` — `tieredCommission` (cumulative bands,
+  sorted ascending), `computePayroll`, `finalize`. All pure.
+- Data: `src/lib/payroll/{store,seed,types}.ts`. Contribution is derived from
+  live visit reports, not stored on the payroll profile, so payroll can never
+  disagree with the commission dashboard.
+- SQL: `20261030000200_payroll.sql` — `payroll_profiles`,
+  `payroll_commission_tiers` (cumulative bands), `payroll_kpi_links`,
+  `payroll_runs`, `payroll_lines`, and the `payroll_run_totals` view.
+
+### Marketing Measurement (Tier 1–5)
+- UI: `src/app/(workspace)/marketing/page.tsx` plus
+  `components/marketing/{marketing-view,marketing-entry-form,settings-panel}.tsx`.
+- Data: `src/lib/marketing/{store,types}.ts`. Manual entries are append-only.
+- Platform vs channel: `platform` (`meta`, `tiktok`, `google`, `snapchat`,
+  `offline`) is who bills us; `channel` (`instagram`, `tiktok`, `google`,
+  `referral`, `field`) is where the audience saw the ad. One platform can run
+  several channels, so they are separate columns, and the dashboard filters on
+  platform while still grouping by channel.
+- API keys are write-only: the store keeps the raw value server-side and
+  exposes `apiKeyConfigured` only. SQL stores `api_key_ciphertext` and the
+  client reads the `marketing_platform_settings_public` view.
+- SQL: `20261030000300_marketing.sql`. The funnel is constrained:
+  `clicks ≤ impressions` and `conversions ≤ clicks`.
+
+### Data Entry (Tier 1 + 2)
+- UI: `src/app/(workspace)/data-entry/page.tsx` plus
+  `components/data-entry/data-entry-view.tsx`.
+- Flow is merchants first, then that merchant's products. Selecting a row is
+  view state only; the page is a server container that passes scoped rows down.
+- Shares the `view_catalog` capability and the same city scope as the catalog.
+
 ### CSS
 - Manifest: `src/app/globals.css` (4884 lines — still over limit, extraction backlog).
-- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac}.css` plus
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,marketing,data-entry}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
 
@@ -380,6 +453,10 @@ The tiers exist conceptually; these are the concrete gaps to close.
    connection clients now exist in `src/lib/db/`; the remaining work is to move
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
+     **Progress:** the accounts ledger, payroll and marketing tables now exist in
+     SQL (§8.7), but their TypeScript stores (`lib/accounts`, `lib/payroll`,
+     `lib/marketing`) still read a process-local global. The schemas are the
+     contract; wiring the repositories is the remaining step.
    - Operations → Firebase: catalog, field ops, live orders.
 2. **RBAC reads and writes are now Supabase-backed.** `rbac/repository.ts`
    implements the Tier 4 seam and `rbac/users.ts` is an async facade over it.
@@ -449,7 +526,7 @@ NoSQL. A document never spans both stores.
 
 Source of truth for the TypeScript side stays `src/lib/rbac/`. The database
 mirrors it, it does not redefine it: `app.permissions` seeds from
-`permissions.ts` (38 keys, 9 groups), and `app.users.clearance_level` follows
+`permissions.ts` (43 keys, 10 groups), and `app.users.clearance_level` follows
 `hierarchy.ts` (1–4).
 
 The migration lives at `supabase/migrations/20261029000000_rbac_foundation.sql`.
@@ -610,7 +687,7 @@ Three project-level settings are required; none of them live in application code
    also carries `BYPASSRLS` on Supabase, which is what makes the provisioning
    writes succeed despite the forced policies.
 3. **Seed `app.permissions`.** `user_permissions.permission_key` is a foreign
-   key, so provisioning fails until the 38 keys from `permissions.ts` exist as
+   key, so provisioning fails until the 43 keys from `permissions.ts` exist as
    rows. `20261029000200_seed_permissions.sql` seeds them idempotently from the
    live catalogue; run it before creating the first account.
 4. **Keep the auth-mirror trigger outside RLS.** `app.users` uses
@@ -662,13 +739,14 @@ password on an existing phone), sets `clearance_level = 4`, and grants every row
 in `app.permissions`. Granting all permissions does not violate the governor
 invariant — the guard only blocks *removing* the last governor.
 
-When the repository cannot be cloned locally, the same logic is available as
-one temporary Edge route, `GET /api/admin/bootstrap`. It mints the credential
-through the Admin API, sets level 4, and grants all 38 capabilities. Two safety
-rails apply: the founder password is read from `BOOTSTRAP_PASSWORD` and never
-committed, and the route refuses to run while another active governor exists,
-so it cannot mint a second all-powerful account. Delete the route once the
-founder can sign in — it is scaffolding, not a product surface.
+The bootstrap was originally also exposed as a temporary Edge route,
+`GET /api/admin/bootstrap`. It has been deleted, together with
+`bootstrap-service.ts` and `bootstrap-diagnostics.ts`: the founder signs in
+normally now, and a self-provisioning endpoint that mints an all-powerful
+account is scaffolding, not a product surface. The
+`app.bootstrap_diagnostics()` SQL helper survives in
+`20261029000300_fix_auth_mirror_rls.sql` for the next mirror failure, but no
+route calls it.
 
 **Never write directly into `auth.users`.** Supabase owns credential storage;
 an INSERT there bypasses GoTrue's password hashing and its `auth.identities`
@@ -716,6 +794,38 @@ store and collects an email. It stays until the RBAC repository lands, but it is
 **not** the production path: it cannot mint credentials. `createUser()` should
 gain a phone field and then delegate to `createUserAccount()` once the
 repository reads `app.users`.
+
+### 8.7 Money: treasury, payroll and marketing
+
+Every table below is SQL because each one participates in a money movement or a
+financial report. All amounts are **minor units** (`bigint`), never floats, so
+no rounding can create or destroy value.
+
+| Migration | Tables | Invariant enforced in SQL |
+|---|---|---|
+| `20261030000100_accounts_ledger.sql` | `app.bank_accounts`, `app.ledger_entries`, view `app.account_balances` | Balance is derived (Σdeposits − Σexpenses), never a column. UPDATE/DELETE on the ledger raise `LEDGER_IMMUTABLE`. Entry currency must equal the account currency. |
+| `20261030000200_payroll.sql` | `app.payroll_profiles`, `app.payroll_commission_tiers`, `app.payroll_kpi_links`, `app.payroll_runs`, `app.payroll_lines`, view `app.payroll_run_totals` | Components are non-negative; `deduction` supplies the sign. Net is a signed sum in the view, never a stored total. |
+| `20261030000300_marketing.sql` | `app.marketing_platform_settings`, `app.marketing_entries`, view `app.marketing_platform_settings_public` | Entries are append-only. `clicks ≤ impressions`, `conversions ≤ clicks`. API keys are ciphertext and never exposed to client roles. |
+| `20261030000400_seed_treasury.sql` | seed only | Asserts SAR deposits 4,865,000 / expenses 3,973,631 / balance 891,369 minor units before committing. |
+| `20261030000500_treasury_access.sql` | adds `record_deposits`, rewrites account/ledger read+insert policies, grants the four prior migrations' tables to `authenticated` and `service_role` | Tiered treasury: deposit-only callers read Egyptian accounts and `deposit` rows only, and may insert deposits against an Egyptian account. The Saudi account and all expenses stay invisible. |
+
+Ledger and marketing immutability is enforced by a trigger rather than a policy
+so it holds for every role, including the table owner and the service role. The
+safe settings view is `security_invoker`, so it inherits the caller's RLS.
+
+`manage_accounts` also grants read on accounts and the ledger. A manager that
+could insert but not select would silently write nothing: the insert's
+`select ... from app.bank_accounts` returned zero rows, so `INSERT 0 0` looked
+like success. The policy now accepts `view_accounts OR manage_accounts` for
+reads and requires `manage_accounts` for writes.
+
+The four treasury migrations created policies but no table privileges, so
+`authenticated` could not read the tables at all and RLS was never consulted.
+`20261030000500_treasury_access.sql` adds the missing grants; without them the
+policies are inert. Verified on local PG15 as `authenticated`: a
+`record_deposits`-only caller sees one Egyptian account and `deposit` rows
+only, its expense insert raises an RLS violation, and its Saudi deposit inserts
+zero rows, while a `view_accounts` caller sees both accounts and both kinds.
 
 ---
 
