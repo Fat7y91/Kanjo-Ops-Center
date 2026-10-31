@@ -17,7 +17,7 @@ type MerchantsPageProps = {
   searchParams: Promise<{ q?: string }>;
 };
 
-const currency = new Intl.NumberFormat("ar-EG", {
+const currency = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   style: "currency",
   currency: "EGP",
   maximumFractionDigits: 0,

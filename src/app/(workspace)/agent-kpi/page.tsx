@@ -7,6 +7,7 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 import { formatScore } from "@/lib/kpi/format";
 import { loadKpiDataset } from "@/lib/kpi/repository";
 import { buildKpiReport } from "@/lib/kpi/services/agent-kpi-service";
+import { KpiError } from "@/lib/kpi/types";
 import {
   buildKpiFilterOptions,
   isKpiAdmin,
@@ -48,7 +49,19 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
     agents: dataset.agents,
   });
 
-  const report = buildKpiReport(dataset, scope, session.user.id);
+  // An empty scope is a normal state, not an error: a fresh workspace has no
+  // field reps yet, and a manager may filter down to a team with none. Without
+  // this guard the domain's EMPTY_SCOPE error escapes as an RSC 500.
+  let report: ReturnType<typeof buildKpiReport>;
+  try {
+    report = buildKpiReport(dataset, scope, session.user.id);
+  } catch (error) {
+    if (error instanceof KpiError && error.code === "EMPTY_SCOPE") {
+      return <KpiEmptyState />;
+    }
+    throw error;
+  }
+
   const self = report.snapshots.find(
     (snapshot) => snapshot.agent.id === session.user.id,
   );
@@ -135,6 +148,23 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
           الترتيب يُحتسب دائماً داخل نفس المدينة.
         </p>
       )}
+    </>
+  );
+}
+
+/** Rendered when no field rep matches the viewer's scope. */
+function KpiEmptyState() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="أداء المناديب"
+        title="لوحة مؤشرات المناديب"
+        description="تقييم موحّد لكل مندوب وفق مرحلة دورة حياة مدينته."
+      />
+      <p className="empty-state">
+        لا يوجد مناديب في نطاقك بعد. تُحتسب المؤشرات بعد إسناد مناديب ميدانيين
+        إلى المدن.
+      </p>
     </>
   );
 }

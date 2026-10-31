@@ -106,7 +106,7 @@ export function ProductDetailsModal({
           </div>
           <div>
             <dt>آخر تحديث</dt>
-            <dd dir="ltr">{new Date(product.updatedAt).toLocaleString("ar-EG")}</dd>
+            <dd dir="ltr">{new Date(product.updatedAt).toLocaleString("ar-EG-u-nu-latn")}</dd>
           </div>
         </dl>
       </div>

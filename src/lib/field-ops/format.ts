@@ -1,5 +1,5 @@
 export function formatAmount(value: number): string {
-  return new Intl.NumberFormat("ar-EG", {
+  return new Intl.NumberFormat("ar-EG-u-nu-latn", {
     style: "currency",
     currency: "EGP",
     maximumFractionDigits: 0,
@@ -7,7 +7,7 @@ export function formatAmount(value: number): string {
 }
 
 export function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

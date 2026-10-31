@@ -48,7 +48,7 @@ type DecisionTarget = {
 };
 
 function formatAmount(value: number): string {
-  return new Intl.NumberFormat("ar-EG", {
+  return new Intl.NumberFormat("ar-EG-u-nu-latn", {
     style: "currency",
     currency: "EGP",
     maximumFractionDigits: 0,
@@ -57,7 +57,7 @@ function formatAmount(value: number): string {
 
 function formatDate(value: string): string {
   const date = new Date(`${value}T00:00:00`);
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     weekday: "long",
     day: "2-digit",
     month: "long",

@@ -15,7 +15,7 @@ const COMPETITION_TONE: Record<GeoCompetitionLevel, string> = {
 };
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(
+  return new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 0 }).format(
     value,
   );
 }
@@ -134,7 +134,7 @@ export function GeoAnalyticsPanel({
             <article className="geo-stat">
               <span className="detail-label">المساحة التقديرية</span>
               <strong>
-                {new Intl.NumberFormat("ar-EG", {
+                {new Intl.NumberFormat("ar-EG-u-nu-latn", {
                   maximumFractionDigits: 2,
                 }).format(analytics.areaKm2)}{" "}
                 كم²

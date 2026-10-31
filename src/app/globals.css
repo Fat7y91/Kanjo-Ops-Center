@@ -46,7 +46,8 @@
 .nav-toggle,
 .sidebar-close {
   display: none;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
   width: 40px;
   height: 40px;
   padding: 0;
@@ -54,6 +55,7 @@
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
+  line-height: 0;
 }
 
 .sidebar-close {
@@ -66,8 +68,10 @@
 
 .nav-toggle svg,
 .sidebar-close svg {
+  display: block;
   width: 20px;
   height: 20px;
+  flex: none;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;

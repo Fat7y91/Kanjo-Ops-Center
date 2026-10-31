@@ -59,7 +59,7 @@ export function MarketingSection({ marketing, onDrill }: MarketingSectionProps) 
         <WidgetStat
           label="التحويلات"
           value={compact(marketing.conversions)}
-          detail="من عميل محتمل إلى تاجر متعاقد"
+          detail="من عميل محتمل إلى مستخدم نشط"
           tone="green"
           onOpen={() => onDrill("marketing-conversions")}
         />

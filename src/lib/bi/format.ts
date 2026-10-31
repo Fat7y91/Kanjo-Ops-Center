@@ -1,15 +1,15 @@
-const CURRENCY = new Intl.NumberFormat("ar-EG", {
+const CURRENCY = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   style: "currency",
   currency: "EGP",
   maximumFractionDigits: 0,
 });
 
-const COMPACT = new Intl.NumberFormat("ar-EG", {
+const COMPACT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
 
-const COUNT = new Intl.NumberFormat("ar-EG", {
+const COUNT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   maximumFractionDigits: 0,
 });
 

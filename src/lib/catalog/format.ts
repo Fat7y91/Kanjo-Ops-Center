@@ -1,4 +1,4 @@
-const CURRENCY = new Intl.NumberFormat("ar-EG", {
+const CURRENCY = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   style: "currency",
   currency: "EGP",
   maximumFractionDigits: 0,

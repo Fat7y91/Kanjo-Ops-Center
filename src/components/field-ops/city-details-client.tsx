@@ -23,7 +23,7 @@ type CityDetailsClientProps = {
 type CityTab = "operations" | "intelligence";
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(
+  return new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 0 }).format(
     value,
   );
 }

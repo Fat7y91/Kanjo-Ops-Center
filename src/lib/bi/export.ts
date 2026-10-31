@@ -1,16 +1,16 @@
 import type { BiCell, BiColumn, BiTable } from "./types";
 
-const CURRENCY_FORMAT = new Intl.NumberFormat("ar-EG", {
+const CURRENCY_FORMAT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   style: "currency",
   currency: "EGP",
   maximumFractionDigits: 0,
 });
 
-const NUMBER_FORMAT = new Intl.NumberFormat("ar-EG", {
+const NUMBER_FORMAT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   maximumFractionDigits: 0,
 });
 
-const DATE_FORMAT = new Intl.DateTimeFormat("ar-EG", {
+const DATE_FORMAT = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
   dateStyle: "medium",
 });
 

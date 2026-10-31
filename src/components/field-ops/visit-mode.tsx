@@ -37,7 +37,7 @@ const GEO_ERROR_LABEL: Record<string, string> = {
 };
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
@@ -170,7 +170,7 @@ export function VisitMode({ merchant, taskId, onComplete, onCancel }: VisitModeP
             <div>
               <span>القيمة الشهرية</span>
               <strong>
-                {new Intl.NumberFormat("ar-EG", {
+                {new Intl.NumberFormat("ar-EG-u-nu-latn", {
                   style: "currency",
                   currency: "EGP",
                   maximumFractionDigits: 0,
@@ -184,7 +184,7 @@ export function VisitMode({ merchant, taskId, onComplete, onCancel }: VisitModeP
             <div>
               <span>العمولة المكتسبة</span>
               <strong>
-                {new Intl.NumberFormat("ar-EG", {
+                {new Intl.NumberFormat("ar-EG-u-nu-latn", {
                   style: "currency",
                   currency: "EGP",
                   maximumFractionDigits: 0,

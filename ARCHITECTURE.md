@@ -91,7 +91,28 @@ Full text: `AGENTS.md`.
 
 ---
 
-## 3. Environment & Configuration
+## 3. Presentation Conventions
+
+### Numerals
+
+All numbers render as **Western digits (0-9)**, even inside Arabic text. Arabic
+locales default to Eastern Arabic-Indic digits (`ar-EG` → `١٬٢٣٤٬٥٦٧`), so every
+`Intl` formatter uses the `-u-nu-latn` extension:
+
+```ts
+new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 0 });
+new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium" });
+```
+
+This keeps Arabic labels and month names while digits, separators and decimals
+stay Latin. Never use a bare `ar-EG` locale for a formatter, and never
+`toLocaleString("ar-EG")`. Canonical formatters live in
+`src/lib/{bi,catalog,field-ops,kpi}/format.ts`; page-local formatters must follow
+the same rule.
+
+---
+
+## 4. Environment & Configuration
 
 All variables are read lazily by `src/lib/db/env.ts` and the domain config
 modules, so a missing value fails at first use — never at import or build time.
@@ -126,7 +147,7 @@ anyone create an operator account.
 **Public signup must be disabled on the Supabase project.** Turn off email and
 phone signups (Dashboard → Authentication → Sign In / Providers, or
 `auth.enable_signup = false` in `supabase/config.toml`). Signup is not a product
-feature here: accounts are provisioned top-down only (§7.6). If the flag is
+feature here: accounts are provisioned top-down only (§8.6). If the flag is
 left on, `POST /auth/v1/signup` remains reachable and would mint credential-only
 accounts with no `app.users` profile, no grants, and no city scope.
 
@@ -163,7 +184,7 @@ scripts. Neither group is read by the Next.js app.
 
 ---
 
-## 4. UI Primitive Library — `src/components/ui/`
+## 5. UI Primitive Library — `src/components/ui/`
 
 All Headless UI backed. Brand styling lives inside each primitive via `data-*`
 states; call sites never hand-roll purple/gold classes.
@@ -209,7 +230,7 @@ crashing route happens to contain charts. Rules:
 
 ---
 
-## 5. Current Module Placement
+## 6. Current Module Placement
 
 ### Database Clients (Tier 5)
 - `src/lib/db/env.ts` — `optionalEnv`, `requireEnv`, `requireAnyEnv`,
@@ -241,12 +262,12 @@ migrated one at a time.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` (38 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
-- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §7.6.
+- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities).
 - `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (nodejs runtime, `manage_permissions`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
-**Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§7.6).
+**Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§8.6).
 
 #### Why login is a Route Handler, not a Server Action
 
@@ -335,6 +356,10 @@ logout therefore POST to plain route handlers. Rules locked in:
   compared. Metrics are chosen from the city stage:
   `preparation → contracting → data_entry → live_operations`.
 - CSS: `src/styles/kpi.css` manifest over `src/styles/kpi/{layout,metrics,ranking,insights,responsive}.css`.
+- Empty scope is a **rendered state, not an error**. When no rep matches the
+  viewer's scope (a fresh workspace has no field reps yet), the service throws
+  `KpiError("EMPTY_SCOPE")`; the page catches it and renders `KpiEmptyState`.
+  Letting it escape produced an RSC application error (digest 788090452).
 
 ### CSS
 - Manifest: `src/app/globals.css` (4884 lines — still over limit, extraction backlog).
@@ -344,7 +369,7 @@ logout therefore POST to plain route handlers. Rules locked in:
 
 ---
 
-## 6. Migration Gaps (target end-state)
+## 7. Migration Gaps (target end-state)
 
 The tiers exist conceptually; these are the concrete gaps to close.
 
@@ -405,7 +430,7 @@ allowed above the limit.
 
 ---
 
-## 7. Data Persistence — Hybrid Schema Contract
+## 8. Data Persistence — Hybrid Schema Contract
 
 Tier 5 is deliberately split between two systems. Nothing may be stored in both.
 
@@ -420,7 +445,7 @@ Rule: any entity that participates in a money movement or an authorization
 decision is SQL. Anything that is primarily edited offline in the field is
 NoSQL. A document never spans both stores.
 
-### 7.1 RBAC Schema
+### 8.1 RBAC Schema
 
 Source of truth for the TypeScript side stays `src/lib/rbac/`. The database
 mirrors it, it does not redefine it: `app.permissions` seeds from
@@ -440,7 +465,7 @@ policies. It is validated end-to-end against PostgreSQL 15.
 
 Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
 
-### 7.2 Identity: phone + password, and nothing else
+### 8.2 Identity: phone + password, and nothing else
 
 Login is **phone number + password**. Email is optional profile data and is
 therefore neither required nor unique.
@@ -454,7 +479,7 @@ therefore neither required nor unique.
   a phone, so a phone-less account can never be created.
 - `email` accepts NULL and carries no unique index. Duplicate emails are legal.
 
-### 7.3 Authorization invariants enforced in SQL
+### 8.3 Authorization invariants enforced in SQL
 
 These mirror the pure functions in `src/lib/rbac/`, so the rules hold even if a
 write bypasses the application.
@@ -472,13 +497,13 @@ The governor guard is the SQL twin of `assertActiveGovernor()` in
 governor, but permits any unrelated update — an earlier draft fired on every
 update and made bootstrapping the first operator impossible.
 
-### 7.4 Cross-database reference
+### 8.4 Cross-database reference
 
 `app.user_city_scope.city_id` has **no foreign key**. City documents live in
 Firestore, so referential integrity is a Tier 3 responsibility. The column is
 `text` and is validated only as non-empty at the database layer.
 
-### 7.5 Row Level Security
+### 8.5 Row Level Security
 
 All four tables have RLS enabled *and* forced, so even the table owner is
 subject to policy. `has_permission()` and `is_active_user()` are
@@ -494,7 +519,7 @@ subject to policy. `has_permission()` and `is_active_user()` are
 Self-service profile edits must go through a dedicated RPC rather than a direct
 `UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
 
-### 7.6 No Self-Service Signup — Top-Down Provisioning
+### 8.6 No Self-Service Signup — Top-Down Provisioning
 
 **Public registration is strictly disabled.** There is no signup route, no
 `signUp()` call anywhere in the app, and no "create account" link on `/login`.
@@ -694,7 +719,7 @@ repository reads `app.users`.
 
 ---
 
-## 8. Refactored Modules
+## 9. Refactored Modules
 
 ### Catalog — Smart Variant Matrix
 
@@ -771,7 +796,7 @@ Rules locked in by this pipeline:
 
 ---
 
-## 9. Agent KPI Dashboard — 4-Stage City Lifecycle
+## 10. Agent KPI Dashboard — 4-Stage City Lifecycle
 
 The dashboard is the second full 5-tier reference implementation (after Image
 QA). The same rep is scored differently depending on the operational stage of
@@ -828,7 +853,7 @@ graph TD
 
 ---
 
-## 10. The AI Workflow Loop (MANDATORY)
+## 11. The AI Workflow Loop (MANDATORY)
 
 Every AI session on this branch follows this loop. No exceptions.
 
