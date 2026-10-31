@@ -592,6 +592,13 @@ write bypasses the application.
 | At least one active `manage_permissions` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
 | Ordinary profile edits stay legal | Guards fire only on governor-removal events, so the first operator can be bootstrapped |
 | Stale sessions can be invalidated | `auth_revision` counter |
+| Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql` |
+
+Level 4 is the supreme tier: an active L4 account is granted every row in
+`app.permissions`, so it always reports 43/43. The backfill is keyed to
+`clearance_level = 4` only — level 3 is a peer in provisioning, but it is not the
+supreme rank, so L3 keeps whatever it was granted. `20261030000700` used
+`>= 3` for the five treasury keys; that was a one-time delta, not the tier rule.
 
 The governor guard is the SQL twin of `assertActiveGovernor()` in
 `src/lib/rbac/users.ts`. It rejects removing or deactivating the last active
