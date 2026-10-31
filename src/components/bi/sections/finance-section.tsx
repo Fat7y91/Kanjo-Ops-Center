@@ -1,6 +1,5 @@
 "use client";
 
-import { Sparkline } from "@/components/bi/sparkline";
 import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { currencyMoney } from "@/lib/accounts/format";
 import type { FinanceSummary } from "@/lib/bi/select";
@@ -12,21 +11,12 @@ type FinanceSectionProps = {
   onDrill: (id: string) => void;
 };
 
-/** Deterministic shape for the commission trend, derived from the summary. */
-function trendOf(finance: FinanceSummary): number[] {
-  const anchor = finance.net === 0 ? 1 : finance.net;
-  const spread = finance.expected === 0 ? 1 : finance.expected;
-  return [0.62, 0.7, 0.66, 0.78, 0.74, 0.86, 0.82, 0.9].map(
-    (factor) => factor * spread + anchor * 0.1,
-  );
-}
-
 /**
  * Financial widget.
  *
- * The three headline cards are the bank position, read from the immutable
- * ledger in one currency at a time. Commission figures are a separate currency
- * and therefore never merged into the balance: they stay in the trend strip with
+ * Every headline card is the bank position, read from the immutable ledger in
+ * one currency at a time. Contract commissions are a separate currency and are
+ * therefore never merged into the balance: they appear as their own card with
  * their own unit, so no sum ever adds riyals to pounds.
  */
 export function FinanceSection({
@@ -91,22 +81,13 @@ export function FinanceSection({
           tone={primary.pendingPayroll > 0 ? "gold" : "default"}
           onOpen={() => onDrill("finance-pending")}
         />
-      </div>
-
-      <div className="bi-trend-strip">
-        <div className="bi-trend-copy">
-          <span className="bi-stat-label">
-            العمولات المتوقعة · {finance.expected > 0 ? "بالجنيه المصري" : "—"}
-          </span>
-          <span className="bi-stat-detail">
-            محصّلة {currencyMoney(finance.collected, "EGP")} · {finance.signedCount}{" "}
-            عقد موقّع
-          </span>
-        </div>
-        <Sparkline
-          values={trendOf(finance)}
-          tone={finance.net >= 0 ? "purple" : "red"}
-          ariaLabel="اتجاه العمولات"
+        <WidgetDivider />
+        <WidgetStat
+          label="عمولات محصّلة (EGP)"
+          value={currencyMoney(finance.collected, "EGP")}
+          detail={`${finance.signedCount} عقد موقّع`}
+          tone="gold"
+          onOpen={() => onDrill("finance-collected")}
         />
       </div>
     </Widget>

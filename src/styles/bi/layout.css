@@ -10,12 +10,30 @@
   gap: 16px;
 }
 
+/* ── Sticky command bar ───────────────────────────────────────────────────
+ * The title block and the universal filter bar scroll as one unit and pin
+ * directly under the app topbar (72px desktop / 64px <=1023px). The background
+ * is opaque so the widgets passing underneath stay unreadable, not ghosted.
+ */
+
+.bi-sticky-head {
+  position: sticky;
+  top: var(--topbar-height, 72px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+  background: var(--canvas);
+}
+
+.bi-sticky-head .page-header {
+  margin-bottom: 0;
+}
+
 /* ── Universal filter bar ─────────────────────────────────────────────── */
 
 .bi-filterbar {
-  position: sticky;
-  top: 0;
-  z-index: 6;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { FilterBar } from "@/components/bi/filter-bar";
@@ -30,6 +30,8 @@ import {
 
 type ExecutiveDashboardProps = {
   dataset: BiDataset;
+  /** Title block rendered inside the sticky header above the filter bar. */
+  header?: ReactNode;
 };
 
 /**
@@ -40,7 +42,7 @@ type ExecutiveDashboardProps = {
  */
 const EXECUTIVE_LEVEL = 3;
 
-export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
+export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps) {
   const { hasPermission, clearanceLevel } = usePermission();
   const [filters, setFilters] = useState<BiFilters>(DEFAULT_BI_FILTERS);
   const [drill, setDrill] = useState<DrillResolution | null>(null);
@@ -92,19 +94,22 @@ export function ExecutiveDashboard({ dataset }: ExecutiveDashboardProps) {
 
   return (
     <div className="bi-dashboard">
-      <FilterBar
-        filters={filters}
-        cities={dataset.cities}
-        teams={dataset.teams}
-        reps={dataset.reps}
-        vendorTypes={dataset.vendorTypes}
-        resultCount={scoped.merchants.length}
-        onChange={updateFilters}
-        onReset={() => {
-          setFilters(DEFAULT_BI_FILTERS);
-          setActiveStage(null);
-        }}
-      />
+      <div className="bi-sticky-head">
+        {header}
+        <FilterBar
+          filters={filters}
+          cities={dataset.cities}
+          teams={dataset.teams}
+          reps={dataset.reps}
+          vendorTypes={dataset.vendorTypes}
+          resultCount={scoped.merchants.length}
+          onChange={updateFilters}
+          onReset={() => {
+            setFilters(DEFAULT_BI_FILTERS);
+            setActiveStage(null);
+          }}
+        />
+      </div>
 
       <FunnelSection
         steps={funnel}

@@ -93,6 +93,9 @@
   --radius-card: 16px;
   --radius-modal: 24px;
 
+  /* Height of the app topbar; sticky section headers pin below it. */
+  --topbar-height: 72px;
+
   /* ── Type ───────────────────────────────────────────────────────────── */
   --font-sans:
     var(--font-cairo), "Cairo", "Segoe UI", "Helvetica Neue", Arial, system-ui,

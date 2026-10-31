@@ -11,7 +11,6 @@ import {
 import type { BiScopedData } from "./select";
 import {
   accountsTable,
-  catalogTable,
   complianceTable,
   expensesTable,
   ledgerTable,
@@ -29,6 +28,29 @@ export type DrillResolution = {
 
 function byStage(scoped: BiScopedData, stage: BiDealStage) {
   return scoped.merchants.filter((merchant) => merchant.stage === stage);
+}
+
+/**
+ * Merchants behind a catalog-health bucket.
+ *
+ * Catalog rows are per product, so a merchant with one published and one
+ * unpublished product must not appear in both buckets. Published therefore
+ * means "has at least one published product"; missing means the opposite.
+ */
+function merchantsInCatalogState(
+  scoped: BiScopedData,
+  state: "published" | "missing",
+) {
+  const published = new Set(
+    scoped.catalog
+      .filter((row) => row.state === "published")
+      .map((row) => row.merchantId),
+  );
+  return scoped.merchants.filter((merchant) =>
+    state === "published"
+      ? published.has(merchant.id)
+      : !published.has(merchant.id),
+  );
 }
 
 /**
@@ -91,10 +113,16 @@ export function resolveDrill(
     if (!meta) return null;
     return {
       eyebrow: "الكتالوج",
-      title: `منتجات بحالة ${meta.label}`,
-      description: "سجلات الكتالوج المطابقة للحالة المحددة.",
-      table: catalogTable(
-        scoped.catalog.filter((row) => row.state === state),
+      title: `تجار بحالة ${meta.label}`,
+      description:
+        state === "published"
+          ? "التجار الذين لديهم منتجات منشورة في الكتالوج."
+          : "التجار الذين لم يُنشروا أي منتج بعد.",
+      table: merchantTable(
+        `drill-${id}`,
+        `تجار بحالة ${meta.label}`,
+        "",
+        merchantsInCatalogState(scoped, state),
       ),
     };
   }
@@ -124,20 +152,6 @@ export function resolveDrill(
           "العمولات المحصّلة",
           "",
           scoped.merchants.filter((merchant) => merchant.collected > 0),
-        ),
-      };
-    case "finance-expected":
-      return {
-        eyebrow: "المالية",
-        title: "العمولات المتوقعة",
-        description: "التجار الذين لديهم عمولة متوقعة داخل النطاق.",
-        table: merchantTable(
-          "finance-expected",
-          "العمولات المتوقعة",
-          "",
-          scoped.merchants.filter(
-            (merchant) => merchant.achievedCommission > 0,
-          ),
         ),
       };
     case "finance-expenses":
@@ -189,8 +203,13 @@ export function resolveDrill(
       return {
         eyebrow: "الكتالوج",
         title: "خط إدخال البيانات",
-        description: "كل سجلات الكتالوج داخل النطاق.",
-        table: catalogTable(scoped.catalog),
+        description: "التجار المطابقون للنطاق مع حالة جاهزية كتالوجهم.",
+        table: merchantTable(
+          "catalog-all",
+          "تجار الكتالوج",
+          "",
+          scoped.merchants,
+        ),
       };
     case "merchants-all":
       return {

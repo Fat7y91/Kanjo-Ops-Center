@@ -91,7 +91,6 @@ export function scopeDataset(
       (row) =>
         cityOk(row.cityId) &&
         teamOk(row.team) &&
-        (!filters.platform || row.platform === filters.platform) &&
         withinRange(row.occurredAt, start),
     ),
     catalog: dataset.catalog.filter(
@@ -189,7 +188,6 @@ function average(values: number[]): number {
 
 export type FinanceSummary = {
   collected: number;
-  expected: number;
   expenses: number;
   net: number;
   marginRate: number;
@@ -202,19 +200,11 @@ export function buildFinance(
   expenses: BiScopedData["expenses"],
 ): FinanceSummary {
   const collected = sum(merchants.map((row) => row.collected));
-  // Only negotiated deals can produce a commission, so untouched merchants
-  // must not inflate the expected pipeline.
-  const expected = sum(
-    merchants
-      .filter((row) => row.achievedCommission > 0)
-      .map((row) => (row.monthlyValue * row.achievedCommission) / 100),
-  );
   const expenseTotal = sum(expenses.map((row) => row.amount));
   const monthlyValue = sum(merchants.map((row) => row.monthlyValue));
 
   return {
     collected,
-    expected: Math.round(expected),
     expenses: expenseTotal,
     net: Math.round(collected - expenseTotal),
     marginRate:

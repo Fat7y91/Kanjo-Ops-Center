@@ -3,13 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { SelectMenu } from "@/components/ui/select-menus";
 import {
-  BI_MARKETING_PLATFORMS,
-  BI_MARKETING_PLATFORM_META,
   BI_RANGES,
   BI_RANGE_LABELS,
   type BiCityOption,
   type BiFilters,
-  type BiMarketingPlatform,
   type BiRange,
 } from "@/lib/bi/types";
 
@@ -49,8 +46,7 @@ export function FilterBar({
     filters.cityId !== null ||
     filters.team !== null ||
     filters.repId !== null ||
-    filters.vendorTypeId !== null ||
-    filters.platform !== null;
+    filters.vendorTypeId !== null;
 
   const cityOptions: Option<string>[] = [
     { value: ALL, label: "كل المدن" },
@@ -69,13 +65,6 @@ export function FilterBar({
     ...vendorTypes.map((vendor) => ({
       value: String(vendor.id),
       label: vendor.name,
-    })),
-  ];
-  const platformOptions: Option<string>[] = [
-    { value: ALL, label: "كل المنصات" },
-    ...BI_MARKETING_PLATFORMS.map((platform) => ({
-      value: platform,
-      label: BI_MARKETING_PLATFORM_META[platform],
     })),
   ];
 
@@ -122,19 +111,6 @@ export function FilterBar({
               onChange({ repId: repId === ALL ? null : repId })
             }
             options={repOptions}
-          />
-        </label>
-
-        <label className="bi-filter">
-          <span>المنصة</span>
-          <SelectMenu
-            value={filters.platform ?? ALL}
-            onChange={(platform) =>
-              onChange({
-                platform: platform === ALL ? null : (platform as BiMarketingPlatform),
-              })
-            }
-            options={platformOptions}
           />
         </label>
 

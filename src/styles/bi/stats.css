@@ -11,13 +11,20 @@
 }
 
 .bi-stat-cluster-row {
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
+  display: flex;
   align-items: stretch;
+  gap: 0;
+}
+
+/* Interior rules are bare 1px columns, not equal-width slots. */
+.bi-stat-cluster-row > .bi-divider {
+  flex: 0 0 1px;
+  align-self: stretch;
 }
 
 .bi-stat {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -64,10 +71,12 @@
 
 .bi-stat-value {
   color: var(--ink);
-  font-size: clamp(1.15rem, 1.7vw, 1.5rem);
+  font-size: clamp(1.05rem, 1.5vw, 1.4rem);
+  font-variant-numeric: tabular-nums;
   font-weight: 800;
   letter-spacing: -0.035em;
-  line-height: 1.15;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .bi-stat-detail {

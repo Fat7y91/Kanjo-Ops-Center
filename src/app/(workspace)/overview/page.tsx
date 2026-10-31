@@ -12,19 +12,15 @@ export default async function OverviewPage() {
   const dataset = await buildBiDataset();
 
   return (
-    <>
-      <PageHeader
-        eyebrow="مركز القيادة التنفيذي"
-        title={`لوحة القيادة، ${firstName}`}
-        description="حالة الشبكة والتفاوض والمالية والتسويق في لقطة واحدة."
-        actions={
-          <span className="badge badge-gold">
-            مستوى التصريح {session.clearanceLevel}
-          </span>
-        }
-      />
-
-      <ExecutiveDashboard dataset={dataset} />
-    </>
+    <ExecutiveDashboard
+      dataset={dataset}
+      header={
+        <PageHeader
+          eyebrow="مركز القيادة التنفيذي"
+          title={`لوحة القيادة، ${firstName}`}
+          description="حالة الشبكة والتفاوض والمالية والتسويق في لقطة واحدة."
+        />
+      }
+    />
   );
 }

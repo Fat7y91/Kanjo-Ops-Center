@@ -1253,6 +1253,11 @@
     padding: 10px 18px;
   }
 
+  .app-shell,
+  .app-main {
+    --topbar-height: 64px;
+  }
+
   .content {
     padding: 20px 18px 40px;
   }
