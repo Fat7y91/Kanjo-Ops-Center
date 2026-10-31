@@ -146,7 +146,7 @@ async function attachProfile(
     .update({
       full_name: input.fullName,
       title: input.title,
-      team: input.team,
+      team: input.team ?? "",
       clearance_level: input.clearanceLevel,
     })
     .eq("id", userId)

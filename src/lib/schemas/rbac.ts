@@ -10,7 +10,8 @@ export const userCreateSchema = z.object({
   name: z.string().trim().min(2, "اسم المشغّل مطلوب.").max(80),
   email: z.string().trim().email("أدخل بريداً إلكترونياً صالحاً.").max(120),
   title: z.string().trim().min(2, "المسمى الوظيفي مطلوب.").max(80),
-  team: z.string().trim().min(2, "الفريق مطلوب.").max(60),
+  /** Mandatory only for a field courier; see `provisionAccountSchema`. */
+  team: z.string().trim().max(60).optional(),
   clearanceLevel: z.coerce
     .number()
     .int("مستوى التصريح يجب أن يكون رقماً صحيحاً.")

@@ -10,6 +10,7 @@ import {
   isGlobalActor,
   toClearanceActor,
 } from "@/lib/rbac/hierarchy";
+import { listTeams } from "@/lib/rbac/teams";
 import { getRbacRevision, listUsers } from "@/lib/rbac/users";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function PermissionsPage() {
   const cities = listCities().filter(
     (city) => global || actor.accessibleCities.includes(city.id),
   );
+  const teams = await listTeams();
 
   return (
     <>
@@ -53,6 +55,7 @@ export default async function PermissionsPage() {
             id: city.id,
             name: city.name,
           }))}
+          teams={teams}
         />
       </Protect>
 

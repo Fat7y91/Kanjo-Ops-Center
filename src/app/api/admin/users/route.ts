@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       name: input.name,
       email: input.email,
       title: input.title,
-      team: input.team,
+      team: input.team ?? "",
       permissions: input.permissions,
       accessibleCities: input.accessibleCities,
       clearanceLevel: input.clearanceLevel,

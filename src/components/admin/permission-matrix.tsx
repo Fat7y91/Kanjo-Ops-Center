@@ -2,12 +2,15 @@
 
 import { Suspense } from "react";
 
-import { CreateUserModal, ScopeModal } from "@/components/admin/permission-modals";
+import { CreateUserModal } from "@/components/admin/permission-modals";
+import { ScopeModal } from "@/components/admin/scope-modal";
+import { Button } from "@/components/ui/button";
 import { UserCard } from "@/components/admin/user-card";
 import { usePermissionMatrix } from "@/components/admin/use-permission-matrix";
 import { PERMISSION_GROUPS } from "@/lib/rbac/permissions";
 import { clearanceTone } from "@/lib/rbac/hierarchy";
 import type { AppUser } from "@/lib/rbac/types";
+import type { TeamOption } from "@/lib/rbac/teams";
 import type {
   CityOption,
   LevelOption,
@@ -21,6 +24,7 @@ type PermissionMatrixProps = {
   viewerGlobalScope: boolean;
   assignableLevels: LevelOption[];
   assignableCities: CityOption[];
+  teams: TeamOption[];
 };
 
 /**
@@ -58,14 +62,14 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
         </div>
         <div className="matrix-meta">
           <span className="badge badge-green">إصدار {matrix.revision}</span>
-          <button
-            type="button"
-            className="button button-primary button-small"
+          <Button
+            size="sm"
+            variant="primary"
             onClick={matrix.openCreate}
             disabled={matrix.levelOptions.length === 0}
           >
-            إضافة مشغّل
-          </button>
+            إضافة مستخدم جديد
+          </Button>
         </div>
       </div>
 
@@ -132,6 +136,7 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
         form={matrix.createForm}
         levels={matrix.levelOptions}
         cities={props.assignableCities}
+        teams={props.teams}
         viewerGlobalScope={props.viewerGlobalScope}
         saving={matrix.savingCreate}
         onFormChange={matrix.setCreateForm}

@@ -207,19 +207,18 @@ export function useUserCapabilities({
     [ensureChannel, refresh, router],
   );
 
-  const insertCreatedUser = useCallback(
-    (user: AppUser, nextRevision?: number) => {
-      setUsers((current) => [...current, user]);
-      if (typeof nextRevision === "number") {
-        setRevision(nextRevision);
-        setSeenRevision(nextRevision);
-      }
-      ensureChannel()?.postMessage({ type: "permissions-changed" });
-      void refresh();
-      router.refresh();
-    },
-    [ensureChannel, refresh, router],
-  );
+  /**
+   * Pulls the authoritative roster after a create.
+   *
+   * Provisioning mints an auth account server-side, so the client cannot assume
+   * the new row matches what it posted (grants, scope and id are assigned
+   * there). A refresh re-reads the RSC payload instead of guessing.
+   */
+  const reloadUsers = useCallback(() => {
+    ensureChannel()?.postMessage({ type: "permissions-changed" });
+    void refresh();
+    router.refresh();
+  }, [ensureChannel, refresh, router]);
 
   const hasPermission = useCallback(
     (permission: Permission) => permissions.has(permission),
@@ -243,6 +242,6 @@ export function useUserCapabilities({
     changeLevel,
     removeUser,
     patchUser,
-    insertCreatedUser,
+    reloadUsers,
   };
 }

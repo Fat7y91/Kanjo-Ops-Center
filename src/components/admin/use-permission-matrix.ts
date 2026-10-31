@@ -4,10 +4,12 @@ import { useCallback, useState } from "react";
 
 import type { AppUser } from "@/lib/rbac/types";
 import { useUserCapabilities } from "@/components/admin/use-user-capabilities";
-import type { CityOption, LevelOption } from "@/components/admin/user-form-types";
 import {
+  COURIER_LEVEL,
   emptyForm,
+  type CityOption,
   type CreateForm,
+  type LevelOption,
 } from "@/components/admin/user-form-types";
 
 type Args = {
@@ -73,35 +75,37 @@ export function usePermissionMatrix(args: Args) {
       setSavingCreate(true);
       caps.setError(null);
       try {
-        const response = await fetch("/api/admin/users", {
+        const response = await fetch("/api/admin/users/provision", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: createForm.name,
-            email: createForm.email,
+            phone: createForm.phone,
+            password: createForm.password,
+            fullName: createForm.name,
+            email: createForm.email.trim() || undefined,
             title: createForm.title,
-            team: createForm.team,
+            team:
+              Number(createForm.clearanceLevel) === COURIER_LEVEL
+                ? createForm.team
+                : undefined,
             clearanceLevel: Number(createForm.clearanceLevel),
             accessibleCities: createForm.cityIds,
-            permissions: [],
+            permissions: createForm.permissions,
           }),
         });
         const payload = (await response.json()) as {
-          user?: AppUser;
-          revision?: number;
+          account?: { id: string };
           error?: string;
         };
-        if (!response.ok || !payload.user) {
-          caps.setError(payload.error ?? "تعذر إنشاء المشغّل.");
+        if (!response.ok || !payload.account) {
+          caps.setError(payload.error ?? "تعذر إنشاء المستخدم.");
           return;
-        }
-        if (caps.withinViewer(payload.user)) {
-          caps.insertCreatedUser(payload.user, payload.revision);
         }
         setCreateOpen(false);
         setCreateForm(emptyForm(args.assignableLevels, args.assignableCities));
+        caps.reloadUsers();
       } catch {
-        caps.setError("تعذر إنشاء المشغّل.");
+        caps.setError("تعذر إنشاء المستخدم.");
       } finally {
         setSavingCreate(false);
       }
@@ -110,8 +114,7 @@ export function usePermissionMatrix(args: Args) {
       args.assignableCities,
       args.assignableLevels,
       caps.setError,
-      caps.withinViewer,
-      caps.insertCreatedUser,
+      caps.reloadUsers,
       createForm,
     ],
   );
