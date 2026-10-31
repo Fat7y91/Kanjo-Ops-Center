@@ -67,6 +67,7 @@ export const SEED_USERS: AppUser[] = [
       "view_contracts",
       "assign_city_managers",
       "manage_permissions",
+      "record_deposits",
     ],
     accessibleCities: ["city-cairo"],
     clearanceLevel: 2,

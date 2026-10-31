@@ -3,7 +3,7 @@ begin;
 /* ─────────────────────────────────────────────────────────────────────────
  * Seed the capability catalogue.
  *
- * Mirrors src/lib/rbac/permissions.ts exactly (38 keys, 9 groups). Generated
+ * Mirrors src/lib/rbac/permissions.ts exactly (43 keys, 10 groups). Generated
  * from that file so the two can never disagree at seed time.
  *
  * Idempotent: re-running updates label/description/group/sort_order and leaves
@@ -49,7 +49,12 @@ insert into app.permissions (key, label, description, group_key, sort_order) val
   ('manage_permissions', 'إدارة الصلاحيات', 'فتح مصفوفة الصلاحيات ومنح القدرات أو سحبها.', 'الحوكمة', 35),
   ('view_financials', 'عرض البيانات المالية', 'الاطلاع على الإيرادات والعمولات والمصروفات في مركز القيادة التنفيذي.', 'المالية', 36),
   ('manage_expenses', 'إدارة المصروفات', 'تسجيل مصروفات التشغيل واعتمادها في دفتر المالية.', 'المالية', 37),
-  ('manage_marketing_metrics', 'إدارة مؤشرات التسويق', 'تحديث أرقام الوصول والحملات المستخدمة في لوحة التسويق.', 'التسويق', 38)
+  ('manage_marketing_metrics', 'إدارة مؤشرات التسويق', 'تحديث أرقام الوصول والحملات المستخدمة في لوحة التسويق.', 'التسويق', 38),
+  ('view_accounts', 'عرض الحسابات البنكية', 'الاطلاع على الحسابات البنكية وأرصدة الودائع والمصروفات.', 'المالية', 39),
+  ('manage_accounts', 'إدارة الحسابات البنكية', 'إضافة الحسابات البنكية وتسجيل الودائع والمصروفات.', 'المالية', 40),
+  ('record_deposits', 'تسجيل الإيداعات', 'تسجيل إيداعات الحسابات البنكية المصرية فقط، دون الاطلاع على الأرصدة أو المصروفات.', 'المالية', 41),
+  ('view_payroll', 'عرض الرواتب والعمولات', 'الاطلاع على مسير الرواتب وحساب العمولات لكل مندوب.', 'المالية', 42),
+  ('manage_payroll', 'إدارة الرواتب والعمولات', 'تعديل بنود الرواتب والعمولات واعتماد المسير.', 'المالية', 43)
 
 on conflict (key) do update
   set label       = excluded.label,

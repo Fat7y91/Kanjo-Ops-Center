@@ -4,6 +4,10 @@
 @import "../styles/kpi.css";
 @import "../styles/field-ops-actions.css";
 @import "../styles/rbac.css";
+@import "../styles/accounts.css";
+@import "../styles/payroll.css";
+@import "../styles/marketing.css";
+@import "../styles/data-entry.css";
 @import "../styles/login.css";
 
 /* ── App shell ─────────────────────────────────────────────────────────── */

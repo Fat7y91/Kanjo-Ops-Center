@@ -23,3 +23,18 @@ export async function requirePermission(
   }
   return session;
 }
+
+/**
+ * Guard for a surface that several distinct grants can open (for example the
+ * treasury, where a deposit-only city manager and a full accountant both have
+ * a legitimate reason to be there).
+ */
+export async function requireAnyPermission(
+  permissions: readonly Permission[],
+): Promise<ActiveSession> {
+  const session = await requireSession();
+  if (!permissions.some((permission) => session.permissions.includes(permission))) {
+    redirect(`/forbidden?permission=${encodeURIComponent(permissions[0])}`);
+  }
+  return session;
+}

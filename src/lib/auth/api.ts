@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { getServerSession } from "@/lib/auth/server-session";
+import { AccountsError } from "@/lib/accounts/store";
 import { CatalogError } from "@/lib/catalog/store";
 import { ImageQaError } from "@/lib/catalog/image-qa";
+import { MarketingError } from "@/lib/marketing/store";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
@@ -76,6 +78,18 @@ export function actorFromSession(session: ActiveSession) {
 }
 
 export function apiError(error: unknown): NextResponse {
+  if (error instanceof AccountsError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof MarketingError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
   if (error instanceof FieldOpsError) {
     return NextResponse.json(
       { error: error.message, code: error.code },

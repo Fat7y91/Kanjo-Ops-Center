@@ -1,0 +1,177 @@
+/* Accounts and bank ledger. */
+
+.accounts-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.accounts-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.accounts-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.accounts-total {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.accounts-scope-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--kanjo-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.account-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-card-head h3 {
+  margin: 6px 0 2px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.account-iban {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+.account-balance {
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.account-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 0;
+  border-block: 1px dashed var(--line);
+}
+
+.account-metrics dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  margin-bottom: 3px;
+}
+
+.account-metrics dd {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.account-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-ledger li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.account-ledger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.account-ledger-date {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.account-ledger strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.account-ledger-empty {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.account-form,
+.ledger-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ledger-kind {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .accounts-totals,
+  .account-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accounts-total:last-child .bi-divider {
+    display: none;
+  }
+}

@@ -250,6 +250,37 @@ export const PERMISSIONS = [
     description: "تحديث أرقام الوصول والحملات المستخدمة في لوحة التسويق.",
     group: "التسويق",
   },
+  {
+    key: "view_accounts",
+    label: "عرض الحسابات البنكية",
+    description: "الاطلاع على الحسابات البنكية وأرصدة الودائع والمصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "manage_accounts",
+    label: "إدارة الحسابات البنكية",
+    description: "إضافة الحسابات البنكية وتسجيل الودائع والمصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "record_deposits",
+    label: "تسجيل الإيداعات",
+    description:
+      "تسجيل إيداعات الحسابات البنكية المصرية فقط، دون الاطلاع على الأرصدة أو المصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "view_payroll",
+    label: "عرض الرواتب والعمولات",
+    description: "الاطلاع على مسير الرواتب وحساب العمولات لكل مندوب.",
+    group: "المالية",
+  },
+  {
+    key: "manage_payroll",
+    label: "إدارة الرواتب والعمولات",
+    description: "تعديل بنود الرواتب والعمولات واعتماد المسير.",
+    group: "المالية",
+  },
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number]["key"];
