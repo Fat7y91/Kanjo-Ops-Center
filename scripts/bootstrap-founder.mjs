@@ -10,7 +10,8 @@
  * Requirements:
  *   SUPABASE_URL               : https://<ref>.supabase.co
  *   SUPABASE_SERVICE_ROLE_KEY  : service-role secret (never commit, never print)
- *   app.permissions must be seeded first (20261029000200_seed_permissions.sql)
+ *   app.permissions must be seeded first
+ *   (20261101000000_seed_l4_new_permissions.sql holds the 49-key catalogue)
  *
  * Usage:
  *   node --env-file=.env.local scripts/bootstrap-founder.mjs
@@ -28,6 +29,8 @@ const FULL_NAME = process.env.KANJO_FOUNDER_NAME ?? 'Founder';
 const TITLE = process.env.KANJO_FOUNDER_TITLE ?? 'المؤسس';
 const TEAM = process.env.KANJO_FOUNDER_TEAM ?? 'الإدارة التنفيذية';
 const CLEARANCE_LEVEL = 4;
+/** Must match `PERMISSION_KEYS.length` in `src/lib/rbac/permissions.ts`. */
+const EXPECTED_CATALOGUE_KEYS = 49;
 
 function fail(message) {
   console.error(`\n  ✗ ${message}\n`);
@@ -145,7 +148,18 @@ async function grantAllPermissions(client, userId) {
 
   if (error) fail(`Could not read permissions: ${error.message}`);
   if (!permissions || permissions.length === 0) {
-    fail('app.permissions is empty. Run 20261029000200_seed_permissions.sql first.');
+    fail('app.permissions is empty. Run 20261101000000_seed_l4_new_permissions.sql first.');
+  }
+
+  // A catalogue left behind by an older refactor still answers here, and the
+  // founder would then be minted with a partial grant set — the exact failure
+  // this guard exists to prevent. The app drops unknown keys at read time, so a
+  // catalogue row the app no longer knows is harmless; a missing row is not.
+  if (permissions.length < EXPECTED_CATALOGUE_KEYS) {
+    fail(
+      `app.permissions holds ${permissions.length} keys, expected at least ${EXPECTED_CATALOGUE_KEYS}. ` +
+        'Run 20261101000000_seed_l4_new_permissions.sql before bootstrapping.',
+    );
   }
 
   const rows = permissions.map((permission) => ({

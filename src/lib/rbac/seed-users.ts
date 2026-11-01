@@ -1,3 +1,4 @@
+import { MAX_CLEARANCE_LEVEL } from "./hierarchy";
 import { PERMISSION_KEYS, type Permission } from "./permissions";
 import type { AppUser } from "./types";
 
@@ -19,8 +20,11 @@ const REP_SET: Permission[] = [
  *
  * Kept in its own module so the user store stays focused on mutation and
  * invariants as the roster grows with new modules (finance, marketing).
+ *
+ * Rows are declarative; `SEED_USERS` below normalises them, so an L4 row can
+ * never be seeded with a partial grant set.
  */
-export const SEED_USERS: AppUser[] = [
+const SEED_ROSTER: AppUser[] = [
   {
     id: "u-owner",
     name: "Nour El-Sayed",
@@ -233,3 +237,19 @@ export const SEED_USERS: AppUser[] = [
     updatedAt: new Date(0).toISOString(),
   },
 ];
+
+/**
+ * Level 4 is the supreme tier: it holds the entire catalogue, always.
+ *
+ * The rule is applied here instead of being trusted from each literal above, so
+ * a future L4 row cannot be added with a partial set. The database enforces the
+ * same invariant in `20261101000000_seed_l4_new_permissions.sql`; both sides
+ * read the catalogue from `permissions.ts`, which is why this is a projection
+ * and not a second copy of 49 keys.
+ */
+function withSupremeCatalogue(user: AppUser): AppUser {
+  if (user.clearanceLevel < MAX_CLEARANCE_LEVEL) return user;
+  return { ...user, permissions: [...ALL_PERMISSIONS] };
+}
+
+export const SEED_USERS: AppUser[] = SEED_ROSTER.map(withSupremeCatalogue);

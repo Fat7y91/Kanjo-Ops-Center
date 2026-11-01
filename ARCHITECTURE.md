@@ -674,13 +674,18 @@ write bypasses the application.
 | At least one active `manage_system_users` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
 | Ordinary profile edits stay legal | Guards fire only on governor-removal events, so the first operator can be bootstrapped |
 | Stale sessions can be invalidated | `auth_revision` counter |
-| Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql` |
+| Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql`, converged by `20261101000000_seed_l4_new_permissions.sql` |
 
-Level 4 is the supreme tier: an active L4 account is granted every row in
-`app.permissions`, so it always reports 49/49. The backfill is keyed to
-`clearance_level = 4` only — under the Hierarchy Security Rule L3 is strictly
-below L4, so L3 keeps whatever it was granted. `20261030000700` used
-`>= 3` for the five treasury keys; that was a one-time delta, not the tier rule.
+Level 4 is the supreme tier: an L4 account holds exactly the 49 catalogue keys,
+so it always reports 49/49. Suspension is expressed by `app.users.active` and
+`is_active_user()`, never by withholding grants — a reactivated L4 returns whole
+instead of half-blind. `20261101000000` upserts the 15-module catalogue, deletes
+the L4 grants that point at keys the catalogue no longer contains, re-grants the
+49, bumps `auth_revision`, and raises an exception if any L4 row does not end up
+with exactly 49. It is keyed to `clearance_level = 4` only — under the Hierarchy
+Security Rule L3 is strictly below L4, so L3 keeps whatever it was granted.
+`20261030000700` used `>= 3` for the five treasury keys; that was a one-time
+delta, not the tier rule.
 
 The governor guard is the SQL twin of `assertActiveGovernor()` in
 `src/lib/rbac/users.ts`. It rejects removing or deactivating the last active
