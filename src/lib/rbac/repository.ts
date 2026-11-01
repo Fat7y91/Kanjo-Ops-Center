@@ -68,11 +68,18 @@ export async function loadRbacSnapshot(): Promise<RbacSnapshot | null> {
   ]);
 
   if (userRows.error) throw userRows.error;
-  if (grantsResult.error) throw grantsResult.error;
-  if (scopesResult.error) throw scopesResult.error;
+  // Grants and scope are additive tables: while a migration is in flight
+  // PostgREST may not see them yet. A missing schema object degrades to "no
+  // grants / no scope" for the render; every other error keeps failing loudly.
+  if (grantsResult.error && !isMissingSchemaObject(grantsResult.error)) {
+    throw grantsResult.error;
+  }
+  if (scopesResult.error && !isMissingSchemaObject(scopesResult.error)) {
+    throw scopesResult.error;
+  }
 
-  const grants = (grantsResult.data ?? []) as GrantRow[];
-  const scopes = (scopesResult.data ?? []) as ScopeRow[];
+  const grants = grantsResult.error ? [] : ((grantsResult.data ?? []) as GrantRow[]);
+  const scopes = scopesResult.error ? [] : ((scopesResult.data ?? []) as ScopeRow[]);
   const rows = userRows.rows;
 
   const permissionsByUser = new Map<string, Permission[]>();
@@ -129,16 +136,24 @@ export async function getUserProfile(id: string): Promise<AppUser | null> {
 
   if (userResult.error) throw userResult.error;
   if (userResult.rows.length === 0) return null;
-  if (grantsResult.error) throw grantsResult.error;
-  if (scopesResult.error) throw scopesResult.error;
+  if (grantsResult.error && !isMissingSchemaObject(grantsResult.error)) {
+    throw grantsResult.error;
+  }
+  if (scopesResult.error && !isMissingSchemaObject(scopesResult.error)) {
+    throw scopesResult.error;
+  }
 
-  const permissions = (grantsResult.data ?? [])
-    .map((row) => (row as { permission_key: string }).permission_key)
-    .filter(isPermission);
+  const permissions = grantsResult.error
+    ? []
+    : (grantsResult.data ?? [])
+        .map((row) => (row as { permission_key: string }).permission_key)
+        .filter(isPermission);
 
-  const cities = (scopesResult.data ?? []).map(
-    (row) => (row as { city_id: string }).city_id,
-  );
+  const cities = scopesResult.error
+    ? []
+    : (scopesResult.data ?? []).map(
+        (row) => (row as { city_id: string }).city_id,
+      );
 
   return toAppUser(userResult.rows[0], permissions, cities);
 }

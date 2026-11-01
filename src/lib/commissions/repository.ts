@@ -82,17 +82,29 @@ export async function selectCommissionRateRows(
   };
 }
 
-/** All schedule rows, or null when Supabase is not configured. */
+/**
+ * All schedule rows, or null when Supabase is not configured.
+ *
+ * The list read is the settings page's data source, so it must never throw
+ * inside a Server Component. A schema migration in flight (or a lagging
+ * PostgREST schema cache) surfaces as an error here while the rest of the app
+ * still works; the page degrades to its "finance database unavailable" state
+ * instead of crashing with a 500. Writes keep their strict error behaviour.
+ */
 export async function listCommissionRateRows(): Promise<
   CommissionRateRow[] | null
 > {
   if (!hasSupabaseConfig()) return null;
 
-  const { rows, error } = await selectCommissionRateRows(
-    getSupabaseServerClient(),
-  );
-  if (error) throw error;
-  return rows;
+  try {
+    const { rows, error } = await selectCommissionRateRows(
+      getSupabaseServerClient(),
+    );
+    if (error) return null;
+    return rows;
+  } catch {
+    return null;
+  }
 }
 
 /** The schedule row for a city, or the global fallback row for null. */

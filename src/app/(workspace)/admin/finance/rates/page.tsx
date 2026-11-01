@@ -26,9 +26,17 @@ export default async function FinanceRatesPage() {
     governorate: city.governorate,
   }));
 
-  const rows = isCommissionRatesDatabaseConfigured()
-    ? ((await listCommissionRateRows()) ?? []).map(toCityCommissionRate)
-    : null;
+  // Degrade, never crash: while the ERP schema is being migrated the read can
+  // fail transiently, so the page renders the "unavailable" state instead of
+  // surfacing the repository error as a 500.
+  let rows: ReturnType<typeof toCityCommissionRate>[] | null = null;
+  try {
+    rows = isCommissionRatesDatabaseConfigured()
+      ? ((await listCommissionRateRows()) ?? []).map(toCityCommissionRate)
+      : null;
+  } catch {
+    rows = null;
+  }
 
   const overrides = rows ? rows.filter((row) => row.cityId !== null) : [];
 
