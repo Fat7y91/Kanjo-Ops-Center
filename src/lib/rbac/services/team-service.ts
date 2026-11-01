@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { isGlobalActor, toClearanceActor, type ClearanceActor } from "@/lib/rbac/hierarchy";
 import { RbacDeniedError } from "@/lib/rbac/management";
+import { isMissingSchemaObject } from "@/lib/rbac/repository";
 import type { CityTeam } from "@/lib/rbac/types";
 import { insertTeamRow, isTeamDatabaseConfigured } from "@/lib/rbac/team-repository";
 
@@ -71,6 +72,15 @@ export async function createTeam(
         "TEAM_EXISTS",
         "يوجد فريق بهذا الاسم في المدينة نفسها.",
         409,
+      );
+    }
+    // The table is absent when the deployment predates the teams migration.
+    // Answer with a clear, actionable error instead of a raw PostgREST code.
+    if (isMissingSchemaObject(error)) {
+      throw new TeamError(
+        "TEAM_STORE_UNAVAILABLE",
+        "إدارة الفرق غير مُفعّلة على هذا النشر بعد.",
+        503,
       );
     }
     throw error;

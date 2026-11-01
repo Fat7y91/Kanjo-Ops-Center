@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 import type { TeamRow } from "@/lib/rbac/team-repository";
+import { isMissingSchemaObject } from "@/lib/rbac/repository";
 import type { ProvisionAccountInput } from "@/lib/schemas/provisioning";
 
 import { ProvisioningError } from "./provisioning-errors";
@@ -54,20 +55,37 @@ export async function attachProfile(
   // `.select()` is deliberate: an UPDATE that matches no row succeeds with an
   // empty result, which would silently leave the profile blank. The auth
   // trigger is expected to have created the row already.
-  const { data, error } = await client
-    .schema("app")
-    .from("users")
-    .update({
-      full_name: input.fullName,
-      title: input.title,
-      // `team_id` is the live reference; `team` is the deprecated label kept
-      // for the un-migrated legacy readers, so both stay in sync.
-      team_id: team?.id ?? null,
-      team: team?.name ?? "",
-      clearance_level: input.clearanceLevel,
-    })
-    .eq("id", userId)
-    .select("id");
+  const write = (allowTeamId: boolean) =>
+    client
+      .schema("app")
+      .from("users")
+      .update({
+        full_name: input.fullName,
+        title: input.title,
+        ...(allowTeamId ? { team_id: team?.id ?? null } : {}),
+        // `team` is the deprecated label, kept in sync for the legacy readers.
+        team: team?.name ?? "",
+        clearance_level: input.clearanceLevel,
+      })
+      .eq("id", userId)
+      .select("id");
+
+  let { data, error } = await write(true);
+
+  // A deployment that predates the teams migration has no `team_id` column.
+  // Dropping the column is acceptable for a non-team profile, but a courier
+  // must never be provisioned without their team: fail loudly instead of
+  // silently creating a rep who belongs to nobody.
+  if (error && isMissingSchemaObject(error)) {
+    if (team) {
+      throw new ProvisioningError(
+        "TEAM_STORE_UNAVAILABLE",
+        "إدارة الفرق غير مُفعّلة على هذا النشر بعد.",
+        503,
+      );
+    }
+    ({ data, error } = await write(false));
+  }
 
   if (error || !data || data.length === 0) {
     throw new ProvisioningError(

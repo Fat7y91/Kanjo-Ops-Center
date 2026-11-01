@@ -3,45 +3,31 @@ import "server-only";
 import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 import { isPermission, type Permission } from "./permissions";
+import {
+  isMissingSchemaObject,
+  selectUserRows,
+  toAppUser,
+  type GrantRow,
+  type ScopeRow,
+  type UserRow,
+} from "./rows";
 import type { AppUser } from "./types";
+
+export { isMissingSchemaObject };
 
 /**
  * Tier 4 read/write repository for the RBAC domain.
  *
  * Source of truth is the `app` schema in Supabase (see ARCHITECTURE §7). This
  * module is the only place that knows the table shapes; callers keep using the
- * `AppUser` domain type.
+ * `AppUser` domain type. Row shapes and the schema-drift projections live in
+ * `rows.ts`.
  *
  * Every read returns `null`/`[]` when Supabase is not configured, and
  * `users.ts` falls back to the seed roster in that case. That keeps local dev
  * and builds working without credentials without ever silently mixing the two
  * sources: if Supabase *is* configured, the seed is not consulted.
  */
-
-type UserRow = {
-  id: string;
-  email: string | null;
-  full_name: string;
-  title: string;
-  team: string;
-  team_id: string | null;
-  clearance_level: number;
-  global_scope: boolean;
-  active: boolean;
-  updated_at: string;
-};
-
-type GrantRow = {
-  user_id: string;
-  permission_key: string;
-  granted_at: string;
-};
-
-type ScopeRow = {
-  user_id: string;
-  city_id: string;
-  granted_at: string;
-};
 
 export type RbacSnapshot = {
   users: AppUser[];
@@ -55,9 +41,6 @@ export type UserPatchInput = {
   active?: boolean;
 };
 
-const USER_COLUMNS =
-  "id,email,full_name,title,team,team_id,clearance_level,global_scope,active,updated_at";
-
 export function isRbacDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
@@ -66,27 +49,6 @@ function epochSeconds(value: string | null | undefined): number {
   if (!value) return 0;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? 0 : Math.floor(parsed / 1000);
-}
-
-function toAppUser(
-  row: UserRow,
-  permissions: Permission[],
-  accessibleCities: string[],
-): AppUser {
-  return {
-    id: row.id,
-    name: row.full_name,
-    email: row.email ?? "",
-    title: row.title,
-    team: row.team,
-    teamId: row.team_id,
-    permissions,
-    accessibleCities,
-    clearanceLevel: row.clearance_level,
-    globalScope: row.global_scope,
-    active: row.active,
-    updatedAt: row.updated_at,
-  };
 }
 
 /**
@@ -99,19 +61,19 @@ export async function loadRbacSnapshot(): Promise<RbacSnapshot | null> {
 
   const client = getSupabaseServerClient();
 
-  const [usersResult, grantsResult, scopesResult] = await Promise.all([
-    client.schema("app").from("users").select(USER_COLUMNS),
+  const [userRows, grantsResult, scopesResult] = await Promise.all([
+    selectUserRows(client),
     client.schema("app").from("user_permissions").select("user_id,permission_key,granted_at"),
     client.schema("app").from("user_city_scope").select("user_id,city_id,granted_at"),
   ]);
 
-  if (usersResult.error) throw usersResult.error;
+  if (userRows.error) throw userRows.error;
   if (grantsResult.error) throw grantsResult.error;
   if (scopesResult.error) throw scopesResult.error;
 
   const grants = (grantsResult.data ?? []) as GrantRow[];
   const scopes = (scopesResult.data ?? []) as ScopeRow[];
-  const rows = (usersResult.data ?? []) as UserRow[];
+  const rows = userRows.rows;
 
   const permissionsByUser = new Map<string, Permission[]>();
   for (const grant of grants) {
@@ -160,13 +122,13 @@ export async function getUserProfile(id: string): Promise<AppUser | null> {
   const client = getSupabaseServerClient();
 
   const [userResult, grantsResult, scopesResult] = await Promise.all([
-    client.schema("app").from("users").select(USER_COLUMNS).eq("id", id).maybeSingle(),
+    selectUserRows(client, id),
     client.schema("app").from("user_permissions").select("permission_key").eq("user_id", id),
     client.schema("app").from("user_city_scope").select("city_id").eq("user_id", id),
   ]);
 
   if (userResult.error) throw userResult.error;
-  if (!userResult.data) return null;
+  if (userResult.rows.length === 0) return null;
   if (grantsResult.error) throw grantsResult.error;
   if (scopesResult.error) throw scopesResult.error;
 
@@ -178,7 +140,7 @@ export async function getUserProfile(id: string): Promise<AppUser | null> {
     (row) => (row as { city_id: string }).city_id,
   );
 
-  return toAppUser(userResult.data as UserRow, permissions, cities);
+  return toAppUser(userResult.rows[0], permissions, cities);
 }
 
 export async function getRbacRevision(): Promise<number> {

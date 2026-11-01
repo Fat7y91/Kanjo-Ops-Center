@@ -261,15 +261,15 @@ migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
 - `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
 - `src/lib/rbac/services/team-service.ts` — `createTeam()`; mints a city-owned team, guarded by `assertCanManageCity()`.
 - `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; `teamId` required only for level 1).
-- `src/lib/rbac/teams.ts` — `listTeams()` / `listTeamsForCity()`: DB-backed reads of `app.field_teams` (§8.6).
+- `src/lib/rbac/teams.ts` — `listTeams()`: DB-backed read of `app.field_teams`, returning `[]` when the table is absent (§8.5.1).
 - `src/lib/rbac/team-repository.ts` — Tier 4 reads/writes for `app.field_teams`.
-- `src/app/api/admin/teams/route.ts` — `GET ?cityId=` / `POST` team controller (edge runtime).
+- `src/app/api/admin/teams/route.ts` — `POST` team controller (edge runtime); creates a team in a city the caller manages.
 - `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_permissions`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
@@ -644,6 +644,35 @@ subject to policy. `has_permission()` and `is_active_user()` are
 Self-service profile edits must go through a dedicated RPC rather than a direct
 `UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
 
+### 8.5.1 Schema drift must not 500 a page
+
+Application code and migrations deploy separately, so a release can reach
+production before `20261031000003_city_teams_and_contracting.sql` has run. That
+is exactly what happened when the city/team picker shipped: the Add User page
+selected `app.users.team_id` and queried `app.field_teams`, both of which were
+absent, so PostgREST returned `42703` / `42P01` during the Server Component
+render and the route answered HTTP 500 with *An error occurred in the Server
+Components render*.
+
+The rule: **a missing new schema object degrades a feature, it never tears down
+the page.**
+
+- `src/lib/rbac/rows.ts` owns the row shapes and `isMissingSchemaObject()`,
+  which recognises `42703` (no column), `42P01` (no table), and `PGRST202` /
+  `PGRST204` (stale schema cache).
+- `selectUserRows()` retries the read with `USER_COLUMNS_LEGACY` (no `team_id`)
+  when the column is missing, so the operator list still renders and `teamId`
+  falls back to `null`.
+- `listTeams()` returns `[]` when `app.field_teams` is absent, so the dialog
+  simply offers to create the first team.
+- Write paths answer `503 TEAM_STORE_UNAVAILABLE` rather than a raw PostgREST
+  code. `attachProfile` retries without `team_id` for a non-team profile, but
+  **refuses** when a team was requested: a courier must never be provisioned
+  with no team.
+
+Genuine errors (`42501` RLS denials, `23505` uniqueness) are re-thrown untouched,
+so this fallback never hides an authorization bug.
+
 ### 8.6 No Self-Service Signup — Top-Down Provisioning
 
 **Public registration is strictly disabled.** There is no signup route, no
@@ -731,9 +760,10 @@ Implementation:
   never unique); `teamId` is required only when `clearanceLevel === 1`, because
   a courier is always dispatched through a team.
 - `src/lib/rbac/team-repository.ts` / `teams.ts` — teams are **city-owned** rows
-  in `app.field_teams`, not a global label set. `listTeamsForCity(cityId)` backs
-  the dependent picker in the add-user dialog; there is no seed fallback,
-  because a team only exists once it is created inside a city.
+  in `app.field_teams`, not a global label set. The page passes the whole
+  catalogue to the dialog, which filters it by the selected city; there is no
+  seed fallback, because a team only exists once it is created inside a city.
+  `listTeams()` returns `[]` when the table is absent (§8.5.1).
 - `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`. Reads the
   city from the team row (never from the client), rejects a team the actor
   cannot reach, and rejects a team whose city is not in the courier's scope. The

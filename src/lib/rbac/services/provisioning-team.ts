@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isGlobalActor, toClearanceActor } from "@/lib/rbac/hierarchy";
+import { isMissingSchemaObject } from "@/lib/rbac/repository";
 import { findTeamRow, type TeamRow } from "@/lib/rbac/team-repository";
 import type { ActiveSession } from "@/lib/rbac/types";
 import type { ProvisionAccountInput } from "@/lib/schemas/provisioning";
@@ -21,7 +22,20 @@ export async function resolveTeam(
 ): Promise<TeamRow | null> {
   if (!input.teamId) return null;
 
-  const team = await findTeamRow(input.teamId);
+  let team: TeamRow | null;
+  try {
+    team = await findTeamRow(input.teamId);
+  } catch (error) {
+    if (isMissingSchemaObject(error)) {
+      throw new ProvisioningError(
+        "TEAM_STORE_UNAVAILABLE",
+        "إدارة الفرق غير مُفعّلة على هذا النشر بعد.",
+        503,
+      );
+    }
+    throw error;
+  }
+
   if (!team) {
     throw new ProvisioningError(
       "TEAM_NOT_FOUND",
