@@ -439,11 +439,13 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Data: `src/lib/commissions/repository.ts` (Tier 4 for `app.commission_rates`),
   `src/lib/commissions/types.ts`, `src/lib/schemas/commission-rates.ts`.
 - Controller: `src/app/api/admin/commission-rates/route.ts` — `GET` / `PUT`.
-- **Gated by clearance rank, not a capability key.** `modules.ts` declares
-  `minClearance: 4`, the Server Component calls `requireMinClearance(4)`, the
-  Route Handler calls `authorizeMinClearance(4)`, and SQL requires
-  `app.has_min_clearance(4)` on update/insert/delete. The nav filter reads the
-  same field, so the sidebar never advertises a route the guard will refuse.
+- **Gated by clearance rank AND the module capability.** `modules.ts` declares
+  `minClearance: 4` with `permission: "manage_commission_rates"`, the Server
+  Component calls `requireMinClearance(4)` then
+  `requirePermission("manage_commission_rates")`, the Route Handler calls
+  `authorizeMinClearance(4)`, and SQL requires `app.has_min_clearance(4)` on
+  update/insert/delete. The nav filter reads the same fields, so the sidebar
+  never advertises a route the guard will refuse.
 - Lookup mirrors `app.commission_rates_for()`: a city row when present,
   otherwise the NULL-city global row. Two rows are never merged, so an override
   is a complete configuration. `city_id` is Firestore text with no FK (§8.4);
@@ -750,12 +752,12 @@ the page.**
 Genuine errors (`42501` RLS denials, `23505` uniqueness) are re-thrown untouched,
 so this fallback never hides an authorization bug.
 
-**Known gap (finance).** `src/lib/commissions/repository.ts` only retries for a
-missing `contracting_base_fee` (`20261031000003`). A deployment that is missing
-the table (`42P01` / `PGRST205`) or `city_id` (`42703`) still throws out of
-`listCommissionRateRows()`, so `/admin/finance/rates` answers 500 instead of
-degrading. No data is exposed — the guard runs first — but the route should
-eventually adopt the same tiered fallback as `selectUserRows()`.
+**Finance rates read.** `src/lib/commissions/repository.ts` retries the
+`contracting_base_fee` projection (`20261031000003`) and, since the finance-500
+fix, `listCommissionRateRows()` itself never throws out of a Server Component:
+missing table (`42P01` / `PGRST205`), missing `city_id` (`42703`) or any
+transient failure degrades the read to `null`, and the page renders its
+"finance database unavailable" state. Writes keep the strict error behaviour.
 
 ### 8.6 No Self-Service Signup — Top-Down Provisioning
 
