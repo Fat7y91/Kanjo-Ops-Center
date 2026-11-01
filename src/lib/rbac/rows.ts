@@ -67,26 +67,11 @@ export const USER_COLUMNS_NO_TEAM_REF =
 export const USER_COLUMNS_LEGACY =
   "id,email,full_name,title,team,clearance_level,global_scope,active,updated_at";
 
-/**
- * True when PostgREST reports that a column, table or function is absent.
- *
- * `42703` is an undefined column, `42P01` an undefined table, `PGRST202` /
- * `PGRST204` mean the schema cache has not picked up a newly added object yet,
- * and `PGRST205` is PostgREST's "table not found in the schema cache".
- * All are deployment-ordering problems, not data corruption, so reads degrade
- * instead of throwing.
- */
-export function isMissingSchemaObject(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const code = (error as { code?: unknown }).code;
-  return (
-    code === "42703" ||
-    code === "42P01" ||
-    code === "PGRST202" ||
-    code === "PGRST204" ||
-    code === "PGRST205"
-  );
-}
+/* Shared PostgREST error triage; the canonical implementation lives beside the
+ * Supabase client so every repository reads the same codes from one place. */
+import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
+
+export { isMissingSchemaObject };
 
 /**
  * True when the embedded team relation cannot be resolved.

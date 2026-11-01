@@ -19,7 +19,7 @@ export default async function ForbiddenPage({
   const params = await searchParams;
   const session = await getServerSession();
   const destination = session
-    ? firstPermittedPath(session.permissions)
+    ? firstPermittedPath(session.permissions, session.clearanceLevel)
     : "/login";
 
   return (

@@ -9,5 +9,5 @@ export const runtime = "edge";
 export default async function HomePage() {
   const session = await getServerSession();
   if (!session) redirect("/login");
-  redirect(firstPermittedPath(session.permissions));
+  redirect(firstPermittedPath(session.permissions, session.clearanceLevel));
 }

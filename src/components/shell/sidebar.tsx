@@ -20,12 +20,15 @@ type SidebarProps = {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname() ?? "";
-  const { permissions, revision } = usePermission();
+  const { permissions, clearanceLevel, revision } = usePermission();
 
   const visibleModules = MODULES.filter((module) =>
-    moduleAllows(module, Array.from(permissions)),
+    moduleAllows(module, Array.from(permissions), clearanceLevel),
   );
-  const homeHref = firstPermittedPath(Array.from(permissions));
+  const homeHref = firstPermittedPath(
+    Array.from(permissions),
+    clearanceLevel,
+  );
 
   return (
     <aside

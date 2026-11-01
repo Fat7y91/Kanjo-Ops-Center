@@ -87,6 +87,7 @@ export async function resolveLoginRequest(
     ok: true,
     token,
     redirectTo:
-      safeNextPath(formData.get("next")) ?? firstPermittedPath(user.permissions),
+      safeNextPath(formData.get("next")) ??
+      firstPermittedPath(user.permissions, user.clearanceLevel),
   };
 }

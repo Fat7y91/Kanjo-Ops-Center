@@ -13,6 +13,7 @@ export type ModuleIcon =
   | "accounts"
   | "payroll"
   | "marketing"
+  | "finance"
   | "data-entry";
 
 export type ModuleDefinition = {
@@ -28,6 +29,13 @@ export type ModuleDefinition = {
    * reasons, and the page narrows what each may see.
    */
   alsoGrantedBy?: readonly Permission[];
+  /**
+   * Minimum clearance rank to even see the module. Commission rates are the
+   * first case: the database gates the surface by `app.has_min_clearance(4)`,
+   * not by a capability key, so the navigation must not advertise a route
+   * whose page guard will refuse the visitor.
+   */
+  minClearance?: number;
   icon: ModuleIcon;
 };
 
@@ -145,6 +153,16 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "data-entry",
   },
   {
+    href: "/admin/finance/rates",
+    label: "أسعار العمولات",
+    shortLabel: "العمولات",
+    description:
+      "رسوم تفعيل التاجر ورسم الصور والرسم الأساسي للتعاقد، بجدول افتراضي عام وتجاوزات لكل مدينة.",
+    permission: "manage_payroll",
+    minClearance: 4,
+    icon: "finance",
+  },
+  {
     href: "/admin/permissions",
     label: "الصلاحيات",
     shortLabel: "الصلاحيات",
@@ -156,11 +174,18 @@ export const MODULES: readonly ModuleDefinition[] = [
 
 export const PUBLIC_PATHS: readonly string[] = ["/login", "/forbidden"];
 
-/** True when any capability the module accepts is held. */
+/** True when any capability the module accepts is held, at a sufficient rank. */
 export function moduleAllows(
   module: ModuleDefinition,
   permissions: readonly Permission[],
+  clearanceLevel = 0,
 ): boolean {
+  if (
+    module.minClearance !== undefined &&
+    clearanceLevel < module.minClearance
+  ) {
+    return false;
+  }
   if (permissions.includes(module.permission)) return true;
   return (module.alsoGrantedBy ?? []).some((permission) =>
     permissions.includes(permission),
@@ -200,7 +225,10 @@ export function permissionsForPath(pathname: string): Permission[] {
 
 export function firstPermittedPath(
   permissions: readonly Permission[],
+  clearanceLevel = 0,
 ): string {
-  const first = MODULES.find((module) => moduleAllows(module, permissions));
+  const first = MODULES.find((module) =>
+    moduleAllows(module, permissions, clearanceLevel),
+  );
   return first?.href ?? "/forbidden";
 }

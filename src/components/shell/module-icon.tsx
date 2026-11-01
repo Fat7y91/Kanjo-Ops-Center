@@ -25,6 +25,8 @@ const paths: Record<ModuleIconName, string> = {
     "M4 6h16v12H4V6Zm0 4h16M7 14h4M15 14h2",
   marketing:
     "M4 10v4h3l6 4V6l-6 4H4Zm13-2a4 4 0 0 1 0 8M17 5a8 8 0 0 1 0 14",
+  finance:
+    "M19 5 5 19M9 7a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm10 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
   "data-entry":
     "M5 4h10l4 4v12H5V4Zm10 0v4h4M8 12h8M8 16h5",
 };

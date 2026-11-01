@@ -42,6 +42,37 @@ export async function authorize(
 }
 
 /**
+ * Rank-based counterpart of `authorize()`. Some surfaces are gated by
+ * clearance rather than by a capability key — `app.commission_rates` writes
+ * require `app.has_min_clearance(4)` in SQL — and the API mirror must match
+ * the policy instead of re-deriving it from permissions.
+ */
+export async function authorizeMinClearance(
+  level: number,
+): Promise<Authorization> {
+  const session = await getServerSession();
+  if (!session) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "يلزم تسجيل الدخول." },
+        { status: 401 },
+      ),
+    };
+  }
+  if (session.clearanceLevel < level) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "تتطلب هذه العملية صلاحية أعلى." },
+        { status: 403 },
+      ),
+    };
+  }
+  return { session, response: null };
+}
+
+/**
  * Capability check for routes that accept any one of several equivalent grants
  * (for example `create_products` or the broader `manage_catalog`).
  */

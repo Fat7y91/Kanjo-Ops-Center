@@ -25,6 +25,23 @@ export async function requirePermission(
 }
 
 /**
+ * Clearance guard for surfaces the database gates by rank rather than by a
+ * capability key. `app.commission_rates` is such a surface: its SQL policies
+ * require `app.has_min_clearance(4)`. This mirrors that rank check in the
+ * application so the UI and the database cannot disagree about who may open
+ * the surface.
+ */
+export async function requireMinClearance(
+  level: number,
+): Promise<ActiveSession> {
+  const session = await requireSession();
+  if (session.clearanceLevel < level) {
+    redirect(`/forbidden?clearance=${encodeURIComponent(String(level))}`);
+  }
+  return session;
+}
+
+/**
  * Guard for a surface that several distinct grants can open (for example the
  * treasury, where a deposit-only city manager and a full accountant both have
  * a legitimate reason to be there).
