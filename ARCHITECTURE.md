@@ -239,6 +239,10 @@ crashing route happens to contain charts. Rules:
 - `src/lib/db/supabase/client.ts` — anon-key browser client (RLS enforced).
 - `src/lib/db/supabase/server.ts` — service-role client for Tier 4 Financial/ERP
   repositories. `server-only`.
+- `src/lib/db/supabase/errors.ts` — PostgREST error triage shared by every
+  repository: `isMissingSchemaObject` (`42703`, `42P01`, `PGRST202`, `PGRST204`,
+  `PGRST205`) and `isUniqueViolation` (`23505`). `rbac/rows.ts` and
+  `commissions/repository.ts` re-export it so no domain keeps a private copy.
 - `src/lib/db/firebase/config.ts` — lazy `NEXT_PUBLIC_FIREBASE_*` readers.
 - `src/lib/db/firebase/client.ts` — memoised web app + Firestore with persistent
   cache and an in-memory fallback when IndexedDB is unavailable.
@@ -247,19 +251,19 @@ crashing route happens to contain charts. Rules:
 - `supabase/migrations/20261029000000_rbac_foundation.sql` — the validated
   `app` schema (RBAC tables, triggers, RLS). See Section 7.
 
-Status: the clients exist, but **no domain repository consumes them yet**. The
-in-memory stores below remain the live implementation until each domain is
-migrated one at a time.
+Status: RBAC (`rbac/repository.ts`, `rbac/team-repository.ts`) and commission
+rates (`commissions/repository.ts`) are live consumers. Every other domain still
+runs on the in-memory stores below until it is migrated one at a time.
 
 ### Auth & RBAC (T1→T5)
-- `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `apiError`, `readJson` (Controller helpers).
+- `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `authorizeMinClearance`, `apiError`, `readJson` (Controller helpers).
 - `src/lib/auth/login.ts` — `resolveLoginRequest` / `safeNextPath`: verifies phone + password via `signInWithPassword`, then mints the app session. Never calls `redirect()`.
 - `src/app/login/login-form.tsx` — phone + password form (client).
 - `src/app/login/page.tsx` — login container.
 - `src/app/api/auth/login/route.ts` — `POST` login Route Handler; sets the cookie and returns `NextResponse.redirect`.
 - `src/app/api/auth/logout/route.ts` — `POST` logout Route Handler; clears the cookie and redirects.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
-- `src/lib/auth/guard.ts` — `requireSession`, `requirePermission` (server components).
+- `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance` (server components), `requireAnyPermission`.
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
@@ -423,6 +427,39 @@ logout therefore POST to plain route handlers. Rules locked in:
   `payroll_commission_tiers` (cumulative bands), `payroll_kpi_links`,
   `payroll_runs`, `payroll_lines`, and the `payroll_run_totals` view.
 
+### Finance — Commission Rates (Tier 1–5)
+- UI: `src/app/(workspace)/admin/finance/rates/page.tsx` (Server Component,
+  60 lines) plus `src/components/admin/finance/`
+  (`commission-rates-view`, `use-commission-rates`, `use-commission-rates-form`).
+- Business: `src/lib/commissions/rates.ts` — `activeRateForCity()` (override
+  first, else the NULL-city fallback), `loadActiveCommissionRate()`,
+  `saveCommissionRate()` insert-or-update with `23505` recovery,
+  `CommissionRatesError`.
+- Data: `src/lib/commissions/repository.ts` (Tier 4 for `app.commission_rates`),
+  `src/lib/commissions/types.ts`, `src/lib/schemas/commission-rates.ts`.
+- Controller: `src/app/api/admin/commission-rates/route.ts` — `GET` / `PUT`.
+- **Gated by clearance rank, not a capability key.** `modules.ts` declares
+  `minClearance: 4`, the Server Component calls `requireMinClearance(4)`, the
+  Route Handler calls `authorizeMinClearance(4)`, and SQL requires
+  `app.has_min_clearance(4)` on update/insert/delete. The nav filter reads the
+  same field, so the sidebar never advertises a route the guard will refuse.
+- Lookup mirrors `app.commission_rates_for()`: a city row when present,
+  otherwise the NULL-city global row. Two rows are never merged, so an override
+  is a complete configuration. `city_id` is Firestore text with no FK (§8.4);
+  `UNKNOWN_CITY` (422) is returned before SQL is touched.
+- A fee is a non-negative EGP amount (`numeric(12,2)`). The schema turns an
+  empty submission into `NaN` rather than `0`, so a cleared field cannot save an
+  unintended zero fee.
+- SQL: `20261031000000_enterprise_kpi_vault.sql` (`app.commission_rates`,
+  `has_min_clearance`), `20261031000002_city_specific_rates.sql` (`city_id`,
+  two partial unique indexes, drops the singleton trigger,
+  `commission_rates_for()`), `20261031000003_city_teams_and_contracting.sql`
+  (`contracting_base_fee`, `contracts_closed`, `avg_achievement_ratio`).
+- `20261031000001_snapshot_rate_history.sql` freezes `applied_merchant_rate` /
+  `applied_item_rate` onto `app.kpi_snapshots` and extends the immutability
+  guard. Pre-existing rows stay NULL — the true rate is unrecoverable, and
+  inventing one would put false evidence in the ledger.
+
 ### Marketing Measurement (Tier 1–5)
 - UI: `src/app/(workspace)/marketing/page.tsx` plus
   `components/marketing/{marketing-view,marketing-entry-form,campaign-form,campaign-card,settings-panel}.tsx`.
@@ -465,7 +502,7 @@ logout therefore POST to plain route handlers. Rules locked in:
 
 ### CSS
 - Manifest: `src/app/globals.css` (4807 lines — still over limit, extraction backlog).
-- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,marketing,data-entry}.css` plus
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing,data-entry}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
 
@@ -482,8 +519,10 @@ The tiers exist conceptually; these are the concrete gaps to close.
    connection clients now exist in `src/lib/db/`; the remaining work is to move
    each domain behind a `repository.ts` that uses them, one domain per commit:
    - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
-     **Progress:** the accounts ledger, payroll and marketing tables now exist in
-     SQL (§8.7), but their TypeScript stores (`lib/accounts`, `lib/payroll`,
+     **Progress:** the accounts ledger, payroll, marketing and commission-rate
+     tables now exist in SQL (§8.7), and the commission schedule is fully wired
+     (`errors.ts`, `modules.ts`, `guard.ts`, `api.ts`).
+     The remaining stores (`lib/accounts`, `lib/payroll`,
      `lib/marketing`) still read a process-local global. The schemas are the
      contract; wiring the repositories is the remaining step.
    - Operations → Firebase: catalog, field ops, live orders.
@@ -660,10 +699,11 @@ Components render*.
 The rule: **a missing new schema object degrades a feature, it never tears down
 the page.**
 
-- `src/lib/rbac/rows.ts` owns the row shapes and `isMissingSchemaObject()`,
-  which recognises `42703` (no column), `42P01` (no table), and `PGRST202` /
-  `PGRST204` (stale schema cache). `PGRST200` (no relationship in the schema
-  cache) counts as a missing embed.
+- `src/lib/db/supabase/errors.ts` owns `isMissingSchemaObject()`, which
+  recognises `42703` (no column), `42P01` (no table), and `PGRST202` /
+  `PGRST204` / `PGRST205` (stale schema cache). `PGRST200` (no relationship in
+  the schema cache) counts as a missing embed. `src/lib/rbac/rows.ts` owns the
+  row shapes and re-exports the helper.
 - `selectUserRows()` degrades in three steps: profile + `field_teams!team_id(name)`,
   then profile + `team_id` (no embed), then `USER_COLUMNS_LEGACY` (no
   `team_id`). The roster always renders; `teamId` falls back to `null` and
@@ -677,6 +717,13 @@ the page.**
 
 Genuine errors (`42501` RLS denials, `23505` uniqueness) are re-thrown untouched,
 so this fallback never hides an authorization bug.
+
+**Known gap (finance).** `src/lib/commissions/repository.ts` only retries for a
+missing `contracting_base_fee` (`20261031000003`). A deployment that is missing
+the table (`42P01` / `PGRST205`) or `city_id` (`42703`) still throws out of
+`listCommissionRateRows()`, so `/admin/finance/rates` answers 500 instead of
+degrading. No data is exposed — the guard runs first — but the route should
+eventually adopt the same tiered fallback as `selectUserRows()`.
 
 ### 8.6 No Self-Service Signup — Top-Down Provisioning
 
@@ -936,8 +983,10 @@ repository reads `app.users`.
 ### 8.7 Money: treasury, payroll and marketing
 
 Every table below is SQL because each one participates in a money movement or a
-financial report. All amounts are **minor units** (`bigint`), never floats, so
-no rounding can create or destroy value.
+financial report. All ledger amounts are **minor units** (`bigint`), never
+floats, so no rounding can create or destroy value. The exception is the
+commission fee schedule: a rate is a price list in EGP, stored as
+`numeric(12,2)` (see below the table).
 
 | Migration | Tables | Invariant enforced in SQL |
 |---|---|---|
@@ -946,6 +995,16 @@ no rounding can create or destroy value.
 | `20261030000300_marketing.sql` | `app.marketing_platform_settings`, `app.marketing_entries`, view `app.marketing_platform_settings_public` | Entries are append-only. `clicks ≤ impressions`, `conversions ≤ clicks`. API keys are ciphertext and never exposed to client roles. |
 | `20261030000400_seed_treasury.sql` | seed only | Asserts SAR deposits 4,865,000 / expenses 3,973,631 / balance 891,369 minor units before committing. |
 | `20261030000500_treasury_access.sql` | adds `record_deposits`, rewrites account/ledger read+insert policies, grants the four prior migrations' tables to `authenticated` and `service_role` | Tiered treasury: deposit-only callers read Egyptian accounts and `deposit` rows only, and may insert deposits against an Egyptian account. The Saudi account and all expenses stay invisible. |
+| `20261031000000_enterprise_kpi_vault.sql` | `app.commission_rates`, `app.kpi_snapshots`, `app.merchants`, `app.catalog_products`; `app.has_min_clearance(integer)` | Fee schedule is one global row; reads are any active operator, writes require clearance level 4. |
+| `20261031000001_snapshot_rate_history.sql` | adds `applied_merchant_rate` / `applied_item_rate` to `app.kpi_snapshots` | A snapshot's rates are mandatory on insert and frozen thereafter, so a slip can always be reconciled against the schedule that produced it. Pre-existing rows stay NULL. |
+| `20261031000002_city_specific_rates.sql` | `app.commission_rates.city_id`, partial unique indexes, `app.commission_rates_for(text)` | One row per city plus exactly one NULL-city fallback (two partial unique indexes, because `UNIQUE` allows many NULLs). The residue of the old singleton trigger is dropped; L4 gains insert/delete. |
+| `20261031000003_city_teams_and_contracting.sql` | `contracting_base_fee` on `app.commission_rates`; `contracts_closed` / `avg_achievement_ratio` on `app.kpi_snapshots` | Fees are non-negative; the new snapshot outcomes join the frozen set. |
+
+Commission rates are **numeric EGP, not minor units**: the schedule is a price
+list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres
+already rounds correctly. The cache-and-freeze rule still holds — every money
+movement derived from a rate is stored in minor units on the ledger, and the KPI
+snapshot freezes the rate that produced it.
 
 Ledger and marketing immutability is enforced by a trigger rather than a policy
 so it holds for every role, including the table owner and the service role. The
