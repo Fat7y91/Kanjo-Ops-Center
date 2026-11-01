@@ -10,7 +10,9 @@ begin;
  *
  * Idempotent: the seed account is looked up by IBAN and every entry by a stable
  * label, so re-running never duplicates a movement. Amounts are minor units and
- * the ledger immutability trigger guarantees these cannot be edited later.
+ * the ledger immutability trigger guarantees these cannot be edited later. The
+ * figure check only runs while the account still holds just the seeded rows, so
+ * a database that already carries real treasury activity keeps its own totals.
  * ───────────────────────────────────────────────────────────────────────── */
 
 insert into app.bank_accounts (
@@ -69,16 +71,33 @@ begin
 end;
 $$;
 
-/* Assert the reference figures survived the write path unchanged. */
+/* Assert the reference figures survived the write path unchanged.
+ *
+ * The check only owns the account while it holds exactly the seeded movements.
+ * A production database that already carries treasury activity under the same
+ * IBAN keeps its own totals: those are the operator's figures, not something a
+ * seed may assert, and aborting the deployment over them would be wrong. */
 do $$
 declare
-  deposits bigint;
-  expenses bigint;
-  balance  bigint;
   sa_account uuid;
+  movements  integer;
+  deposits   bigint;
+  expenses   bigint;
+  balance    bigint;
 begin
   select id into sa_account from app.bank_accounts
    where iban = 'SA0380000000608010167519';
+
+  select count(*) into movements
+    from app.ledger_entries
+   where account_id = sa_account;
+
+  if movements <> 6 then
+    raise notice
+      'Treasury seed check skipped: the account holds % movements instead of the 6 seeded rows.',
+      movements;
+    return;
+  end if;
 
   select
     coalesce(sum(amount_minor) filter (where kind = 'deposit'), 0),

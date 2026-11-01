@@ -1,6 +1,13 @@
 begin;
 
 /* ─────────────────────────────────────────────────────────────────────────
+ * Re-runnable against a database that already carries the V1 deployment.
+ * Tables are created only when absent and then widened column by column,
+ * indexes use `if not exists`, functions and views are replaced, and every
+ * policy and trigger is dropped before it is recreated.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────────
  * Payroll, commissions and the monthly payslip.
  *
  * The engine that computes a slip lives in `src/lib/payroll/engine.ts`; this
@@ -11,7 +18,7 @@ begin;
  * bands per profile, so a profile can change its bands without touching code.
  * ───────────────────────────────────────────────────────────────────────── */
 
-create table app.payroll_profiles (
+create table if not exists app.payroll_profiles (
   user_id              uuid        primary key references app.users (id) on delete cascade,
   base_salary_minor    bigint      not null default 0,
   transport_minor      bigint      not null default 0,
@@ -32,14 +39,29 @@ create table app.payroll_profiles (
   constraint payroll_profiles_currency_allowed check (currency in ('EGP', 'SAR'))
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.payroll_profiles
+  add column if not exists user_id               uuid references app.users (id) on delete cascade,
+  add column if not exists base_salary_minor     bigint      not null default 0,
+  add column if not exists transport_minor       bigint      not null default 0,
+  add column if not exists data_entry_rate_minor bigint     not null default 0,
+  add column if not exists data_entry_count      integer     not null default 0,
+  add column if not exists incentive_multiplier  numeric(6, 3) not null default 1,
+  add column if not exists currency              char(3)     not null default 'EGP',
+  add column if not exists active                boolean     not null default true,
+  add column if not exists created_at            timestamptz not null default now(),
+  add column if not exists updated_at            timestamptz not null default now();
+
 comment on table app.payroll_profiles is
   'Fixed monthly terms per operator. Variable commission is derived from the tier table.';
 
+drop trigger if exists payroll_profiles_touch_updated_at on app.payroll_profiles;
 create trigger payroll_profiles_touch_updated_at
 before update on app.payroll_profiles
 for each row execute function app.touch_updated_at();
 
-create table app.payroll_commission_tiers (
+create table if not exists app.payroll_commission_tiers (
   id            uuid        primary key default gen_random_uuid(),
   user_id       uuid        not null references app.payroll_profiles (user_id) on delete cascade,
   /** Upper bound of the cumulative band, in minor units. */
@@ -51,14 +73,22 @@ create table app.payroll_commission_tiers (
   constraint payroll_tiers_unique_band unique (user_id, threshold_minor)
 );
 
-create index payroll_tiers_user_idx
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.payroll_commission_tiers
+  add column if not exists id              uuid default gen_random_uuid(),
+  add column if not exists user_id         uuid        not null references app.payroll_profiles (user_id) on delete cascade,
+  add column if not exists threshold_minor bigint    not null,
+  add column if not exists rate            numeric(6, 5) not null;
+
+create index if not exists payroll_tiers_user_idx
   on app.payroll_commission_tiers (user_id, threshold_minor);
 
 comment on table app.payroll_commission_tiers is
   'Cumulative contracting-commission bands. Sorted by threshold; the slice above each band earns that band rate.';
 
 /* Optional link from a payslip line to the KPI it was earned on. */
-create table app.payroll_kpi_links (
+create table if not exists app.payroll_kpi_links (
   user_id        uuid        not null references app.payroll_profiles (user_id) on delete cascade,
   kpi_key        text        not null,
   weight         numeric(6, 3) not null default 1,
@@ -68,10 +98,18 @@ create table app.payroll_kpi_links (
   constraint payroll_kpi_key_present check (length(btrim(kpi_key)) > 0)
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.payroll_kpi_links
+  add column if not exists user_id    uuid        not null references app.payroll_profiles (user_id) on delete cascade,
+  add column if not exists kpi_key    text        not null,
+  add column if not exists weight     numeric(6, 3) not null default 1,
+  add column if not exists created_at timestamptz not null default now();
+
 comment on table app.payroll_kpi_links is
   'Links an operator payslip to KPI keys, so an incentive can be tied to a measured outcome.';
 
-create table app.payroll_runs (
+create table if not exists app.payroll_runs (
   id             uuid        primary key default gen_random_uuid(),
   period_start   date        not null,
   period_end     date        not null,
@@ -85,7 +123,19 @@ create table app.payroll_runs (
   constraint payroll_runs_currency_allowed check (currency in ('EGP', 'SAR'))
 );
 
-create table app.payroll_lines (
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.payroll_runs
+  add column if not exists id           uuid default gen_random_uuid(),
+  add column if not exists period_start date        not null,
+  add column if not exists period_end   date        not null,
+  add column if not exists currency     char(3)     not null,
+  add column if not exists status       text        not null default 'draft',
+  add column if not exists approved_by  uuid        references app.users (id) on delete set null,
+  add column if not exists approved_at  timestamptz,
+  add column if not exists created_at   timestamptz not null default now();
+
+create table if not exists app.payroll_lines (
   id            uuid        primary key default gen_random_uuid(),
   run_id        uuid        not null references app.payroll_runs (id) on delete cascade,
   user_id       uuid        not null references app.payroll_profiles (user_id) on delete restrict,
@@ -100,13 +150,23 @@ create table app.payroll_lines (
   constraint payroll_lines_amount_nonnegative check (amount_minor >= 0)
 );
 
-create index payroll_lines_run_idx on app.payroll_lines (run_id);
-create index payroll_lines_user_idx on app.payroll_lines (user_id);
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.payroll_lines
+  add column if not exists id           uuid default gen_random_uuid(),
+  add column if not exists run_id       uuid        not null references app.payroll_runs (id) on delete cascade,
+  add column if not exists user_id      uuid        not null references app.payroll_profiles (user_id) on delete restrict,
+  add column if not exists item_type    text        not null,
+  add column if not exists amount_minor bigint      not null,
+  add column if not exists note         text        not null default '';
+
+create index if not exists payroll_lines_run_idx on app.payroll_lines (run_id);
+create index if not exists payroll_lines_user_idx on app.payroll_lines (user_id);
 
 comment on table app.payroll_lines is
   'One line per component of a payslip. Net is the signed sum, never a stored total.';
 
-create function app.payroll_line_sign(p_item_type text)
+create or replace function app.payroll_line_sign(p_item_type text)
 returns integer
 language sql
 immutable
@@ -114,7 +174,7 @@ as $$
   select case p_item_type when 'deduction' then -1 else 1 end;
 $$;
 
-create view app.payroll_run_totals
+create or replace view app.payroll_run_totals
 with (security_invoker = true)
 as
 select
@@ -143,46 +203,56 @@ alter table app.payroll_kpi_links         force row level security;
 alter table app.payroll_runs              force row level security;
 alter table app.payroll_lines             force row level security;
 
+drop policy if exists payroll_profiles_read on app.payroll_profiles;
 create policy payroll_profiles_read on app.payroll_profiles
   for select to authenticated
   using (user_id = auth.uid() or app.has_permission('view_payroll'));
 
+drop policy if exists payroll_profiles_write on app.payroll_profiles;
 create policy payroll_profiles_write on app.payroll_profiles
   for all to authenticated
   using (app.has_permission('manage_payroll'))
   with check (app.has_permission('manage_payroll'));
 
+drop policy if exists payroll_tiers_read on app.payroll_commission_tiers;
 create policy payroll_tiers_read on app.payroll_commission_tiers
   for select to authenticated
   using (user_id = auth.uid() or app.has_permission('view_payroll'));
 
+drop policy if exists payroll_tiers_write on app.payroll_commission_tiers;
 create policy payroll_tiers_write on app.payroll_commission_tiers
   for all to authenticated
   using (app.has_permission('manage_payroll'))
   with check (app.has_permission('manage_payroll'));
 
+drop policy if exists payroll_kpi_links_read on app.payroll_kpi_links;
 create policy payroll_kpi_links_read on app.payroll_kpi_links
   for select to authenticated
   using (app.has_permission('view_payroll'));
 
+drop policy if exists payroll_kpi_links_write on app.payroll_kpi_links;
 create policy payroll_kpi_links_write on app.payroll_kpi_links
   for all to authenticated
   using (app.has_permission('manage_payroll'))
   with check (app.has_permission('manage_payroll'));
 
+drop policy if exists payroll_runs_read on app.payroll_runs;
 create policy payroll_runs_read on app.payroll_runs
   for select to authenticated
   using (app.has_permission('view_payroll'));
 
+drop policy if exists payroll_runs_write on app.payroll_runs;
 create policy payroll_runs_write on app.payroll_runs
   for all to authenticated
   using (app.has_permission('manage_payroll'))
   with check (app.has_permission('manage_payroll'));
 
+drop policy if exists payroll_lines_read on app.payroll_lines;
 create policy payroll_lines_read on app.payroll_lines
   for select to authenticated
   using (user_id = auth.uid() or app.has_permission('view_payroll'));
 
+drop policy if exists payroll_lines_write on app.payroll_lines;
 create policy payroll_lines_write on app.payroll_lines
   for all to authenticated
   using (app.has_permission('manage_payroll'))

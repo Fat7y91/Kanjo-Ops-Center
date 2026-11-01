@@ -31,6 +31,14 @@ create table if not exists app.field_teams (
   constraint field_teams_name_present check (length(btrim(name)) > 0)
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.field_teams
+  add column if not exists id         uuid default gen_random_uuid(),
+  add column if not exists city_id    text        not null,
+  add column if not exists name       varchar(120) not null,
+  add column if not exists created_at timestamptz not null default now();
+
 comment on table app.field_teams is
   'Dynamic field team owned by one city. Contracting is executed by these teams, not by a global label.';
 comment on column app.field_teams.city_id is

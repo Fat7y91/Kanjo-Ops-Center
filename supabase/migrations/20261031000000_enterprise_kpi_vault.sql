@@ -81,6 +81,28 @@ create table if not exists app.merchants (
     check ((first_entry_by is null) = (first_entry_at is null))
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.merchants
+  add column if not exists id                  text,
+  add column if not exists name                text        not null,
+  add column if not exists normalized_name     text        not null default '',
+  add column if not exists vendor_type_id      integer,
+  add column if not exists vendor_type         text        not null default '',
+  add column if not exists team                text,
+  add column if not exists city_id             text        not null,
+  add column if not exists target_commission   numeric(6, 2) not null default 0,
+  add column if not exists monthly_value_minor bigint      not null default 0 check (monthly_value_minor >= 0),
+  add column if not exists strategic_notes     text        not null default '',
+  add column if not exists contract_state      text        not null default 'no_agreement',
+  add column if not exists agreed_commission   numeric(6, 2),
+  add column if not exists edit_unlocked       boolean     not null default false,
+  add column if not exists last_visit_at       timestamptz,
+  add column if not exists first_entry_by      uuid        references app.users (id) on delete set null,
+  add column if not exists first_entry_at      timestamptz,
+  add column if not exists created_at          timestamptz not null default now(),
+  add column if not exists updated_at          timestamptz not null default now();
+
 comment on table app.merchants is
   'SQL mirror of the field-ops merchant record, plus first-touch attribution.';
 comment on column app.merchants.city_id is
@@ -118,6 +140,22 @@ create table if not exists app.catalog_products (
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now()
 );
+
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.catalog_products
+  add column if not exists id             text,
+  add column if not exists merchant_id    text        not null references app.merchants (id) on delete cascade,
+  add column if not exists name           text        not null,
+  add column if not exists description    text        not null default '',
+  add column if not exists sku            text,
+  add column if not exists barcode        text,
+  add column if not exists image_data_url text,
+  add column if not exists price_minor    bigint      not null default 0 check (price_minor >= 0),
+  add column if not exists state          text        not null default 'draft',
+  add column if not exists created_by     uuid        references app.users (id) on delete set null,
+  add column if not exists created_at     timestamptz not null default now(),
+  add column if not exists updated_at     timestamptz not null default now();
 
 comment on table app.catalog_products is
   'SQL mirror of the catalog product record, with per-product authorship.';
@@ -175,6 +213,15 @@ create table if not exists app.commission_rates (
   updated_by              uuid        references app.users (id) on delete set null,
   updated_at              timestamptz not null default now()
 );
+
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.commission_rates
+  add column if not exists id                      uuid default gen_random_uuid(),
+  add column if not exists merchant_activation_fee numeric(12, 2) not null default 50,
+  add column if not exists photo_item_fee          numeric(12, 2) not null default 1,
+  add column if not exists updated_by              uuid        references app.users (id) on delete set null,
+  add column if not exists updated_at              timestamptz not null default now();
 
 comment on table app.commission_rates is
   'Editable KPI fee schedule. Snapshots copy the applied figures, so edits here never rewrite history.';
@@ -262,6 +309,19 @@ create table if not exists app.kpi_snapshots (
     check (month_year = date_trunc('month', month_year)::date),
   constraint kpi_snapshots_rep_month_unique unique (rep_id, month_year)
 );
+
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.kpi_snapshots
+  add column if not exists id                      uuid default gen_random_uuid(),
+  add column if not exists rep_id                  uuid        not null references app.users (id) on delete restrict,
+  add column if not exists month_year              date        not null,
+  add column if not exists new_merchants_activated integer     not null default 0,
+  add column if not exists items_added             integer     not null default 0,
+  add column if not exists calculated_salary       numeric(14, 2) not null default 0,
+  add column if not exists status                  app.kpi_snapshot_status not null default 'pending',
+  add column if not exists locked_at               timestamptz not null default now(),
+  add column if not exists created_at              timestamptz not null default now();
 
 comment on table app.kpi_snapshots is
   'Monthly KPI vault. Financial history: figures are immutable, only status may move pending -> paid.';

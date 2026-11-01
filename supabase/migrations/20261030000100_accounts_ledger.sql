@@ -1,6 +1,13 @@
 begin;
 
 /* ─────────────────────────────────────────────────────────────────────────
+ * Re-runnable against a database that already carries the V1 deployment.
+ * Tables are created only when absent and then widened column by column,
+ * indexes use `if not exists`, functions and views are replaced, and every
+ * policy and trigger is dropped before it is recreated.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────────
  * Bank accounts and the immutable money ledger.
  *
  * Balance is never stored: it is the sum of deposits minus the sum of expenses
@@ -13,7 +20,7 @@ begin;
  * denominations.
  * ───────────────────────────────────────────────────────────────────────── */
 
-create table app.bank_accounts (
+create table if not exists app.bank_accounts (
   id             uuid        primary key default gen_random_uuid(),
   bank_name      text        not null,
   account_name   text        not null,
@@ -37,6 +44,21 @@ create table app.bank_accounts (
   constraint bank_accounts_bank_present check (length(btrim(bank_name)) > 0)
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.bank_accounts
+  add column if not exists id             uuid default gen_random_uuid(),
+  add column if not exists bank_name      text        not null,
+  add column if not exists account_name   text        not null,
+  add column if not exists account_number text        not null,
+  add column if not exists iban           text        not null,
+  add column if not exists country_code   char(2)     not null,
+  add column if not exists currency       char(3)     not null,
+  add column if not exists city_id        text,
+  add column if not exists active         boolean     not null default true,
+  add column if not exists created_by     uuid        references app.users (id) on delete set null,
+  add column if not exists created_at     timestamptz not null default now();
+
 comment on table app.bank_accounts is
   'Company bank accounts. Currency is derived from the country and enforced by a check.';
 comment on column app.bank_accounts.city_id is
@@ -44,17 +66,17 @@ comment on column app.bank_accounts.city_id is
 comment on column app.bank_accounts.iban is
   'Normalized, unspaced, uppercase IBAN. Unique per currency.';
 
-create unique index bank_accounts_iban_key
+create unique index if not exists bank_accounts_iban_key
   on app.bank_accounts (iban);
 
-create index bank_accounts_active_idx
+create index if not exists bank_accounts_active_idx
   on app.bank_accounts (active, country_code);
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Ledger: append-only. Amounts are positive minor units; `kind` decides the
  * sign. A check cannot express "no UPDATE", so a trigger enforces immutability.
  * ───────────────────────────────────────────────────────────────────────── */
-create table app.ledger_entries (
+create table if not exists app.ledger_entries (
   id           uuid        primary key default gen_random_uuid(),
   account_id   uuid        not null references app.bank_accounts (id) on delete restrict,
   kind         text        not null,
@@ -70,19 +92,32 @@ create table app.ledger_entries (
   constraint ledger_entries_currency_allowed check (currency in ('EGP', 'SAR'))
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.ledger_entries
+  add column if not exists id           uuid default gen_random_uuid(),
+  add column if not exists account_id   uuid        not null references app.bank_accounts (id) on delete restrict,
+  add column if not exists kind         text        not null,
+  add column if not exists label        text        not null,
+  add column if not exists amount_minor bigint      not null,
+  add column if not exists currency     char(3)     not null,
+  add column if not exists occurred_at  timestamptz not null,
+  add column if not exists recorded_by  uuid        references app.users (id) on delete set null,
+  add column if not exists recorded_at  timestamptz not null default now();
+
 comment on table app.ledger_entries is
   'Immutable money movements. A correction is a new opposing entry, never an update.';
 comment on column app.ledger_entries.amount_minor is
   'Positive minor units (piastres/halalas). The kind column supplies the sign.';
 
-create index ledger_entries_account_idx
+create index if not exists ledger_entries_account_idx
   on app.ledger_entries (account_id, occurred_at desc);
 
-create index ledger_entries_recorded_idx
+create index if not exists ledger_entries_recorded_idx
   on app.ledger_entries (recorded_at desc);
 
 /* Currency must always match the owning account. */
-create function app.ledger_enforce_account_currency()
+create or replace function app.ledger_enforce_account_currency()
 returns trigger
 language plpgsql
 security definer
@@ -111,12 +146,13 @@ begin
 end;
 $$;
 
+drop trigger if exists ledger_entries_enforce_currency on app.ledger_entries;
 create trigger ledger_entries_enforce_currency
 before insert on app.ledger_entries
 for each row execute function app.ledger_enforce_account_currency();
 
 /* Append-only: block every UPDATE and DELETE, including for the table owner. */
-create function app.ledger_reject_mutation()
+create or replace function app.ledger_reject_mutation()
 returns trigger
 language plpgsql
 as $$
@@ -127,10 +163,12 @@ begin
 end;
 $$;
 
+drop trigger if exists ledger_entries_immutable_update on app.ledger_entries;
 create trigger ledger_entries_immutable_update
 before update on app.ledger_entries
 for each row execute function app.ledger_reject_mutation();
 
+drop trigger if exists ledger_entries_immutable_delete on app.ledger_entries;
 create trigger ledger_entries_immutable_delete
 before delete on app.ledger_entries
 for each row execute function app.ledger_reject_mutation();
@@ -139,7 +177,7 @@ for each row execute function app.ledger_reject_mutation();
  * Derived balance. Every read path uses this function, so the figure can never
  * disagree with the entries behind it.
  * ───────────────────────────────────────────────────────────────────────── */
-create function app.account_balance(p_account_id uuid)
+create or replace function app.account_balance(p_account_id uuid)
 returns bigint
 language sql
 stable
@@ -153,7 +191,7 @@ as $$
   where account_id = p_account_id;
 $$;
 
-create view app.account_balances
+create or replace view app.account_balances
 with (security_invoker = true)
 as
 select
@@ -190,6 +228,7 @@ alter table app.ledger_entries enable row level security;
 alter table app.bank_accounts  force row level security;
 alter table app.ledger_entries force row level security;
 
+drop policy if exists bank_accounts_read_capable on app.bank_accounts;
 create policy bank_accounts_read_capable on app.bank_accounts
   for select to authenticated
   using (
@@ -197,15 +236,18 @@ create policy bank_accounts_read_capable on app.bank_accounts
     app.has_permission('manage_accounts')
   );
 
+drop policy if exists bank_accounts_write_capable on app.bank_accounts;
 create policy bank_accounts_write_capable on app.bank_accounts
   for insert to authenticated
   with check (app.has_permission('manage_accounts'));
 
+drop policy if exists bank_accounts_update_capable on app.bank_accounts;
 create policy bank_accounts_update_capable on app.bank_accounts
   for update to authenticated
   using (app.has_permission('manage_accounts'))
   with check (app.has_permission('manage_accounts'));
 
+drop policy if exists ledger_entries_read_capable on app.ledger_entries;
 create policy ledger_entries_read_capable on app.ledger_entries
   for select to authenticated
   using (
@@ -213,6 +255,7 @@ create policy ledger_entries_read_capable on app.ledger_entries
     app.has_permission('manage_accounts')
   );
 
+drop policy if exists ledger_entries_insert_capable on app.ledger_entries;
 create policy ledger_entries_insert_capable on app.ledger_entries
   for insert to authenticated
   with check (app.has_permission('manage_accounts'));

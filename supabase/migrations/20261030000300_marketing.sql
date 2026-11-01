@@ -1,6 +1,13 @@
 begin;
 
 /* ─────────────────────────────────────────────────────────────────────────
+ * Re-runnable against a database that already carries the V1 deployment.
+ * Tables are created only when absent and then widened column by column,
+ * indexes use `if not exists`, functions and views are replaced, and every
+ * policy and trigger is dropped before it is recreated.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* ─────────────────────────────────────────────────────────────────────────
  * Marketing facts and per-platform integration settings.
  *
  * A marketing row is append-only for the same reason as the ledger: an edited
@@ -14,7 +21,7 @@ begin;
  * `api_key_configured`.
  * ───────────────────────────────────────────────────────────────────────── */
 
-create table app.marketing_platform_settings (
+create table if not exists app.marketing_platform_settings (
   platform           text        primary key,
   enabled            boolean     not null default false,
   api_key_ciphertext text,
@@ -29,10 +36,20 @@ create table app.marketing_platform_settings (
   )
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.marketing_platform_settings
+  add column if not exists platform           text,
+  add column if not exists enabled            boolean     not null default false,
+  add column if not exists api_key_ciphertext text,
+  add column if not exists webhook_url        text        not null default '',
+  add column if not exists updated_at         timestamptz not null default now(),
+  add column if not exists updated_by         uuid        references app.users (id) on delete set null;
+
 comment on table app.marketing_platform_settings is
   'Per-platform sync settings. The API key is ciphertext and is never exposed to client roles.';
 
-create table app.marketing_entries (
+create table if not exists app.marketing_entries (
   id                uuid        primary key default gen_random_uuid(),
   platform          text        not null,
   channel           text        not null,
@@ -62,18 +79,34 @@ create table app.marketing_entries (
     check (length(btrim(campaign)) > 0)
 );
 
+/* Reconciliation: a pre-existing table from the V1 deployment is
+ * widened to this contract instead of being skipped wholesale. */
+alter table app.marketing_entries
+  add column if not exists id          uuid default gen_random_uuid(),
+  add column if not exists platform    text        not null,
+  add column if not exists channel     text        not null,
+  add column if not exists campaign    text        not null,
+  add column if not exists spend_minor bigint      not null default 0,
+  add column if not exists impressions bigint      not null default 0,
+  add column if not exists clicks      bigint      not null default 0,
+  add column if not exists conversions bigint      not null default 0,
+  add column if not exists occurred_at timestamptz not null,
+  add column if not exists city_id     text,
+  add column if not exists recorded_by uuid        references app.users (id) on delete set null,
+  add column if not exists recorded_at timestamptz not null default now();
+
 comment on table app.marketing_entries is
   'Manual campaign facts. Append-only: corrections are new rows so spend stays auditable.';
 comment on column app.marketing_entries.city_id is
   'Firestore city document id. Null means the campaign covers all cities.';
 
-create index marketing_entries_platform_idx
+create index if not exists marketing_entries_platform_idx
   on app.marketing_entries (platform, occurred_at desc);
 
-create index marketing_entries_city_idx
+create index if not exists marketing_entries_city_idx
   on app.marketing_entries (city_id, occurred_at desc);
 
-create function app.marketing_reject_mutation()
+create or replace function app.marketing_reject_mutation()
 returns trigger
 language plpgsql
 as $$
@@ -84,10 +117,12 @@ begin
 end;
 $$;
 
+drop trigger if exists marketing_entries_immutable_update on app.marketing_entries;
 create trigger marketing_entries_immutable_update
 before update on app.marketing_entries
 for each row execute function app.marketing_reject_mutation();
 
+drop trigger if exists marketing_entries_immutable_delete on app.marketing_entries;
 create trigger marketing_entries_immutable_delete
 before delete on app.marketing_entries
 for each row execute function app.marketing_reject_mutation();
@@ -103,25 +138,29 @@ alter table app.marketing_entries           enable row level security;
 alter table app.marketing_platform_settings force row level security;
 alter table app.marketing_entries           force row level security;
 
+drop policy if exists marketing_settings_read on app.marketing_platform_settings;
 create policy marketing_settings_read on app.marketing_platform_settings
   for select to authenticated
   using (app.has_permission('manage_marketing_metrics'));
 
+drop policy if exists marketing_settings_write on app.marketing_platform_settings;
 create policy marketing_settings_write on app.marketing_platform_settings
   for all to authenticated
   using (app.has_permission('manage_marketing_metrics'))
   with check (app.has_permission('manage_marketing_metrics'));
 
+drop policy if exists marketing_entries_read on app.marketing_entries;
 create policy marketing_entries_read on app.marketing_entries
   for select to authenticated
   using (app.has_permission('manage_marketing_metrics'));
 
+drop policy if exists marketing_entries_insert on app.marketing_entries;
 create policy marketing_entries_insert on app.marketing_entries
   for insert to authenticated
   with check (app.has_permission('manage_marketing_metrics'));
 
 /* Safe projection: exposes whether a key exists, never the key itself. */
-create view app.marketing_platform_settings_public
+create or replace view app.marketing_platform_settings_public
 with (security_invoker = true)
 as
 select

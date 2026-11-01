@@ -113,6 +113,7 @@ create policy ledger_entries_insert_capable on app.ledger_entries
   for insert to authenticated
   with check (app.has_permission('manage_accounts'));
 
+drop policy if exists ledger_entries_insert_deposits on app.ledger_entries;
 create policy ledger_entries_insert_deposits on app.ledger_entries
   for insert to authenticated
   with check (

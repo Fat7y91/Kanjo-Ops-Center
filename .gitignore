@@ -76,3 +76,6 @@ out/
 
 # Local env overrides for the V2 app
 .env*.local
+
+# Supabase CLI local state
+supabase/.temp/
