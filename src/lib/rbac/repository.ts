@@ -24,6 +24,7 @@ type UserRow = {
   full_name: string;
   title: string;
   team: string;
+  team_id: string | null;
   clearance_level: number;
   global_scope: boolean;
   active: boolean;
@@ -55,7 +56,7 @@ export type UserPatchInput = {
 };
 
 const USER_COLUMNS =
-  "id,email,full_name,title,team,clearance_level,global_scope,active,updated_at";
+  "id,email,full_name,title,team,team_id,clearance_level,global_scope,active,updated_at";
 
 export function isRbacDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
@@ -78,6 +79,7 @@ function toAppUser(
     email: row.email ?? "",
     title: row.title,
     team: row.team,
+    teamId: row.team_id,
     permissions,
     accessibleCities,
     clearanceLevel: row.clearance_level,

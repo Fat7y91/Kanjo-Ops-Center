@@ -1,17 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { ChipToggle } from "@/components/ui/chip-toggle";
-import {
-  CheckboxField,
-  TextField,
-} from "@/components/ui/form-inputs";
+import { CheckboxField, TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
+import { TeamPicker } from "@/components/admin/team-picker";
 import { PERMISSION_GROUPS, type Permission } from "@/lib/rbac/permissions";
-import type { TeamOption } from "@/lib/rbac/teams";
+import type { CityTeam } from "@/lib/rbac/types";
 import {
   isCourier,
   type CityOption,
@@ -19,17 +17,16 @@ import {
   type LevelOption,
 } from "@/components/admin/user-form-types";
 
-const CUSTOM_TEAM = "__custom__";
-
 type CreateModalProps = {
   open: boolean;
   form: CreateForm;
   levels: LevelOption[];
   cities: CityOption[];
-  teams: TeamOption[];
+  teams: CityTeam[];
   viewerGlobalScope: boolean;
   saving: boolean;
   onFormChange: (next: CreateForm) => void;
+  onTeamCreated: (team: CityTeam) => void;
   onClose: () => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
@@ -51,17 +48,12 @@ export function CreateUserModal({
   viewerGlobalScope,
   saving,
   onFormChange,
+  onTeamCreated,
   onClose,
   onSubmit,
 }: CreateModalProps) {
-  const [customTeam, setCustomTeam] = useState(false);
   const needsTeam = isCourier(form.clearanceLevel);
   const held = useMemo(() => new Set(form.permissions), [form.permissions]);
-  const teamValues = useMemo(
-    () => new Set(teams.map((team) => team.value)),
-    [teams],
-  );
-  const teamIsKnown = teamValues.has(form.team);
 
   function patch(next: Partial<CreateForm>) {
     onFormChange({ ...form, ...next });
@@ -136,40 +128,6 @@ export function CreateUserModal({
           />
         </div>
 
-        {needsTeam ? (
-          <div className="form-grid">
-            <SelectMenu
-              label="الفريق"
-              hint="إلزامي للمندوب الميداني."
-              value={customTeam ? CUSTOM_TEAM : form.team || null}
-              onChange={(value) => {
-                if (value === CUSTOM_TEAM) {
-                  setCustomTeam(true);
-                  patch({ team: "" });
-                  return;
-                }
-                setCustomTeam(false);
-                patch({ team: value });
-              }}
-              options={[
-                ...teams.map((team) => ({
-                  value: team.value,
-                  label: team.label,
-                })),
-                { value: CUSTOM_TEAM, label: "فريق جديد…" },
-              ]}
-            />
-            {customTeam || (form.team !== "" && !teamIsKnown) ? (
-              <TextField
-                label="اسم الفريق الجديد"
-                value={form.team}
-                onChange={(event) => patch({ team: event.target.value })}
-                required
-              />
-            ) : null}
-          </div>
-        ) : null}
-
         <div className="field">
           <div className="field-head">
             <span>نطاق المدن</span>
@@ -194,6 +152,19 @@ export function CreateUserModal({
             ))}
           </div>
         </div>
+
+        {/* Teams are city-owned, so the picker comes after the city scope. */}
+        {needsTeam ? (
+          <TeamPicker
+            cities={cities}
+            cityIds={form.cityIds}
+            teams={teams}
+            teamId={form.teamId}
+            teamCityId={form.teamCityId}
+            onChange={(next) => patch(next)}
+            onTeamCreated={onTeamCreated}
+          />
+        ) : null}
 
         <div className="field">
           <div className="field-head">

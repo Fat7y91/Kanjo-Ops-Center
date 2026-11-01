@@ -263,8 +263,13 @@ migrated one at a time.
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
-- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; team required only for level 1).
-- `src/lib/rbac/teams.ts` — `listTeams()` = `BASE_TEAMS` ∪ teams already in the roster.
+- `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
+- `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
+- `src/lib/rbac/services/team-service.ts` — `createTeam()`; mints a city-owned team, guarded by `assertCanManageCity()`.
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; `teamId` required only for level 1).
+- `src/lib/rbac/teams.ts` — `listTeams()` / `listTeamsForCity()`: DB-backed reads of `app.field_teams` (§8.6).
+- `src/lib/rbac/team-repository.ts` — Tier 4 reads/writes for `app.field_teams`.
+- `src/app/api/admin/teams/route.ts` — `GET ?cityId=` / `POST` team controller (edge runtime).
 - `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_permissions`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
@@ -560,11 +565,22 @@ policies. It is validated end-to-end against PostgreSQL 15.
 | Table | Purpose |
 |---|---|
 | `app.permissions` | Capability catalogue, one row per key |
-| `app.users` | Operator profile + authorization state |
+| `app.users` | Operator profile + authorization state (`team_id` → `app.field_teams`) |
 | `app.user_permissions` | Explicit capability grants (no roles table) |
 | `app.user_city_scope` | Per-operator city restriction |
+| `app.field_teams` | City-owned field teams (`20261031000003_city_teams_and_contracting.sql`) |
 
 Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
+`app.field_teams` must exist before `app.users.team_id` can reference it.
+
+**Teams are city-owned, not global.** `app.field_teams(id, city_id, name)` is
+unique per `(city_id, lower(name))`, and `app.users.team_id` points at one row.
+The legacy free-text `app.users.team` label is kept, deprecated, only because
+the provisioning service and legacy readers still write it; `team_id` is
+authoritative. Deleting a team sets `team_id` to NULL, but a merchant contract
+(`app.merchants.contracted_by_team_id`) is `on delete restrict`, so attribution
+survives. `app.can_manage_city(city_id)` gates team writes: an executive (level
+≥ 3) owns every city, a level-2 manager only their scoped cities.
 
 ### 8.2 Identity: phone + password, and nothing else
 
@@ -623,6 +639,7 @@ subject to policy. `has_permission()` and `is_active_user()` are
 | `app.users` | Read own row, or all rows with `manage_permissions`; writes are governor-only |
 | `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_permissions` |
 | `app.user_city_scope` | Same shape as grants |
+| `app.field_teams` | Read by any active operator (needed to pick a team); insert/update/delete only via `can_manage_city(city_id)` |
 
 Self-service profile edits must go through a dedicated RPC rather than a direct
 `UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
@@ -696,9 +713,10 @@ POST /api/admin/users/provision        (protected Route Handler, edge)
   → require manage_permissions         else 401 / 403
   → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
   → assertCanCreate(session, input)    rank / permission / city subset
+  → resolveTeam(session, input)        team exists, city reachable, city in scope
   → supabase.auth.admin.createUser()   SERVICE ROLE, phone + password
       ├─ trigger: app.handle_auth_user_upsert mirrors phone/email
-      ├─ update app.users                profile: name, title, team, clearance
+      ├─ update app.users                profile: name, title, team_id, clearance
       ├─ insert app.user_permissions     explicit capability grants
       └─ insert app.user_city_scope      city assignments
   → on any failure: auth.admin.deleteUser()  cascade rollback
@@ -710,13 +728,25 @@ Implementation:
   password is capped at 72 characters because bcrypt silently truncates beyond
   that, and a silent truncation would make the stored credential differ from
   what the operator typed. Email is optional profile data (never an identity,
-  never unique); `team` is required only when `clearanceLevel === 1`, because
+  never unique); `teamId` is required only when `clearanceLevel === 1`, because
   a courier is always dispatched through a team.
-- `src/lib/rbac/teams.ts` — `BASE_TEAMS` merged with the live roster
-  (`TEAM_LABELS` ∪ teams already in use) via `listTeams()`, so the add-user
-  dialog offers a known set without hiding a team that is already assigned.
+- `src/lib/rbac/team-repository.ts` / `teams.ts` — teams are **city-owned** rows
+  in `app.field_teams`, not a global label set. `listTeamsForCity(cityId)` backs
+  the dependent picker in the add-user dialog; there is no seed fallback,
+  because a team only exists once it is created inside a city.
+- `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`. Reads the
+  city from the team row (never from the client), rejects a team the actor
+  cannot reach, and rejects a team whose city is not in the courier's scope. The
+  same city is what `app.can_manage_city()` authorises on the database side.
+- `src/lib/rbac/services/provisioning-writes.ts` — profile / grants / scope
+  writes. `attachProfile` writes both `team_id` (authoritative) and the
+  deprecated free-text `team` label so legacy readers stay correct during the
+  migration.
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`. Pure
   orchestration over the service-role client; no UI, no HTTP concerns.
+- `src/app/api/admin/teams/route.ts` — team controller. `GET` lists one city's
+  teams for the picker; `POST` mints a team, and both require the caller to
+  reach the city (`assertCanManageCity`, mirroring the SQL policy).
 - `src/app/api/admin/users/provision/route.ts` — thin controller. It only
   authenticates, delegates, and maps errors to status codes.
 
@@ -840,6 +870,25 @@ zombie login.
 
 `granted_by` records the authorising operator for audit. It is set only when
 the session id is a real UUID, because seed/demo sessions use `u-*` ids.
+
+#### Team selection in the add-user dialog
+
+A courier is the only rank that needs a team, and a team is city-owned
+(`app.field_teams`), so the picker is dependent on the city scope:
+
+1. The operator ticks the courier's cities first.
+2. `TeamPicker` (`src/components/admin/team-picker.tsx`) lists only the teams of
+   the selected city; with several cities the operator picks the owning city
+   explicitly, with one it is implied.
+3. "Create new team" posts `{ cityId, name }` to `POST /api/admin/teams`,
+   which enforces `assertCanManageCity()` (executive anywhere, city manager only
+   in their scoped cities) and relies on the per-city case-insensitive unique
+   index to reject duplicates.
+4. Removing a team's city from the courier scope also clears the selected team,
+   so the dialog can never submit a team the rep does not cover.
+5. Provisioning receives `teamId`; `resolveTeam()` re-reads the team, derives
+   its city from the row, and persists `app.users.team_id` (plus the deprecated
+   `team` label) in `attachProfile`.
 
 #### What replaces the old create flow
 

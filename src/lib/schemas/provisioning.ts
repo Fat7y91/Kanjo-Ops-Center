@@ -6,9 +6,10 @@ import { PERMISSION_KEYS, type Permission } from "@/lib/rbac/permissions";
  * Top-down provisioning input. There is no public signup: an authorised
  * operator supplies the phone and initial password on the new account's behalf.
  *
- * `email` is optional profile data and is never a login identity. `team` is
+ * `email` is optional profile data and is never a login identity. `teamId` is
  * mandatory only for a field courier (level 1), who must belong to a field
- * team; every other level has no team obligation.
+ * team; every other level has no team obligation. Teams are city-owned, so the
+ * service verifies the team belongs to a city in the operator's scope.
  */
 const permissionSchema = z.enum(
   PERMISSION_KEYS as unknown as [Permission, ...Permission[]],
@@ -30,7 +31,8 @@ const baseProvisionSchema = z.object({
   fullName: z.string().trim().min(2, "اسم المشغّل مطلوب.").max(80),
   email: z.string().trim().email("أدخل بريداً إلكترونياً صالحاً.").max(120).optional(),
   title: z.string().trim().min(2, "المسمى الوظيفي مطلوب.").max(80),
-  team: z.string().trim().max(60).optional(),
+  /** `app.field_teams.id`; the city is derived server-side from the team. */
+  teamId: z.string().uuid("معرّف الفريق غير صالح.").optional(),
   clearanceLevel: z.coerce
     .number()
     .int("مستوى التصريح يجب أن يكون رقماً صحيحاً.")
@@ -41,12 +43,10 @@ const baseProvisionSchema = z.object({
 });
 
 export const provisionAccountSchema = baseProvisionSchema.refine(
-  (value) =>
-    value.clearanceLevel !== 1 ||
-    (value.team !== undefined && value.team.trim().length >= 2),
+  (value) => value.clearanceLevel !== 1 || value.teamId !== undefined,
   {
     message: "الفريق مطلوب للمندوب.",
-    path: ["team"],
+    path: ["teamId"],
   },
 );
 

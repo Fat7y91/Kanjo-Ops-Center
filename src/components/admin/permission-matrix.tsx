@@ -9,8 +9,7 @@ import { UserCard } from "@/components/admin/user-card";
 import { usePermissionMatrix } from "@/components/admin/use-permission-matrix";
 import { PERMISSION_GROUPS } from "@/lib/rbac/permissions";
 import { clearanceTone } from "@/lib/rbac/hierarchy";
-import type { AppUser } from "@/lib/rbac/types";
-import type { TeamOption } from "@/lib/rbac/teams";
+import type { AppUser, CityTeam } from "@/lib/rbac/types";
 import type {
   CityOption,
   LevelOption,
@@ -24,7 +23,7 @@ type PermissionMatrixProps = {
   viewerGlobalScope: boolean;
   assignableLevels: LevelOption[];
   assignableCities: CityOption[];
-  teams: TeamOption[];
+  teams: CityTeam[];
 };
 
 /**
@@ -136,10 +135,11 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
         form={matrix.createForm}
         levels={matrix.levelOptions}
         cities={props.assignableCities}
-        teams={props.teams}
+        teams={matrix.teams}
         viewerGlobalScope={props.viewerGlobalScope}
         saving={matrix.savingCreate}
         onFormChange={matrix.setCreateForm}
+        onTeamCreated={matrix.addTeam}
         onClose={() => matrix.setCreateOpen(false)}
         onSubmit={(event) => void matrix.submitCreate(event)}
       />

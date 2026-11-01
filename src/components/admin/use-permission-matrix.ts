@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 
-import type { AppUser } from "@/lib/rbac/types";
+import type { AppUser, CityTeam } from "@/lib/rbac/types";
 import { useUserCapabilities } from "@/components/admin/use-user-capabilities";
 import { maxAssignableLevel } from "@/lib/rbac/hierarchy";
 import {
@@ -21,6 +21,7 @@ type Args = {
   viewerGlobalScope: boolean;
   assignableLevels: LevelOption[];
   assignableCities: CityOption[];
+  teams: CityTeam[];
 };
 
 /**
@@ -31,7 +32,8 @@ type Args = {
 export function usePermissionMatrix(args: Args) {
   const caps = useUserCapabilities(args);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<CreateForm>(() =>
+  const [teams, setTeams] = useState<CityTeam[]>(args.teams);
+  const [createForm, setCreateFormState] = useState<CreateForm>(() =>
     emptyForm(args.assignableLevels, args.assignableCities),
   );
   const [savingCreate, setSavingCreate] = useState(false);
@@ -39,8 +41,31 @@ export function usePermissionMatrix(args: Args) {
   const [scopeCities, setScopeCities] = useState<string[]>([]);
   const [savingScope, setSavingScope] = useState(false);
 
+  /**
+   * A team is city-bound, so dropping its city from the courier scope must also
+   * drop the team: otherwise the dialog would submit a team the rep cannot own.
+   */
+  const setCreateForm = useCallback((next: CreateForm) => {
+    const team = next.teamId
+      ? teams.find((candidate) => candidate.id === next.teamId)
+      : undefined;
+    if (team && !next.cityIds.includes(team.cityId)) {
+      setCreateFormState({ ...next, teamId: "", teamCityId: "" });
+      return;
+    }
+    setCreateFormState(next);
+  }, [teams]);
+
+  const addTeam = useCallback((team: CityTeam) => {
+    setTeams((current) =>
+      current.some((candidate) => candidate.id === team.id)
+        ? current
+        : [...current, team],
+    );
+  }, []);
+
   const openCreate = useCallback(() => {
-    setCreateForm(emptyForm(args.assignableLevels, args.assignableCities));
+    setCreateFormState(emptyForm(args.assignableLevels, args.assignableCities));
     caps.setError(null);
     setCreateOpen(true);
   }, [args.assignableCities, args.assignableLevels, caps.setError]);
@@ -85,9 +110,9 @@ export function usePermissionMatrix(args: Args) {
             fullName: createForm.name,
             email: createForm.email.trim() || undefined,
             title: createForm.title,
-            team:
+            teamId:
               Number(createForm.clearanceLevel) === COURIER_LEVEL
-                ? createForm.team
+                ? createForm.teamId || undefined
                 : undefined,
             clearanceLevel: Number(createForm.clearanceLevel),
             accessibleCities: createForm.cityIds,
@@ -103,7 +128,9 @@ export function usePermissionMatrix(args: Args) {
           return;
         }
         setCreateOpen(false);
-        setCreateForm(emptyForm(args.assignableLevels, args.assignableCities));
+        setCreateFormState(
+          emptyForm(args.assignableLevels, args.assignableCities),
+        );
         caps.reloadUsers();
       } catch {
         caps.setError("تعذر إنشاء المستخدم.");
@@ -134,6 +161,7 @@ export function usePermissionMatrix(args: Args) {
     scopeTarget,
     scopeCities,
     savingScope,
+    teams,
     setCreateForm,
     setCreateOpen,
     setScopeCities,
@@ -142,6 +170,7 @@ export function usePermissionMatrix(args: Args) {
     openScope,
     saveScope,
     submitCreate,
+    addTeam,
   };
 }
 
