@@ -453,15 +453,34 @@ logout therefore POST to plain route handlers. Rules locked in:
 - A fee is a non-negative EGP amount (`numeric(12,2)`). The schema turns an
   empty submission into `NaN` rather than `0`, so a cleared field cannot save an
   unintended zero fee.
+- **The contract fee is tiered by achievement**, not flat:
+  tier 1 `[0, 80)`, tier 2 `[80, 90)`, tier 3 `[90, 100)`, tier 4 `[100, ∞)`.
+  The boundaries live in exactly one place per side —
+  `app.contract_fee_tier(numeric)` in SQL and `contractFeeTier()` in
+  `src/lib/commissions/types.ts` — and both must agree. `100%` is tier 4: the
+  ladder is half-open and gap-free, so no achievement value is ever unpaid.
+  A null achievement (no target, or a target of zero) is tier 1, never an
+  unearned bonus. `app.contract_fee_for(city, achievement)` resolves the same
+  override/fallback pair as `commission_rates_for()`, then selects the band; the
+  TypeScript twin is `contractFeeForAchievement()` in `rates.ts`.
 - SQL: `20261031000000_enterprise_kpi_vault.sql` (`app.commission_rates`,
   `has_min_clearance`), `20261031000002_city_specific_rates.sql` (`city_id`,
   two partial unique indexes, drops the singleton trigger,
   `commission_rates_for()`), `20261031000003_city_teams_and_contracting.sql`
-  (`contracting_base_fee`, `contracts_closed`, `avg_achievement_ratio`).
+  (`contracts_closed`, `avg_achievement_ratio`), and
+  `20261102000000_tiered_contract_commissions.sql` (the four
+  `contract_fee_tier_*` columns, `achievement_percent()`, `contract_fee_tier()`,
+  `contract_fee_for()`, `applied_contract_fee`).
+- `20261102000000_tiered_contract_commissions.sql` is additive and safe: it
+  adds the four tiers, backfills **all four from the old flat fee** so the
+  migration changes no amount by itself, and only then drops
+  `contracting_base_fee`. Every statement is guarded (`if not exists`, `if
+  exists`, `coalesce`), so a re-run is a no-op.
 - `20261031000001_snapshot_rate_history.sql` freezes `applied_merchant_rate` /
   `applied_item_rate` onto `app.kpi_snapshots` and extends the immutability
   guard. Pre-existing rows stay NULL — the true rate is unrecoverable, and
   inventing one would put false evidence in the ledger.
+  `20261102000000` adds `applied_contract_fee` beside them on the same terms.
 
 ### Marketing Measurement (Tier 1–5)
 - UI: `src/app/(workspace)/marketing/page.tsx` plus
@@ -757,12 +776,14 @@ the page.**
 Genuine errors (`42501` RLS denials, `23505` uniqueness) are re-thrown untouched,
 so this fallback never hides an authorization bug.
 
-**Finance rates read.** `src/lib/commissions/repository.ts` retries the
-`contracting_base_fee` projection (`20261031000003`) and, since the finance-500
-fix, `listCommissionRateRows()` itself never throws out of a Server Component:
-missing table (`42P01` / `PGRST205`), missing `city_id` (`42703`) or any
-transient failure degrades the read to `null`, and the page renders its
-"finance database unavailable" state. Writes keep the strict error behaviour.
+**Finance rates read.** `src/lib/commissions/repository.ts` degrades through
+three projections — the tiered columns, then the old flat `contracting_base_fee`
+(copied into all four bands so no amount changes), then no contracting fee at
+all. Since the finance-500 fix, `listCommissionRateRows()` itself never throws
+out of a Server Component: missing table (`42P01` / `PGRST205`), missing
+`city_id` (`42703`) or any transient failure degrades the read to `null`, and
+the page renders its "finance database unavailable" state. Writes keep the
+strict error behaviour.
 
 ### 8.6 No Self-Service Signup — Top-Down Provisioning
 
@@ -1039,7 +1060,8 @@ commission fee schedule: a rate is a price list in EGP, stored as
 | `20261031000000_enterprise_kpi_vault.sql` | `app.commission_rates`, `app.kpi_snapshots`, `app.merchants`, `app.catalog_products`; `app.has_min_clearance(integer)` | Fee schedule is one global row; reads are any active operator, writes require clearance level 4. |
 | `20261031000001_snapshot_rate_history.sql` | adds `applied_merchant_rate` / `applied_item_rate` to `app.kpi_snapshots` | A snapshot's rates are mandatory on insert and frozen thereafter, so a slip can always be reconciled against the schedule that produced it. Pre-existing rows stay NULL. |
 | `20261031000002_city_specific_rates.sql` | `app.commission_rates.city_id`, partial unique indexes, `app.commission_rates_for(text)` | One row per city plus exactly one NULL-city fallback (two partial unique indexes, because `UNIQUE` allows many NULLs). The residue of the old singleton trigger is dropped; L4 gains insert/delete. |
-| `20261031000003_city_teams_and_contracting.sql` | `contracting_base_fee` on `app.commission_rates`; `contracts_closed` / `avg_achievement_ratio` on `app.kpi_snapshots` | Fees are non-negative; the new snapshot outcomes join the frozen set. |
+| `20261031000003_city_teams_and_contracting.sql` | `contracts_closed` / `avg_achievement_ratio` on `app.kpi_snapshots`; adds the then-flat `contracting_base_fee` | Fees are non-negative; the new snapshot outcomes join the frozen set. |
+| `20261102000000_tiered_contract_commissions.sql` | replaces `contracting_base_fee` with `contract_fee_tier_1..4`; `achievement_percent()`, `contract_fee_tier()`, `contract_fee_for()`; `applied_contract_fee` on `app.kpi_snapshots` | Backfills all four tiers from the old flat fee before dropping it, so the migration changes no amount. Bands are half-open and gap-free; `100%` is tier 4. The applied fee is frozen with the snapshot. |
 
 Commission rates are **numeric EGP, not minor units**: the schedule is a price
 list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres

@@ -7,6 +7,7 @@ import { TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
 import { shortDate } from "@/lib/accounts/format";
 
+import { ContractFeeTierFields } from "./contract-fee-tier-fields";
 import type { CommissionRatesSnapshot } from "./use-commission-rates";
 import {
   useCommissionRatesForm,
@@ -118,22 +119,13 @@ export function CommissionRatesView({
                 }
                 disabled={form.saving}
               />
-              <TextField
-                label="الرسم الأساسي للتعاقد"
-                hint="الرسم الأساسي لإغلاق العقد، قبل احتساب الهامش."
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                dir="ltr"
-                required
-                value={form.drafts.contractingBaseFee}
-                onChange={(event) =>
-                  form.patchFee("contractingBaseFee", event.target.value)
-                }
-                disabled={form.saving}
-              />
             </div>
+
+            <ContractFeeTierFields
+              drafts={form.drafts}
+              disabled={form.saving}
+              onChange={form.patchFee}
+            />
 
             {form.rate ? (
               <p className="commission-rates-meta">

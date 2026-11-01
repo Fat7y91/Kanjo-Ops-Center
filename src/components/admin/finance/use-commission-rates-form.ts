@@ -23,7 +23,10 @@ export type CityOption = {
 export type FeeDraft = {
   merchantActivationFee: string;
   photoItemFee: string;
-  contractingBaseFee: string;
+  contractFeeTier1: string;
+  contractFeeTier2: string;
+  contractFeeTier3: string;
+  contractFeeTier4: string;
 };
 
 function draftFromRate(rate: CityCommissionRate | null): FeeDraft {
@@ -31,7 +34,10 @@ function draftFromRate(rate: CityCommissionRate | null): FeeDraft {
   return {
     merchantActivationFee: String(base.merchantActivationFee),
     photoItemFee: String(base.photoItemFee),
-    contractingBaseFee: String(base.contractingBaseFee),
+    contractFeeTier1: String(base.contractFeeTier1),
+    contractFeeTier2: String(base.contractFeeTier2),
+    contractFeeTier3: String(base.contractFeeTier3),
+    contractFeeTier4: String(base.contractFeeTier4),
   };
 }
 
@@ -89,13 +95,16 @@ export function useCommissionRatesForm(
     const fees = {
       merchantActivationFee: Number(drafts.merchantActivationFee),
       photoItemFee: Number(drafts.photoItemFee),
-      contractingBaseFee: Number(drafts.contractingBaseFee),
+      contractFeeTier1: Number(drafts.contractFeeTier1),
+      contractFeeTier2: Number(drafts.contractFeeTier2),
+      contractFeeTier3: Number(drafts.contractFeeTier3),
+      contractFeeTier4: Number(drafts.contractFeeTier4),
     };
     const valid = Object.values(fees).every(
       (value) => Number.isFinite(value) && value >= 0,
     );
     if (!valid) {
-      setSaveError("أدخل أرقاماً صحيحة غير سالبة للرسوم الثلاثة.");
+      setSaveError("أدخل أرقاماً صحيحة غير سالبة لكل الرسوم.");
       return;
     }
 

@@ -23,7 +23,10 @@ export const commissionRateUpsertSchema = z.object({
   cityId: z.string().trim().min(1).nullable(),
   merchantActivationFee: fee("رسوم تفعيل التاجر"),
   photoItemFee: fee("رسم الصورة / الصنف"),
-  contractingBaseFee: fee("الرسم الأساسي للتعاقد"),
+  contractFeeTier1: fee("رسم التعاقد — أقل من 80%"),
+  contractFeeTier2: fee("رسم التعاقد — من 80% إلى 90%"),
+  contractFeeTier3: fee("رسم التعاقد — من 90% إلى 100%"),
+  contractFeeTier4: fee("رسم التعاقد — فوق 100%"),
 });
 
 export type CommissionRateUpsertInput = z.infer<

@@ -13,8 +13,9 @@ import {
   type CommissionRateRow,
 } from "./repository";
 import {
-  DEFAULT_COMMISSION_RATES,
+  contractFeeTier,
   type CityCommissionRate,
+  type ContractFeeTier,
 } from "./types";
 
 /**
@@ -45,12 +46,10 @@ export function toCityCommissionRate(
     cityId: row.city_id,
     merchantActivationFee: Number(row.merchant_activation_fee),
     photoItemFee: Number(row.photo_item_fee),
-    // NULL only when the deployment predates the contracting migration; the
-    // seeded default is the honest stand-in for display.
-    contractingBaseFee:
-      row.contracting_base_fee === null
-        ? DEFAULT_COMMISSION_RATES.contractingBaseFee
-        : Number(row.contracting_base_fee),
+    contractFeeTier1: Number(row.contract_fee_tier_1),
+    contractFeeTier2: Number(row.contract_fee_tier_2),
+    contractFeeTier3: Number(row.contract_fee_tier_3),
+    contractFeeTier4: Number(row.contract_fee_tier_4),
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
@@ -77,6 +76,51 @@ export function activeRateForCity(
     if (override) return { rate: override, source: "override" };
   }
   return { rate: globalRate(rows), source: "global" };
+}
+
+/** The fee a schedule defines for one achievement band. */
+export function feeForTier(
+  rate: CityCommissionRate,
+  tier: ContractFeeTier,
+): number {
+  switch (tier) {
+    case 1:
+      return rate.contractFeeTier1;
+    case 2:
+      return rate.contractFeeTier2;
+    case 3:
+      return rate.contractFeeTier3;
+    case 4:
+      return rate.contractFeeTier4;
+  }
+}
+
+export type ContractFeeResolution = {
+  fee: number | null;
+  tier: ContractFeeTier;
+  achievementPercent: number | null;
+};
+
+/**
+ * The contract fee a schedule pays at a given achievement.
+ *
+ * Mirrors `app.contract_fee_for()`: the band comes from the same boundaries as
+ * SQL, so a payout computed here always equals one computed in the database.
+ * A null achievement (no target, or an unknown figure) is tier 1 — never an
+ * unearned bonus. Returns `fee: null` only when the schedule has no row.
+ */
+export function contractFeeForAchievement(
+  rows: readonly CityCommissionRate[],
+  cityId: string | null,
+  achievementPercent: number | null,
+): ContractFeeResolution {
+  const tier = contractFeeTier(achievementPercent);
+  const { rate } = activeRateForCity(rows, cityId);
+  return {
+    fee: rate ? feeForTier(rate, tier) : null,
+    tier,
+    achievementPercent,
+  };
 }
 
 /** Active schedule plus the full row list, for the settings surface. */
@@ -120,7 +164,10 @@ export async function saveCommissionRate(
   const write = {
     merchantActivationFee: input.merchantActivationFee,
     photoItemFee: input.photoItemFee,
-    contractingBaseFee: input.contractingBaseFee,
+    contractFeeTier1: input.contractFeeTier1,
+    contractFeeTier2: input.contractFeeTier2,
+    contractFeeTier3: input.contractFeeTier3,
+    contractFeeTier4: input.contractFeeTier4,
     updatedBy: session.user.id,
   };
 
