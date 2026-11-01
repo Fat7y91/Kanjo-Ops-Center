@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { requireAnyPermission } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
+import { monthLabel, recentMonthKeys } from "@/lib/kpi/calendar";
 import { formatScore } from "@/lib/kpi/format";
 import { loadKpiDataset } from "@/lib/kpi/repository";
 import { buildKpiReport } from "@/lib/kpi/services/agent-kpi-service";
@@ -34,9 +35,9 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
   const session = await requireAnyPermission(["view_global_kpi", "view_rep_kpi"]);
   const params = await searchParams;
 
-  const dataset = await loadKpiDataset();
-  const allowedCityIds = effectiveCityIds(session);
   const filters = normalizeFilters(parseKpiFilters(params));
+  const dataset = await loadKpiDataset(filters.month);
+  const allowedCityIds = effectiveCityIds(session);
 
   const { scope, lockedToSelf, selfAgent, cityId } = resolveKpiScope({
     viewer: {
@@ -80,10 +81,10 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
       <PageHeader
         eyebrow="أداء المناديب"
         title="لوحة مؤشرات المناديب"
-        description="تقييم موحّد لكل مندوب وفق مرحلة دورة حياة مدينته: الاستكشاف، التعاقدات، إدخال البيانات، ثم التشغيل. المقارنة والترتيب داخل المدينة فقط."
+        description="أرقام كل مندوب تُقرأ مباشرة من قاعدة البيانات: الشهر الجاري يُحتسب لحظياً من الإسناد الفردي، والشهور السابقة تُقرأ من سجل المؤشرات المؤرشف. المقارنة والترتيب داخل المدينة فقط."
         actions={
           <span className="badge badge-gold">
-            {report.snapshots.length} مندوب · {report.cityCount} مدينة
+            {report.snapshots.length} مندوب · {monthLabel(filters.month)}
           </span>
         }
       />
@@ -96,10 +97,22 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
         team={filters.team}
         agentId={filters.agentId}
         windowDays={filters.windowDays}
+        month={filters.month}
+        monthOptions={recentMonthKeys(6).map((key) => ({
+          value: key,
+          label: monthLabel(key),
+        }))}
         lockedToSelf={lockedToSelf}
         selfAgent={selfAgent}
         selfLabel={`${session.user.name} · ${session.user.team}`}
       />
+
+      {dataset.vault.source === "unavailable" && (
+        <p className="kpi-filter-note">
+          قاعدة بيانات المؤشرات غير متصلة حالياً؛ تُعرض الأرقام صفراً حتى
+          اكتمال الربط.
+        </p>
+      )}
 
       <section className="stat-grid">
         <StatCard

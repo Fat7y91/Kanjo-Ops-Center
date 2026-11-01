@@ -19,6 +19,8 @@ export type KpiFilterBarProps = {
   team: string | null;
   agentId: string | null;
   windowDays: number;
+  month: string;
+  monthOptions: KpiFilterOption[];
   /** Reps cannot widen scope; the bar renders read-only context instead. */
   lockedToSelf: boolean;
   /** False when the viewer manages a city but is not a field rep themselves. */
@@ -42,6 +44,8 @@ export function KpiFilterBar({
   team,
   agentId,
   windowDays,
+  month,
+  monthOptions,
   lockedToSelf,
   selfAgent,
   selfLabel,
@@ -79,6 +83,12 @@ export function KpiFilterBar({
         <p className="kpi-filter-note">
           <strong>{selfLabel}</strong> · {windowLabel(windowDays)}
         </p>
+        <SelectMenu
+          label="الشهر"
+          value={month}
+          options={monthOptions}
+          onChange={(value) => push({ month: value })}
+        />
       </section>
     );
   }
@@ -117,6 +127,12 @@ export function KpiFilterBar({
         options={agents}
         placeholder="كل المناديب"
         onChange={(value) => push({ agent: value })}
+      />
+      <SelectMenu
+        label="الشهر"
+        value={month}
+        options={monthOptions}
+        onChange={(value) => push({ month: value })}
       />
       <SelectMenu
         label="الفترة"

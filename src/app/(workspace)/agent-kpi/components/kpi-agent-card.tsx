@@ -1,7 +1,6 @@
 import { KpiInsightsPanel } from "@/app/(workspace)/agent-kpi/components/kpi-insights-panel";
 import { KpiMetricGrid } from "@/app/(workspace)/agent-kpi/components/kpi-metric-grid";
 import { KpiRankCard } from "@/app/(workspace)/agent-kpi/components/kpi-rank-card";
-import { formatMetricValue } from "@/lib/kpi/format";
 import { KPI_STAGE_META, type KpiSnapshot } from "@/lib/kpi/types";
 
 const ALL_STAGES = ["preparation", "contracting", "data_entry", "live_operations"] as const;
@@ -40,6 +39,11 @@ export function KpiAgentCard({ snapshot }: { snapshot: KpiSnapshot }) {
         <span className="badge badge-purple">
           {stage.code} · {snapshot.stageLabel}
         </span>
+        {snapshot.facts.source === "snapshot" && (
+          <span className="badge badge-green">
+            {snapshot.facts.status === "paid" ? "مدفوعة" : "مؤرشفة"}
+          </span>
+        )}
       </div>
 
       <div className="kpi-stage-rail" aria-label="مراحل دورة حياة المدينة">
@@ -56,15 +60,6 @@ export function KpiAgentCard({ snapshot }: { snapshot: KpiSnapshot }) {
       </div>
 
       <KpiMetricGrid metrics={snapshot.metrics} />
-
-      <div className="kpi-usage">
-        {snapshot.usageMetrics.map((metric) => (
-          <div key={metric.key} className="kpi-usage-item">
-            <span>{metric.label}</span>
-            <strong>{formatMetricValue(metric)}</strong>
-          </div>
-        ))}
-      </div>
 
       <div className="kpi-split">
         <div className="kpi-insight-block">

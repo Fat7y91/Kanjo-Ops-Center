@@ -1,14 +1,18 @@
-import type { FollowUpTask, FieldTask, Merchant, VisitReport } from "@/lib/field-ops/types";
 import type { CityStage } from "@/lib/field-ops/types";
-import type { CatalogProduct } from "@/lib/catalog/types";
+import type {
+  LiveVault,
+  VaultRate,
+  VaultSnapshotFact,
+  VaultTeamContracting,
+} from "@/lib/kpi/vault";
 
 /**
  * Agent KPI domain vocabulary (Tier 3).
  *
- * These types are the contract between the KPI service, the repository and the
- * dashboard. Raw records (`KpiScoutEntry`, `KpiLiveOpsDay`, `KpiUsageSession`)
- * represent feeds that do not yet live in a domain store; they are seeded in
- * `data/facts-seed.ts` until the Consumer app exposes them.
+ * The numbers themselves come from the SQL KPI Vault (`app` schema): live
+ * per-record attribution for the current month and immutable
+ * `app.kpi_snapshots` for history. The `KpiDataset` carries the raw vault
+ * inputs plus the roster; `metrics.ts` turns them into facts and salary.
  */
 
 export type KpiStage = CityStage;
@@ -46,34 +50,6 @@ export const KPI_STAGE_META: Record<
   },
 };
 
-/* ── Raw feeds ─────────────────────────────────────────────────────────── */
-
-export type KpiScoutEntry = {
-  agentId: string;
-  merchantName: string;
-  description: string;
-  createdAt: string;
-};
-
-export type KpiLiveOpsDay = {
-  agentId: string;
-  date: string;
-  shiftOrders: number;
-  gmv: number;
-  ticketsResolved: number;
-  merchantsContacted: number;
-  rejectedOrders: number;
-  activeMerchants: number;
-  cashMerchants: number;
-  cashDrivers: number;
-};
-
-export type KpiUsageSession = {
-  agentId: string;
-  date: string;
-  minutes: number;
-};
-
 /* ── Roster and dataset ────────────────────────────────────────────────── */
 
 export type KpiCity = {
@@ -86,76 +62,43 @@ export type KpiAgent = {
   id: string;
   name: string;
   team: string;
+  /** `app.field_teams.id` when the rep belongs to a city-owned team. */
+  teamId?: string | null;
   cityId: string;
   cityName: string;
   stage: KpiStage;
 };
 
+/** Raw vault inputs keyed by identity, hydrated by the Tier 4 repository. */
+export type KpiVaultRaw = {
+  source: "live" | "snapshot" | "unavailable";
+  activationsByRep: Map<string, number>;
+  itemsByRep: Map<string, number>;
+  contractsByTeam: Map<string, VaultTeamContracting>;
+  ratesByCity: Map<string | null, VaultRate>;
+  snapshotsByRep: Map<string, VaultSnapshotFact>;
+};
+
 export type KpiDataset = {
   cities: KpiCity[];
   agents: KpiAgent[];
-  merchants: Merchant[];
-  reports: VisitReport[];
-  tasks: FieldTask[];
-  followUps: FollowUpTask[];
-  products: CatalogProduct[];
-  scouts: KpiScoutEntry[];
-  liveOps: KpiLiveOpsDay[];
-  usage: KpiUsageSession[];
+  vault: KpiVaultRaw;
+  /** The month the dataset is computed for (`YYYY-MM`). */
+  month: string;
 };
 
 /* ── Computed facts ────────────────────────────────────────────────────── */
 
-export type PreparationFacts = {
-  merchantsScouted: number;
-  avgDescriptionLength: number;
-};
-
-export type NegotiationFacts = {
-  merchantsVisited: number;
-  totalVisits: number;
-  followUps: number;
-  reportsWritten: number;
-  avgReportLength: number;
-  targetPercent: number;
-  finalContractPercent: number;
-  provisionalContractPercent: number;
-  avgVisitDurationMinutes: number;
-};
-
-export type DataEntryFacts = {
-  merchantsDigitized: number;
-  totalProducts: number;
-  imagesUploaded: number;
-  productsMissingImages: number;
-  catalogAccuracy: number;
-  avgDescriptionLength: number;
-};
-
-export type LiveOpsFacts = {
-  dailyShiftOrders: number;
-  totalGmv: number;
-  ticketsResolved: number;
-  merchantsContacted: number;
-  rejectedOrders: number;
-  activeMerchants: number;
-  cashCollectedMerchants: number;
-  cashCollectedDrivers: number;
-};
-
-export type UsageFacts = {
-  activeMinutes: number;
-  activeDays: number;
-  sessions: number;
-  avgSessionMinutes: number;
-};
-
-export type AgentKpiFacts = {
-  preparation: PreparationFacts;
-  negotiation: NegotiationFacts;
-  dataEntry: DataEntryFacts;
-  liveOps: LiveOpsFacts;
-  usage: UsageFacts;
+export type KpiVaultFacts = {
+  activations: number;
+  itemsAdded: number;
+  contractsClosed: number;
+  /** Average agreed/target margin (%), shared with the rep's team. */
+  marginRatio: number;
+  salary: number;
+  source: "live" | "snapshot" | "unavailable";
+  /** Snapshot payroll state; null for live months. */
+  status: "pending" | "paid" | null;
 };
 
 /* ── Presentation contract ─────────────────────────────────────────────── */
@@ -198,9 +141,8 @@ export type KpiSnapshot = {
   agent: KpiAgent;
   stage: KpiStage;
   stageLabel: string;
-  facts: AgentKpiFacts;
+  facts: KpiVaultFacts;
   metrics: KpiMetric[];
-  usageMetrics: KpiMetric[];
   score: number;
   rank: KpiRank;
   topPerformer: {

@@ -1,23 +1,21 @@
 import type {
-  AgentKpiFacts,
   KpiAgent,
   KpiInsight,
-  KpiStage,
+  KpiVaultFacts,
 } from "@/lib/kpi/types";
 
 /**
- * Insight heuristics (Tier 3, pure).
+ * Insight heuristics over vault facts (Tier 3, pure).
  *
- * Compares the viewer against the city's top performer for the same stage and
+ * Compares the agent with the city's top performer on the four vault axes and
  * emits at most three actionable cards. Never throws; missing data yields a
  * neutral fallback so the panel is never empty.
  */
 
 type InsightInput = {
   agent: KpiAgent;
-  stage: KpiStage;
-  facts: AgentKpiFacts;
-  top: { name: string; facts: AgentKpiFacts; score: number } | null;
+  facts: KpiVaultFacts;
+  top: { name: string; facts: KpiVaultFacts; score: number } | null;
   score: number;
   rank: number;
   rankTotal: number;
@@ -34,9 +32,8 @@ function gap(current: number, best: number, higherIsBetter: boolean): number {
 }
 
 export function buildInsights(input: InsightInput): KpiInsight[] {
-  const { stage, facts, top, rank, rankTotal } = input;
+  const { facts, top, rank, rankTotal } = input;
   const topName = top?.name ?? "المتصدر";
-  const insights: KpiInsight[] = [];
 
   if (!top) {
     return [
@@ -44,142 +41,74 @@ export function buildInsights(input: InsightInput): KpiInsight[] {
         id: "no-baseline",
         tone: "neutral",
         title: "لا يوجد متصدر بعد في مدينتك",
-        body: "سجّل زيارات أو بيانات إضافية لتصبح أول من يظهر في ترتيب المدينة.",
+        body: "سجّل تفعيلات أو منتجات جديدة لتصبح أول من يظهر في ترتيب المدينة.",
       },
     ];
   }
 
-  if (stage === "preparation") {
-    const scoutedGap = gap(facts.preparation.merchantsScouted, top.facts.preparation.merchantsScouted, true);
-    const descGap = gap(facts.preparation.avgDescriptionLength, top.facts.preparation.avgDescriptionLength, true);
+  const insights: KpiInsight[] = [];
+  const activationGap = gap(
+    facts.activations,
+    top.facts.activations,
+    true,
+  );
+  const contractGap = gap(
+    facts.contractsClosed,
+    top.facts.contractsClosed,
+    true,
+  );
+  const itemGap = gap(facts.itemsAdded, top.facts.itemsAdded, true);
+
+  if (activationGap < 0) {
     insights.push({
-      id: "prep-scout",
-      tone: scoutedGap < 0 ? "focus" : "strength",
-      title:
-        scoutedGap < 0
-          ? `أضف ${fmt(Math.max(0, top.facts.preparation.merchantsScouted - facts.preparation.merchantsScouted))} تاجراً للوصول إلى ${topName}`
-          : "تغطية استكشاف أعلى من المتصدر",
-      body:
-        scoutedGap < 0
-          ? `استكشافك أقل بنسبة ${fmt(Math.abs(scoutedGap))}% من متصدر المدينة. ركّز على شوارع لم تُحصر بعد.`
-          : "استمر في الحفاظ على معدل الحصر الحالي قبل بدء مرحلة التعاقدات.",
+      id: "vault-activations",
+      tone: "focus",
+      title: `تفعيلات أقل من ${topName} بنسبة ${fmt(Math.abs(activationGap))}%`,
+      body: `فعّلت ${facts.activations} تاجراً مقابل ${top.facts.activations}. ركّز على التجار المحصورين غير المفعّلين في مدينتك.`,
     });
+  } else {
     insights.push({
-      id: "prep-desc",
-      tone: descGap < 0 ? "focus" : "strength",
-      title: descGap < 0 ? "وصف الفرصة التجارية يحتاج تفصيلاً" : "جودة وصف ممتازة",
-      body:
-        descGap < 0
-          ? `متوسط وصفك ${fmt(facts.preparation.avgDescriptionLength)} حرفاً مقابل ${fmt(top.facts.preparation.avgDescriptionLength)} لدى ${topName}. أضف حجم السوق والمنافسين المتوقعين.`
-          : "وصفك يمنح الفريق سياقاً كافياً لبدء التفاوض دون إعادة زيارة.",
+      id: "vault-activations",
+      tone: "strength",
+      title: "وتيرة تفعيل متقدمة",
+      body: `تفعيلاتك ${facts.activations} تعادل أو تتجاوز متصدر المدينة.`,
     });
-    return insights;
   }
 
-  if (stage === "contracting") {
-    const targetGap = gap(facts.negotiation.targetPercent, top.facts.negotiation.targetPercent, true);
-    const finalGap = gap(facts.negotiation.finalContractPercent, top.facts.negotiation.finalContractPercent, true);
+  if (contractGap < 0) {
     insights.push({
-      id: "neg-target",
-      tone: targetGap < 0 ? "focus" : "strength",
-      title:
-        targetGap < 0
-          ? `زياراتك تغطي ${fmt(facts.negotiation.targetPercent)}% من تجار المدينة`
-          : "تغطية مستهدفة متقدمة",
-      body:
-        targetGap < 0
-          ? `${topName} يغطي ${fmt(top.facts.negotiation.targetPercent)}%. خصّص يومين لمتابعة التجار غير المزارين.`
-          : "حافظ على وتيرة الزيارات وأضف متابعات مبرمجة للتجار المبدئيين.",
+      id: "vault-contracts",
+      tone: "focus",
+      title: `تعاقدات الفريق أقل بنسبة ${fmt(Math.abs(contractGap))}%`,
+      body: `أغلق فريقك ${facts.contractsClosed} تعاقداً مقابل ${top.facts.contractsClosed}. ابدأ من التجار ذوي العمولة المتفق عليها.`,
     });
+  } else if (facts.contractsClosed > 0) {
     insights.push({
-      id: "neg-final",
-      tone: finalGap < 0 ? "focus" : "strength",
-      title:
-        finalGap < 0
-          ? "حوّل الاتفاقيات المبدئية إلى نهائية"
-          : "أعلى نسبة إغلاق نهائي في المدينة",
-      body:
-        finalGap < 0
-          ? `نسبتك ${fmt(facts.negotiation.finalContractPercent)}% مقابل ${fmt(top.facts.negotiation.finalContractPercent)}%. ابدأ من التجار ذوي العمولة المتفق عليها.`
-          : "استمر في إغلاق الصفقات بسرعة قبل انتهاء صلاحية الفترة التجريبية.",
+      id: "vault-contracts",
+      tone: "strength",
+      title: "إغلاق تعاقدات رائد",
+      body: `فريقك أغلق ${facts.contractsClosed} تعاقداً بهذا الشهر. وثّق أفضل الممارسات ليستفيد بقية الفريق.`,
     });
-    if (
-      facts.negotiation.avgVisitDurationMinutes > 0 &&
-      facts.negotiation.avgReportLength < top.facts.negotiation.avgReportLength
-    ) {
-      insights.push({
-        id: "neg-report",
-        tone: "focus",
-        title: "تقاريرك أقصر من المتصدر",
-        body: `متوسط ${fmt(facts.negotiation.avgReportLength)} حرفاً مقابل ${fmt(top.facts.negotiation.avgReportLength)}. وثّق الاعتراضات والأسعار البديلة.`,
-      });
-    }
-    return insights.slice(0, 3);
   }
 
-  if (stage === "data_entry") {
-    const coverGap = gap(facts.dataEntry.merchantsDigitized, top.facts.dataEntry.merchantsDigitized, true);
+  if (itemGap < 0 && top.facts.itemsAdded > 0) {
     insights.push({
-      id: "data-digitized",
-      tone: coverGap < 0 ? "focus" : "strength",
-      title:
-        coverGap < 0
-          ? `رقمنة ${fmt(facts.dataEntry.merchantsDigitized)} تاجراً فقط`
-          : "تغطية رقمنة رائدة",
-      body:
-        coverGap < 0
-          ? `${topName} رقمن ${fmt(top.facts.dataEntry.merchantsDigitized)} تاجراً. ابدأ بالتجار ذوي العقود النهائية.`
-          : "وسّع الرقمنة إلى المنتجات المتغيرة لإكمال دقة الكتالوج.",
+      id: "vault-items",
+      tone: "focus",
+      title: `إدخال بيانات أقل بنسبة ${fmt(Math.abs(itemGap))}%`,
+      body: `أضفت ${facts.itemsAdded} منتجاً مقابل ${top.facts.itemsAdded}. رقمن منتجات التجار المفعّلين أولاً.`,
     });
-    insights.push({
-      id: "data-images",
-      tone: facts.dataEntry.productsMissingImages > 0 ? "focus" : "strength",
-      title:
-        facts.dataEntry.productsMissingImages > 0
-          ? `${facts.dataEntry.productsMissingImages} منتجاً بلا صورة`
-          : "كل منتجاتك لها صور",
-      body:
-        facts.dataEntry.productsMissingImages > 0
-          ? "الصور شرط للنشر. التقط الصور أثناء الزيارة التالية وارفعها مباشرة."
-          : `دقتك ${fmt(facts.dataEntry.catalogAccuracy)}%. راجع الأوصاف القصيرة لرفعها للمتصدر.`,
-    });
-    return insights;
   }
 
-  const orderGap = gap(facts.liveOps.dailyShiftOrders, top.facts.liveOps.dailyShiftOrders, true);
-  const rejectGap = gap(facts.liveOps.rejectedOrders, top.facts.liveOps.rejectedOrders, false);
   insights.push({
-    id: "live-orders",
-    tone: orderGap < 0 ? "focus" : "strength",
-    title:
-      orderGap < 0
-        ? `طلبات الشيفت أقل بنسبة ${fmt(Math.abs(orderGap))}% من المتصدر`
-        : "أعلى معدل طلبات يومية",
-    body:
-      orderGap < 0
-        ? `${topName} يحقق ${fmt(top.facts.liveOps.dailyShiftOrders)} طلباً يومياً مقابل ${fmt(facts.liveOps.dailyShiftOrders)}. فعّل التجار ذوي الطلب المرتفع قبل الذروة.`
-        : "حافظ على التغطية اليومية وتابع التذاكر المفتوحة قبل نهاية الشيفت.",
-  });
-  insights.push({
-    id: "live-reject",
-    tone: facts.liveOps.rejectedOrders > top.facts.liveOps.rejectedOrders ? "focus" : "strength",
-    title:
-      facts.liveOps.rejectedOrders > 0
-        ? `${facts.liveOps.rejectedOrders} طلباً مرفوضاً`
-        : "لا طلبات مرفوضة",
-    body:
-      facts.liveOps.rejectedOrders > 0
-        ? "راجع أسباب الرفض مع التجار: نقص مخزون أو سعر أو وقت تجهيز طويل. الرفض يأكل هامش GMV."
-        : "استمر في متابعة جاهزية التجار لتقليل الرفض الصفري.",
-  });
-  insights.push({
-    id: "live-rank",
+    id: "vault-rank",
     tone: rank <= Math.max(1, Math.ceil(rankTotal / 3)) ? "strength" : "neutral",
     title: `ترتيبك ${rank} من ${rankTotal} في مدينتك`,
     body:
       rank <= 1
-        ? "أنت متصدر المدينة. وثّق أفضل ممارساتك ليستفيد فريقك."
+        ? "أنت متصدر المدينة. حافظ على وتيرة التفعيل والإدخال."
         : `${topName} متصدر بفارق ${fmt(Math.max(0, top.score - input.score))} نقطة. ابدأ بأعلى مؤشر فرق.`,
   });
-  return insights;
+
+  return insights.slice(0, 3);
 }

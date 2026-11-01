@@ -1,11 +1,12 @@
+import { currentMonthKey, isMonthKey } from "@/lib/kpi/calendar";
 import type { KpiAgent, KpiDataset, KpiScope } from "@/lib/kpi/types";
 
 /**
  * KPI scope resolution (Tier 3, pure).
  *
  * Converts raw filter input + the viewer's authorized cities into the scope the
- * service consumes. Reps are pinned to themselves; only global/level-3 viewers
- * ("admins") may widen the selection to teams, cities or other agents.
+ * service consumes. Reps (L1/L2) are pinned to themselves; only global/level-3
+ * viewers ("admins") may widen the selection to teams, cities or other agents.
  */
 
 export type KpiFilters = {
@@ -13,6 +14,8 @@ export type KpiFilters = {
   team: string | null;
   agentId: string | null;
   windowDays: number;
+  /** Vault month (`YYYY-MM`); defaults to the current month. */
+  month: string;
 };
 
 export type KpiViewer = {
@@ -35,12 +38,14 @@ export function parseKpiFilters(
   const windowDays = (WINDOWS as readonly number[]).includes(rawWindow)
     ? rawWindow
     : DEFAULT_WINDOW_DAYS;
+  const rawMonth = single(params.month);
 
   return {
     cityId: single(params.city),
     team: single(params.team),
     agentId: single(params.agent),
     windowDays,
+    month: rawMonth && isMonthKey(rawMonth) ? rawMonth : currentMonthKey(),
   };
 }
 

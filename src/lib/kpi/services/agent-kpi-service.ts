@@ -1,19 +1,14 @@
 import type {
-  AgentKpiFacts,
   KpiAgent,
   KpiCity,
   KpiDataset,
   KpiRank,
   KpiScope,
   KpiSnapshot,
+  KpiVaultFacts,
 } from "@/lib/kpi/types";
 import { KPI_STAGE_META, KpiError } from "@/lib/kpi/types";
-import {
-  computeFacts,
-  scoreFacts,
-  stageMetrics,
-  usageMetrics,
-} from "@/lib/kpi/metrics";
+import { factsFor, scoreVaultFacts, vaultMetrics } from "@/lib/kpi/metrics";
 import { buildInsights } from "@/lib/kpi/insights";
 
 /**
@@ -32,9 +27,9 @@ const byScoreDesc = (
 function cityPeers(
   dataset: KpiDataset,
   agent: KpiAgent,
-  factsFor: (candidate: KpiAgent) => AgentKpiFacts,
-  scoreFor: (facts: AgentKpiFacts) => number,
-): Array<{ agent: KpiAgent; facts: AgentKpiFacts; score: number }> {
+  factsFor: (candidate: KpiAgent) => KpiVaultFacts,
+  scoreFor: (facts: KpiVaultFacts) => number,
+): Array<{ agent: KpiAgent; facts: KpiVaultFacts; score: number }> {
   return dataset.agents
     .filter((candidate) => candidate.cityId === agent.cityId)
     .map((candidate) => {
@@ -68,21 +63,20 @@ function snapshotFor(
   agent: KpiAgent,
   city: KpiCity,
 ): KpiSnapshot {
-  const facts = computeFacts(dataset, agent);
-  const score = Math.round(scoreFacts(facts, agent.stage) * 10) / 10;
+  const facts = factsFor(dataset, agent);
+  const score = Math.round(scoreVaultFacts(facts) * 10) / 10;
 
   const peers = cityPeers(
     dataset,
     agent,
-    (candidate) => computeFacts(dataset, candidate),
-    (candidateFacts) => scoreFacts(candidateFacts, agent.stage),
+    (candidate) => factsFor(dataset, candidate),
+    (candidateFacts) => scoreVaultFacts(candidateFacts),
   );
   const rank = rankFor(peers, agent.id, city);
 
   const top = peers[0] ?? null;
   const insights = buildInsights({
     agent,
-    stage: agent.stage,
     facts,
     top: top ? { name: top.agent.name, facts: top.facts, score: top.score } : null,
     score,
@@ -95,8 +89,7 @@ function snapshotFor(
     stage: agent.stage,
     stageLabel: KPI_STAGE_META[agent.stage].label,
     facts,
-    metrics: stageMetrics(facts, agent.stage),
-    usageMetrics: usageMetrics(facts),
+    metrics: vaultMetrics(facts),
     score,
     rank,
     topPerformer: top
@@ -119,18 +112,19 @@ function snapshotFor(
 /**
  * Resolve the agents a viewer may inspect.
  *
- * A rep sees only themselves; a manager/admin with `agentIds` or a `team` filter
- * can widen the selection, but the scope is always intersected with the allowed
- * cities handed in from the controller.
+ * A rep sees only themselves; a manager/admin with `agentIds` or a `team`
+ * filter can widen the selection, but the scope is always intersected with the
+ * allowed cities handed in from the controller.
  */
 export function selectAgents(
   dataset: KpiDataset,
   scope: KpiScope,
 ): KpiAgent[] {
   const allowedCities = new Set(scope.cityIds);
-  const requested = scope.agentIds && scope.agentIds.length > 0
-    ? new Set(scope.agentIds)
-    : null;
+  const requested =
+    scope.agentIds && scope.agentIds.length > 0
+      ? new Set(scope.agentIds)
+      : null;
 
   const agents = dataset.agents.filter((agent) => {
     if (!allowedCities.has(agent.cityId)) return false;
