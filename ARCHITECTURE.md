@@ -265,7 +265,7 @@ runs on the in-memory stores below until it is migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance` (server components), `requireAnyPermission`.
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` (43 keys / 9 groups), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` (15 modules / 49 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
 - `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
@@ -274,7 +274,7 @@ runs on the in-memory stores below until it is migrated one at a time.
 - `src/lib/rbac/teams.ts` — `listTeams()`: DB-backed read of `app.field_teams`, returning `[]` when the table is absent (§8.5.1).
 - `src/lib/rbac/team-repository.ts` — Tier 4 reads/writes for `app.field_teams`.
 - `src/app/api/admin/teams/route.ts` — `POST` team controller (edge runtime); creates a team in a city the caller manages.
-- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_permissions`).
+- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_system_users`).
 - `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
 
 **Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§8.6).
@@ -370,18 +370,19 @@ logout therefore POST to plain route handlers. Rules locked in:
 ### Agent KPI (Tier 1–5)
 - UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus
   `components/{kpi-filter-bar,kpi-agent-card,kpi-metric-grid,kpi-rank-card,kpi-insights-panel}.tsx`.
-- Controller: page-level authorization (`view_agent_kpi`), URL filter parsing
-  (`parseKpiFilters`), and scope resolution (`resolveKpiScope`). Reps are pinned
-  to themselves; admins (`globalScope` or clearance ≥ 3) may filter city/team/rep.
+- Controller: page-level authorization (`view_global_kpi` or `view_rep_kpi`),
+  URL filter parsing (`parseKpiFilters`, incl. the vault `month`), and scope
+  resolution (`resolveKpiScope`). Reps (L1/L2) are pinned to themselves; admins
+  (clearance ≥ 3) may filter city/team/rep/month.
 - Business: `src/lib/kpi/services/agent-kpi-service.ts` (snapshots, city-scoped
-  rank, top-performer), `metrics.ts` (stage arithmetic + scoring),
-  `insights.ts` (gap heuristics), `scope.ts` (filter/scope rules). All pure.
-- Repository: `src/lib/kpi/repository.ts` composes field-ops + catalog + RBAC
-  stores into a `KpiDataset`. No math, no authorization.
-- Data: `src/lib/kpi/data/facts-seed.ts` stands in for the Consumer shift/GMV
-  and app-usage feeds until those systems publish an API.
+  rank, top-performer), `metrics.ts` (vault facts, live salary pricing,
+  scoring), `insights.ts` (gap heuristics), `scope.ts`, `calendar.ts` (month
+  arithmetic). All pure.
+- Repository: `src/lib/kpi/vault.ts` reads the SQL Vault (live month queries
+  and `app.kpi_snapshots`); `src/lib/kpi/repository.ts` composes the RBAC
+  roster + city catalogue with the vault into a `KpiDataset`. No mock seeds.
 - Ranking is **strictly city-scoped**; scores from different cities are never
-  compared. Metrics are chosen from the city stage:
+  compared. Metrics come from the city stage:
   `preparation → contracting → data_entry → live_operations`.
 - CSS: `src/styles/kpi.css` manifest over `src/styles/kpi/{layout,metrics,ranking,insights,responsive}.css`.
 - Empty scope is a **rendered state, not an error**. When no rep matches the
@@ -594,7 +595,7 @@ NoSQL. A document never spans both stores.
 
 Source of truth for the TypeScript side stays `src/lib/rbac/`. The database
 mirrors it, it does not redefine it: `app.permissions` seeds from
-`permissions.ts` (43 keys, 9 groups), and `app.users.clearance_level` follows
+`permissions.ts` (15 modules / 49 keys), and `app.users.clearance_level` follows
 `hierarchy.ts` (1–4).
 
 The migration lives at `supabase/migrations/20261029000000_rbac_foundation.sql`.
@@ -611,6 +612,27 @@ policies. It is validated end-to-end against PostgreSQL 15.
 
 Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
 `app.field_teams` must exist before `app.users.team_id` can reference it.
+
+The capability catalogue is exactly the 15 modules below (49 keys); the Arabic
+labels live in `src/lib/rbac/permissions.ts` and the SQL seed mirrors the keys:
+
+| Module | Keys |
+|---|---|
+| نظرة عامة (Overview) | `view_overview_contracts`, `view_overview_negotiation`, `view_overview_finance`, `view_overview_catalog`, `view_overview_compliance`, `view_overview_marketing` |
+| المدن (Cities) | `manage_cities`, `view_active_cities`, `view_geo_operations`, `add_city` |
+| التجار (Merchants) | `view_merchants`, `view_merchant_profile`, `add_merchant` |
+| الكتالوج (Catalog) | `view_catalog`, `edit_catalog`, `add_catalog` |
+| مراجعة الصور (Images) | `edit_product_images`, `review_image_quality` |
+| التصنيفات (Categories) | `review_add_requests`, `manage_merchant_types`, `manage_categories`, `manage_variables` |
+| مؤشرات المناديب (Rep KPIs) | `view_global_kpi`, `view_rep_kpi` |
+| العمليات الميدانية (Field Ops) | `assign_tasks`, `view_all_teams_visits`, `start_end_visit`, `write_report`, `request_ownership_transfer`, `approve_ownership_transfer`, `approve_report_edits` |
+| العقود (Contracts) | `draft_contract`, `edit_contract`, `sign_contract`, `cancel_contract` |
+| الحسابات البنكية (Banking) | `view_bank_balances`, `add_bank_account`, `view_bank_transactions`, `record_bank_transaction` |
+| الرواتب (Payroll) | `view_payroll_sheets`, `view_employee_payslip` |
+| التسويق (Marketing) | `view_campaigns`, `create_campaign`, `record_campaign_results`, `view_marketing_logs`, `manage_platform_settings` |
+| إدخال البيانات (Data Entry) | `view_pricing_and_status` |
+| أسعار العمولات (Commission Rates) | `manage_commission_rates` |
+| مستخدمين النظام (System Users) | `manage_system_users` |
 
 **Teams are city-owned, not global.** `app.field_teams(id, city_id, name)` is
 unique per `(city_id, lower(name))`, and `app.users.team_id` points at one row.
@@ -647,15 +669,15 @@ write bypasses the application.
 |---|---|
 | `global_scope` never drifts from clearance | `generated always as (clearance_level >= 3) stored` |
 | Clearance stays within 1–4 | `users_clearance_range` check |
-| At least one active `manage_permissions` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
+| At least one active `manage_system_users` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
 | Ordinary profile edits stay legal | Guards fire only on governor-removal events, so the first operator can be bootstrapped |
 | Stale sessions can be invalidated | `auth_revision` counter |
 | Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql` |
 
 Level 4 is the supreme tier: an active L4 account is granted every row in
-`app.permissions`, so it always reports 43/43. The backfill is keyed to
-`clearance_level = 4` only — level 3 is a peer in provisioning, but it is not the
-supreme rank, so L3 keeps whatever it was granted. `20261030000700` used
+`app.permissions`, so it always reports 49/49. The backfill is keyed to
+`clearance_level = 4` only — under the Hierarchy Security Rule L3 is strictly
+below L4, so L3 keeps whatever it was granted. `20261030000700` used
 `>= 3` for the five treasury keys; that was a one-time delta, not the tier rule.
 
 The governor guard is the SQL twin of `assertActiveGovernor()` in
@@ -678,8 +700,8 @@ subject to policy. `has_permission()` and `is_active_user()` are
 | Surface | Policy |
 |---|---|
 | `app.permissions` | Read by any active operator; writes are service-role only |
-| `app.users` | Read own row, or all rows with `manage_permissions`; writes are governor-only |
-| `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_permissions` |
+| `app.users` | Read own row, or all rows with `manage_system_users`; writes are governor-only |
+| `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_system_users` |
 | `app.user_city_scope` | Same shape as grants |
 | `app.field_teams` | Read by any active operator (needed to pick a team); insert/update/delete only via `can_manage_city(city_id)` |
 
@@ -710,6 +732,16 @@ the page.**
   `teamName` falls back to `null` while `team` keeps the legacy label.
 - `listTeams()` returns `[]` when `app.field_teams` is absent, so the dialog
   simply offers to create the first team.
+- The RBAC grants/scope reads (`loadRbacSnapshot`, `getUserProfile`) treat a
+  missing `user_permissions` / `user_city_scope` table as empty during a
+  migration window, so session resolution keeps working while the schema
+  catches up; every non-schema error is still re-thrown.
+- `listCommissionRateRows()` (finance rates page) never throws inside a Server
+  Component: any read failure — missing table, stale schema cache, transient
+  outage — degrades to `null`, and the page renders its "finance database
+  unavailable" state instead of a 500. The KPI vault reads
+  (`src/lib/kpi/vault.ts`) follow the same contract: `null` on schema drift,
+  honest zeros in the UI.
 - Write paths answer `503 TEAM_STORE_UNAVAILABLE` rather than a raw PostgREST
   code. `attachProfile` retries without `team_id` for a non-team profile, but
   **refuses** when a team was requested: a courier must never be provisioned
@@ -739,40 +771,42 @@ Supabase's phone provider must stay closed to public signup. Set
 Tier 3. Without that setting the REST `/auth/v1/signup` endpoint would still
 mint accounts behind the app's back.
 
-#### The hierarchy
+#### The Hierarchy Security Rule
 
-Provisioning follows clearance, and each level can only create at or below
-itself: the executive tier may mint peers.
+A user holding `manage_system_users` may only **see, edit and create** users who
+are inside their own city scope **and** have a **strictly lower clearance
+level** than themselves. Peers and superiors are invisible on the users
+surface, for executives included: an L4 may assign at most L3 and can never see
+or edit another L4 account. Without `manage_system_users` the page does not
+render at all.
 
 | Actor | Level | Creates | Scope it may grant |
 |---|---|---|---|
-| System Admin / Founder | 4 / 3 | Up to its own level (L3/L4 are peers) | Any city, any permission it holds |
+| System Admin | 4 | Levels 1–3 (strictly lower) | Any city, any permission it holds |
+| Founder | 3 | Levels 1–2 (strictly lower) | Any city, any permission it holds |
 | City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
 | Field Rep | 1 | Nobody | — |
 
-Kanjo is run by seven co-founders, so rank 3 and 4 are a shared custody tier:
-each partner needs their own level 4 account. `maxAssignableLevel()` returns
-the actor's own level for rank ≥ 3 and `level − 1` below that. Peer-minting is
-keyed to the rank, never to `global_scope`, so a mis-set flag cannot let a city
-manager clone an account at their own level. Self-management stays blocked
-separately (`assertCanManage` rejects `target.id === actor.id`).
+`governsLevel()` is strict (`actor.level > target.level`) for every rank, and
+`maxAssignableLevel()` always returns `actor.level − 1`, so peer-minting is
+impossible by construction — no shared-custody exception, no `global_scope`
+escape hatch. Self-management stays blocked separately (`assertCanManage`
+rejects `target.id === actor.id`).
 
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual
-capability grants, grouped by `PERMISSION_GROUPS`. The client never posts to
-the legacy `POST /api/admin/users`; provisioning goes through the route above
-and the roster is re-read afterwards, because the auth account, grants and
-scope are all assigned server-side.
+capability grants, grouped by the 15 `PERMISSION_GROUPS`. The client never
+posts to the legacy `POST /api/admin/users`; provisioning goes through the
+route above and the roster is re-read afterwards, because the auth account,
+grants and scope are all assigned server-side.
 
 Rules enforced for every creation:
 
-1. **Assignable rank.** `canAssignLevel(actor, level)` — executives (level ≥ 3)
-   may assign up to their own level so co-founders can provision each other;
-   everyone else stays strictly below themselves, so a city manager cannot
-   clone a peer or lift a rep to their own rank. This one rule lives only in
-   Tier 3: provisioning writes through the service-role client, which bypasses
-   RLS and carries no actor identity, so a database trigger could not tell who
-   is granting. The other three rules below are enforced in both tiers.
+1. **Assignable rank.** `canAssignLevel(actor, level)` — strictly below the
+   actor's own rank, always. This one rule lives only in Tier 3: provisioning
+   writes through the service-role client, which bypasses RLS and carries no
+   actor identity, so a database trigger could not tell who is granting. The
+   other three rules below are enforced in both tiers.
 2. **Permission subset.** The grantor can only hand out permissions they
    themselves hold (`permissionsAreWithinActor`). No capability can be
    invented during provisioning.
@@ -791,7 +825,7 @@ server.
 ```
 POST /api/admin/users/provision        (protected Route Handler, edge)
   → getServerSession()                 verify cookie + re-read live grants
-  → require manage_permissions         else 401 / 403
+  → require manage_system_users        else 401 / 403
   → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
   → assertCanCreate(session, input)    rank / permission / city subset
   → resolveTeam(session, input)        team exists, city reachable, city in scope
@@ -853,7 +887,7 @@ Three project-level settings are required; none of them live in application code
    also carries `BYPASSRLS` on Supabase, which is what makes the provisioning
    writes succeed despite the forced policies.
 3. **Seed `app.permissions`.** `user_permissions.permission_key` is a foreign
-   key, so provisioning fails until the 43 keys from `permissions.ts` exist as
+   key, so provisioning fails until the 49 keys from `permissions.ts` exist as
    rows. `20261029000200_seed_permissions.sql` seeds them idempotently from the
    live catalogue; run it before creating the first account.
 4. **Keep the auth-mirror trigger outside RLS.** `app.users` uses
@@ -1103,48 +1137,59 @@ Rules locked in by this pipeline:
 
 ---
 
-## 10. Agent KPI Dashboard — 4-Stage City Lifecycle
+## 10. Agent KPI Dashboard — SQL-Backed Vault
 
-The dashboard is the second full 5-tier reference implementation (after Image
-QA). The same rep is scored differently depending on the operational stage of
-their city, because the work itself is different at each stage.
+The dashboard renders per-rep monthly figures from the SQL Vault. The same rep
+is scored across the four vault axes; the card keeps the city stage rail as
+context, but the numbers are no longer computed from in-memory field-ops or
+catalog mock data — every figure is either a live SQL count or a frozen
+snapshot row.
 
 | Tier | File | Responsibility |
 |---|---|---|
-| 1 — UI | `agent-kpi/page.tsx` | Server container: `requirePermission("view_agent_kpi")`, builds dataset, resolves scope, renders cards. |
-| 1 — UI | `components/kpi-filter-bar.tsx` | Client shell; writes city/team/rep/window into the URL. No math. |
-| 1 — UI | `components/kpi-agent-card.tsx` | Layout: identity, stage rail, metric grid, usage strip, insights + rank. |
+| 1 — UI | `agent-kpi/page.tsx` | Server container: `requireAnyPermission([view_global_kpi, view_rep_kpi])`, loads the vault month, resolves scope, renders cards. |
+| 1 — UI | `components/kpi-filter-bar.tsx` | Client shell; writes city/team/rep/window/month into the URL. No math. |
+| 1 — UI | `components/kpi-agent-card.tsx` | Layout: identity, stage rail, vault metric grid, snapshot badge, insights + rank. |
 | 1 — UI | `components/kpi-metric-grid.tsx`, `kpi-rank-card.tsx`, `kpi-insights-panel.tsx` | Dumb presentational blocks. |
-| 2 — Controller | `src/lib/kpi/scope.ts` | `parseKpiFilters`, `resolveKpiScope`, `buildKpiFilterOptions`, `isKpiAdmin`. Turns viewer + filters into a `KpiScope`. |
-| 3 — Business | `src/lib/kpi/services/agent-kpi-service.ts` | `buildKpiReport`, `getAgentSnapshot`, `selectAgents`; computes 0-100 score and city rank. |
-| 3 — Business | `src/lib/kpi/metrics.ts` | Pure stage arithmetic (`computeFacts`) and `scoreFacts`; `stageMetrics`/`usageMetrics` shape the UI contract. |
-| 3 — Business | `src/lib/kpi/insights.ts` | `buildInsights` compares the agent with the city top performer. |
-| 4 — Repository | `src/lib/kpi/repository.ts` | `loadKpiDataset` merges field-ops/catalog/RBAC into one dataset. |
-| 5 — Database | field-ops/catalog stores + `kpi/data/facts-seed.ts` | Underlying records; the seed stands in for the consumer feeds. **Target:** Firebase for field ops and catalog; Supabase for financial KPIs. |
+| 2 — Controller | `src/lib/kpi/scope.ts` | `parseKpiFilters` (incl. `month`), `resolveKpiScope`, `buildKpiFilterOptions`, `isKpiAdmin`. |
+| 3 — Business | `src/lib/kpi/services/agent-kpi-service.ts` | `buildKpiReport`, `getAgentSnapshot`, `selectAgents`; 0–100 score and city rank. |
+| 3 — Business | `src/lib/kpi/metrics.ts` | `factsFor` (rep + shared team attribution), `computeLiveSalary`, `scoreVaultFacts`, `vaultMetrics`. |
+| 3 — Business | `src/lib/kpi/insights.ts` | `buildInsights` compares the agent with the city top performer on the vault axes. |
+| 3 — Business | `src/lib/kpi/calendar.ts` | Month keys, window bounds, labels, recent-month options. Pure. |
+| 4 — Repository | `src/lib/kpi/vault.ts` | The only SQL reader: live month queries and `app.kpi_snapshots`. Degrades to `null`. |
+| 4 — Repository | `src/lib/kpi/repository.ts` | `loadKpiDataset(month)`: RBAC roster + field-ops city catalogue + vault inputs. No mocks. |
+| 5 — Database | `app` schema (Supabase) | `catalog_products`, `merchants`, `commission_rates`, `kpi_snapshots`. |
 
-### Stage metric contract
+### Vault reading rules
 
-| Stage | Metrics |
-|---|---|
-| Preparation (`preparation`) | merchants scouted, avg description length |
-| Negotiation (`contracting`) | merchants visited, total visits, follow-ups, reports written, avg report length, target %, final contract %, provisional contract %, avg visit duration |
-| Data entry (`data_entry`) | merchants digitized, total products, images uploaded, products missing images, catalog accuracy, avg description length |
-| Live ops (`live_operations`) | daily shift orders, total GMV, tickets resolved, merchants contacted, rejected orders, active merchants, cash from merchants, cash from drivers |
-| Global (all stages) | app usage: active minutes, active days, sessions, avg session |
-
-### Rules locked in by this module
-
-- **No cross-city ranking.** `rank.total` is always the count of agents whose
-  `cityId` equals the subject's. A Giza rep is never compared to a Cairo rep.
-- **Reps cannot widen scope.** `resolveKpiScope` ignores URL filters for a viewer
-  without `globalScope`/clearance ≥ 3 and returns a self-only scope.
-- **Stage drives metrics, not the viewer.** Metrics come from `agent.stage`
-  (the city stage), so a Cairo rep and a Mansoura rep see different cards.
-- **Controllers never compute.** The page passes a `KpiScope` to the service and
-  renders `KpiSnapshot` objects verbatim.
-- **Feed gap is explicit.** `scouts`/`liveOps`/`usage` are seeded fixtures until
-  the Consumer app exposes shift/GMV tickets and usage tracking; replacing them
-  only touches `repository.ts`.
+- **Current month (live).** Every figure is counted on read:
+  - *Data entry* — `app.catalog_products` rows created this month, counted by
+    `created_by`.
+  - *Activations* — `app.merchants` rows whose `first_entry_at` falls this
+    month, counted by `first_entry_by`.
+  - *Contracting* — `app.merchants` rows in `final_contract`/`signed_contract`
+    with `contracted_by_team_id` set and `updated_at` this month; the count and
+    the average agreed/target margin ratio are credited to the team, so paired
+    reps share the credit (the split is a payout concern, not a schema one).
+  - *Live salary* — priced from the active `app.commission_rates` row for the
+    rep's `city_id` (override first, then the NULL-city global row):
+    `activations × merchant_activation_fee + items × photo_item_fee +
+    contracts × contracting_base_fee × marginRatio`.
+- **Past months (vault).** Read strictly from `app.kpi_snapshots`
+  (`new_merchants_activated`, `items_added`, `contracts_closed`,
+  `avg_achievement_ratio`, `calculated_salary`, `status`). Snapshots are
+  immutable after lock; only `status` moves `pending → paid`, and only an L4
+  may move it.
+- **Scope.** Reps (L1/L2) are pinned to their own row; admins (clearance ≥ 3)
+  may filter city/team/agent/month. Ranking stays strictly city-scoped — a Giza
+  rep is never compared to a Cairo rep.
+- **No mocks.** The old `globalThis` seed dataset (`facts-seed.ts`, in-memory
+  merchants/products/visits/usage) is purged from the KPI path. A deployment
+  without the vault configured renders an honest zeroed state with an explicit
+  "database not connected" note, never fabricated numbers.
+- **Schema drift must not 500.** `vault.ts` returns `null` on missing schema
+  objects and transient failures, mirroring `rows.ts` and the commission-rates
+  read; the page maps `null` to the unavailable state.
 
 Data flow:
 
@@ -1152,9 +1197,10 @@ Data flow:
 graph TD
     A["agent-kpi/page.tsx (T1)"] --> B["scope.ts (T2)"]
     A --> C["repository.ts (T4)"]
-    C --> D["field-ops + catalog + rbac stores (T5)"]
+    C --> D["vault.ts (T4) -> app schema: products, merchants, commission_rates, kpi_snapshots"]
+    C --> G["rbac users + field-ops cities"]
     B --> E["agent-kpi-service.ts (T3)"]
-    E --> F["metrics.ts + insights.ts (T3)"]
+    E --> F["metrics.ts + insights.ts + calendar.ts (T3)"]
     F --> A
 ```
 
