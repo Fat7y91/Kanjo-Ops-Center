@@ -13,6 +13,12 @@ export type AppUser = {
   title: string;
   /** Deprecated free-text label; `teamId` is authoritative. */
   team: string;
+  /**
+   * Display name of the joined city-owned team (`app.field_teams.name`).
+   * Null when the operator has no team or the deployment predates the table.
+   * Never use it for authorization: `teamId` is the identity.
+   */
+  teamName?: string | null;
   /** `app.field_teams.id`, or null when the operator has no team. */
   teamId?: string | null;
   permissions: Permission[];

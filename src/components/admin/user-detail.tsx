@@ -60,7 +60,7 @@ function UserDetailBase({ user, groups }: UserDetailProps) {
           </span>
         </div>
         <span className="account-email">{user.email}</span>
-        <span>{user.team}</span>
+        <span>{user.teamName ?? user.team}</span>
       </div>
 
       <div className="matrix-groups grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">

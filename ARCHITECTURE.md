@@ -577,7 +577,10 @@ Load order is `permissions` → `users` → `user_permissions` → `user_city_sc
 unique per `(city_id, lower(name))`, and `app.users.team_id` points at one row.
 The legacy free-text `app.users.team` label is kept, deprecated, only because
 the provisioning service and legacy readers still write it; `team_id` is
-authoritative. Deleting a team sets `team_id` to NULL, but a merchant contract
+authoritative. Reads embed the owning row (`field_teams!team_id(name)`, i.e. a
+`left join`) and expose it as `AppUser.teamName`; the deprecated `team` column is
+kept unchanged because merchant ownership in field-ops/KPI still compares
+against that vocabulary. Deleting a team sets `team_id` to NULL, but a merchant contract
 (`app.merchants.contracted_by_team_id`) is `on delete restrict`, so attribution
 survives. `app.can_manage_city(city_id)` gates team writes: an executive (level
 ≥ 3) owns every city, a level-2 manager only their scoped cities.
@@ -659,10 +662,12 @@ the page.**
 
 - `src/lib/rbac/rows.ts` owns the row shapes and `isMissingSchemaObject()`,
   which recognises `42703` (no column), `42P01` (no table), and `PGRST202` /
-  `PGRST204` (stale schema cache).
-- `selectUserRows()` retries the read with `USER_COLUMNS_LEGACY` (no `team_id`)
-  when the column is missing, so the operator list still renders and `teamId`
-  falls back to `null`.
+  `PGRST204` (stale schema cache). `PGRST200` (no relationship in the schema
+  cache) counts as a missing embed.
+- `selectUserRows()` degrades in three steps: profile + `field_teams!team_id(name)`,
+  then profile + `team_id` (no embed), then `USER_COLUMNS_LEGACY` (no
+  `team_id`). The roster always renders; `teamId` falls back to `null` and
+  `teamName` falls back to `null` while `team` keeps the legacy label.
 - `listTeams()` returns `[]` when `app.field_teams` is absent, so the dialog
   simply offers to create the first team.
 - Write paths answer `503 TEAM_STORE_UNAVAILABLE` rather than a raw PostgREST
