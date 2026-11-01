@@ -56,7 +56,7 @@ export function DropdownMenu({
       <MenuButton
         {...buttonProps}
         className={cx(
-          "inline-flex items-center justify-center gap-1.5 rounded-full border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink)] transition duration-200 ease-out",
+          "inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border-0 bg-[color:var(--surface-soft)] px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink)] transition duration-200 ease-out hover:bg-[color:var(--kanjo-pastel)]",
           "hover:border-[color:var(--kanjo-purple-interactive)] hover:bg-[color:var(--kanjo-interactive-hover)] hover:text-white",
           "data-[hover]:border-[color:var(--kanjo-purple-interactive)] data-[hover]:bg-[color:var(--kanjo-interactive-hover)] data-[hover]:text-white",
           "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)]",
@@ -72,7 +72,7 @@ export function DropdownMenu({
       <MenuItems
         transition
         anchor={align === "end" ? "bottom end" : "bottom start"}
-        className="z-[100] w-48 origin-top [--anchor-gap:6px] rounded-2xl border border-[color:var(--line)] bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--kanjo-focus-ring)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0"
+        className="z-[100] w-48 origin-top [--anchor-gap:6px] rounded-[var(--radius-lg)] border-0 bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--line)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0"
       >
         {items.map((item) => (
           <MenuItem

@@ -16,8 +16,13 @@ import type { ReactNode } from "react";
 
 import { cx } from "@/components/ui/cx";
 
+/**
+ * Borderless control surface. The resting state is a tinted neutral fill and a
+ * hairline inset ring; focus lifts the fill to white and draws the purple ring.
+ * No 1px outer border, matching the flat button and tab geometry.
+ */
 const CONTROL =
-  "block w-full rounded-xl border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] px-3.5 py-2.5 text-sm text-[color:var(--ink)] shadow-[var(--shadow-sm)] transition duration-200 ease-out placeholder:text-[color:var(--ink-soft)] hover:border-[color:var(--kanjo-focus-ring-strong)] focus:border-[color:var(--kanjo-purple-interactive)] focus:outline-none focus:ring-4 focus:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55";
+  "block w-full rounded-[var(--radius-control)] border-0 bg-[color:var(--surface-soft)] px-3.5 py-2.5 text-sm text-[color:var(--ink)] ring-1 ring-inset ring-[color:var(--kanjo-field-border)] transition duration-200 ease-out placeholder:text-[color:var(--ink-soft)] hover:ring-[color:var(--kanjo-focus-ring-strong)] focus:bg-[color:var(--kanjo-surface)] focus:outline-none focus:ring-4 focus:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-55";
 
 export type FieldProps = {
   label?: ReactNode;
@@ -161,7 +166,7 @@ export function CheckboxField({
       <HeadlessLabel className="flex cursor-pointer items-start gap-2.5">
         <HeadlessCheckbox
           className={cx(
-            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border border-[color:var(--kanjo-field-border)] bg-[color:var(--kanjo-surface)] text-white transition duration-200 ease-out data-[checked]:border-[color:var(--kanjo-purple-interactive)] data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-md border-0 bg-[color:var(--surface-soft)] text-white ring-1 ring-inset ring-[color:var(--kanjo-field-border)] transition duration-200 ease-out data-[checked]:bg-[color:var(--kanjo-purple-interactive)] data-[checked]:ring-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
             className,
           )}
           {...props}

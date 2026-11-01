@@ -39,10 +39,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 18px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
 }
 
 .taxonomy-tab {
@@ -50,24 +52,23 @@
   align-items: center;
   gap: 7px;
   padding: 8px 14px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+  border: 0;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--ink-soft);
   font-family: inherit;
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .taxonomy-tab:hover {
-  background: var(--surface-soft);
-  color: var(--ink);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-purple-interactive);
 }
 
 .taxonomy-tab.is-active {
-  border-color: var(--purple);
   background: var(--primary);
   color: var(--on-primary, #fff);
 }
@@ -79,8 +80,8 @@
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--gold) 12%, var(--surface));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--gold) 18%, var(--surface));
   color: var(--gold-deep);
   font-size: 0.68rem;
   font-weight: 800;

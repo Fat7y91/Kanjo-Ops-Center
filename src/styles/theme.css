@@ -287,13 +287,12 @@
 }
 
 [data-theme="dark"] .city-tab.is-active {
-  background: var(--surface-soft);
-  color: var(--ink);
+  background: var(--kanjo-purple-interactive);
+  color: #ffffff;
 }
 
 [data-theme="dark"] .segmented {
   background: var(--surface-soft);
-  border-color: var(--line);
 }
 
 [data-theme="dark"] .segmented button {
@@ -301,8 +300,8 @@
 }
 
 [data-theme="dark"] .segmented button.is-active {
-  background: var(--surface-soft);
-  color: var(--ink);
+  background: var(--kanjo-purple-interactive);
+  color: #ffffff;
 }
 
 
@@ -362,11 +361,11 @@
 
 .city-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   margin: 18px 0;
-  padding: 5px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-control);
   background: var(--surface-soft);
   width: fit-content;
   max-width: 100%;
@@ -374,25 +373,27 @@
 
 .city-tab {
   padding: 8px 16px;
-  border: 1px solid transparent;
-  border-radius: 9px;
+  border: 0;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--ink-soft);
   font: inherit;
   font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
 }
 
 .city-tab:hover {
-  color: var(--ink);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-purple-interactive);
 }
 
 .city-tab.is-active {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 4px 14px rgba(24, 24, 27, 0.06);
+  background: var(--kanjo-purple-interactive);
+  color: #ffffff;
 }
 
 .city-details-grid {

@@ -12,22 +12,29 @@
   flex-direction: column;
   gap: 6px;
   padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border: 0;
+  border-radius: var(--radius-card);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
 }
 
+/* Tone is an inset accent bar, not a border: the card silhouette stays clean. */
 .stat-card-gold {
-  border-top: 3px solid var(--gold);
+  box-shadow:
+    inset 0 3px 0 var(--gold),
+    var(--shadow-sm);
 }
 
 .stat-card-green {
-  border-top: 3px solid #22c55e;
+  box-shadow:
+    inset 0 3px 0 #22c55e,
+    var(--shadow-sm);
 }
 
 .stat-card-red {
-  border-top: 3px solid #ef4444;
+  box-shadow:
+    inset 0 3px 0 #ef4444,
+    var(--shadow-sm);
 }
 
 .stat-label {

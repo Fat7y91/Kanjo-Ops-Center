@@ -90,25 +90,32 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border: 0;
+  border-radius: var(--radius-control);
   background: var(--surface-soft);
 }
 
 .segmented button {
   padding: 7px 11px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--ink-soft);
   font-size: 0.76rem;
   font-weight: 650;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.segmented button:hover {
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-purple-interactive);
 }
 
 .segmented button.is-active {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 2px 8px rgba(19, 28, 48, 0.08);
+  background: var(--kanjo-purple-interactive);
+  color: #ffffff;
 }
 
 .task-card-top {

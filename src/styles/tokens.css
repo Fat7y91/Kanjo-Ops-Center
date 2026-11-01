@@ -7,8 +7,9 @@
 
    Brand contract:
      purple-base        #230535  backgrounds / headings / navigation shell
-     purple-interactive #6D28D9  buttons, focus rings, active states ONLY
+     purple-interactive #6C35B6  buttons, focus rings, active states ONLY
      gold               #FFD700  accents and active text on dark surfaces
+     orange             #F97316  secondary accent beside gold, never a surface
      surface            #FFFFFF  raised content
      canvas             #F8FAFC  app background (slate-50)
    ========================================================================== */
@@ -18,22 +19,25 @@
 
   /* ── Brand palette ──────────────────────────────────────────────────── */
   --kanjo-purple-base: #230535;
-  --kanjo-purple-interactive: #6d28d9;
-  --kanjo-interactive-hover: #5b21b6;
-  --kanjo-interactive-active: #4c1d95;
+  --kanjo-purple-interactive: #6c35b6;
+  --kanjo-interactive-hover: #5a2b98;
+  --kanjo-interactive-active: #4a237d;
   --kanjo-gold: #ffd700;
   --kanjo-gold-deep: #7a5b00;
+  --kanjo-orange: #f97316;
+  --kanjo-orange-deep: #b45309;
+  --kanjo-orange-soft: #fff4ea;
   --kanjo-surface: #ffffff;
   --kanjo-canvas: #f8fafc;
 
   /* Pastel pair for non-primary pills: bg-purple-50 + text-purple-900. */
-  --kanjo-pastel: #f5f3ff;
-  --kanjo-pastel-ink: #4c1d95;
+  --kanjo-pastel: #f5efff;
+  --kanjo-pastel-ink: #4a237d;
 
   /* Interaction surfaces derived from the interactive purple. */
-  --kanjo-field-border: rgba(109, 40, 217, 0.16);
-  --kanjo-focus-ring: rgba(109, 40, 217, 0.2);
-  --kanjo-focus-ring-strong: rgba(109, 40, 217, 0.4);
+  --kanjo-field-border: rgba(108, 53, 182, 0.16);
+  --kanjo-focus-ring: rgba(108, 53, 182, 0.2);
+  --kanjo-focus-ring-strong: rgba(108, 53, 182, 0.4);
 
   /* ── Semantic aliases (consumed by app + domain CSS) ─────────────────── */
   --ink: #0f172a;
@@ -53,6 +57,9 @@
   --gold: var(--kanjo-gold);
   --gold-deep: var(--kanjo-gold-deep);
   --gold-contrast: #161106;
+  --orange: var(--kanjo-orange);
+  --orange-deep: var(--kanjo-orange-deep);
+  --orange-soft: var(--kanjo-orange-soft);
   --purple: var(--kanjo-purple-interactive);
   --primary: var(--kanjo-purple-interactive);
   --primary-ink: #ffffff;
@@ -75,6 +82,11 @@
     #f5d27a,
     var(--kanjo-gold-deep)
   );
+  --gradient-accent: linear-gradient(
+    135deg,
+    var(--kanjo-orange),
+    var(--kanjo-gold-deep)
+  );
 
   /* ── Elevation: deep, diffused, purple-tinted ───────────────────────── */
   --shadow-sm: 0 1px 2px rgba(35, 5, 53, 0.05);
@@ -84,14 +96,18 @@
   --shadow-modal: 0 24px 80px -12px rgba(35, 5, 53, 0.25);
 
   /* ── Geometry ───────────────────────────────────────────────────────── */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius: 16px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-input: 12px;
-  --radius-card: 16px;
-  --radius-modal: 24px;
+  /* Flat 2026 SaaS geometry: one 10px control radius and one card radius.
+   * Buttons, tabs, inputs and pills all share `--radius-control` so the
+   * silhouette never mixes square and pill shapes inside one surface. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-control: 10px;
+  --radius: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-input: 10px;
+  --radius-card: 14px;
+  --radius-modal: 18px;
 
   /* Height of the app topbar; sticky section headers pin below it. */
   --topbar-height: 72px;
@@ -108,11 +124,12 @@
   /* Brand hues stay recognisable on dark canvases. */
   --kanjo-surface: #1e293b;
   --kanjo-canvas: #0f172a;
-  --kanjo-pastel: rgba(109, 40, 217, 0.18);
+  --kanjo-pastel: rgba(108, 53, 182, 0.22);
   --kanjo-pastel-ink: #ddd6fe;
   --kanjo-field-border: rgba(167, 139, 250, 0.24);
   --kanjo-focus-ring: rgba(167, 139, 250, 0.25);
   --kanjo-focus-ring-strong: rgba(167, 139, 250, 0.45);
+  --kanjo-orange-soft: rgba(249, 115, 22, 0.14);
 
   --ink: #f8fafc;
   --ink-soft: #94a3b8;
@@ -131,10 +148,13 @@
   --gold: var(--kanjo-gold);
   --gold-deep: #ffd75e;
   --gold-contrast: #161106;
+  --orange: #fdba74;
+  --orange-deep: #fdba74;
+  --orange-soft: rgba(249, 115, 22, 0.14);
   --purple: #c4b5fd;
   --primary: var(--kanjo-purple-interactive);
   --primary-ink: #ffffff;
-  --primary-hover: #7c3aed;
+  --primary-hover: #7a45c9;
   --focus: var(--kanjo-focus-ring-strong);
   --info: #93c5fd;
   --green: #4ade80;

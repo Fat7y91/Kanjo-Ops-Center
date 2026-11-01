@@ -153,14 +153,16 @@
   color: var(--nav-ink);
 }
 
-/* Active pill: gold accent for text/icon, translucent gold wash for the track. */
+/* Active pill: borderless gold wash with a gold icon. The 3px inline bar is an
+ * inset accent, so the row keeps its full rounded silhouette. */
 .nav-link.is-active {
-  border-color: color-mix(in srgb, var(--kanjo-gold) 32%, transparent);
+  border-color: transparent;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--kanjo-gold) 16%, transparent),
-    color-mix(in srgb, var(--kanjo-purple-interactive) 22%, transparent)
+    color-mix(in srgb, var(--kanjo-gold) 18%, transparent),
+    color-mix(in srgb, var(--kanjo-orange) 14%, transparent)
   );
+  box-shadow: inset -3px 0 0 var(--gold);
   color: var(--nav-ink);
 }
 
