@@ -272,6 +272,17 @@
   flex-direction: column;
   align-items: flex-end;
   line-height: 1.3;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-control);
+  padding: 4px 8px;
+  transition: background 160ms ease-out;
+}
+
+.user-copy:hover,
+.user-copy:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
 }
 
 .user-copy strong {

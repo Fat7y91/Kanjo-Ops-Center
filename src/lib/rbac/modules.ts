@@ -5,6 +5,7 @@ import { MODULES } from "./module-catalog";
 export { MODULES };
 
 export type ModuleIcon =
+  | "profile"
   | "overview"
   | "kpi"
   | "cities"
@@ -40,6 +41,12 @@ export type ModuleDefinition = {
    * whose page guard will refuse the visitor.
    */
   minClearance?: number;
+  /**
+   * Personal surfaces (the operator's own profile) are open to every signed-in
+   * account. They carry no capability because nobody can be *granted* access
+   * to their own record: the guard is the session itself.
+   */
+  sessionOnly?: boolean;
   icon: ModuleIcon;
 };
 
@@ -55,6 +62,9 @@ export function moduleAllows(
   permissions: readonly Permission[],
   clearanceLevel = 0,
 ): boolean {
+  // A personal surface opens for any signed-in operator. `moduleAllows` is only
+  // reached with a live session, so no capability check applies.
+  if (module.sessionOnly) return true;
   if (
     module.minClearance !== undefined &&
     clearanceLevel < module.minClearance
@@ -94,7 +104,9 @@ export function permissionForPath(pathname: string): Permission | null {
 export function permissionsForPath(pathname: string): Permission[] {
   if (pathname === "/") return ["view_overview_contracts"];
   const module = moduleForPath(pathname);
-  if (!module) return [];
+  // An empty list means "signed in is enough": the middleware then accepts any
+  // valid session instead of demanding a capability nobody holds.
+  if (!module || module.sessionOnly) return [];
   return [module.permission, ...(module.alsoGrantedBy ?? [])];
 }
 

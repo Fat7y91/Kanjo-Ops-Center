@@ -155,6 +155,16 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "data-entry",
   },
   {
+    href: "/admin/finance/reviews",
+    label: "اعتماد رأس المال",
+    shortLabel: "الاعتمادات",
+    description:
+      "مراجعة إيداعات المؤسسين الرأسمالية ووجهات الصرف واعتمادها في الخزينة.",
+    permission: "view_bank_balances",
+    alsoGrantedBy: ["add_bank_account"],
+    icon: "finance",
+  },
+  {
     href: "/admin/finance/rates",
     label: "أسعار العمولات",
     shortLabel: "العمولات",
@@ -171,5 +181,16 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "إنشاء المستخدمين وإدارة رتبهم وصلاحياتهم ونطاق مدنهم.",
     permission: "manage_system_users",
     icon: "permissions",
+  },
+  {
+    // Last on purpose: `firstPermittedPath` lands a fresh session on the first
+    // permitted module, and the landing page should stay the overview.
+    href: "/profile",
+    label: "ملفي الشخصي",
+    shortLabel: "ملفي",
+    description: "بياناتي وكلمة المرور ووجهة الصرف ورأس مالي.",
+    permission: "view_overview_contracts",
+    sessionOnly: true,
+    icon: "profile",
   },
 ];

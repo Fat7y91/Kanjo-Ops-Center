@@ -416,6 +416,33 @@ logout therefore POST to plain route handlers. Rules locked in:
   and `app.ledger_reject_mutation()` blocks UPDATE/DELETE even for the owner.
   A correction is a new opposing entry.
 
+### Profile & Founder Capital (Tier 1–5)
+- UI: `src/app/(workspace)/profile/page.tsx` (own profile) and
+  `src/app/(workspace)/admin/finance/reviews/page.tsx` (treasury review), plus
+  `components/profile/` (`profile-identity-card`, `profile-password-card`,
+  `payout-method-card`, `capital-deposit-card`, `capital-review-board`,
+  `use-profile`, `use-capital-review`).
+- Business: `src/lib/profile/{types,capital,profile,capital-service,errors}.ts`.
+  `types.ts` and `capital.ts` are the Zod contracts (one discriminated union per
+  payout method); `profile.ts` and `capital-service.ts` are the Tier 3 rules;
+  `errors.ts` maps PostgREST/trigger failures onto domain errors.
+- Data: `src/lib/profile/{repository,capital-repository,storage,upload}.ts`
+  (Tier 4/5). Split by table group to stay under the file-size limit; the
+  SQL half is `20261102000001_user_profiles_and_capital.sql` plus
+  `20261102000002_capital_treasury_gate.sql`.
+- App/Edge: `GET|PATCH /api/profile`, `POST /api/profile/password`,
+  `PUT /api/profile/payout-method`, `POST /api/profile/upload`,
+  `GET|POST /api/capital-deposits`,
+  `POST /api/capital-deposits/[id]/decision`,
+  `POST /api/payout-methods/[id]/decision`.
+- Every route derives the operator from the session. There is no `id`
+  parameter on the self-service surfaces, so no request can point at another
+  operator by editing the body.
+- `/profile` is `sessionOnly` in `rbac/module-catalog.ts`: nobody is *granted*
+  access to their own record, so `permissionsForPath()` returns an empty list and
+  the middleware accepts any valid session. The review surface is gated by the
+  full-book treasury capabilities, not by rank.
+
 ### Payroll (Tier 1–5)
 - UI: `src/app/(workspace)/payroll/page.tsx` plus
   `components/payroll/{payroll-view,payroll-table}.tsx`.
@@ -1062,6 +1089,8 @@ commission fee schedule: a rate is a price list in EGP, stored as
 | `20261031000002_city_specific_rates.sql` | `app.commission_rates.city_id`, partial unique indexes, `app.commission_rates_for(text)` | One row per city plus exactly one NULL-city fallback (two partial unique indexes, because `UNIQUE` allows many NULLs). The residue of the old singleton trigger is dropped; L4 gains insert/delete. |
 | `20261031000003_city_teams_and_contracting.sql` | `contracts_closed` / `avg_achievement_ratio` on `app.kpi_snapshots`; adds the then-flat `contracting_base_fee` | Fees are non-negative; the new snapshot outcomes join the frozen set. |
 | `20261102000000_tiered_contract_commissions.sql` | replaces `contracting_base_fee` with `contract_fee_tier_1..4`; `achievement_percent()`, `contract_fee_tier()`, `contract_fee_for()`; `applied_contract_fee` on `app.kpi_snapshots` | Backfills all four tiers from the old flat fee before dropping it, so the migration changes no amount. Bands are half-open and gap-free; `100%` is tier 4. The applied fee is frozen with the snapshot. |
+| `20261102000001_user_profiles_and_capital.sql` | `app.user_payout_methods`, `app.capital_deposits`, `avatar_url` + `bank_info_status` on `app.users`, storage buckets | One payout method per operator; any detail edit resets the decision to `pending` (`payout_methods_reset_decision`). A capital approval appends exactly one ledger entry in the same transaction (`capital_deposit_decide`) and is immutable thereafter. Self-review is refused by `PAYOUT_SELF_REVIEW` / `CAPITAL_DEPOSIT_SELF_REVIEW`. |
+| `20261102000002_capital_treasury_gate.sql` | `app.can_manage_treasury()`, rewritten payout/capital policies | The first migration gated decisions on the legacy `manage_accounts` key, which the 49-key catalogue no longer contains — the policies would have been unreachable. Decisions now follow the full-book treasury capabilities, the same rule `resolveTreasuryAccess()` applies. |
 
 Commission rates are **numeric EGP, not minor units**: the schedule is a price
 list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres

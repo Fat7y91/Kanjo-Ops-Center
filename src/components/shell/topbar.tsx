@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
@@ -101,10 +102,10 @@ export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
         ) : null}
         <ThemeToggle />
         {user && (
-          <div className="user-copy">
+          <Link className="user-copy" href="/profile" title="ملفي الشخصي">
             <strong>{user.name}</strong>
             <span>{user.title}</span>
-          </div>
+          </Link>
         )}
         <form action="/api/auth/logout" method="post">
           <button type="submit" className="button button-quiet button-small">

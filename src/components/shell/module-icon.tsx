@@ -1,6 +1,8 @@
 import type { ModuleIcon as ModuleIconName } from "@/lib/rbac/modules";
 
 const paths: Record<ModuleIconName, string> = {
+  profile:
+    "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9c0-4 3.6-6 8-6s8 2 8 6",
   overview:
     "M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z",
   kpi:

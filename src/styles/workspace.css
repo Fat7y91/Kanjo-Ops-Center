@@ -50,6 +50,9 @@
 /* Taxonomy master data management */
 @import "./taxonomy.css";
 
+/* Operator profile and founder capital */
+@import "./profile.css";
+
 /* Field visit engine */
 @import "./visits/mode.css";
 @import "./visits/report.css";
