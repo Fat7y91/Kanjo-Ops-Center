@@ -1,0 +1,124 @@
+/* Visit report form */
+
+.visit-report-form .visit-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.visit-report-form .visit-form-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.visit-summary-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.visit-summary-strip > div {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.visit-contact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visit-followup-grid {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 1.4fr;
+  gap: 12px;
+}
+
+.visit-advanced-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+  color: var(--purple);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.outcome-advanced-tag {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(122, 91, 0, 0.12);
+  color: var(--gold-deep);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.opinion-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.opinion-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.opinion-chip:hover {
+  border-color: var(--purple);
+}
+
+.opinion-chip.is-active {
+  border-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+}
+
+.opinion-chip .badge {
+  white-space: normal;
+  text-align: start;
+}
+
+.opinion-check {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.opinion-chip.is-active .opinion-check {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+.opinion-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+

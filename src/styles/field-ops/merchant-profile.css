@@ -1,0 +1,151 @@
+/* Merchant profile */
+
+.profile-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.profile-hero h2 {
+  margin: 4px 0 10px;
+  font-size: 1.6rem;
+}
+
+.profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timeline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 0 14px;
+  padding-inline-start: 16px;
+  border-bottom: 1px solid var(--line);
+  border-inline-start: 2px solid var(--kanjo-focus-ring);
+}
+
+.timeline-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.timeline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeline-item p {
+  font-size: 0.84rem;
+}
+
+.timeline-meta {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.document-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.document-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.document-list li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.document-list span {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.document-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line);
+}
+
+.plain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plain-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .form-grid,
+  .outcome-grid,
+  .profile-grid,
+  .detail-grid,
+  .detail-grid-wide,
+  .competitor-row {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-hero,
+  .field-ops-toolbar,
+  .board-toolbar,
+  .request-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-list li {
+    flex-wrap: wrap;
+  }
+}
+

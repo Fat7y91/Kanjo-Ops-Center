@@ -1,0 +1,239 @@
+/* ── Field Ops V2 ──────────────────────────────────────────────────────── */
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+/*
+ * Native dropdown popups are painted by the OS, not by the page. Without an
+ * explicit option palette the popup can inherit a light system background
+ * while the text keeps our dark-theme ink colour, producing invisible
+ * white-on-white items. Pin both halves of the pair in every theme.
+ */
+select option,
+select optgroup,
+datalist option {
+  background-color: var(--surface);
+  color: var(--ink);
+}
+
+select option:disabled {
+  color: var(--ink-soft);
+}
+
+select option:checked,
+select option:hover {
+  background-color: var(--surface-soft);
+  color: var(--ink);
+}
+
+[data-theme="dark"] select option,
+[data-theme="dark"] select optgroup,
+[data-theme="dark"] datalist option {
+  background-color: var(--surface-raised);
+  color: var(--ink);
+}
+
+[data-theme="dark"] select option:checked,
+[data-theme="dark"] select option:hover {
+  background-color: var(--line);
+  color: var(--ink);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: #8b8b96;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.badge-purple {
+  border-color: var(--kanjo-pastel);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+}
+
+.badge-signed {
+  border-color: #25406b;
+  background: #16233b;
+  color: #e9f0ff;
+}
+
+.chip-team {
+  background: var(--surface-soft);
+  color: #3d4a63;
+  font-family: inherit;
+  font-weight: 650;
+}
+
+.empty-state {
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.inline-note {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+  color: var(--purple);
+  font-size: 0.8rem;
+}
+
+.toast {
+  position: fixed;
+  inset-inline-end: 24px;
+  bottom: 24px;
+  z-index: 80;
+  max-width: 420px;
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--green) 26%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--green) 10%, var(--surface));
+  box-shadow: var(--shadow-md);
+  color: var(--green);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+/* Modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(35, 5, 53, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  max-height: min(88vh, 900px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  background: var(--kanjo-surface);
+  box-shadow: var(--shadow-modal);
+}
+
+.modal-wide {
+  width: min(820px, 100%);
+}
+
+.modal-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.modal-head h2 {
+  font-size: 1.18rem;
+}
+
+.modal-note {
+  margin-top: 6px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.modal-body {
+  padding: 22px 24px 26px;
+}
+
+/* Forms */
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.field > span:first-child {
+  color: #364154;
+}
+
+.field-hint {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+

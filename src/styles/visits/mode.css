@@ -1,0 +1,302 @@
+/* ── Field Visit Engine ────────────────────────────────────────────────── */
+
+/*
+ * Visit Mode is a locked, full-viewport focus surface. The app shell is hidden
+ * outright (not merely covered) so the rep cannot tab, scroll, or click back
+ * into navigation while a visit is running.
+ */
+body.visit-mode-active {
+  overflow: hidden;
+}
+
+body.visit-mode-active .app-shell {
+  visibility: hidden;
+}
+
+.visit-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% -10%, rgba(91, 31, 134, 0.14), transparent 46%),
+    radial-gradient(circle at 92% 110%, rgba(255, 215, 0, 0.16), transparent 44%),
+    var(--canvas);
+}
+
+.visit-mode-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 28px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.visit-mode-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.visit-mode-brand .brand-mark {
+  width: 40px;
+  height: 40px;
+  font-size: 1.1rem;
+}
+
+.visit-mode-brand .eyebrow {
+  margin-bottom: 2px;
+}
+
+.visit-mode-brand strong {
+  font-size: 0.95rem;
+}
+
+.visit-mode-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.visit-clock-value {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.visit-clock-label {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.visit-mode-clock.is-urgent {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.visit-mode-clock.is-urgent .visit-clock-value {
+  color: var(--red);
+}
+
+.visit-live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.5);
+  animation: visit-pulse 1.8s ease-out infinite;
+}
+
+.visit-mode-clock.is-urgent .visit-live-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.5);
+}
+
+@keyframes visit-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(21, 128, 61, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 9px rgba(21, 128, 61, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(21, 128, 61, 0);
+  }
+}
+
+.visit-mode-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 26px 28px 28px;
+}
+
+.visit-mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.visit-merchant-card {
+  grid-row: span 2;
+}
+
+.visit-merchant-card h1 {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  line-height: 1.15;
+}
+
+.visit-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.visit-figures,
+.visit-tracking-grid,
+.visit-summary-strip,
+.visit-contact-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.visit-figures {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.visit-figures > div,
+.visit-tracking-grid > div,
+.visit-summary-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.visit-figures span,
+.visit-tracking-grid span,
+.visit-summary-strip span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.visit-figures strong,
+.visit-summary-strip strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.visit-tracking-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.visit-tracking-grid strong {
+  font-size: 0.85rem;
+}
+
+.visit-tracking-grid small {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.visit-coords {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  direction: ltr;
+  text-align: start;
+  word-break: break-word;
+}
+
+.visit-geo-note {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 10%, var(--surface));
+  color: var(--gold-deep);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.visit-card-head,
+.visit-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.visit-card-head .eyebrow,
+.visit-form-head .eyebrow {
+  margin-bottom: 0;
+}
+
+.visit-strategic-notes {
+  padding: 14px;
+  border-inline-start: 3px solid var(--gold);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.visit-mode-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: auto;
+  padding: 16px 28px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.visit-foot-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.visit-foot-note strong {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.visit-foot-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.visit-end {
+  min-width: 170px;
+}
+
+.visit-notes-card .visit-card-head,
+.visit-tracking-card .visit-card-head {
+  align-items: flex-start;
+}
+
+.visit-cancel {
+  min-width: 96px;
+}
+
+.visit-followup-note {
+  grid-column: span 1;
+}
+

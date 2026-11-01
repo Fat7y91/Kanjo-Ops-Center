@@ -1,0 +1,59 @@
+/* Workspace shell and cross-domain surface rules.
+ *
+ * Manifest only: imported from globals.css after the domain manifests and
+ * before `@tailwind utilities`. Split out of the former 4,800-line globals.css
+ * with no rule or selector change; the files below load in their original
+ * source order so the cascade is identical.
+ *
+ * Domain rules (bi, catalog, kpi, accounts, payroll, commissions, marketing,
+ * data-entry) stay in their own manifests and are imported first.
+ */
+
+/* Shell and navigation */
+@import "./shell.css";
+
+/* Typographic and control primitives: eyebrow, page header, button, panel, badge */
+@import "./ui.css";
+
+/* Overview dashboard, data tables and the shared card grid */
+@import "./overview.css";
+@import "./tables.css";
+@import "./cards.css";
+
+/* Login and forbidden shells */
+@import "./auth.css";
+
+/* Permission matrix surface */
+@import "./permissions.css";
+
+/* Global responsive breakpoints for the shell and shared surfaces */
+@import "./layout-responsive.css";
+
+/* Field operations */
+@import "./field-ops/base.css";
+@import "./field-ops/combobox.css";
+@import "./field-ops/outcomes.css";
+@import "./field-ops/cities.css";
+@import "./field-ops/board.css";
+@import "./field-ops/approvals.css";
+@import "./field-ops/merchant-profile.css";
+
+/* Brand theming: theme toggle and dark-surface corrections */
+@import "./theme.css";
+
+/* Geo-Intelligence wizard */
+@import "./geo-wizard.css";
+
+/* Route loading boundaries and navigation progress */
+@import "./route-progress.css";
+
+/* Taxonomy master data management */
+@import "./taxonomy.css";
+
+/* Field visit engine */
+@import "./visits/mode.css";
+@import "./visits/report.css";
+@import "./visits/crm.css";
+@import "./visits/banners.css";
+@import "./visits/dark.css";
+@import "./visits/opinions.css";

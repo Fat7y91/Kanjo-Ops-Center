@@ -1,0 +1,114 @@
+/* ── Login ─────────────────────────────────────────────────────────────── */
+
+.login-shell,
+.forbidden-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(35, 5, 53, 0.05), transparent 32%),
+    radial-gradient(circle at 88% 80%, rgba(255, 215, 0, 0.09), transparent 30%),
+    var(--canvas);
+}
+
+.login-panel {
+  width: min(760px, 100%);
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+/* `.account-avatar` keeps living here: the admin user card reuses it. */
+
+.account-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--purple) 10%, var(--surface));
+  color: var(--purple);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.account-avatar-small {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+}
+
+.form-error {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--red) 26%, transparent);
+  border-radius: 12px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ── Forbidden ─────────────────────────────────────────────────────────── */
+
+.forbidden-card {
+  width: min(640px, 100%);
+  padding: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-modal);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.forbidden-mark {
+  display: inline-block;
+  margin-bottom: 18px;
+  color: var(--gold-deep);
+  font-size: 3.4rem;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+
+.permission-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 20px 0 16px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 10%, var(--surface));
+  color: var(--gold-deep);
+  font-size: 0.8rem;
+}
+
+.permission-callout span {
+  font-weight: 700;
+}
+
+.permission-callout code {
+  background: rgba(255, 215, 0, 0.16);
+  color: #6d5310;
+}
+
+.forbidden-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+

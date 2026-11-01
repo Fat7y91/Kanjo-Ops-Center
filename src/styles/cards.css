@@ -1,0 +1,118 @@
+/* ── Catalog and field ops ─────────────────────────────────────────────── */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.product-card {
+  display: flex;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    border-color 160ms ease;
+}
+
+.product-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.product-thumb {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(135deg, rgba(255, 215, 0, 0.22), rgba(109, 40, 217, 0.14)),
+    var(--surface-soft);
+  color: var(--purple);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.product-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.product-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.product-meta strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.board-column {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 2px 12px;
+}
+
+.board-head h2 {
+  font-size: 0.9rem;
+}
+
+.task-card {
+  margin-bottom: 10px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 5px 16px rgba(19, 28, 48, 0.04);
+}
+
+.task-card:last-child {
+  margin-bottom: 0;
+}
+
+.task-card h3 {
+  margin-bottom: 4px;
+}
+
+.task-card > p:not(.eyebrow) {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.task-card .row-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+

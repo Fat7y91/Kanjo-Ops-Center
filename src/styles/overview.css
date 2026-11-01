@@ -1,0 +1,163 @@
+/* ── Overview ──────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.stat-card-gold {
+  border-top: 3px solid var(--gold);
+}
+
+.stat-card-green {
+  border-top: 3px solid #22c55e;
+}
+
+.stat-card-red {
+  border-top: 3px solid #ef4444;
+}
+
+.stat-label {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 1.85rem;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.stat-detail {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.finance-panel {
+  background:
+    linear-gradient(135deg, rgba(91, 31, 134, 0.04), transparent 50%),
+    var(--surface);
+}
+
+.finance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.finance-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.finance-grid span {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.finance-grid strong {
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-list li {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.activity-list li:last-child {
+  border-bottom: 0;
+}
+
+.activity-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-list strong {
+  font-size: 0.87rem;
+}
+
+.activity-list span {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.activity-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--purple);
+}
+
+.activity-dot-gold {
+  background: var(--gold);
+}
+
+.activity-dot-green {
+  background: #2ca36a;
+}
+
+.capability-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.chip {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+}
+
+.chip-muted {
+  color: var(--ink-soft);
+  font-family: inherit;
+}
+
