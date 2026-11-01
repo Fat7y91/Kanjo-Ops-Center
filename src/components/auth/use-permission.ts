@@ -7,7 +7,7 @@ import type { Permission } from "@/lib/rbac/permissions";
  * The only supported client-side capability API.
  *
  *   const { hasPermission } = usePermission();
- *   if (hasPermission("view_contracts")) { ... }
+ *   if (hasPermission("draft_contract")) { ... }
  */
 export function usePermission() {
   const {

@@ -18,7 +18,7 @@ type UserPageProps = {
  * navigation commits immediately and the capability grid fills in after.
  */
 export default async function UserDetailPage({ params }: UserPageProps) {
-  const session = await requirePermission("manage_permissions");
+  const session = await requirePermission("manage_system_users");
   const { id } = await params;
 
   return (

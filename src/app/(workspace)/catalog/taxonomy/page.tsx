@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CatalogTaxonomyPage() {
-  const session = await requirePermission("manage_taxonomy");
+  const session = await requirePermission("manage_categories");
 
   const snapshot = {
     vendorTypes: listVendorTypes(),

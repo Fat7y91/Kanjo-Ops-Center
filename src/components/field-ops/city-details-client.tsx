@@ -37,7 +37,7 @@ export function CityDetailsClient({
   const { hasPermission } = usePermission();
   const [tab, setTab] = useState<CityTab>("operations");
   const meta = CITY_STAGE_META[city.stage];
-  const canAnalyze = hasPermission("view_city_analytics");
+  const canAnalyze = hasPermission("view_geo_operations");
   const centroid =
     city.zone.length > 0
       ? ([

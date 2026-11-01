@@ -92,9 +92,9 @@ function zoneCentroid(zone: ZonePoint[]): [number, number] | undefined {
 export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
   const router = useRouter();
   const { hasPermission, refresh } = usePermission();
-  const canCreate = hasPermission("create_city");
-  const canUpdate = hasPermission("update_city_zone");
-  const canAnalyze = hasPermission("view_city_analytics");
+  const canCreate = hasPermission("add_city");
+  const canUpdate = hasPermission("manage_cities");
+  const canAnalyze = hasPermission("view_geo_operations");
 
   const [cities, setCities] = useState(initialCities);
   const [open, setOpen] = useState(false);
@@ -329,7 +329,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
             <p className="eyebrow">الجغرافيا التشغيلية</p>
             <h2>نطاقات المدن ومعلومات السوق</h2>
           </div>
-          <Protect require="create_city">
+          <Protect require="add_city">
             <button
               type="button"
               className="button button-primary"
@@ -409,7 +409,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                 )}
               </div>
               <Protect
-                require={["view_city_analytics", "update_city_zone"]}
+                require={["view_geo_operations", "manage_cities"]}
                 mode="any"
               >
                 <div className="row-actions city-card-actions mt-auto">
@@ -420,7 +420,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                   >
                     تفاصيل المدينة
                   </Link>
-                  <Protect require="view_city_analytics">
+                  <Protect require="view_geo_operations">
                     <button
                       type="button"
                       className="button button-small button-quiet"
@@ -429,7 +429,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                       تحليل النطاق
                     </button>
                   </Protect>
-                  <Protect require="update_city_zone">
+                  <Protect require="manage_cities">
                     <button
                       type="button"
                       className="button button-small button-quiet"

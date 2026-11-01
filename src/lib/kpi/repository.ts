@@ -26,7 +26,7 @@ function isFieldAgent(user: AppUser): boolean {
   return (
     user.active &&
     user.title === REP_TITLE &&
-    user.permissions.includes("view_field_ops")
+    user.permissions.includes("view_all_teams_visits")
   );
 }
 

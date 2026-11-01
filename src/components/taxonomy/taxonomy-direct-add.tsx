@@ -47,7 +47,7 @@ export function TaxonomyDirectAddButton({
     [vendorTypes, vendorTypeId],
   );
 
-  if (!hasPermission("manage_taxonomy")) return null;
+  if (!hasPermission("manage_categories")) return null;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,7 +108,7 @@ export function TaxonomyDirectAddButton({
         open={open}
         title={`إضافة ${TAXONOMY_KIND_META[kind].label} مباشرة`}
         eyebrow="إدارة التصنيف المركزي"
-        description="صلاحية manage_taxonomy تتجاوز طابور الطلبات: أنشئ السجل على لوحة المستهلك ثم أدخل معرّفه الرقمي هنا فوراً."
+        description="صلاحية manage_categories تتجاوز طابور الطلبات: أنشئ السجل على لوحة المستهلك ثم أدخل معرّفه الرقمي هنا فوراً."
         onClose={() => {
           if (saving) return;
           setOpen(false);

@@ -74,7 +74,7 @@ export async function authorizeMinClearance(
 
 /**
  * Capability check for routes that accept any one of several equivalent grants
- * (for example `create_products` or the broader `manage_catalog`).
+ * (for example `add_catalog` or the broader `edit_catalog`).
  */
 export async function authorizeAny(
   permissions: readonly Permission[],

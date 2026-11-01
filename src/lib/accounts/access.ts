@@ -31,12 +31,12 @@ export function resolveTreasuryAccess(
   const held = new Set(session.permissions);
   // Capability, not clearance, decides the tier. A Head of Accounts can sit at
   // any clearance level; what matters is that they were granted the book.
-  const full = held.has("manage_accounts") || held.has("view_accounts");
+  const full = held.has("add_bank_account") || held.has("view_bank_balances");
 
   return {
     full,
-    canView: full || held.has("record_deposits"),
-    canRecordDeposits: full || held.has("record_deposits"),
+    canView: full || held.has("record_bank_transaction"),
+    canRecordDeposits: full || held.has("record_bank_transaction"),
     canRecordExpenses: full,
   };
 }

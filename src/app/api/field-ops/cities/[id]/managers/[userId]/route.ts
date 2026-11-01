@@ -17,7 +17,7 @@ export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string; userId: string }> },
 ) {
-  const { session, response } = await authorize("assign_city_managers");
+  const { session, response } = await authorize("manage_cities");
   if (!session) return response;
 
   try {

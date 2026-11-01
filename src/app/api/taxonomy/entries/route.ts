@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("manage_taxonomy");
+  const { session, response } = await authorize("manage_categories");
   if (!session) return response;
 
   try {

@@ -11,7 +11,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("approve_edit_requests");
+  const { session, response } = await authorize("approve_report_edits");
   if (!session) return response;
   const { id } = await context.params;
 

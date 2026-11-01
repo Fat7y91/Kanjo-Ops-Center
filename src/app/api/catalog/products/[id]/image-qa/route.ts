@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 const REVIEW_CAPABILITIES = [
-  "manage_catalog",
-  "review_catalog_images",
+  "edit_catalog",
+  "review_image_quality",
 ] as const;
 
 const imageQaSchema = z.object({

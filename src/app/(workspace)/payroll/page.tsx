@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function PayrollPage() {
-  await requirePermission("view_payroll");
+  await requirePermission("view_payroll_sheets");
   const payslips = buildPayslips();
 
   return (

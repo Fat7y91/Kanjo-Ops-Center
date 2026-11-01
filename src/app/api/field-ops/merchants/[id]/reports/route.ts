@@ -17,7 +17,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
   const { id } = await context.params;
 
@@ -33,7 +33,7 @@ export async function POST(
      * Cross-team ownership still requires the transfer-request workflow, but
      * it must not block an unplanned, offline-capable visit.
      */
-    const canManageTasks = session.permissions.includes("manage_tasks");
+    const canManageTasks = session.permissions.includes("assign_tasks");
     const inScope = effectiveCityIds(session).includes(merchant.cityId);
     if (!canManageTasks && !inScope) {
       throw new FieldOpsError(
@@ -59,7 +59,7 @@ export async function POST(
     if (
       visitCountFor(id) === 0 &&
       input.outcome === "final_contract" &&
-      !session.permissions.includes("manage_merchant_state")
+      !session.permissions.includes("edit_contract")
     ) {
       throw new FieldOpsError(
         "FIRST_VISIT_GATE",
@@ -69,7 +69,7 @@ export async function POST(
     }
 
     const result = createVisitReport(id, input, actorFromSession(session), {
-      canManageState: session.permissions.includes("manage_merchant_state"),
+      canManageState: session.permissions.includes("edit_contract"),
     });
     return NextResponse.json(
       { ...result, visitCount: visitCountFor(id) },
@@ -84,7 +84,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
   const { id } = await context.params;
 

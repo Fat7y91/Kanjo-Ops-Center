@@ -377,7 +377,7 @@ type SignContractModalProps = {
  *
  * This is intentionally NOT part of the visit report. A signature is a
  * governance event that permanently locks the final commission percentage, so
- * it is gated by `manage_merchant_state` and requires an explicit note.
+ * it is gated by `edit_contract` and requires an explicit note.
  */
 export function SignContractModal({
   open,

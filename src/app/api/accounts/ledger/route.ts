@@ -13,8 +13,8 @@ export const runtime = "edge";
 
 export async function POST(request: Request) {
   const { session, response } = await authorizeAny([
-    "manage_accounts",
-    "record_deposits",
+    "add_bank_account",
+    "record_bank_transaction",
   ]);
   if (!session) return response;
 

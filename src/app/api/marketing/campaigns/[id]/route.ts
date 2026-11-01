@@ -12,7 +12,7 @@ type CampaignRouteProps = {
 
 /** Pause, resume or close a campaign. Closed campaigns are terminal. */
 export async function PATCH(request: Request, { params }: CampaignRouteProps) {
-  const { session, response } = await authorize("manage_marketing_metrics");
+  const { session, response } = await authorize("view_campaigns");
   if (!session) return response;
 
   const { id } = await params;

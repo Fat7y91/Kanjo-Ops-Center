@@ -16,7 +16,7 @@ export const runtime = "edge";
  * pending queue, and hands display-ready data to the client board.
  */
 export default async function CatalogQaPage() {
-  const session = await requirePermission("review_catalog_images");
+  const session = await requirePermission("review_image_quality");
 
   const cityScope = effectiveCityIds(session);
   const pending = getPendingReviewProducts(listCatalogRecords(), cityScope);

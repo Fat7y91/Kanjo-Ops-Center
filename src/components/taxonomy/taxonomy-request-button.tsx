@@ -34,7 +34,7 @@ export function TaxonomyRequestButton({
   const [message, setMessage] = useState("");
 
   // Operators who can manage the taxonomy never enter the request queue.
-  if (hasPermission("manage_taxonomy")) {
+  if (hasPermission("manage_categories")) {
     return (
       <TaxonomyDirectAddButton
         kind={kind}
@@ -48,7 +48,7 @@ export function TaxonomyRequestButton({
     );
   }
 
-  if (!hasPermission("request_taxonomy")) return null;
+  if (!hasPermission("review_add_requests")) return null;
 
   return (
     <>

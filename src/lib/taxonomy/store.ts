@@ -429,7 +429,7 @@ function dashboardIdConflict(
 }
 
 /**
- * Direct creation path for operators holding `manage_taxonomy`. This bypasses
+ * Direct creation path for operators holding `manage_categories`. This bypasses
  * the request queue entirely and links the record to a Dashboard ID in one step.
  */
 export function createTaxonomyEntry(

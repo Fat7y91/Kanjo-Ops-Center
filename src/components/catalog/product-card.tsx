@@ -103,7 +103,7 @@ export function ProductCard({
         {needsImageQa(product.state) ? (
           <div onClick={stop}>
             <Protect
-              require={["manage_catalog", "review_catalog_images"]}
+              require={["edit_catalog", "review_image_quality"]}
               mode="any"
             >
               <ImageQaActions

@@ -35,7 +35,7 @@ export default async function MerchantsPage({
   const scoped = listMerchants().filter((merchant) =>
     allowedCities.has(merchant.cityId),
   );
-  const canCreate = session.permissions.includes("create_merchants");
+  const canCreate = session.permissions.includes("add_merchant");
   const availableCities = allCities
     .filter((city) => allowedCities.has(city.id))
     .map((city) => ({ id: city.id, name: city.name, stage: city.stage }));

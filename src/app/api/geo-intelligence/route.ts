@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_city_analytics");
+  const { session, response } = await authorize("view_geo_operations");
   if (!session) return response;
 
   try {

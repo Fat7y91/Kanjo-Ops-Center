@@ -26,7 +26,7 @@ export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
     ? cityOptions.map((city) => city.id).join("|")
     : accessibleCities.join("|");
   const canSwitchCities =
-    permissions.has("view_cities") && cityOptions.length > 1;
+    permissions.has("view_active_cities") && cityOptions.length > 1;
 
   function selectCity(cityId: string) {
     if (typeof window === "undefined") return;

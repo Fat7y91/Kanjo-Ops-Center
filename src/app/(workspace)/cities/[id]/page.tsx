@@ -24,7 +24,7 @@ type CityDetailsPageProps = {
 export default async function CityDetailsPage({
   params,
 }: CityDetailsPageProps) {
-  const session = await requirePermission("view_cities");
+  const session = await requirePermission("view_active_cities");
   const { id } = await params;
   const city = getCityById(id);
   if (!city || !canAccessCity(session, city.id)) notFound();
@@ -42,7 +42,7 @@ export default async function CityDetailsPage({
         city={city}
         managers={await listCityManagers(city.id)}
         assignable={filterGovernableUsers(actor, await listAssignableManagers())}
-        canEdit={session.permissions.includes("update_city_zone")}
+        canEdit={session.permissions.includes("manage_cities")}
       />
     </>
   );

@@ -60,7 +60,7 @@ export function EconomicsPanel({
         </div>
       </div>
 
-      <Protect require="manage_merchant_state">
+      <Protect require="edit_contract">
         {merchant.contractState !== "signed_contract" ? (
           <div className="sign-panel">
             <div className="sign-panel-head">

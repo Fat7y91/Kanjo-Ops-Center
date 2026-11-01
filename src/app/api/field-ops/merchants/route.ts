@@ -52,7 +52,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("create_merchants");
+  const { session, response } = await authorize("add_merchant");
   if (!session) return response;
 
   try {

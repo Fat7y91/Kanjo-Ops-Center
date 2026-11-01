@@ -96,17 +96,17 @@ export function outranks(
 /**
  * Whether the actor stands above the target rank.
  *
- * Normally that means strictly above. An executive (level >= 3) may also act on
- * a peer at their own level, because the co-founders share custody of the L3/L4
- * ranks; self-management is still blocked separately by `assertCanManage`.
+ * The Hierarchy Security Rule is strict in both directions: an operator with
+ * `manage_system_users` may only see, edit and create users whose clearance is
+ * STRICTLY lower than their own. Peers and superiors are invisible on the
+ * users surface, for executives included — the founder redefined peer-minting
+ * out of the model.
  */
 export function governsLevel(
   actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
   target: Pick<AppUser, "clearanceLevel">,
 ): boolean {
-  return isExecutive(actor.clearanceLevel)
-    ? actor.clearanceLevel >= target.clearanceLevel
-    : actor.clearanceLevel > target.clearanceLevel;
+  return actor.clearanceLevel > target.clearanceLevel;
 }
 
 export function sharesCityScope(
@@ -133,7 +133,7 @@ export function canManageUser(
   actor: ClearanceActor,
   target: Pick<AppUser, "clearanceLevel" | "accessibleCities">,
 ): boolean {
-  if (!actor.permissions.includes("manage_permissions")) return false;
+  if (!actor.permissions.includes("manage_system_users")) return false;
   return canGovernUser(actor, target);
 }
 
@@ -154,21 +154,14 @@ export function filterGovernableUsers<T extends Pick<AppUser, "clearanceLevel" |
 /**
  * Highest clearance an actor may hand out.
  *
- * Global actors (executives, level ≥ 3) may mint peers at their own level: the
- * company is run by co-founders who each need a level 4 account. Every other
- * actor stays strictly below themselves, so a city manager cannot clone a peer
- * or lift a rep to their own rank.
+ * Strictly lower than the actor's own rank, always. Executives no longer mint
+ * peers: under the Hierarchy Security Rule an L4 may assign at most L3 and can
+ * never see or edit another L4 account.
  */
 export function maxAssignableLevel(
   actor: Pick<ClearanceActor, "clearanceLevel" | "globalScope">,
 ): number {
-  // Peer-minting is an executive privilege keyed to the rank itself, never to
-  // the `global_scope` flag, so a mis-set flag cannot let a city manager clone
-  // an account at their own level.
-  const ceiling = isExecutive(actor.clearanceLevel)
-    ? actor.clearanceLevel
-    : actor.clearanceLevel - 1;
-  return Math.max(0, Math.min(MAX_CLEARANCE_LEVEL, ceiling));
+  return Math.max(0, Math.min(MAX_CLEARANCE_LEVEL, actor.clearanceLevel - 1));
 }
 
 /** True when the actor may assign the given clearance level. */

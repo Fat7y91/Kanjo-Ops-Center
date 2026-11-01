@@ -64,7 +64,7 @@ function respondToError(error: unknown) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   const session = await getServerSession();
-  if (!session || !session.permissions.includes("manage_permissions")) {
+  if (!session || !session.permissions.includes("manage_system_users")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -151,7 +151,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const session = await getServerSession();
-  if (!session || !session.permissions.includes("manage_permissions")) {
+  if (!session || !session.permissions.includes("manage_system_users")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

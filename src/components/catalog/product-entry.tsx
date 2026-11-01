@@ -100,7 +100,7 @@ export function ProductEntry({
         syncing={queue.syncing}
         online={queue.online}
         onUploadAll={() => void uploadAll()}
-        canEdit={hasAny(["manage_catalog", "create_products"])}
+        canEdit={hasAny(["edit_catalog", "add_catalog"])}
         onEdit={(draft) => {
           void entry.editDraft(draft).then(() => {
             setToast(`جارٍ تعديل «${draft.payload.name}».`);

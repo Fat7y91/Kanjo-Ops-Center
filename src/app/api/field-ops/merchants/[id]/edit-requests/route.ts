@@ -15,7 +15,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
   const { id } = await context.params;
 
@@ -26,7 +26,7 @@ export async function POST(
     }
     if (
       merchant.team !== session.user.team &&
-      !session.permissions.includes("manage_merchant_state")
+      !session.permissions.includes("edit_contract")
     ) {
       throw new FieldOpsError(
         "OUTSIDE_TEAM",

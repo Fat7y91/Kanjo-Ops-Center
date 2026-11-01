@@ -57,9 +57,9 @@ export function useUserCapabilities({
   }, [initialRevision, initialUsers, seenRevision]);
 
   // The server has already resolved the assignable ladder from the actor's own
-  // rank, so it is rendered as-is. Re-filtering here with `< viewerLevel` would
-  // hide the executive's own tier and reintroduce the mismatch between what the
-  // dropdown offers and what `assertCanCreate` accepts.
+  // rank, so it is rendered as-is. The Hierarchy Security Rule makes every
+  // assignable level strictly below the viewer's rank, so the dropdown can
+  // never offer what `assertCanCreate` would reject.
   const levelOptions = useMemo(
     () =>
       [...assignableLevels].sort((left, right) => right.level - left.level),
@@ -84,8 +84,9 @@ export function useUserCapabilities({
   );
 
 
-  // Mirrors `canGovernUser` on the server so a peer minted by an executive is
-  // not dropped from the roster when a live permission event re-filters it.
+  // Mirrors `canGovernUser` on the server so a user that drops out of the
+  // strict hierarchy on a live permission event is not re-filtered here. Only
+  // strictly-lower ranks inside the viewer's city scope stay visible.
   const withinViewer = useCallback(
     (user: AppUser): boolean => {
       if (

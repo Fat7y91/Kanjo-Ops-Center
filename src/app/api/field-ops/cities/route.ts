@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET() {
-  const { session, response } = await authorize("view_cities");
+  const { session, response } = await authorize("view_active_cities");
   if (!session) return response;
 
   return NextResponse.json(
@@ -19,7 +19,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("create_city");
+  const { session, response } = await authorize("add_city");
   if (!session) return response;
 
   try {

@@ -28,8 +28,8 @@ import type { Permission } from "@/lib/rbac/permissions";
  */
 
 const REVIEW_CAPABILITIES: readonly Permission[] = [
-  "manage_catalog",
-  "review_catalog_images",
+  "edit_catalog",
+  "review_image_quality",
 ];
 
 export type ImageQaActionResult = {

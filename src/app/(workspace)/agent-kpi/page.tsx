@@ -2,7 +2,7 @@ import { KpiAgentCard } from "@/app/(workspace)/agent-kpi/components/kpi-agent-c
 import { KpiFilterBar } from "@/app/(workspace)/agent-kpi/components/kpi-filter-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireAnyPermission } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { formatScore } from "@/lib/kpi/format";
 import { loadKpiDataset } from "@/lib/kpi/repository";
@@ -31,7 +31,7 @@ type AgentKpiPageProps = {
  * renders one card per agent in scope.
  */
 export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) {
-  const session = await requirePermission("view_agent_kpi");
+  const session = await requireAnyPermission(["view_global_kpi", "view_rep_kpi"]);
   const params = await searchParams;
 
   const dataset = await loadKpiDataset();

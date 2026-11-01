@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CitiesPage() {
-  const session = await requirePermission("view_cities");
+  const session = await requirePermission("view_active_cities");
   const canManage =
-    session.permissions.includes("create_city") ||
-    session.permissions.includes("update_city_zone");
+    session.permissions.includes("add_city") ||
+    session.permissions.includes("manage_cities");
 
   return (
     <>

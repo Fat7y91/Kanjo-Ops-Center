@@ -16,7 +16,7 @@ export const runtime = "edge";
  * Top-down account provisioning. Public signup is disabled, so this is the
  * only way an operator account can come into existence.
  *
- * Guarded by `manage_permissions`; `createUserAccount` additionally enforces
+ * Guarded by `manage_system_users`; `createUserAccount` additionally enforces
  * that the caller may assign the requested level (executives up to their own
  * rank, everyone else strictly below) and can only grant a subset of their own
  * permissions and cities.
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "يلزم تسجيل الدخول." }, { status: 401 });
   }
-  if (!session.permissions.includes("manage_permissions")) {
+  if (!session.permissions.includes("manage_system_users")) {
     return NextResponse.json({ error: "لا تملك هذه الصلاحية." }, { status: 403 });
   }
 

@@ -159,7 +159,7 @@ export function OpsTeamPanel({
               المدن تلقائياً.
             </p>
           </div>
-          <Protect require="assign_city_managers">
+          <Protect require="manage_cities">
             <button
               type="button"
               className="button button-primary"
@@ -198,7 +198,7 @@ export function OpsTeamPanel({
                     نطاق {cityName} مُفعّل
                   </span>
                 </div>
-                <Protect require="assign_city_managers">
+                <Protect require="manage_cities">
                   <button
                     type="button"
                     className="button button-small button-danger"
@@ -271,7 +271,7 @@ export function OpsTeamPanel({
                     </span>
                     {alreadyAssigned ? (
                       <span className="badge badge-green">مُسند</span>
-                    ) : user.permissions.includes("view_cities") ? (
+                    ) : user.permissions.includes("view_active_cities") ? (
                       <span className="badge">وصول للمدن</span>
                     ) : null}
                   </label>

@@ -78,9 +78,9 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
   }, [funnel]);
 
   const canSeeFinance =
-    hasPermission("view_financials") && clearanceLevel >= EXECUTIVE_LEVEL;
+    hasPermission("view_overview_finance") && clearanceLevel >= EXECUTIVE_LEVEL;
   const canSeeMarketing =
-    hasPermission("manage_marketing_metrics") &&
+    hasPermission("view_campaigns") &&
     clearanceLevel >= EXECUTIVE_LEVEL;
 
   function updateFilters(patch: Partial<BiFilters>) {
@@ -133,7 +133,7 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
       ) : (
         <LockedSection
           title="الأداء المالي"
-          requirement="view_financials"
+          requirement="view_overview_finance"
           level={EXECUTIVE_LEVEL}
         />
       )}
@@ -150,7 +150,7 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
       ) : (
         <LockedSection
           title="الوصول التسويقي"
-          requirement="manage_marketing_metrics"
+          requirement="view_campaigns"
           level={EXECUTIVE_LEVEL}
         />
       )}

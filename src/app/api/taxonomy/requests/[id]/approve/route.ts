@@ -11,7 +11,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("manage_taxonomy");
+  const { session, response } = await authorize("manage_categories");
   if (!session) return response;
 
   try {

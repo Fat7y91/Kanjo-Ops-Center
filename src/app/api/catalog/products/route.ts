@@ -14,8 +14,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 const PRODUCT_CREATE_CAPABILITIES = [
-  "create_products",
-  "manage_catalog",
+  "add_catalog",
+  "edit_catalog",
 ] as const;
 
 export async function GET() {

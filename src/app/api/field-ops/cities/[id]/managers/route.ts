@@ -33,7 +33,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("view_cities");
+  const { session, response } = await authorize("view_active_cities");
   if (!session) return response;
 
   try {
@@ -64,7 +64,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("assign_city_managers");
+  const { session, response } = await authorize("manage_cities");
   if (!session) return response;
 
   try {

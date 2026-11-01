@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function PermissionsPage() {
-  const session = await requirePermission("manage_permissions");
+  const session = await requirePermission("manage_system_users");
   const actor = toClearanceActor(session);
   const global = isGlobalActor(actor);
   const manageable = filterManageableUsers(actor, await listUsers());
@@ -31,8 +31,8 @@ export default async function PermissionsPage() {
     <>
       <PageHeader
         eyebrow="الحوكمة"
-        title="مركز التحكم بالصلاحيات"
-        description="امنح واسحب القدرات الدقيقة لأي مشغّل. تتزامن الجلسات المفتوحة خلال خمس ثوانٍ، وتعيد حواجز الخادم التحقق في كل طلب."
+        title="مستخدمين النظام"
+        description="إنشاء المستخدمين وإدارة رتبهم وصلاحياتهم ونطاق مدنهم. لا يظهر هنا إلا المشغّلون الأدنى من رتبتك والواقعون داخل مدنك، وتتزامن الجلسات المفتوحة خلال خمس ثوانٍ."
         actions={
           <span className="badge badge-gold">
             رتبتك · {clearanceLabel(session.clearanceLevel)}
@@ -40,7 +40,7 @@ export default async function PermissionsPage() {
         }
       />
 
-      <Protect require="manage_permissions">
+      <Protect require="manage_system_users">
         <PermissionMatrix
           initialUsers={manageable}
           initialRevision={revision}

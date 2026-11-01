@@ -43,7 +43,7 @@ const statusTone: Record<string, string> = {
 };
 
 export default async function ContractsPage() {
-  await requirePermission("view_contracts");
+  await requirePermission("draft_contract");
 
   return (
     <>
@@ -52,7 +52,7 @@ export default async function ContractsPage() {
         title="سجل العقود"
         description="الصياغة والتعديل والتوقيع المعتمد صلاحيات منفصلة. لا تُستنتج صلاحية التوقيع من المسمى الوظيفي أبداً."
         actions={
-          <Protect require="create_contracts">
+          <Protect require="draft_contract">
             <button type="button" className="button button-primary">
               صياغة عقد
             </button>
@@ -91,7 +91,7 @@ export default async function ContractsPage() {
                   <td className="muted">{contract.signatory}</td>
                   <td>
                     <div className="row-actions">
-                      <Protect require="edit_contracts">
+                      <Protect require="edit_contract">
                         <button
                           type="button"
                           className="button button-small button-quiet"
@@ -101,7 +101,7 @@ export default async function ContractsPage() {
                       </Protect>
 
                       {contract.status === "يتطلب توقيعاً" && (
-                        <Protect require="sign_contracts">
+                        <Protect require="sign_contract">
                           <button
                             type="button"
                             className="button button-small button-primary"
@@ -111,7 +111,7 @@ export default async function ContractsPage() {
                         </Protect>
                       )}
 
-                      <Protect require="delete_contracts">
+                      <Protect require="cancel_contract">
                         <button
                           type="button"
                           className="button button-small button-danger"
@@ -128,7 +128,7 @@ export default async function ContractsPage() {
         </div>
 
         <p className="panel-note">
-          زر التوقيع يتطلب <code>sign_contracts</code>. محرر العقود الذي لا يملك
+          زر التوقيع يتطلب <code>sign_contract</code>. محرر العقود الذي لا يملك
           هذه الصلاحية يمكنه تعديل البنود لكنه لا يستطيع التوقيع أبداً.
         </p>
       </section>

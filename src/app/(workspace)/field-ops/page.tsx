@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function FieldOpsPage() {
-  const session = await requirePermission("view_field_ops");
+  const session = await requirePermission("view_all_teams_visits");
   const board = buildBoard(session);
   const permissions = session.permissions;
 
@@ -21,11 +21,11 @@ export default async function FieldOpsPage() {
       <FieldOpsClient
         initialBoard={board}
         viewerTeam={session.user.team}
-        canManageTasks={permissions.includes("manage_tasks")}
-        canRequestTransfers={permissions.includes("request_transfers")}
-        canApproveTransfers={permissions.includes("approve_transfers")}
-        canApproveEdits={permissions.includes("approve_edit_requests")}
-        canManageState={permissions.includes("manage_merchant_state")}
+        canManageTasks={permissions.includes("assign_tasks")}
+        canRequestTransfers={permissions.includes("request_ownership_transfer")}
+        canApproveTransfers={permissions.includes("approve_ownership_transfer")}
+        canApproveEdits={permissions.includes("approve_report_edits")}
+        canManageState={permissions.includes("edit_contract")}
         canViewMerchants={permissions.includes("view_merchants")}
         canAssignTasks={permissions.includes("assign_tasks")}
       />

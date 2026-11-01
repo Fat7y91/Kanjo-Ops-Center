@@ -11,7 +11,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("edit_merchants");
+  const { session, response } = await authorize("view_merchant_profile");
   if (!session) return response;
   const { id } = await context.params;
 

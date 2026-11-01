@@ -25,7 +25,7 @@ export const runtime = "edge";
 
 export async function GET() {
   const session = await getServerSession();
-  if (!session || !session.permissions.includes("manage_permissions")) {
+  if (!session || !session.permissions.includes("manage_system_users")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -55,7 +55,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await getServerSession();
-  if (!session || !session.permissions.includes("manage_permissions")) {
+  if (!session || !session.permissions.includes("manage_system_users")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -36,7 +36,7 @@ type SyncResult = {
  * `clientVisitId` makes retries idempotent.
  */
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
 
   const body = (await readJson(request)) as { visits?: QueuedVisit[] };
@@ -50,8 +50,8 @@ export async function POST(request: Request) {
   }
 
   const actor = actorFromSession(session);
-  const canManageTasks = session.permissions.includes("manage_tasks");
-  const canManageState = session.permissions.includes("manage_merchant_state");
+  const canManageTasks = session.permissions.includes("assign_tasks");
+  const canManageState = session.permissions.includes("edit_contract");
   const cityScope = new Set(effectiveCityIds(session));
 
   const results: SyncResult[] = [];

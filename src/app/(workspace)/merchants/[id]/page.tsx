@@ -31,7 +31,7 @@ export default async function MerchantProfilePage({
   const { id } = await params;
   const merchant = getMerchantById(id);
   // Merchant profiles follow the merchant directory's scope: any city the
-  // viewer can operate in, not just cities they have the `view_cities`
+  // viewer can operate in, not just cities they have the `view_active_cities`
   // dashboard permission for.
   if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {
     notFound();
@@ -59,12 +59,12 @@ export default async function MerchantProfilePage({
         summary={merchantCrmSummary(merchant.id)}
         visitCount={visitCountFor(merchant.id)}
         viewerTeam={session.user.team}
-        canEditMerchants={permissions.includes("edit_merchants")}
-        canRequestTransfers={permissions.includes("request_transfers")}
-        canManageState={permissions.includes("manage_merchant_state")}
-        canViewFieldOps={permissions.includes("view_field_ops")}
-        canViewFieldOpsPage={permissions.includes("view_field_ops")}
-        canStartVisit={permissions.includes("view_field_ops")}
+        canEditMerchants={permissions.includes("view_merchant_profile")}
+        canRequestTransfers={permissions.includes("request_ownership_transfer")}
+        canManageState={permissions.includes("edit_contract")}
+        canViewFieldOps={permissions.includes("view_all_teams_visits")}
+        canViewFieldOpsPage={permissions.includes("view_all_teams_visits")}
+        canStartVisit={permissions.includes("view_all_teams_visits")}
       />
     </>
   );

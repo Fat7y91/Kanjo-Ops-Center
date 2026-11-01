@@ -17,9 +17,9 @@ export const runtime = "edge";
 
 export default async function AccountsPage() {
   const session = await requireAnyPermission([
-    "view_accounts",
-    "manage_accounts",
-    "record_deposits",
+    "view_bank_balances",
+    "add_bank_account",
+    "record_bank_transaction",
   ]);
   const access = resolveTreasuryAccess(session);
   const accounts = visibleAccounts(listBankAccounts(), access);
@@ -49,7 +49,7 @@ export default async function AccountsPage() {
         full={access.full}
         canRecordDeposits={access.canRecordDeposits}
         canRecordExpenses={access.canRecordExpenses}
-        canAddAccount={session.permissions.includes("manage_accounts")}
+        canAddAccount={session.permissions.includes("add_bank_account")}
       />
     </>
   );

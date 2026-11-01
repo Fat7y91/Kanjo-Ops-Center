@@ -18,13 +18,13 @@ export function canAccessCity(
   cityId: string,
 ): boolean {
   return (
-    session.permissions.includes("view_cities") &&
+    session.permissions.includes("view_active_cities") &&
     effectiveCityIds(session).includes(cityId)
   );
 }
 
 export function scopedCities(session: ActiveSession): City[] {
-  if (!session.permissions.includes("view_cities")) return [];
+  if (!session.permissions.includes("view_active_cities")) return [];
   const allowed = new Set(effectiveCityIds(session));
   return listCities().filter((city) => allowed.has(city.id));
 }

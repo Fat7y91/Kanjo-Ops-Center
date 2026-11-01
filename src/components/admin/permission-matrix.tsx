@@ -35,17 +35,17 @@ type PermissionMatrixProps = {
 export function PermissionMatrix(props: PermissionMatrixProps) {
   const matrix = usePermissionMatrix(props);
 
-  if (!matrix.hasPermission("manage_permissions")) {
+  if (!matrix.hasPermission("manage_system_users")) {
     return (
       <section className="panel">
         <div className="panel-head">
           <div>
             <p className="eyebrow">تغيّر الوصول</p>
-            <h2>تم سحب إدارة الصلاحيات</h2>
+            <h2>تم سحب إدارة المستخدمين</h2>
           </div>
         </div>
         <p className="panel-note">
-          لم تعد جلساتك تحمل <code>manage_permissions</code>. أزالت بوابة
+          لم تعد جلساتك تحمل <code>manage_system_users</code>. أزالت بوابة
           القدرات المصفوفة.
         </p>
       </section>

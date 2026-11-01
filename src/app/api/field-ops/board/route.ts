@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET() {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
 
   return NextResponse.json(

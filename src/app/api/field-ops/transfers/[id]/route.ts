@@ -11,7 +11,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("approve_transfers");
+  const { session, response } = await authorize("approve_ownership_transfer");
   if (!session) return response;
   const { id } = await context.params;
 

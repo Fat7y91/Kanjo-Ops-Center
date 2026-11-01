@@ -62,7 +62,7 @@ export function CatalogClient({
       <section className="toolbar-row">
         <div className="row-actions">
           <Protect
-            require={["create_products", "manage_catalog"]}
+            require={["add_catalog", "edit_catalog"]}
             mode="any"
             fallback={<span className="badge">عرض فقط</span>}
           >
@@ -104,8 +104,8 @@ export function CatalogClient({
           </div>
         </div>
         <p className="panel-note">
-          يظهر زر «إضافة منتج» فقط لمن يملك <code>create_products</code> أو{" "}
-          <code>manage_catalog</code>، ويتحقق الخادم من نفس القدرات قبل إنشاء
+          يظهر زر «إضافة منتج» فقط لمن يملك <code>add_catalog</code> أو{" "}
+          <code>edit_catalog</code>، ويتحقق الخادم من نفس القدرات قبل إنشاء
           الطلب. التصنيفات والمتغيرات تُقرأ من التصنيف المركزي فقط، ولا يمكن
           تجاوزها من الواجهة.
         </p>

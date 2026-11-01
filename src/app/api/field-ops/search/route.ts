@@ -16,7 +16,7 @@ export const runtime = "edge";
  * visit for any merchant on the fly.
  */
 export async function GET(request: Request) {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
 
   const query = new URL(request.url).searchParams.get("q") ?? "";

@@ -14,14 +14,14 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET() {
-  const { session, response } = await authorize("view_field_ops");
+  const { session, response } = await authorize("view_all_teams_visits");
   if (!session) return response;
 
   return NextResponse.json(
     {
       tasks: tasksForViewer({
         team: session.user.team,
-        canManageTasks: session.permissions.includes("manage_tasks"),
+        canManageTasks: session.permissions.includes("assign_tasks"),
         date: today(),
       }),
     },

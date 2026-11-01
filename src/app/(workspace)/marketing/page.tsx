@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function MarketingPage() {
-  const session = await requirePermission("manage_marketing_metrics");
+  const session = await requirePermission("view_campaigns");
   const campaigns = listCampaigns();
   const progress = campaignProgress();
   const entries = listMarketingEntries();
@@ -37,7 +37,7 @@ export default async function MarketingPage() {
         entries={entries}
         settings={settings}
         cities={cities}
-        canManage={session.permissions.includes("manage_marketing_metrics")}
+        canManage={session.permissions.includes("view_campaigns")}
       />
     </>
   );

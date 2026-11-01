@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function OverviewPage() {
-  const session = await requirePermission("view_overview");
+  const session = await requirePermission("view_overview_contracts");
   const firstName = session.user.name.split(" ")[0];
   const dataset = await buildBiDataset();
 

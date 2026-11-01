@@ -59,7 +59,7 @@ function governorRemains(
     if (
       user.id !== candidateId &&
       user.active &&
-      user.permissions.includes("manage_permissions")
+      user.permissions.includes("manage_system_users")
     ) {
       return true;
     }
@@ -74,7 +74,7 @@ export function assertActiveGovernor(
 ): void {
   if (!governorRemains(users, candidateId)) {
     throw new PermissionInvariantError(
-      "At least one active operator must retain manage_permissions.",
+      "At least one active operator must retain manage_system_users.",
     );
   }
 }

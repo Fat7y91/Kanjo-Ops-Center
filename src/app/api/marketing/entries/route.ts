@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const { session, response } = await authorize("manage_marketing_metrics");
+  const { session, response } = await authorize("view_campaigns");
   if (!session) return response;
 
   const campaignId = new URL(request.url).searchParams.get("campaignId");
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("manage_marketing_metrics");
+  const { session, response } = await authorize("view_campaigns");
   if (!session) return response;
 
   try {

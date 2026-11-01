@@ -20,11 +20,11 @@ export type FieldOpsBoard = {
 };
 
 export function buildBoard(session: ActiveSession): FieldOpsBoard {
-  const canManageTasks = session.permissions.includes("manage_tasks");
+  const canManageTasks = session.permissions.includes("assign_tasks");
   const canApproveTransfers =
-    session.permissions.includes("approve_transfers");
+    session.permissions.includes("approve_ownership_transfer");
   const canApproveEdits =
-    session.permissions.includes("approve_edit_requests");
+    session.permissions.includes("approve_report_edits");
 
   const transferRequests = listTransferRequests().filter(
     (request) =>

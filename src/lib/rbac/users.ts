@@ -156,9 +156,9 @@ export async function updateUser(
         ).filter(Boolean);
 
   const staysGovernor =
-    nextActive && nextPermissions.includes("manage_permissions");
+    nextActive && nextPermissions.includes("manage_system_users");
   const wasGovernor =
-    current.active && current.permissions.includes("manage_permissions");
+    current.active && current.permissions.includes("manage_system_users");
 
   if (wasGovernor && !staysGovernor) {
     assertActiveGovernor(await listUsers(), id);
@@ -202,7 +202,7 @@ export async function deleteUser(id: string): Promise<AppUser> {
   const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
-  if (current.active && current.permissions.includes("manage_permissions")) {
+  if (current.active && current.permissions.includes("manage_system_users")) {
     assertActiveGovernor(await listUsers(), id);
   }
 

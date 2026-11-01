@@ -55,7 +55,7 @@ export async function createUserAccount(
 ): Promise<ProvisionedAccount> {
   // Self-defending: the service-role client bypasses RLS, so authorization
   // must be re-asserted here even though the route already checked it.
-  if (!session.permissions.includes("manage_permissions")) {
+  if (!session.permissions.includes("manage_system_users")) {
     throw new ProvisioningError(
       "PERMISSION_DENIED",
       "لا تملك صلاحية إنشاء الحسابات.",

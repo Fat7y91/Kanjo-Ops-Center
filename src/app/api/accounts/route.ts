@@ -14,9 +14,9 @@ export const runtime = "edge";
 
 export async function GET() {
   const { session, response } = await authorizeAny([
-    "view_accounts",
-    "manage_accounts",
-    "record_deposits",
+    "view_bank_balances",
+    "add_bank_account",
+    "record_bank_transaction",
   ]);
   if (!session) return response;
 
@@ -36,7 +36,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const { session, response } = await authorizeAny([
-    "manage_accounts",
+    "add_bank_account",
   ]);
   if (!session) return response;
 

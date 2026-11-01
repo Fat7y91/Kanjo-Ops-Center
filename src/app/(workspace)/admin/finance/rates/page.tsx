@@ -1,6 +1,6 @@
 import { CommissionRatesView } from "@/components/admin/finance/commission-rates-view";
 import { PageHeader } from "@/components/ui/page-header";
-import { requireMinClearance } from "@/lib/auth/guard";
+import { requireMinClearance, requirePermission } from "@/lib/auth/guard";
 import {
   activeRateForCity,
   toCityCommissionRate,
@@ -18,7 +18,10 @@ export const runtime = "edge";
 const FINANCE_CLEARANCE = 4;
 
 export default async function FinanceRatesPage() {
+  // Rank-gated like the SQL policies (`app.has_min_clearance(4)`) and opened
+  // by the dedicated capability of the Commission Rates module.
   await requireMinClearance(FINANCE_CLEARANCE);
+  await requirePermission("manage_commission_rates");
 
   const cities = listCities().map((city) => ({
     id: city.id,
