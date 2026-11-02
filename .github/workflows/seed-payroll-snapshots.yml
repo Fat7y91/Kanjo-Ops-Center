@@ -1,0 +1,32 @@
+# Freeze the verified September + October 2026 payroll KPI numbers into the
+# immutable payroll_snapshots collection. Runs manually from the Actions tab.
+#
+# The script uses create()-only writes, so running this twice is safe: the
+# second run refuses to overwrite the already-locked months. Dry run needs no
+# credentials and prints the exact plan.
+name: Seed payroll snapshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (print plan only, no writes)'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install firebase-admin
+        run: npm install firebase-admin@12
+      - name: Seed immutable payroll snapshots
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KANJO_DESOUK }}
+          SYNC_DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node scripts/seed-payroll-snapshots.mjs

@@ -304,6 +304,30 @@ service cloud.firestore {
         && (legacy() || canUsePayrollConfig());
     }
 
+    // Immutable payroll KPI snapshots (`payroll_snapshots`).
+    //    payroll_snapshots/{YYYY-MM}              ← month header
+    //    payroll_snapshots/{YYYY-MM}/reps/{repId} ← frozen per-rep metrics
+    // These documents are the legal record of what was paid. They are written
+    // EXCLUSIVELY by scripts/seed-payroll-snapshots.mjs through the Admin SDK,
+    // which bypasses these rules, so the client-facing write rule is a flat
+    // deny with NO legacy/migration escape hatch: an unlocked write path would
+    // defeat the entire point of freezing the numbers. Corrections are issued by
+    // creating a new `-r2` revision document, never by editing an existing one.
+    // READ: payroll roles only — reps never load snapshots and external
+    // marketing agencies are excluded from every financial surface.
+    match /payroll_snapshots/{month} {
+      function canReadPayrollSnapshot() {
+        return isPrivileged() || isOpsManager() || isAccounting();
+      }
+      allow read: if !isMarketingAgency() && canReadPayrollSnapshot();
+      allow write: if false;
+
+      match /reps/{repId} {
+        allow read: if !isMarketingAgency() && canReadPayrollSnapshot();
+        allow write: if false;
+      }
+    }
+
     // System configuration (`system_config`). Currently holds the single
     // `dynamic_taxonomy` document written by the export modal's CSV sync: the
     // aggregated category table keyed by vendor_type. READ: any signed-in
