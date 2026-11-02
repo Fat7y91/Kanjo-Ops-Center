@@ -235,29 +235,6 @@ export function TaxonomyCenter({
 
   return (
     <>
-      <section className="taxonomy-guardrail">
-        <div>
-          <p className="eyebrow">قاعدة الحوكمة</p>
-          <h2>مساران: إضافة مباشرة للمسؤولين وطلب مراجعة للميدان</h2>
-          <p>
-            من يملك <code>manage_categories</code> ينشئ السجل مباشرةً ويُدخل معرّف
-            لوحة المستهلك في خطوة واحدة دون طابور طلبات. أما مندوبو الميدان
-            ومديرو المدن فيرسلون طلب إضافة يصل إلى قائمة الانتظار أدناه.
-          </p>
-        </div>
-        <div className="taxonomy-guardrail-stats">
-          <span className="badge badge-gold">{pending.length} قيد المراجعة</span>
-          <span className="badge badge-green">
-            {requests.filter((request) => request.status === "approved").length}{" "}
-            معتمد
-          </span>
-          <span className="badge badge-red">
-            {requests.filter((request) => request.status === "rejected").length}{" "}
-            مرفوض
-          </span>
-        </div>
-      </section>
-
       <section className="panel">
         <div className="taxonomy-tabs" role="tablist">
           {TABS.map((entry) => (

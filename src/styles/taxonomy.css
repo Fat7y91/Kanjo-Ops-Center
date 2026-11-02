@@ -1,40 +1,5 @@
 /* ── Taxonomy MDM ─────────────────────────────────────────────────────── */
 
-.taxonomy-guardrail {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 22px;
-  margin-bottom: 22px;
-  padding: 20px 22px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--purple) 7%, var(--surface)) 0%,
-      color-mix(in srgb, var(--gold) 7%, var(--surface)) 100%
-    );
-}
-
-.taxonomy-guardrail h2 {
-  margin: 4px 0 8px;
-  font-size: 1.02rem;
-}
-
-.taxonomy-guardrail p {
-  max-width: 70ch;
-  color: var(--ink-soft);
-  font-size: 0.84rem;
-  line-height: 1.7;
-}
-
-.taxonomy-guardrail-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 .taxonomy-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -300,11 +265,6 @@
   min-width: 180px;
 }
 
-[data-theme="dark"] .taxonomy-guardrail {
-  border-color: var(--line-strong);
-  background: linear-gradient(135deg, #1d1526 0%, #1b1a12 100%);
-}
-
 [data-theme="dark"] .taxonomy-request-card,
 [data-theme="dark"] .taxonomy-variant-card,
 [data-theme="dark"] .taxonomy-approve-summary {
@@ -343,11 +303,6 @@
 }
 
 @media (max-width: 760px) {
-  .taxonomy-guardrail {
-    flex-direction: column;
-    gap: 14px;
-  }
-
   .taxonomy-tabs {
     gap: 4px;
   }

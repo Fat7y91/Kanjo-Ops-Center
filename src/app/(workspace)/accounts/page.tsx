@@ -31,7 +31,7 @@ export default async function AccountsPage() {
     <>
       <PageHeader
         eyebrow="المالية"
-        title="الحسابات البنكية"
+        title="ارصدة حسابات كانجو البنكية"
         description={
           access.full
             ? "أرصدة الحسابات المصرية والسعودية وحركاتها المسجّلة."
