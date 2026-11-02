@@ -39,7 +39,12 @@ export function useOperationForm(
   merchantRates: Record<string, number>,
 ) {
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [operations, setOperations] = useState(initialOperations);
+  // The page degrades to empty arrays when the schema is not reachable, but a
+  // direct/mocked caller could still omit the prop; never let `undefined`
+  // reach `.length` or `.map` in the render.
+  const [operations, setOperations] = useState<OperationLog[]>(
+    Array.isArray(initialOperations) ? initialOperations : [],
+  );
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,7 +55,7 @@ export function useOperationForm(
 
   const preview = useMemo(() => {
     const value = Number(form.orderValue) || 0;
-    const rate = merchantRates[form.merchantId] ?? 0;
+    const rate = Number(merchantRates[form.merchantId] ?? 0) || 0;
     const commission = toMinorUnits((value * rate) / 100) / 100;
     const delivery = Number(form.deliveryFee) || 0;
     const cut = Number(form.courierCut) || 0;

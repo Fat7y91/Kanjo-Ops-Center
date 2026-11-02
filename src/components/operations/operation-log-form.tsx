@@ -1,9 +1,15 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Button } from "@/components/ui/button";
 import { SelectMenu } from "@/components/ui/select-menus";
 import { TextAreaField, TextField } from "@/components/ui/form-inputs";
-import { currencyMoney, shortDate } from "@/lib/accounts/format";
+import {
+  operationDate,
+  operationMethodLabel,
+  operationMoney,
+} from "@/lib/operations/format";
 import {
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABEL,
@@ -29,8 +35,18 @@ export function OperationLogForm({
   merchants: MerchantOption[];
   initialOperations: OperationLog[];
 }) {
-  const rates: Record<string, number> = {};
-  for (const merchant of merchants) rates[merchant.id] = merchant.commissionPercent;
+  const merchantList = Array.isArray(merchants) ? merchants : [];
+  const courierList = Array.isArray(couriers) ? couriers : [];
+
+  // Stable identity so the preview memo only recomputes when the roster or the
+  // typed values change, not on every parent render.
+  const rates = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const merchant of merchantList) {
+      map[merchant.id] = merchant.commissionPercent;
+    }
+    return map;
+  }, [merchantList]);
 
   const { form, set, preview, submit, operations, error, notice, busy } =
     useOperationForm(initialOperations, rates);
@@ -60,7 +76,7 @@ export function OperationLogForm({
             label="التاجر"
             required
             value={form.merchantId || null}
-            options={merchants.map((merchant) => ({
+            options={merchantList.map((merchant) => ({
               value: merchant.id,
               label: merchant.name,
               hint: `${merchant.commissionPercent}%`,
@@ -72,7 +88,7 @@ export function OperationLogForm({
             label="المندوب"
             required
             value={form.courierId || null}
-            options={couriers.map((courier) => ({
+            options={courierList.map((courier) => ({
               value: courier.id,
               label: courier.displayName,
               hint: `${courier.cutPercent}%`,
@@ -130,15 +146,15 @@ export function OperationLogForm({
 
         <div className="operation-preview">
           <span>
-            العمولة: <strong>{currencyMoney(preview.commission, currency)}</strong>
+            العمولة: <strong>{operationMoney(preview.commission, currency)}</strong>
           </span>
           <span>
             مستحق التاجر:{" "}
-            <strong>{currencyMoney(preview.merchantShare, currency)}</strong>
+            <strong>{operationMoney(preview.merchantShare, currency)}</strong>
           </span>
           <span>
             مستحق المندوب:{" "}
-            <strong>{currencyMoney(preview.courierShare, currency)}</strong>
+            <strong>{operationMoney(preview.courierShare, currency)}</strong>
           </span>
         </div>
 
@@ -169,17 +185,22 @@ export function OperationLogForm({
             {operations.map((operation) => (
               <li key={operation.id}>
                 <div>
-                  <strong>{operation.orderId}</strong>
+                  <strong>{operation.orderId || "—"}</strong>
                   <span>
-                    {operation.merchantName} · {operation.courierName}
+                    {operation.merchantName ?? "تاجر"} ·{" "}
+                    {operation.courierName ?? "مندوب"}
                   </span>
                 </div>
                 <div>
                   <span className="badge badge-gold">
-                    {PAYMENT_METHOD_LABEL[operation.paymentMethod]}
+                    {operationMethodLabel(operation.paymentMethod)}
                   </span>
-                  <span>{currencyMoney(operation.orderValue, operation.currency)}</span>
-                  <span className="muted">{shortDate(operation.occurredAt)}</span>
+                  <span>
+                    {operationMoney(operation.orderValue, operation.currency)}
+                  </span>
+                  <span className="muted">
+                    {operationDate(operation.occurredAt)}
+                  </span>
                 </div>
               </li>
             ))}

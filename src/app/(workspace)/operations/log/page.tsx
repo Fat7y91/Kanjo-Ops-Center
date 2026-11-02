@@ -15,6 +15,13 @@ export default async function OperationsLogPage() {
     merchants: [],
   }));
 
+  // The service already degrades to an empty board, but a future repository
+  // could return a partial shape. Normalise here so the client never receives
+  // `undefined` for a list it iterates.
+  const operations = Array.isArray(board.operations) ? board.operations : [];
+  const couriers = Array.isArray(board.couriers) ? board.couriers : [];
+  const merchants = Array.isArray(board.merchants) ? board.merchants : [];
+
   return (
     <>
       <PageHeader
@@ -24,9 +31,9 @@ export default async function OperationsLogPage() {
       />
 
       <OperationLogForm
-        couriers={board.couriers}
-        merchants={board.merchants}
-        initialOperations={board.operations}
+        couriers={couriers}
+        merchants={merchants}
+        initialOperations={operations}
       />
     </>
   );

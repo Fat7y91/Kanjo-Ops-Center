@@ -3,7 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { TextField } from "@/components/ui/form-inputs";
-import { currencyMoney, shortDate } from "@/lib/accounts/format";
+import {
+  operationDate,
+  operationMoney,
+} from "@/lib/operations/format";
 import {
   CLEARING_STATUS_LABEL,
   type ClearingLedgerRow,
@@ -37,7 +40,7 @@ function PartyBook({
               party.balance > 0 ? "clearing-positive" : "clearing-negative"
             }
           >
-            {currencyMoney(Math.abs(party.balance), party.currency)}
+            {operationMoney(Math.abs(party.balance), party.currency)}
           </strong>
         </li>
       ))}
@@ -71,7 +74,7 @@ function LedgerRows({
             <span>
               {row.partyName} · {row.entityType === "merchant" ? "تاجر" : "مندوب"}
             </span>
-            <span className="muted">{shortDate(row.createdAt)}</span>
+            <span className="muted">{operationDate(row.createdAt)}</span>
           </div>
 
           <div className="clearing-row-amount">
@@ -80,10 +83,10 @@ function LedgerRows({
                 row.amount > 0 ? "clearing-positive" : "clearing-negative"
               }
             >
-              {currencyMoney(Math.abs(row.amount), row.currency)}
+              {operationMoney(Math.abs(row.amount), row.currency)}
             </strong>
             <span className="badge badge-gold">
-              {CLEARING_STATUS_LABEL[row.status]}
+              {CLEARING_STATUS_LABEL[row.status] ?? "—"}
             </span>
           </div>
 
@@ -110,7 +113,7 @@ function LedgerRows({
               </Button>
             </div>
           ) : (
-            <span className="muted">سُوّي في {shortDate(row.clearedAt ?? "")}</span>
+            <span className="muted">سُوّي في {operationDate(row.clearedAt)}</span>
           )}
         </li>
       ))}

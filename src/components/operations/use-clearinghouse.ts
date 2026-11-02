@@ -21,9 +21,17 @@ export function useClearinghouse(
   initialPayables: ClearingParty[],
   initialReceivables: ClearingParty[],
 ) {
-  const [rows, setRows] = useState(initialRows);
-  const [payables, setPayables] = useState(initialPayables);
-  const [receivables, setReceivables] = useState(initialReceivables);
+  // Same defensive contract as the operations form: a partial board must
+  // render an empty list, never crash on `.filter` / `.map`.
+  const [rows, setRows] = useState<ClearingLedgerRow[]>(
+    Array.isArray(initialRows) ? initialRows : [],
+  );
+  const [payables, setPayables] = useState<ClearingParty[]>(
+    Array.isArray(initialPayables) ? initialPayables : [],
+  );
+  const [receivables, setReceivables] = useState<ClearingParty[]>(
+    Array.isArray(initialReceivables) ? initialReceivables : [],
+  );
   const [status, setStatus] = useState<ClearingStatus>("pending");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
