@@ -60,14 +60,29 @@ function fromBase64Url(value: string): Uint8Array {
   return bytes;
 }
 
+/**
+ * The HMAC key is derived from a constant secret, so it is imported once per
+ * isolate instead of on every middleware/session verification. On the Edge
+ * runtime `crypto.subtle.importKey` is the single most expensive part of the
+ * auth hot path, and importing a stable key repeatedly was a measurable CPU
+ * cost on every page request.
+ */
+let cachedSigningKey: CryptoKey | null = null;
+let cachedSecret: string | null = null;
+
 async function signingKey(): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
+  const secret = sessionSecret();
+  if (cachedSigningKey && cachedSecret === secret) return cachedSigningKey;
+
+  cachedSigningKey = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(sessionSecret()),
+    encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
+  cachedSecret = secret;
+  return cachedSigningKey;
 }
 
 export async function createSessionToken(

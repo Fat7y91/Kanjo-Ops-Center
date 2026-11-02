@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import {
   createSessionToken,
@@ -9,7 +10,17 @@ import {
 import type { ActiveSession } from "@/lib/rbac/types";
 import { getRbacRevision, getUserById } from "@/lib/rbac/users";
 
-export async function getServerSession(): Promise<ActiveSession | null> {
+/**
+ * Resolved once per request.
+ *
+ * A single page can ask for the session several times (the layout guard plus
+ * each page guard, e.g. `requireMinClearance` then `requirePermission`). Each
+ * call verifies the HMAC, reads the operator and loads the RBAC revision, so
+ * without this memo the same request repeated the whole auth chain two or
+ * three times — the CPU spike that timed out the edge worker on the finance
+ * rates page.
+ */
+export const getServerSession = cache(async (): Promise<ActiveSession | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -34,7 +45,7 @@ export async function getServerSession(): Promise<ActiveSession | null> {
     globalScope: user.globalScope,
     revision: await getRbacRevision(),
   };
-}
+});
 
 export async function writeSessionCookie(userId: string): Promise<void> {
   const user = await getUserById(userId);
