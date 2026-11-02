@@ -19,6 +19,8 @@ export type ModuleIcon =
   | "payroll"
   | "marketing"
   | "finance"
+  | "operations"
+  | "clearinghouse"
   | "data-entry";
 
 export type ModuleDefinition = {

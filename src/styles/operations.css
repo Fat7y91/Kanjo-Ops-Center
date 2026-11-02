@@ -1,0 +1,125 @@
+/* Operations logger and clearinghouse surfaces.
+ *
+ * Layout only: colour, radii and elevation come from the tokens and the shared
+ * `panel`, `badge` and `button` primitives.
+ */
+
+.operation-log {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.operation-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.operation-preview strong {
+  color: var(--ink);
+}
+
+.operation-list,
+.clearing-rows,
+.clearing-parties {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-list li,
+.clearing-rows li,
+.clearing-parties li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 4px;
+  border-block-end: 1px solid var(--line);
+}
+
+.operation-list li:last-child,
+.clearing-rows li:last-child,
+.clearing-parties li:last-child {
+  border-block-end: 0;
+}
+
+.operation-list li > div,
+.clearing-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.operation-list li > div:last-child,
+.clearing-row-amount {
+  align-items: flex-end;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.clearinghouse {
+  display: grid;
+  gap: 18px;
+}
+
+.clearing-book {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.clearing-rows li {
+  align-items: flex-start;
+}
+
+.clearing-row-main strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.clearing-receipt {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.clearing-positive {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-negative {
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (min-width: 960px) {
+  .operation-log {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}

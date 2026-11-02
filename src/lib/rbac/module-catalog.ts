@@ -175,6 +175,23 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "finance",
   },
   {
+    href: "/operations/log",
+    label: "تسجيل العمليات",
+    shortLabel: "العمليات",
+    description: "تسجيل الطلبات المنفذة وتوجيه مستحقات التجار والمناديب.",
+    permission: "log_operations",
+    icon: "operations",
+  },
+  {
+    href: "/finance/clearinghouse",
+    label: "المقاصة",
+    shortLabel: "المقاصة",
+    description: "مستحقات التجار والمناديب ومديونياتهم وتسويتها.",
+    permission: "view_clearinghouse",
+    alsoGrantedBy: ["settle_clearinghouse"],
+    icon: "clearinghouse",
+  },
+  {
     href: "/admin/permissions",
     label: "مستخدمين النظام",
     shortLabel: "المستخدمون",

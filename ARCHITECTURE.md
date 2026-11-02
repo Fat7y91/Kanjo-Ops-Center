@@ -443,6 +443,28 @@ logout therefore POST to plain route handlers. Rules locked in:
   the middleware accepts any valid session. The review surface is gated by the
   full-book treasury capabilities, not by rank.
 
+### Operations & Clearinghouse (Tier 1–5)
+- UI: `src/app/(workspace)/operations/log/page.tsx` (order logger) and
+  `src/app/(workspace)/finance/clearinghouse/page.tsx` (the book), plus
+  `components/operations/` (`operation-log-form`, `clearinghouse-board`,
+  `use-operation-form`, `use-clearinghouse`).
+- Business: `src/lib/operations/{types,errors,service}.ts`. `types.ts` owns the
+  Zod contracts and the signed-amount vocabulary; `service.ts` is the Tier 3
+  rule that parses a payload, converts major units to minor units once, and
+  never forwards a commission percent.
+- Data: `src/lib/operations/repository.ts` (Tier 4). It is the only module that
+  knows the column names in `20261102000003_operations_clearinghouse.sql`; every
+  read degrades when the schema is ahead of the code.
+- App/Edge: `GET|POST /api/operations`, `GET|POST /api/clearinghouse`.
+- Commission is **not** a form field. The SQL trigger
+  `operation_freeze_amounts()` resolves `agreed_commission`, else
+  `target_commission`, and freezes it on the row before it exists. Editing a
+  merchant rate afterwards cannot rewrite an order already logged.
+- Reading and settling are separate capabilities (`view_clearinghouse` vs
+  `settle_clearinghouse`) so an operator can audit the book without being able
+  to release money. A settler may read the rows it settles; the RLS policies
+  accept either key.
+
 ### Payroll (Tier 1–5)
 - UI: `src/app/(workspace)/payroll/page.tsx` plus
   `components/payroll/{payroll-view,payroll-table}.tsx`.
@@ -1091,12 +1113,20 @@ commission fee schedule: a rate is a price list in EGP, stored as
 | `20261102000000_tiered_contract_commissions.sql` | replaces `contracting_base_fee` with `contract_fee_tier_1..4`; `achievement_percent()`, `contract_fee_tier()`, `contract_fee_for()`; `applied_contract_fee` on `app.kpi_snapshots` | Backfills all four tiers from the old flat fee before dropping it, so the migration changes no amount. Bands are half-open and gap-free; `100%` is tier 4. The applied fee is frozen with the snapshot. |
 | `20261102000001_user_profiles_and_capital.sql` | `app.user_payout_methods`, `app.capital_deposits`, `avatar_url` + `bank_info_status` on `app.users`, storage buckets | One payout method per operator; any detail edit resets the decision to `pending` (`payout_methods_reset_decision`). A capital approval appends exactly one ledger entry in the same transaction (`capital_deposit_decide`) and is immutable thereafter. Self-review is refused by `PAYOUT_SELF_REVIEW` / `CAPITAL_DEPOSIT_SELF_REVIEW`. |
 | `20261102000002_capital_treasury_gate.sql` | `app.can_manage_treasury()`, rewritten payout/capital policies | The first migration gated decisions on the legacy `manage_accounts` key, which the 49-key catalogue no longer contains — the policies would have been unreachable. Decisions now follow the full-book treasury capabilities, the same rule `resolveTreasuryAccess()` applies. |
+| `20261102000003_operations_clearinghouse.sql` | `app.couriers`, `app.operation_logs`, `app.financial_ledgers`; enums `payment_method` / `clearing_entity_type` / `clearing_ledger_status` | Operations are append-only (`OPERATION_IMMUTABLE`). `operation_freeze_amounts()` derives and freezes commission and courier cut before insert. `operation_route_ledgers()` writes exactly one merchant row and one courier row per order: **COD** → merchant `-(commission)`, courier `-(delivery_fee − courier_cut)`; **ONLINE** → merchant `+(order_value − commission)`, courier `+(courier_cut)`. A unique `(operation_id, entity_type)` index makes a retry unable to double-route. `clearing_ledger_guard()` forbids changing money terms or reopening a settled row. |
 
 Commission rates are **numeric EGP, not minor units**: the schedule is a price
 list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres
 already rounds correctly. The cache-and-freeze rule still holds — every money
 movement derived from a rate is stored in minor units on the ledger, and the KPI
 snapshot freezes the rate that produced it.
+
+The clearinghouse is deliberately **not** the treasury. `app.ledger_entries`
+records cash the company holds, while `app.financial_ledgers` records what the
+company owes to, or is owed by, merchants and couriers. The clearinghouse amount
+is signed from Kanjo's point of view: positive is a payable, negative is a
+receivable. Settling a row changes `status` and stamps `cleared_at`; it never
+touches the amount, so history stays a faithful record of what was owed.
 
 Ledger and marketing immutability is enforced by a trigger rather than a policy
 so it holds for every role, including the table owner and the service role. The
