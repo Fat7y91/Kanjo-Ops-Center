@@ -1178,7 +1178,7 @@ const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
     const price = Number(row.price) || (catalog ? Number(catalog.public_price) : 0) || 0;
     /* Descriptions come from the enriched catalog for MATCHED rows only.
        UNMATCHED rows keep both description fields strictly empty. */
-    return {
+    const payload = {
         merchantId: merchant.merchantId,
         merchantName: merchant.merchantName,
         name_ar: nameAr,
@@ -1203,6 +1203,13 @@ const intakeBuildPayload = (m, merchant, newImageUrl, runId) => {
         intakeRunAt: new Date(),
         syncedFromDraft: true
     };
+    /* Provenance: an image copied from the source sheet is media work actioned
+       by this intake run, so the KPI engine credits the current month. */
+    if (newImageUrl) {
+        payload.image_uploaded_by = payload.createdBy;
+        payload.image_uploaded_at = payload.createdAt;
+    }
+    return payload;
 };
 
 /* Write `{ id, data }` entries in 400-write chunks. Documents are addressed by

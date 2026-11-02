@@ -47,7 +47,8 @@ const KPI_PRODUCT_FIELDS = [
     'has_enhanced_image', 'hasEnhancedImage', 'status', 'image_status', 'imageStatus',
     'importSource', 'intakeSource',
     'image_locked_by', 'image_locked_by_name', 'image_locked_at', 'image_uploaded_by', 'image_uploaded_at',
-    'edit_type', 'edited_by', 'edited_at',
+    'imageUploadedBy', 'imageUploadedAt', 'imageLockedAt',
+    'edit_type', 'edited_by', 'edited_at', 'editedAt',
     'imageUpdatedAt', 'image_updated_at', 'enhancedImageUpdatedAt', 'enhanced_image_updated_at',
     'imagesUpdatedAt', 'images_updated_at', 'imageEditCompletedAt', 'image_edit_completed_at',
     'enhancedAt', 'enhanced_at', 'updatedAt', 'updated_at', 'createdAt', 'created_at'
@@ -317,29 +318,63 @@ window.kpiMonthLabel = kpiMonthLabel;
 /* The month currently shown by the dashboard. Set before every report build. */
 window._kpiReportMonth = kpiCurrentMonthKey();
 /* Whether the viewer explicitly picked a month. Until they do, the dashboard
-   defaults to the most recent month that actually has data, so a rep is never
-   stranded on a still-empty current month. */
+   opens on the CURRENT calendar month — never on an older (possibly locked)
+   month, so the team always lands on the open period it is working in. */
 window._kpiReportMonthUserSet = false;
 
-/* A product belongs to the month it was CREATED in (never the edit date). */
+/* A product belongs to the month it was CREATED in for DATA-ENTRY metrics
+   (products, descriptions, merchants, variations). Media credit is deliberately
+   NOT derived from this key: an image uploaded or edited this month must be
+   credited this month even when the product row itself was created earlier. */
 const kpiProductMonthKey = (p) => {
     const ms = kpiToMillis(p && (p.createdAt || p.created_at || p.updatedAt));
     return ms ? kpiLocalDateKey(ms).slice(0, 7) : '';
 };
 
-/* The most recent month (never newer than the current month) that has at least
-   one product. Used to choose a non-empty default period. Returns '' when there
-   is no dated product at all. */
-const kpiLatestProductMonth = (products) => {
-    const ceiling = kpiCurrentMonthKey();
-    let latest = '';
-    (Array.isArray(products) ? products : []).forEach((p) => {
-        const m = kpiProductMonthKey(p);
-        if (!KPI_MONTH_RE.test(m) || m > ceiling) return;
-        if (m > latest) latest = m;
-    });
-    return latest;
+const kpiMillisMonthKey = (ms) => (ms ? kpiLocalDateKey(ms).slice(0, 7) : '');
+
+/* Timestamp of the raw image UPLOAD action (whoever attached the original
+   photo). Only explicit upload/lock stamps count — never `createdAt`. */
+const kpiProductRawUploadMillis = (p) => {
+    if (!p) return 0;
+    const candidates = [
+        p.image_uploaded_at, p.imageUploadedAt,
+        p.image_locked_at, p.imageLockedAt
+    ];
+    for (const value of candidates) {
+        const ms = kpiToMillis(value);
+        if (ms > 0) return ms;
+    }
+    return 0;
 };
+
+/* Timestamp of the studio's EDIT / approval / completion action. Dedicated
+   media-provenance stamps only; a generic `updatedAt` (bumped by any text edit)
+   and `createdAt` are both deliberately excluded so a non-media edit can never
+   move the credit into another month. */
+const kpiProductEditActionMillis = (p) => {
+    if (!p) return 0;
+    const candidates = [
+        p.edited_at, p.editedAt,
+        p.imageEditCompletedAt, p.image_edit_completed_at,
+        p.imageUpdatedAt, p.image_updated_at,
+        p.enhancedImageUpdatedAt, p.enhanced_image_updated_at,
+        p.imagesUpdatedAt, p.images_updated_at,
+        p.enhancedAt, p.enhanced_at
+    ];
+    for (const value of candidates) {
+        const ms = kpiToMillis(value);
+        if (ms > 0) return ms;
+    }
+    return 0;
+};
+
+/* Month the raw image was uploaded in. Empty when the row carries no upload
+   stamp — the product creation date is never used as a fallback. */
+const kpiProductRawUploadMonthKey = (p) => kpiMillisMonthKey(kpiProductRawUploadMillis(p));
+
+/* Month the studio edited/completed the image in (again, no creation fallback). */
+const kpiProductEditActionMonthKey = (p) => kpiMillisMonthKey(kpiProductEditActionMillis(p));
 
 const kpiRepId = (name) => {
     const clean = String(name || '').trim().replace(/[\/\s]+/g, '_').replace(/[^\u0600-\u06FFa-zA-Z0-9_.-]/g, '');
@@ -957,6 +992,7 @@ const kpiProductHasEnhancedImage = (p) => {
 const kpiProductImageEditedMillis = (p) => {
     if (!p) return 0;
     const candidates = [
+        p.edited_at, p.editedAt,
         p.imageUpdatedAt, p.image_updated_at,
         p.enhancedImageUpdatedAt, p.enhanced_image_updated_at,
         p.imagesUpdatedAt, p.images_updated_at,
@@ -1021,12 +1057,6 @@ const kpiIsImportedProduct = (p) => !!p && (
 const kpiProductImageUploaderName = (p) => String(
     (p && (p.image_uploaded_by || p.image_locked_by_name)) || ''
 ).trim();
-
-/* Month the import image was actually uploaded in (falls back to creation). */
-const kpiUploadMonthKey = (p) => {
-    const ms = kpiToMillis(p && (p.image_locked_at || p.image_uploaded_at || p.createdAt));
-    return ms ? kpiLocalDateKey(ms).slice(0, 7) : '';
-};
 
 /* The signed-in operator's PIN — the concurrency lock token. */
 const kpiCurrentUserPin = () => {
@@ -1824,8 +1854,25 @@ const kpiBuildReport = async (monthKey) => {
         kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || ''),
         kpiFetchParentRecords()
     ]);
-    const products = (allProducts || []).filter((p) => kpiProductMonthKey(p) === period);
-
+    /* Data-entry metrics (products, descriptions, merchants, variations) belong
+       to the month the row was CREATED in. Media credit is bucketed separately
+       by the month the upload/edit was ACTIONED, so the open month never misses
+       work just because the product itself was created earlier. */
+    const products = allProducts || [];
+    const createdInPeriod = (p) => kpiProductMonthKey(p) === period;
+    /* Media credit is action-dated and product `createdAt` is fully IGNORED, per
+       the payroll rule: credit must follow the month the work was ACTIONED, not
+       the month the product was entered. A row with no action stamp therefore
+       earns no live media credit (locked months still read their frozen vault).
+       - A rep's "with image" numerator is earned when the ORIGINAL image was
+         uploaded (or, for a from-scratch job, when the studio produced one).
+       - The media editor's processed count is earned when the EDIT/approval was
+         actioned. */
+    const repImageInPeriod = (p) => {
+        const actionMonth = kpiProductRawUploadMonthKey(p) || kpiProductEditActionMonthKey(p);
+        return actionMonth === period;
+    };
+    const editorWorkInPeriod = (p) => kpiProductEditActionMonthKey(p) === period;
     const reps = new Map();
     const ensureRep = (name) => {
         const repId = kpiRepId(name);
@@ -1863,14 +1910,19 @@ const kpiBuildReport = async (monthKey) => {
         else editedBreakdown.fromScratch += 1;
     };
     products.forEach((p) => {
+        const hasEnhanced = kpiProductHasEnhancedImage(p);
+        const imagePeriod = repImageInPeriod(p);
+        const editedPeriod = editorWorkInPeriod(p);
+
         if (kpiIsImportedProduct(p)) {
             /* Imported/data-entry products belong to the data-entry operator and
                NEVER enter any rep's denominator. A field rep who claimed one gets
-               a numerator-only bonus; the editor still gets processing credit. */
-            if (kpiProductHasEnhancedImage(p)) { editedImagesTotal += 1; classifyEditorWork(p); }
+               a numerator-only bonus credited to the month they UPLOADED it; the
+               editor still gets processing credit in the month they EDITED it. */
+            if (hasEnhanced && editedPeriod) { editedImagesTotal += 1; classifyEditorWork(p); }
             const uploader = kpiProductImageUploaderName(p);
             if (uploader && !kpiIsEditorName(uploader) && !kpiIsExcludedRepName(uploader)
-                && kpiProductHasRawImage(p) && kpiUploadMonthKey(p) === period) {
+                && kpiProductHasRawImage(p) && kpiProductRawUploadMonthKey(p) === period) {
                 const upRep = ensureRep(uploader);
                 upRep.withImage += 1;
                 upRep.importImagesUploaded = (upRep.importImagesUploaded || 0) + 1;
@@ -1878,41 +1930,47 @@ const kpiBuildReport = async (monthKey) => {
             return;
         }
         const rep = ensureRep(kpiProductRepName(p));
-        rep.totalProducts += 1;
-        const merchant = kpiProductMerchantName(p);
-        if (merchant) rep.merchants.add(merchant);
+        /* Product/description/merchant metrics stay creation-dated so a rep is
+           never credited for entering a product in a previous month. */
+        if (createdInPeriod(p)) {
+            rep.totalProducts += 1;
+            const merchant = kpiProductMerchantName(p);
+            if (merchant) rep.merchants.add(merchant);
 
-        if (kpiProductHasImage(p)) rep.withImage += 1;
+            const variations = kpiProductVariations(p);
+            if (variations.length > 0) {
+                rep.variableProducts += 1;
+                rep.variationCount += variations.length;
+            }
+
+            const desc = window.kpiValidateDescription(
+                p.description_ar || p.description_en || p.description || '',
+                [p.name_ar, p.name_en, p.name]
+            );
+            /* Count the raw character length of every product (empty = 0) so the
+               average reflects the whole dataset, not only the non-empty rows. */
+            rep.descriptionCharsTotal += desc.length;
+            if (desc.isEmpty) rep.emptyDescriptions += 1;
+            else {
+                rep.nonEmptyDescriptions += 1;
+                if (desc.isJunk) rep.junkDescriptions += 1;
+                if (desc.isValid) rep.validDescriptions += 1;
+            }
+
+            const createdMs = kpiToMillis(p.createdAt || p.created_at || p.updatedAt);
+            if (createdMs) {
+                const day = kpiLocalDateKey(createdMs);
+                rep.dailyCounts.set(day, (rep.dailyCounts.get(day) || 0) + 1);
+            }
+        }
+
+        /* Media: image presence is credited to the month the raw image was
+           uploaded (the rep's own work), not the month the product was created. */
+        if (kpiProductHasImage(p) && imagePeriod) rep.withImage += 1;
 
         /* Global image-edit count: independent of the data-entry metric and
-           attributed to the image editor, not to the product's creator. */
-        if (kpiProductHasEnhancedImage(p)) { editedImagesTotal += 1; classifyEditorWork(p); }
-
-        const variations = kpiProductVariations(p);
-        if (variations.length > 0) {
-            rep.variableProducts += 1;
-            rep.variationCount += variations.length;
-        }
-
-        const desc = window.kpiValidateDescription(
-            p.description_ar || p.description_en || p.description || '',
-            [p.name_ar, p.name_en, p.name]
-        );
-        /* Count the raw character length of every product (empty = 0) so the
-           average reflects the whole dataset, not only the non-empty rows. */
-        rep.descriptionCharsTotal += desc.length;
-        if (desc.isEmpty) rep.emptyDescriptions += 1;
-        else {
-            rep.nonEmptyDescriptions += 1;
-            if (desc.isJunk) rep.junkDescriptions += 1;
-            if (desc.isValid) rep.validDescriptions += 1;
-        }
-
-        const createdMs = kpiToMillis(p.createdAt || p.created_at || p.updatedAt);
-        if (createdMs) {
-            const day = kpiLocalDateKey(createdMs);
-            rep.dailyCounts.set(day, (rep.dailyCounts.get(day) || 0) + 1);
-        }
+           attributed to the image editor, credited in the month they edited. */
+        if (hasEnhanced && editedPeriod) { editedImagesTotal += 1; classifyEditorWork(p); }
     });
 
     parents.forEach((data, repId) => {
@@ -2097,7 +2155,12 @@ const kpiBuildReport = async (monthKey) => {
     totals.editors = rows.length - fieldRows.length;
     totals.topScorerName = topScorer ? topScorer.name : null;
     totals.topScorerScore = topScorer ? topScorer.kanjoScore : 0;
-    totals.imageRatioRaw = totals.products ? (totals.withImage / totals.products) : 0;
+    /* Media credit is action-dated, so `withImage` can legitimately exceed the
+       creation-dated product count (work on older rows). Keep the team ratio a
+       percentage by capping it, exactly like the per-rep ratio. */
+    totals.imageRatioRaw = totals.products
+        ? Math.max(0, Math.min(1, totals.withImage / totals.products))
+        : 0;
     const globalDescBase = totals.nonEmpty || totals.products;
     totals.validRatioRaw = globalDescBase ? (totals.valid / globalDescBase) : 0;
     totals.junkRatioRaw = globalDescBase ? (totals.junk / globalDescBase) : 0;
@@ -3409,10 +3472,12 @@ window.kpiUploadMissingImage = async (productId, input) => {
             status: 'pending',
             updatedAt: new Date()
         };
-        /* Provenance: credit the claiming rep (numerator-only) and stamp the lock. */
+        /* Provenance: the raw image belongs to the month it was UPLOADED, for
+           every uploader. Imported rows additionally take the concurrency lock
+           and credit the claiming rep's numerator. */
+        imagePatch.image_uploaded_by = repName;
+        imagePatch.image_uploaded_at = new Date();
         if (isImported) {
-            imagePatch.image_uploaded_by = repName;
-            imagePatch.image_uploaded_at = new Date();
             imagePatch.image_locked_by = myPin;
             imagePatch.image_locked_by_name = repName;
         }
@@ -3502,25 +3567,19 @@ window.renderKpiDashboard = async () => {
 
        - Explicit month choice: use it. If it is locked, the live catalog is
          never queried — this is the payroll-vault path.
-       - No explicit choice: keep the original navigation (latest month that has
-         data), so the dashboard does not silently change what month it opens
-         on. If that month happens to be locked, the vault path is still used. */
+       - No explicit choice: open on the CURRENT calendar month. Never jump to
+         the latest month that has data, because that is usually a locked
+         payroll month and the team must see the open period it is working in. */
     const requestedMonth = window._kpiReportMonthUserSet
         ? kpiNormalizeMonthKey(window._kpiReportMonth)
-        : null;
-    let isLockedMonth = !!requestedMonth && lockedMonths.indexOf(requestedMonth) !== -1;
+        : kpiCurrentMonthKey();
+    window._kpiReportMonth = requestedMonth;
+    let isLockedMonth = lockedMonths.indexOf(requestedMonth) !== -1;
 
     /* Only query the live catalog when the selected month is NOT frozen. */
     const scopeProducts = isLockedMonth
         ? []
         : await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
-
-    if (requestedMonth) {
-        window._kpiReportMonth = requestedMonth;
-    } else {
-        window._kpiReportMonth = kpiLatestProductMonth(scopeProducts) || kpiCurrentMonthKey();
-        isLockedMonth = lockedMonths.indexOf(window._kpiReportMonth) !== -1;
-    }
 
     /* A frozen month has no preview mode and no historical recomputation: both
        would imply the numbers can still change. Keep the export button (it is

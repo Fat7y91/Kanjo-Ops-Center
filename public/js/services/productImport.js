@@ -329,6 +329,12 @@ window.productImportBuildEntries = (rows, merchant, repName) => {
                 updatedAt: now,
                 syncedFromDraft: true
             };
+            /* Provenance: a sheet-provided image is attached at creation, so the
+               media credit belongs to the month the row was imported. */
+            if (data.rawImageUrls.length) {
+                data.image_uploaded_by = owner;
+                data.image_uploaded_at = now;
+            }
             if (code) data.barcode = code;
             if (isVariable) {
                 data.variations = variations.map((v) => ({

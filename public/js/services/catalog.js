@@ -2788,6 +2788,13 @@ const updateCatalogProductDirect = async () => {
             updatedAt: new Date().toISOString(),
             updatedBy: (window.currentUser && window.currentUser.name) || ''
         };
+        /* A NEW product image on an edit is media work actioned NOW: stamp the
+           upload so the KPI engine credits the current month, not the month the
+           product was originally created in. */
+        if (form.files.length && rawImageUrls.length) {
+            payload.image_uploaded_by = payload.updatedBy;
+            payload.image_uploaded_at = new Date();
+        }
         if (effectiveProductType === 'variable') {
             const variantPayload = [];
             for (const v of form.variations) {
@@ -4816,6 +4823,13 @@ const syncOneCatalogDraft = async (draft, persistProgress, opts) => {
         createdBy: draft.createdBy || ((window.currentUser && window.currentUser.name) || ''),
         syncedFromDraft: !(opts && opts.direct)
     };
+    /* Provenance: a raw photo attached at creation is media work actioned NOW,
+       so the KPI engine can credit the current month instead of guessing from
+       the product's creation date. */
+    if (rawImageUrls.length) {
+        payload.image_uploaded_by = payload.createdBy;
+        payload.image_uploaded_at = payload.createdAt;
+    }
     if (draft.product_type === 'variable' && Array.isArray(draft.variations)) {
         const variantPayload = [];
         for (let j = 0; j < draft.variations.length; j++) {

@@ -457,6 +457,8 @@ window.founderAuditHandleUpload = async (event) => {
             rawImageUrl: url,
             rawImageUrls: [url],
             image_url: url,
+            image_uploaded_at: new Date(),
+            image_uploaded_by: (window.currentUser && window.currentUser.name) || '',
             updatedAt: new Date()
         };
         const ok = await founderAuditPatchProduct(id, imagePatch, {
