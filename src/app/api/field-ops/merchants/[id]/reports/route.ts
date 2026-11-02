@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { visitReportSchema } from "@/lib/schemas/field-ops";
+import { visitReportSchema } from "@/lib/schemas/visit";
 import {
   createVisitReport,
   FieldOpsError,

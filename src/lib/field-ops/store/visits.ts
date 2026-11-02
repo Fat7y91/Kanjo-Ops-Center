@@ -9,7 +9,7 @@ import {
   COMMISSION_OUTCOMES,
   isRepOutcome,
 } from "@/lib/field-ops/types";
-import type { VisitReportInput } from "@/lib/schemas/field-ops";
+import type { VisitReportInput } from "@/lib/schemas/visit";
 
 import {
   FieldOpsError,
