@@ -330,6 +330,11 @@ logout therefore POST to plain route handlers. Rules locked in:
   `store/core.ts` (store accessor, ids, clock) and `store/operations.ts`.
   The concrete repositories are `store/{cities,merchants,tasks,visits,transfers,
   edits,documents,state,crm,dates}.ts`; `store/seed.ts` (565) is seed data.
+- Durable writes: `src/lib/field-ops/reports-repository.ts` inserts a created
+  report into `app.visit_reports` (migration `20261102000005`). Reads still come
+  from the in-memory store, so a report is re-readable once the read tier is
+  moved onto the same table. Report rows are append-only (update/delete raise
+  `VISIT_REPORT_IMMUTABLE`); corrections go through the edit-request workflow.
 - Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`.
 - Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
   is authoritative; `components/field-ops/visit/validate-visit-form.ts`
