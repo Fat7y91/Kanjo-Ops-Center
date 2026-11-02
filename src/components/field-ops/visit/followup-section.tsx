@@ -4,6 +4,8 @@ import { FOLLOW_UP_KINDS, FOLLOW_UP_KIND_META } from "@/lib/field-ops/types";
 import type { FollowUpKind } from "@/lib/field-ops/types";
 import { sanitizePhone } from "@/lib/field-ops/phone";
 
+import { visitFieldId } from "./field-anchors";
+
 type FollowupSectionProps = {
   followUpAt: string;
   followUpKind: FollowUpKind | null;
@@ -57,6 +59,7 @@ export function FollowupSection({
         <label className={`field${kindError ? " field-invalid" : ""}`}>
           <span>نوع المتابعة</span>
           <select
+            id={visitFieldId("followUpKind")}
             value={followUpKind ?? ""}
             onChange={(event) => {
               const value = event.target.value;
@@ -79,6 +82,7 @@ export function FollowupSection({
         <label className={`field${atError ? " field-invalid" : ""}`}>
           <span>الموعد</span>
           <input
+            id={visitFieldId("followUpAt")}
             type="datetime-local"
             value={followUpAt}
             onChange={(event) => onAtChange(event.target.value)}
@@ -97,6 +101,7 @@ export function FollowupSection({
             {required ? <em className="field-required">مطلوب</em> : null}
           </span>
           <input
+            id={visitFieldId("followUpContactNumber")}
             type="tel"
             value={followUpContactNumber}
             onChange={(event) => onContactNumberChange(event.target.value)}

@@ -7,6 +7,7 @@ import {
 } from "@/lib/field-ops/types";
 import type { ContractState, Merchant } from "@/lib/field-ops/types";
 
+import { visitFieldId } from "./field-anchors";
 import type { OutcomeOption } from "./outcome-options";
 
 type OutcomeSectionProps = {
@@ -49,7 +50,11 @@ export function OutcomeSection({
         </span>
       </div>
 
-      <div className="outcome-grid">
+      <div
+        className="outcome-grid"
+        id={visitFieldId("outcome")}
+        tabIndex={-1}
+      >
         {outcomeOptions.map((option) => (
           <button
             key={option.value}
@@ -92,6 +97,7 @@ export function OutcomeSection({
         >
           <span>النسبة المتفق عليها (%)</span>
           <input
+            id={visitFieldId("agreedCommission")}
             type="number"
             min={1}
             max={100}

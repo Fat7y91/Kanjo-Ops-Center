@@ -5,6 +5,7 @@ import {
   REP_OPINION_META,
 } from "@/lib/field-ops/types";
 
+import { visitFieldId } from "./field-anchors";
 import type { OpinionState } from "./outcome-options";
 
 type OpinionSectionProps = {
@@ -101,6 +102,7 @@ export function OpinionSection({
           </strong>
         </div>
         <input
+          id={visitFieldId("customLabel")}
           type="text"
           aria-invalid={customError ? true : undefined}
           value={customLabel}
@@ -110,6 +112,7 @@ export function OpinionSection({
           maxLength={60}
         />
         <input
+          id={visitFieldId("customWeight")}
           type="range"
           min={0}
           max={100}

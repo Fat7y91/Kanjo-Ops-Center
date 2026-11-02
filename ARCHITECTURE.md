@@ -346,7 +346,10 @@ logout therefore POST to plain route handlers. Rules locked in:
     engine clears them as `report.followUpX || null`.
   Form state and submit live in `components/field-ops/use-visit-report-form.ts`;
   `visit-report-form.tsx` is presentation only. Failures render inline under
-  the offending control, never as a raw Zod 422.
+  the offending control, never as a raw Zod 422. Every validatable control
+  carries an id from `visit/field-anchors.ts`; a rejected submit scrolls and
+  focuses the failing field, because the Save button sits at the bottom of a
+  long form and the error would otherwise be off-screen.
 
 ### Taxonomy (Tier 1–5)
 - UI: `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` (764 — over

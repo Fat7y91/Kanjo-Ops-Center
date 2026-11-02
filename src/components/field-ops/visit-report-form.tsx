@@ -13,6 +13,7 @@ import type {
   RepOpinion,
 } from "@/lib/field-ops/types";
 
+import { visitFieldId } from "./visit/field-anchors";
 import { useVisitReportForm } from "./use-visit-report-form";
 
 export type VisitReportDraft = {
@@ -106,6 +107,7 @@ export function VisitReportForm({
         <label className={`field${form.fieldError("notes") ? " field-invalid" : ""}`}>
           <span>التقرير النوعي الكامل</span>
           <textarea
+            id={visitFieldId("notes")}
             rows={5}
             value={form.notes}
             onChange={(event) => form.setNotes(event.target.value)}

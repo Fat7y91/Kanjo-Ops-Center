@@ -7,6 +7,7 @@ import {
   type OpinionState,
   type OutcomeOption,
 } from "@/components/field-ops/visit/outcome-options";
+import { focusVisitField } from "@/components/field-ops/visit/field-anchors";
 import {
   validateVisitForm,
   type VisitFormField,
@@ -64,6 +65,10 @@ export function useVisitReportForm(options: {
   const [followUpContactNumber, setFollowUpContactNumber] = useState("");
   const [error, setError] = useState("");
   const [errorField, setErrorField] = useState<VisitFormField | null>(null);
+  // Bumped on every rejected submit. Two identical failures leave `error` and
+  // `errorField` unchanged, so the scroll effect keys off this instead of them
+  // and still re-centres the field the second time the rep taps Save.
+  const [failedSubmit, setFailedSubmit] = useState(0);
 
   /** Only the field that failed carries a message; the rest stay clean. */
   function fieldError(field: VisitFormField): string | undefined {
@@ -108,6 +113,7 @@ export function useVisitReportForm(options: {
     setFollowUpContactNumber("");
     setError("");
     setErrorField(null);
+    setFailedSubmit(0);
   }, [open, merchant, visitCount]);
 
   const outcomeOptions = useMemo<OutcomeOption[]>(() => {
@@ -167,6 +173,15 @@ export function useVisitReportForm(options: {
     }));
   }
 
+  // Scroll the failing field into view once it has rendered with its message.
+  // The submit handler only stores the field; the scroll is a DOM side effect
+  // that must run after React paints the error, or the element would still be
+  // unmarked when we look for it.
+  useEffect(() => {
+    if (failedSubmit === 0 || !errorField) return;
+    focusVisitField(errorField);
+  }, [failedSubmit, errorField]);
+
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearError();
@@ -193,6 +208,7 @@ export function useVisitReportForm(options: {
     if (!result.ok) {
       setError(result.error);
       setErrorField(result.field);
+      setFailedSubmit((count) => count + 1);
       return;
     }
 

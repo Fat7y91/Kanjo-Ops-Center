@@ -1,6 +1,7 @@
 "use client";
 
 import { formatCoordinates, formatDuration } from "@/lib/field-ops/geolocation";
+import { visitFieldId } from "@/components/field-ops/visit/field-anchors";
 import type { VisitDraft } from "@/components/field-ops/visit-mode";
 
 type ContactSectionProps = {
@@ -89,6 +90,7 @@ export function ContactSection({
               ) : null}
             </span>
             <input
+              id={visitFieldId("contactMobile")}
               type="tel"
               value={contactMobile}
               onChange={(event) => onMobileChange(event.target.value)}

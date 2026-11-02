@@ -1,5 +1,26 @@
 /* Visit report form */
 
+/*
+ * `scrollIntoView({ block: "center" })` on a field near the top of the modal
+ * would otherwise tuck it under the sticky header. The scroll margin is applied
+ * to the anchored controls only, so ordinary layout is untouched.
+ */
+.visit-report-form [id^="visit-field-"] {
+  scroll-margin-block: 96px;
+}
+
+/* The outcome group is a focus target rather than a single control: suppress
+ * the click ring, keep a visible one for keyboard and programmatic focus. */
+.outcome-grid:focus {
+  outline: none;
+}
+
+.outcome-grid:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+  border-radius: 14px;
+}
+
 .visit-report-form .visit-form-section {
   display: flex;
   flex-direction: column;
