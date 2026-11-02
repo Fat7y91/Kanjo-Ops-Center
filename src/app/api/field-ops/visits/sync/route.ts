@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { actorFromSession, authorize, readJson } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
+import { persistVisitReport } from "@/lib/field-ops/reports-repository";
 import { visitReportSchema } from "@/lib/schemas/visit";
 import {
   createVisitReport,
@@ -128,6 +129,9 @@ export async function POST(request: Request) {
       const created = createVisitReport(merchantId, parsed.data, actor, {
         canManageState,
       });
+      if (!created.duplicate) {
+        await persistVisitReport(created.report, actor.id);
+      }
       results.push({
         clientVisitId,
         merchantId,

@@ -198,8 +198,10 @@ export function createVisitReport(
   // blank string would otherwise be persisted and later treated as a number.
   const followUpContactNumber = input.followUpContactNumber?.trim() || null;
 
+  // The durable copy lives in `app.visit_reports` (`id uuid`), so the id must
+  // be a real UUID rather than the readable `report-xxxxxxxx` store prefix.
   const report: VisitReport = {
-    id: id("report"),
+    id: crypto.randomUUID(),
     merchantId: merchant.id,
     merchantName: merchant.name,
     taskId: input.taskId ?? null,

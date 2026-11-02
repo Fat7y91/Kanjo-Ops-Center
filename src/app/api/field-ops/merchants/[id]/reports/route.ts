@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
+import { persistVisitReport } from "@/lib/field-ops/reports-repository";
 import { visitReportSchema } from "@/lib/schemas/visit";
 import {
   createVisitReport,
@@ -68,9 +69,15 @@ export async function POST(
       );
     }
 
-    const result = createVisitReport(id, input, actorFromSession(session), {
+    const actor = actorFromSession(session);
+    const result = createVisitReport(id, input, actor, {
       canManageState: session.permissions.includes("edit_contract"),
     });
+
+    if (!result.duplicate) {
+      await persistVisitReport(result.report, actor.id);
+    }
+
     return NextResponse.json(
       { ...result, visitCount: visitCountFor(id) },
       { status: 201 },
