@@ -69,11 +69,16 @@ export const visitReportSchema = z.object({
     .trim()
     .nullable()
     .optional(),
+  /*
+   * `null` means "no follow-up". The dropdown ships with that as its default,
+   * so a merchant who needs no follow-up never has to invent a number.
+   */
   followUpKind: z
     .enum(FOLLOW_UP_KINDS, {
       required_error: "اختر نوع المتابعة.",
       invalid_type_error: "نوع المتابعة غير صالح.",
     })
+    .nullable()
     .optional(),
   followUpNote: z
     .string({ invalid_type_error: "ملاحظة المتابعة غير صالحة." })
@@ -120,21 +125,49 @@ export const visitReportSchema = z.object({
     }
 
     /*
-     * A follow-up OR an agreement always carries a reachable number. This is
-     * deliberately broader than the old call/WhatsApp-only condition — a
-     * "visit" follow-up and a negotiated outcome both need someone to call,
-     * and leaving the field optional made the recorded task unreachable in
-     * practice.
+     * Agreements hang off the merchant's PRIMARY mobile, not the follow-up
+     * number: the contact block at the top of the form is the record of who
+     * signed. Keeping the requirement on the follow-up field asked the rep to
+     * duplicate a number they had already typed.
      */
-    const needsNumber =
-      Boolean(value.followUpAt) || COMMISSION_OUTCOMES.includes(value.outcome);
-    if (needsNumber) {
+    if (COMMISSION_OUTCOMES.includes(value.outcome)) {
+      const mobile = (value.contact?.mobile ?? "").replace(/\D/g, "");
+      if (mobile.length === 0) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contact", "mobile"],
+          message: "رقم موبايل التاجر مطلوب عند تسجيل اتفاق.",
+        });
+      } else if (mobile.length < 8) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contact", "mobile"],
+          message: "رقم الموبايل يجب أن يحتوي 8 أرقام على الأقل.",
+        });
+      }
+    }
+
+    /*
+     * A follow-up is defined by its schedule: no date means no task, so a
+     * stray type from a cached payload is normalised away rather than treated
+     * as an error. Once a date exists the rep must have named a channel and
+     * supplied a dialable number.
+     */
+    const wantsFollowUp = Boolean(value.followUpAt);
+    if (wantsFollowUp && value.followUpKind == null) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["followUpKind"],
+        message: "اختر نوع المتابعة أو أزل موعد المتابعة.",
+      });
+    }
+    if (wantsFollowUp) {
       const digits = (value.followUpContactNumber ?? "").replace(/\D/g, "");
       if (digits.length === 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["followUpContactNumber"],
-          message: "رقم هاتف المتابعة مطلوب عند تسجيل متابعة أو اتفاق.",
+          message: "رقم هاتف المتابعة مطلوب عند اختيار نوع متابعة.",
         });
       } else if (digits.length < 8) {
         context.addIssue({

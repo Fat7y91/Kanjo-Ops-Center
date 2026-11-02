@@ -28,7 +28,7 @@ export type QueuedVisitPayload = {
   opinions?: Array<{ trait: string; weight: number; label?: string }>;
   agreedCommission?: number | null;
   followUpAt?: string | null;
-  followUpKind?: "visit" | "call" | "whatsapp";
+  followUpKind?: "visit" | "call" | "whatsapp" | null;
   followUpNote?: string;
   followUpContactNumber?: string | null;
   source?: "task" | "unplanned" | "offline";

@@ -22,7 +22,7 @@ export type VisitFormValues = {
   customWeight: number;
   agreedCommission: string;
   followUpAt: string;
-  followUpKind: FollowUpKind;
+  followUpKind: FollowUpKind | null;
   followUpNote: string;
   followUpContactNumber: string;
   canUseAdvanced: boolean;
@@ -33,6 +33,8 @@ export type VisitFormValues = {
 export type VisitFormField =
   | "outcome"
   | "notes"
+  | "contactMobile"
+  | "followUpKind"
   | "agreedCommission"
   | "customLabel"
   | "customWeight"
@@ -50,7 +52,7 @@ export type VisitFormPayload = {
   opinions: RepOpinion[];
   agreedCommission: number | null;
   followUpAt: string;
-  followUpKind: FollowUpKind;
+  followUpKind: FollowUpKind | null;
   followUpNote: string;
   followUpContactNumber: string;
 };
@@ -123,34 +125,64 @@ export function validateVisitForm(values: VisitFormValues): VisitFormResult {
     }
   }
 
-  if (followUpAt && new Date(followUpAt).getTime() < Date.now() - 60_000) {
-    return {
-      ok: false,
-      field: "followUpAt",
-      error: "موعد المتابعة يجب أن يكون في المستقبل.",
-    };
-  }
-  if (followUpAt && !hasTeam) {
-    return {
-      ok: false,
-      field: "followUpAt",
-      error: "لا يمكن جدولة مهمة متابعة قبل إسناد التاجر لفريق.",
-    };
-  }
   /*
-   * A follow-up or a negotiated agreement always carries a reachable number.
-   * Mirrors `visitReportSchema`, so the rep sees the same rule inline before
-   * the request is sent and cannot be surprised by a server 422.
+   * An agreement is signed against the merchant's primary mobile at the top of
+   * the form, so that is the number the record needs — not the follow-up
+   * field. Mirrors `visitReportSchema`.
    */
-  const needsContactNumber =
-    Boolean(followUpAt) || COMMISSION_OUTCOMES.includes(outcome);
-  if (needsContactNumber) {
+  if (COMMISSION_OUTCOMES.includes(outcome)) {
+    const mobileDigits = values.contactMobile.replace(/\D/g, "");
+    if (mobileDigits.length === 0) {
+      return {
+        ok: false,
+        field: "contactMobile",
+        error: "رقم موبايل التاجر مطلوب عند تسجيل اتفاق.",
+      };
+    }
+    if (mobileDigits.length < 8) {
+      return {
+        ok: false,
+        field: "contactMobile",
+        error: "رقم الموبايل يجب أن يحتوي 8 أرقام على الأقل.",
+      };
+    }
+  }
+
+  /*
+   * Picking a type is the rep's explicit opt-in, so it demands a schedule and
+   * a dialable number. No type means no follow-up and nothing to fill in. The
+   * server keys off the schedule instead, so a cached legacy payload that
+   * carries a default type without a date still syncs.
+   */
+  const wantsFollowUp = followUpKind != null;
+  if (wantsFollowUp && !followUpAt) {
+    return {
+      ok: false,
+      field: "followUpAt",
+      error: "حدد موعد المتابعة أو اختر «بدون متابعة».",
+    };
+  }
+  if (wantsFollowUp) {
+    if (new Date(followUpAt).getTime() < Date.now() - 60_000) {
+      return {
+        ok: false,
+        field: "followUpAt",
+        error: "موعد المتابعة يجب أن يكون في المستقبل.",
+      };
+    }
+    if (!hasTeam) {
+      return {
+        ok: false,
+        field: "followUpAt",
+        error: "لا يمكن جدولة مهمة متابعة قبل إسناد التاجر لفريق.",
+      };
+    }
     const digits = followUpContactNumber.replace(/\D/g, "");
     if (digits.length === 0) {
       return {
         ok: false,
         field: "followUpContactNumber",
-        error: "رقم هاتف المتابعة مطلوب عند تسجيل متابعة أو اتفاق.",
+        error: "رقم هاتف المتابعة مطلوب عند اختيار نوع متابعة.",
       };
     }
     if (digits.length < 8) {
@@ -189,10 +221,12 @@ export function validateVisitForm(values: VisitFormValues): VisitFormResult {
       },
       opinions,
       agreedCommission: needsCommission ? commission : null,
-      followUpAt,
-      followUpKind,
-      followUpNote: values.followUpNote,
-      followUpContactNumber: followUpContactNumber.replace(/[\s-()]/g, ""),
+      followUpAt: wantsFollowUp ? followUpAt : "",
+      followUpKind: wantsFollowUp ? followUpKind : null,
+      followUpNote: wantsFollowUp ? values.followUpNote : "",
+      followUpContactNumber: wantsFollowUp
+        ? followUpContactNumber.replace(/[\s-()]/g, "")
+        : "",
     },
   };
 }

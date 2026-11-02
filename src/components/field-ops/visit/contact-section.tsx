@@ -9,6 +9,10 @@ type ContactSectionProps = {
   contactName: string;
   contactRole: string;
   contactMobile: string;
+  /** True when the chosen outcome makes the primary mobile mandatory. */
+  mobileRequired?: boolean;
+  /** Inline error for the primary mobile, surfaced by the form validator. */
+  mobileError?: string;
   onNameChange: (value: string) => void;
   onRoleChange: (value: string) => void;
   onMobileChange: (value: string) => void;
@@ -20,6 +24,8 @@ export function ContactSection({
   contactName,
   contactRole,
   contactMobile,
+  mobileRequired,
+  mobileError,
   onNameChange,
   onRoleChange,
   onMobileChange,
@@ -75,15 +81,31 @@ export function ContactSection({
               placeholder="المالك، مدير الفرع، مسؤول المشتريات…"
             />
           </label>
-          <label className="field">
-            <span>رقم الموبايل</span>
+          <label className={`field${mobileError ? " field-invalid" : ""}`}>
+            <span>
+              رقم الموبايل
+              {mobileRequired ? (
+                <em className="field-required">مطلوب</em>
+              ) : null}
+            </span>
             <input
               type="tel"
               value={contactMobile}
               onChange={(event) => onMobileChange(event.target.value)}
               placeholder="01xxxxxxxxx"
               inputMode="tel"
+              aria-invalid={mobileError ? true : undefined}
+              aria-describedby={mobileError ? "contact-mobile-error" : undefined}
             />
+            {mobileError ? (
+              <span
+                className="field-error"
+                id="contact-mobile-error"
+                role="alert"
+              >
+                {mobileError}
+              </span>
+            ) : null}
           </label>
         </div>
       </section>

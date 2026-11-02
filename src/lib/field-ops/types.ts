@@ -210,8 +210,8 @@ export type FieldTask = {
    */
   followUpKind?: FollowUpKind | null;
   /**
-   * E.164-ish contact captured for communication follow-ups (call/WhatsApp).
-   * Present only when `followUpKind` is `call` or `whatsapp`.
+   * Dialable contact captured with an explicit follow-up, whatever the channel.
+   * Present only when the task was spawned from a visit follow-up.
    */
   followUpContactNumber?: string | null;
   createdBy: string;

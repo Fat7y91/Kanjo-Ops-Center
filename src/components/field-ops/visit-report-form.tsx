@@ -22,7 +22,7 @@ export type VisitReportDraft = {
   opinions: RepOpinion[];
   agreedCommission: number | null;
   followUpAt: string;
-  followUpKind: FollowUpKind;
+  followUpKind: FollowUpKind | null;
   followUpNote: string;
   followUpContactNumber: string;
 };
@@ -83,9 +83,11 @@ export function VisitReportForm({
           contactName={form.contactName}
           contactRole={form.contactRole}
           contactMobile={form.contactMobile}
+          mobileRequired={form.needsContactMobile}
+          mobileError={form.fieldError("contactMobile")}
           onNameChange={form.setContactName}
           onRoleChange={form.setContactRole}
-          onMobileChange={form.setContactMobile}
+          onMobileChange={form.changeContactMobile}
         />
 
         <OutcomeSection
@@ -139,11 +141,11 @@ export function VisitReportForm({
           followUpKind={form.followUpKind}
           followUpNote={form.followUpNote}
           followUpContactNumber={form.followUpContactNumber}
-          outcome={form.outcome}
           merchantTeam={merchant.team}
           atError={form.fieldError("followUpAt")}
+          kindError={form.fieldError("followUpKind")}
           error={form.fieldError("followUpContactNumber")}
-          onAtChange={form.setFollowUpAt}
+          onAtChange={form.changeFollowUpAt}
           onKindChange={form.changeFollowUpKind}
           onNoteChange={form.setFollowUpNote}
           onContactNumberChange={form.changeContactNumber}

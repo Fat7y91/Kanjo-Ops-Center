@@ -333,10 +333,17 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`.
 - Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
   is authoritative; `components/field-ops/visit/validate-visit-form.ts`
-  mirrors it client-side and must return the failing field key. The follow-up
-  contact number is mandatory whenever a follow-up date exists **or** the
-  outcome is a commission outcome, and the schema accepts `null` because the
-  visit engine clears the field as `report.followUpContactNumber || null`.
+  mirrors it client-side and must return the failing field key.
+  - A follow-up is optional. `followUpKind` is `null` by default ("بدون
+    متابعة") and is only mandatory once a date is set; a chosen type requires
+    both a schedule and a dialable `followUpContactNumber`. The server keys off
+    the schedule so cached legacy payloads that carry a default type without a
+    date still sync.
+  - A commission outcome (`provisional`, `final_contract`) requires the
+    PRIMARY `contact.mobile` in the بيانات التواصل block, not the follow-up
+    number.
+  - The schema accepts `null` for the follow-up fields because the visit
+    engine clears them as `report.followUpX || null`.
   Form state and submit live in `components/field-ops/use-visit-report-form.ts`;
   `visit-report-form.tsx` is presentation only. Failures render inline under
   the offending control, never as a raw Zod 422.

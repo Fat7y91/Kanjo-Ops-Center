@@ -11,9 +11,10 @@ import {
   validateVisitForm,
   type VisitFormField,
 } from "@/components/field-ops/visit/validate-visit-form";
-import { isCommunicationKind, sanitizePhone } from "@/lib/field-ops/phone";
+import { sanitizePhone } from "@/lib/field-ops/phone";
 import {
   ADVANCED_OUTCOMES,
+  COMMISSION_OUTCOMES,
   type ContractState,
   type FollowUpKind,
   type Merchant,
@@ -56,7 +57,9 @@ export function useVisitReportForm(options: {
     merchant?.agreedCommission != null ? String(merchant.agreedCommission) : "",
   );
   const [followUpAt, setFollowUpAt] = useState("");
-  const [followUpKind, setFollowUpKind] = useState<FollowUpKind>("visit");
+  // Default to "no follow-up": the number is only mandatory once the rep
+  // explicitly picks a type, so an untouched section never blocks the save.
+  const [followUpKind, setFollowUpKind] = useState<FollowUpKind | null>(null);
   const [followUpNote, setFollowUpNote] = useState("");
   const [followUpContactNumber, setFollowUpContactNumber] = useState("");
   const [error, setError] = useState("");
@@ -100,7 +103,7 @@ export function useVisitReportForm(options: {
       merchant.agreedCommission != null ? String(merchant.agreedCommission) : "",
     );
     setFollowUpAt("");
-    setFollowUpKind("visit");
+    setFollowUpKind(null);
     setFollowUpNote("");
     setFollowUpContactNumber("");
     setError("");
@@ -116,15 +119,38 @@ export function useVisitReportForm(options: {
     })).filter((option) => !option.advanced || canUseAdvanced);
   }, [canUseAdvanced]);
 
-  function changeFollowUpKind(kind: FollowUpKind) {
+  function changeFollowUpKind(kind: FollowUpKind | null) {
     setFollowUpKind(kind);
-    // Auto-fill the dialable number from the visit contact so a communication
-    // follow-up is immediately actionable. Only fills an empty field, so a rep
-    // who already typed an override keeps it.
-    if (isCommunicationKind(kind) && !followUpContactNumber.trim()) {
+    if (errorField === "followUpKind" || errorField === "followUpAt") {
+      clearError();
+    }
+    if (!kind) {
+      // "No follow-up" means the disabled date/note fields must not linger in
+      // state, or a later save would submit a schedule nobody chose.
+      setFollowUpAt("");
+      setFollowUpNote("");
+      setFollowUpContactNumber("");
+      return;
+    }
+    // Every follow-up type now needs a dialable number, so seed it from the
+    // merchant contact for any choice. Only fills an empty field, so a rep who
+    // already typed an override keeps it.
+    if (!followUpContactNumber.trim()) {
       const fallback = sanitizePhone(contactMobile);
       if (fallback) setFollowUpContactNumber(fallback);
     }
+  }
+
+  function changeContactMobile(value: string) {
+    setContactMobile(value);
+    // Typing in the failing field is the rep acknowledging it; keeping the old
+    // message on screen while the value changes reads as a stale error.
+    if (errorField === "contactMobile") clearError();
+  }
+
+  function changeFollowUpAt(value: string) {
+    setFollowUpAt(value);
+    if (errorField === "followUpAt") clearError();
   }
 
   function changeContactNumber(value: string) {
@@ -177,6 +203,9 @@ export function useVisitReportForm(options: {
     (state) => state.enabled,
   );
 
+  // An agreement is recorded against the merchant's primary mobile.
+  const needsContactMobile = COMMISSION_OUTCOMES.includes(outcome);
+
   return {
     outcome,
     setOutcome,
@@ -187,7 +216,7 @@ export function useVisitReportForm(options: {
     contactRole,
     setContactRole,
     contactMobile,
-    setContactMobile,
+    changeContactMobile,
     opinionState,
     customLabel,
     setCustomLabel,
@@ -198,7 +227,7 @@ export function useVisitReportForm(options: {
     agreedCommission,
     setAgreedCommission,
     followUpAt,
-    setFollowUpAt,
+    changeFollowUpAt,
     followUpKind,
     followUpNote,
     setFollowUpNote,
@@ -211,5 +240,6 @@ export function useVisitReportForm(options: {
     fieldError,
     submit,
     canUseAdvanced,
+    needsContactMobile,
   };
 }

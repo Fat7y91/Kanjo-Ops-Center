@@ -194,7 +194,7 @@ export function createVisitReport(
 
   merchant.opinions = mergeOpinions(merchant.opinions ?? [], input.opinions ?? []);
 
-  // Normalise once: the form sends "" for non-communication follow-ups, and a
+  // Normalise once: the form sends "" when no follow-up is selected, and a
   // blank string would otherwise be persisted and later treated as a number.
   const followUpContactNumber = input.followUpContactNumber?.trim() || null;
 
