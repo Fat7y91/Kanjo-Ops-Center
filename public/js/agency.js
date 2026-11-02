@@ -10,9 +10,14 @@
      - the vendor directory is filtered server-side to active partners only;
      - all export / edit / delete / admin controls are absent from this page;
      - the grid text is non-selectable and images reject right-click + drag;
-     - the grid/lightbox never expose a download affordance.
+     - the ONLY download affordance is a per-vendor logo button that targets the
+       contract-approved public artwork (`logoOriginalUrl`), never catalogue
+       images. Social buttons link out to the merchant's own public pages.
    Firestore rules (firestore.rules `isMarketingAgency()`) additionally deny
-   every write and every sensitive read for this role.
+   every write and every sensitive read for this role. The two marketing assets
+   exposed here (`socialLinks`, `logoOriginalUrl`) are denormalized onto
+   `merchants` by scripts/sync-merchant-status.mjs from PUBLIC task fields only;
+   no commission, owner phone, contact or contract value is copied.
    This module is intentionally self-contained: it never imports the ops
    dashboard's 470 KB catalog bundle. */
 
@@ -31,7 +36,10 @@ const PRODUCT_FIELDS = [
     'rawImageUrl', 'rawImageUrls', 'enhancedImageUrl', 'enhancedImageUrls',
     'variations', 'status'
 ];
-const VENDOR_FIELDS = ['name', 'merchantId', 'createdAt', 'logoUrl', 'contractStatus', 'productCount', 'primaryCategory'];
+const VENDOR_FIELDS = [
+    'name', 'merchantId', 'createdAt', 'logoUrl', 'logoOriginalUrl', 'socialLinks',
+    'contractStatus', 'productCount', 'primaryCategory'
+];
 /* Only partners who are actually shown are read: `contractStatus` is
    denormalized onto `merchants` by scripts/sync-merchant-status.mjs, so the
    directory query filters server-side (~119 docs) instead of reading (and
@@ -173,6 +181,89 @@ const vendorCategoryLabel = (v) => {
     return raw.replace(/^[^\p{L}\p{N}]+/u, '').trim();
 };
 
+/* ── Public marketing assets ───────────────────────────────────────────────
+   `socialLinks` and `logoOriginalUrl` are denormalized onto the merchant doc by
+   scripts/sync-merchant-status.mjs from the PUBLIC task fields only. They never
+   carry commission, owner phone, contact or contract data. URLs are validated
+   again here so an unexpected value can never become a javascript: href. */
+const safeExternalUrl = (value) => {
+    const s = String(value == null ? '' : value).trim();
+    if (!s) return '';
+    try {
+        const u = new URL(s);
+        return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+    } catch (_) { return ''; }
+};
+
+const SOCIAL_LINK_DEFS = [
+    ['facebook', 'fa-brands fa-facebook-f', 'فيسبوك'],
+    ['facebookGroup', 'fa-solid fa-users', 'جروب فيسبوك'],
+    ['instagram', 'fa-brands fa-instagram', 'إنستغرام'],
+    ['website', 'fa-solid fa-globe', 'الموقع الإلكتروني']
+];
+
+const vendorSocialEntries = (v) => {
+    const links = (v && v.socialLinks && typeof v.socialLinks === 'object') ? v.socialLinks : {};
+    const out = [];
+    SOCIAL_LINK_DEFS.forEach(([key, icon, label]) => {
+        const url = safeExternalUrl(links[key]);
+        if (url) out.push({ key, icon, label, url });
+    });
+    return out;
+};
+
+/* The download affordance is deliberate and only points at the untouched
+   original artwork. Falls back to the thumbnail when no original exists. */
+const vendorLogoDownloadUrl = (v) => {
+    const raw = String((v && (v.logoOriginalUrl || v.logoUrl)) || '').trim();
+    return /^https?:\/\//i.test(raw) ? raw : '';
+};
+
+const logoDownloadName = (v, url) => {
+    const base = String((v && (v.name || v.id)) || 'merchant')
+        .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').trim() || 'merchant';
+    let ext = 'png';
+    try {
+        const m = new URL(url).pathname.match(/\.([a-z0-9]{2,5})$/i);
+        if (m) ext = m[1].toLowerCase();
+    } catch (_) { /* keep default */ }
+    return base + '-logo.' + ext;
+};
+
+const downloadVendorLogo = async (v) => {
+    const url = vendorLogoDownloadUrl(v);
+    if (!url) return;
+    const filename = logoDownloadName(v, url);
+    try {
+        const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
+    } catch (err) {
+        /* Cross-origin Storage may not answer the CORS preflight; fall back to
+           a direct navigation to the immutable public URL (the browser then
+           saves/opens the original itself). An anchor click is used instead of
+           window.open so no popup blocker interferes. */
+        console.warn('[agency] logo download failed, opening original:', err);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+};
+
 /* ── Session / login ─────────────────────────────────────────────────────── */
 const resetIdleTimer = () => {
     clearTimeout(idleTimer);
@@ -251,13 +342,22 @@ const vendorCardHtml = (v) => {
     const media = src
         ? `<img class="monogram-logo" src="${escapeHtml(src)}" alt="${name}" loading="lazy" decoding="async" referrerpolicy="no-referrer" draggable="false" onerror="this.style.display='none';var m=this.nextElementSibling;if(m){m.style.display='flex';}"><div class="monogram" style="display:none;background:${color}">${initials}</div>`
         : `<div class="monogram" style="background:${color}">${initials}</div>`;
+    const socials = vendorSocialEntries(v);
+    const canDownload = !!vendorLogoDownloadUrl(v);
+    const actions = (socials.length || canDownload)
+        ? `<div class="vendor-actions">
+            ${socials.map((s) => `<a class="vendor-social" href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(s.label)}" aria-label="${escapeHtml(s.label)}"><i class="${s.icon}"></i></a>`).join('')}
+            ${canDownload ? `<button type="button" class="vendor-social vendor-download" data-download-logo="${escapeHtml(v.id)}" title="تحميل الشعار" aria-label="تحميل الشعار"><i class="fa-solid fa-download"></i></button>` : ''}
+        </div>`
+        : '';
     return `
-    <button type="button" class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
+    <div class="vendor-card" data-vendor-id="${escapeHtml(v.id)}" data-vendor-name="${name}">
         ${media}
         <div class="text-[#230535] font-bold text-sm leading-snug line-clamp-2 min-h-[2.4rem] px-1">${name}</div>
         ${cat ? `<div class="vendor-cat">${escapeHtml(cat)}</div>` : ''}
-        <div class="text-[11px] text-purple-500/80 mt-1 font-semibold">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></div>
-    </button>`;
+        ${actions}
+        <button type="button" class="vendor-open" data-open-vendor="${escapeHtml(v.id)}">عرض المنتجات <i class="fa-solid fa-arrow-left mr-0.5"></i></button>
+    </div>`;
 };
 
 const renderVendors = () => {
@@ -397,6 +497,8 @@ const loadVendors = async () => {
                     id: r.id || r.merchantId,
                     name: r.name || r.merchantId || r.id,
                     logoUrl: r.logoUrl || '',
+                    logoOriginalUrl: r.logoOriginalUrl || '',
+                    socialLinks: (r.socialLinks && typeof r.socialLinks === 'object') ? r.socialLinks : {},
                     contractStatus: String(r.contractStatus || ''),
                     productCount: Number(r.productCount) || 0,
                     primaryCategory: String(r.primaryCategory || '').trim()
@@ -603,6 +705,17 @@ const bind = () => {
             const section = head.closest('.vendor-section');
             const collapsed = section.classList.toggle('collapsed');
             head.setAttribute('aria-expanded', String(!collapsed));
+            return;
+        }
+        /* Social links + logo download are real controls: never let the click
+           bubble into the card's "open products" handler. */
+        if (e.target.closest('.vendor-social')) {
+            const dl = e.target.closest('[data-download-logo]');
+            if (dl) {
+                e.preventDefault();
+                const vendor = state.vendors.find((v) => String(v.id) === String(dl.getAttribute('data-download-logo')));
+                if (vendor) downloadVendorLogo(vendor);
+            }
             return;
         }
         const card = e.target.closest('.vendor-card');

@@ -17,12 +17,23 @@
                       "🍔 مطاعم وكافيهات"; the portal only strips the emoji for
                       display. Empty when the source task carries none.
      logoUrl        : a SHORT public Cloud Storage URL for the vendor logo
-                      (tasks.merchantLogo). The source is a Base64 data URI,
-                      which is opaque to the agency role and made every
-                      `merchants` read ~10 MB, so it is uploaded to Storage once
-                      (content-addressed + immutable cache) and only the short
-                      URL is stored. A raw Base64 blob is NEVER written back to
-                      Firestore. Empty when the source task carries none.
+                      thumbnail (tasks.merchantLogo). The source is a Base64
+                      data URI, which is opaque to the agency role and made
+                      every `merchants` read ~10 MB, so it is uploaded to
+                      Storage once (content-addressed + immutable cache) and
+                      only the short URL is stored. A raw Base64 blob is NEVER
+                      written back to Firestore. Empty when the source task
+                      carries none.
+     logoOriginalUrl: the UNRESIZED original logo, uploaded to Storage under a
+                      separate content-addressed object so the portal's
+                      intentional "download logo" button returns print-quality
+                      artwork. Empty when the source task carries none; the
+                      portal falls back to logoUrl.
+     socialLinks    : a small map of the merchant's PUBLIC marketing links
+                      ({ facebook, facebookGroup, instagram, website }), copied
+                      from tasks.fbPage / fbGroup / insta / website. Only
+                      http(s) URLs are accepted. No contact phone, owner name,
+                      commission or contract value is ever copied here.
      contractStatusSyncedAt : server write time
 
    Contracted merchants that have no merchant document yet (e.g. fresh VIP
@@ -40,7 +51,7 @@
 */
 
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { createHash } from 'node:crypto';
 
@@ -113,22 +124,57 @@ const parseDataUri = (uri) => {
 const logoUrlFor = (objectPath, token) =>
   `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
 
+const uploadObject = async (objectPath, buffer, contentType, token) => {
+  const file = bucket.file(objectPath);
+  const [exists] = await file.exists();
+  if (!exists && !dryRun) {
+    await file.save(buffer, {
+      resumable: false,
+      metadata: {
+        contentType,
+        cacheControl: 'public, max-age=31536000, immutable',
+        metadata: { firebaseStorageDownloadTokens: token }
+      }
+    });
+    console.log(`[logo] uploaded ${objectPath} (${buffer.length} bytes)`);
+  }
+  return logoUrlFor(objectPath, token);
+};
+
+/* Uploads BOTH a card thumbnail (bounded, cheap) and the untouched original
+   (print-quality for the portal's explicit download action). Both objects are
+   content-addressed, so re-running is a no-op. The original lives under an
+   `original/` prefix so a JPEG source can never collide with its own thumbnail
+   object path. Returns `{ logoUrl, logoOriginalUrl }`. */
 const uploadLogo = async (raw) => {
   try {
     const parsed = parseDataUri(raw);
     if (!parsed) {
       console.warn('[logo] unrecognized logo format; leaving URL empty (no raw blob stored)');
-      return '';
+      return { logoUrl: '', logoOriginalUrl: '' };
     }
-    let buffer = Buffer.from(parsed.base64, 'base64');
-    let contentType = parsed.contentType || 'image/jpeg';
-    let ext = /png/i.test(contentType) ? 'png' : (/webp/i.test(contentType) ? 'webp' : 'jpg');
-    if (!buffer.length) return '';
-    /* Shrink to a card-friendly thumbnail when sharp is present; otherwise upload
+    const original = Buffer.from(parsed.base64, 'base64');
+    if (!original.length) return { logoUrl: '', logoOriginalUrl: '' };
+    const origContentType = parsed.contentType || 'image/jpeg';
+    const origExt = /png/i.test(origContentType) ? 'png'
+      : (/webp/i.test(origContentType) ? 'webp' : (/gif/i.test(origContentType) ? 'gif' : 'jpg'));
+
+    const hash = sha1(raw);
+    const logoOriginalUrl = await uploadObject(
+      `${LOGO_PATH_PREFIX}/original/${hash}.${origExt}`,
+      original,
+      origContentType,
+      sha1('kanjo-logo-original:' + hash).slice(0, 36)
+    );
+
+    /* Shrink to a card-friendly thumbnail when sharp is present; otherwise reuse
        the original bytes untouched (still zero loss). */
+    let buffer = original;
+    let contentType = origContentType;
+    let ext = origExt;
     try {
       const sharpMod = (await import('sharp')).default;
-      const resized = await sharpMod(buffer)
+      const resized = await sharpMod(original)
         .rotate()
         .resize({ width: 400, height: 400, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 82 })
@@ -140,37 +186,55 @@ const uploadLogo = async (raw) => {
       }
     } catch (_) { /* sharp unavailable — keep original bytes */ }
 
-    const hash = sha1(raw);
-    const objectPath = `${LOGO_PATH_PREFIX}/${hash}.${ext}`;
-    const token = sha1('kanjo-logo:' + hash).slice(0, 36);
-    const file = bucket.file(objectPath);
-    const [exists] = await file.exists();
-    if (!exists && !dryRun) {
-      await file.save(buffer, {
-        resumable: false,
-        metadata: {
-          contentType,
-          cacheControl: 'public, max-age=31536000, immutable',
-          metadata: { firebaseStorageDownloadTokens: token }
-        }
-      });
-      console.log(`[logo] uploaded ${objectPath} (${buffer.length} bytes)`);
-    }
-    return logoUrlFor(objectPath, token);
+    const logoUrl = await uploadObject(
+      `${LOGO_PATH_PREFIX}/${hash}.${ext}`,
+      buffer,
+      contentType,
+      sha1('kanjo-logo:' + hash).slice(0, 36)
+    );
+    return { logoUrl, logoOriginalUrl };
   } catch (err) {
     console.warn('[logo] upload failed; leaving URL empty instead of a raw blob:', err && err.message ? err.message : err);
-    return '';
+    return { logoUrl: '', logoOriginalUrl: '' };
   }
 };
 
 /* Dedupe concurrent work on the same image (two merchants often share a logo). */
-const LOGO_CACHE = new Map(); // raw source -> Promise<public url>
-const resolveLogoUrl = (source) => {
+const LOGO_CACHE = new Map(); // raw source -> Promise<{ logoUrl, logoOriginalUrl }>
+const resolveLogoUrls = (source) => {
   const raw = source ? String(source) : '';
-  if (!raw) return Promise.resolve('');
-  if (/^https?:\/\//i.test(raw)) return Promise.resolve(raw);
+  if (!raw) return Promise.resolve({ logoUrl: '', logoOriginalUrl: '' });
+  if (/^https?:\/\//i.test(raw)) return Promise.resolve({ logoUrl: raw, logoOriginalUrl: raw });
   if (!LOGO_CACHE.has(raw)) LOGO_CACHE.set(raw, uploadLogo(raw));
   return LOGO_CACHE.get(raw);
+};
+
+/* ── Public social links ───────────────────────────────────────────────────
+   Only the four PUBLIC marketing URLs already collected on the merchant task
+   are denormalized. Each value must be an absolute http(s) URL; anything else
+   (javascript:, data:, relative, empty) is dropped. Contact phone, owner name,
+   commission and contract figures are deliberately NOT copied. */
+const SOCIAL_SOURCE_FIELDS = [
+  ['facebook', 'fbPage'],
+  ['facebookGroup', 'fbGroup'],
+  ['instagram', 'insta'],
+  ['website', 'website']
+];
+const safeHttpUrl = (value) => {
+  const s = value == null ? '' : String(value).trim();
+  if (!s) return '';
+  try {
+    const u = new URL(s);
+    return (u.protocol === 'http:' || u.protocol === 'https:') ? u.href : '';
+  } catch (_) { return ''; }
+};
+const pickSocialLinks = (task) => {
+  const out = {};
+  SOCIAL_SOURCE_FIELDS.forEach(([key, source]) => {
+    const url = safeHttpUrl(task && task[source]);
+    if (url) out[key] = url;
+  });
+  return out;
 };
 
 const main = async () => {
@@ -181,7 +245,7 @@ const main = async () => {
   ]);
 
   /* ── 1) Contracted merchants, keyed by base-name. Final wins over VIP. ── */
-  const contracted = new Map(); // base -> { merchantId, name, status, cat, logoSource }
+  const contracted = new Map(); // base -> { merchantId, name, status, cat, logoSource, socialLinks }
   tasksSnap.forEach((doc) => {
     const t = doc.data() || {};
     const base = getBaseName(t.name);
@@ -191,19 +255,26 @@ const main = async () => {
     const isVip = t.vipPreContract === true;
     if (!isFinal && !isVip) return;
     const status = isFinal ? 'final' : 'vip';
+    const links = pickSocialLinks(t);
     const existing = contracted.get(base);
     if (existing) {
       if (status === 'final') existing.status = 'final';
       if (!existing.merchantId && t.merchantId) existing.merchantId = t.merchantId;
       if (!existing.cat && t.cat) existing.cat = String(t.cat).trim();
       if (!existing.logoSource && t.merchantLogo) existing.logoSource = pickLogoSource(t.merchantLogo);
+      /* First non-empty URL per platform wins; later duplicate task docs only
+         fill gaps, so a blank field never erases a good link. */
+      Object.keys(links).forEach((key) => {
+        if (!existing.socialLinks[key]) existing.socialLinks[key] = links[key];
+      });
     } else {
       contracted.set(base, {
         merchantId: t.merchantId || '',
         name: base,
         status,
         cat: t.cat ? String(t.cat).trim() : '',
-        logoSource: pickLogoSource(t.merchantLogo)
+        logoSource: pickLogoSource(t.merchantLogo),
+        socialLinks: links
       });
     }
   });
@@ -211,9 +282,11 @@ const main = async () => {
     [...contracted.values()].map((c) => c.merchantId).filter(Boolean)
   );
 
-  /* ── 1b) Resolve every unique logo to a short Storage URL (uploads once). ── */
+  /* ── 1b) Resolve every unique logo to thumbnail + original Storage URLs. ── */
   await Promise.all([...contracted.values()].map(async (c) => {
-    c.logoUrl = await resolveLogoUrl(c.logoSource);
+    const urls = await resolveLogoUrls(c.logoSource);
+    c.logoUrl = urls.logoUrl;
+    c.logoOriginalUrl = urls.logoOriginalUrl;
   }));
   const withLogo = [...contracted.values()].filter((c) => c.logoUrl).length;
   console.log(`[logo] resolved ${withLogo}/${contracted.size} contracted logos to Storage URLs`);
@@ -251,20 +324,63 @@ const main = async () => {
     batch.set(ref, payload, { merge: true });
     opCount += 1;
   };
+  /* `update()` (not merge-set) so dotted paths and FieldValue.delete() act on
+     nested map members. Only ever called for a document we just read, so it
+     cannot fail on a missing ref. */
+  const writeUpdate = (ref, payload) => {
+    batch.update(ref, payload);
+    opCount += 1;
+  };
 
   /* ── 4) Upsert contractStatus + productCount for every contracted merchant. ── */
   for (const [base, c] of contracted) {
     summary[c.status] += 1;
     const doc = (c.merchantId && byId.get(c.merchantId)) || byBase.get(base) || null;
     const logo = c.logoUrl || '';
+    const logoOriginal = c.logoOriginalUrl || '';
+    const socialLinks = c.socialLinks || {};
 
     if (doc) {
       const m = doc.data() || {};
       const mid = String(m.merchantId || doc.id);
       const count = productCount.get(mid) || 0;
       const cat = c.cat || '';
-      if (m.contractStatus !== c.status || Number(m.productCount || 0) !== count || String(m.primaryCategory || '') !== cat || String(m.logoUrl || '') !== logo) {
-        write(doc.ref, { contractStatus: c.status, productCount: count, primaryCategory: cat, logoUrl: logo, contractStatusSyncedAt: new Date() });
+      const prevLinks = (m.socialLinks && typeof m.socialLinks === 'object') ? m.socialLinks : {};
+      /* A legacy/corrupt non-map value must be replaced wholesale — a dotted
+         field path onto a scalar would make the whole batch fail. */
+      const linksIsMap = !('socialLinks' in m) || (m.socialLinks != null && typeof m.socialLinks === 'object');
+      const linksChanged = SOCIAL_SOURCE_FIELDS.some(([key]) =>
+        String(prevLinks[key] || '') !== String(socialLinks[key] || ''));
+      if (m.contractStatus !== c.status
+        || Number(m.productCount || 0) !== count
+        || String(m.primaryCategory || '') !== cat
+        || String(m.logoUrl || '') !== logo
+        || String(m.logoOriginalUrl || '') !== logoOriginal
+        || linksChanged) {
+        const payload = {
+          contractStatus: c.status,
+          productCount: count,
+          primaryCategory: cat,
+          logoUrl: logo,
+          logoOriginalUrl: logoOriginal,
+          contractStatusSyncedAt: new Date()
+        };
+        if (linksIsMap) {
+          /* Dotted paths (not the whole `socialLinks` map) so a platform link
+             removed from the source task is actually deleted instead of
+             lingering in the map forever. A field path may not appear both
+             dotted and as part of a map, hence `socialLinks` itself is omitted
+             here. */
+          SOCIAL_SOURCE_FIELDS.forEach(([key]) => {
+            const next = socialLinks[key] || '';
+            const prev = String(prevLinks[key] || '');
+            if (next) payload['socialLinks.' + key] = next;
+            else if (prev) payload['socialLinks.' + key] = FieldValue.delete();
+          });
+        } else {
+          payload.socialLinks = socialLinks;
+        }
+        writeUpdate(doc.ref, payload);
         summary.updated += 1;
         if (opCount >= 480) await flush();
       }
@@ -273,16 +389,19 @@ const main = async () => {
          so the read-only portal can list the vendor. */
       const count = productCount.get(c.merchantId) || 0;
       const ref = db.collection('merchants').doc(c.merchantId);
-      write(ref, {
+      const payload = {
         merchantId: c.merchantId,
         name: c.name,
         contractStatus: c.status,
         productCount: count,
         primaryCategory: c.cat || '',
         logoUrl: logo,
+        logoOriginalUrl: logoOriginal,
         contractStatusSyncedAt: new Date(),
         createdAt: new Date()
-      });
+      };
+      if (Object.keys(socialLinks).length) payload.socialLinks = socialLinks;
+      write(ref, payload);
       summary.created += 1;
       if (opCount >= 480) await flush();
     }
@@ -295,7 +414,15 @@ const main = async () => {
     const base = getBaseName(m.name);
     const mid = m.merchantId ? String(m.merchantId) : '';
     if (contracted.has(base) || (mid && contractedIds.has(mid))) continue;
-    write(doc.ref, { contractStatus: '', contractStatusSyncedAt: new Date() });
+    /* De-partnered merchants must not keep public marketing assets: clear the
+       logo URLs and drop the social link map alongside the status. */
+    write(doc.ref, {
+      contractStatus: '',
+      logoUrl: '',
+      logoOriginalUrl: '',
+      socialLinks: FieldValue.delete(),
+      contractStatusSyncedAt: new Date()
+    });
     summary.cleared += 1;
     if (opCount >= 480) await flush();
   }
