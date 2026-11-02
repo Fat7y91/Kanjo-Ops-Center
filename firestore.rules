@@ -313,17 +313,17 @@ service cloud.firestore {
     // deny with NO legacy/migration escape hatch: an unlocked write path would
     // defeat the entire point of freezing the numbers. Corrections are issued by
     // creating a new `-r2` revision document, never by editing an existing one.
-    // READ: payroll roles only — reps never load snapshots and external
-    // marketing agencies are excluded from every financial surface.
+    // READ: any signed-in session EXCEPT external marketing agencies. The vault
+    // holds operational counts only (products / vendors / processed images) —
+    // salaries stay in the external payroll sheet — and a rep must see the same
+    // frozen numbers as the founder on their personal screen, otherwise the
+    // live-vs-locked mismatch reappears for reps.
     match /payroll_snapshots/{month} {
-      function canReadPayrollSnapshot() {
-        return isPrivileged() || isOpsManager() || isAccounting();
-      }
-      allow read: if !isMarketingAgency() && canReadPayrollSnapshot();
+      allow read: if isSignedIn() && !isMarketingAgency();
       allow write: if false;
 
       match /reps/{repId} {
-        allow read: if !isMarketingAgency() && canReadPayrollSnapshot();
+        allow read: if isSignedIn() && !isMarketingAgency();
         allow write: if false;
       }
     }

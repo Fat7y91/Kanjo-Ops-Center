@@ -1277,6 +1277,13 @@ input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
 }
 .kpi-chip-dark { background: #230535; color: #FFD700; }
 .kpi-chip-gold { background: #FFD700; color: #230535; }
+.kpi-chip-locked {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #34d399;
+    cursor: help;
+}
+.kpi-panel-locked { border: 1px solid #a7f3d0; }
 .kpi-stat-hint {
     font-size: 0.62rem;
     font-weight: 800;

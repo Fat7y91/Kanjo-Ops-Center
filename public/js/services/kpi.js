@@ -367,6 +367,204 @@ const kpiReadDoc = async (segments) => {
     return (snap && snap.exists && snap.exists()) ? { id: snap.id, ...(snap.data() || {}) } : null;
 };
 
+/* ─────────────────── immutable payroll snapshots ───────────────────
+   September/October 2026 were seeded into `payroll_snapshots/{YYYY-MM}` with
+   `locked: true` (see scripts/seed-payroll-snapshots.mjs). Once a month is
+   locked, its numbers are the legal payroll record and MUST NOT be re-derived
+   from the mutable `merchant_products` collection. The dashboard therefore
+   checks the vault FIRST and, when a lock exists, renders the frozen metrics
+   instead of running any live product query.
+
+   Security rules make the vault read-only for clients and readable by any
+   signed-in session except marketing agencies, so a rep sees their own frozen
+   row while managers see the whole month. Salaries are NOT stored here: only
+   the three operational counts that were paid against. */
+const KPI_SNAPSHOT_COLLECTION = 'payroll_snapshots';
+const KPI_SNAPSHOT_READ_TTL = KPI_READ_CACHE_TTL * 10;
+
+/* Every locked month, newest first. Empty on any failure: a vault outage must
+   never block the live dashboard. */
+const kpiFetchLockedSnapshotMonthsUncached = async () => {
+    try {
+        let docs = [];
+        if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+            docs = await window.kanjoRest.list([KPI_SNAPSHOT_COLLECTION], { select: ['month', 'locked'] });
+        } else {
+            const snap = await window.getDocs(window.collection(window.db, KPI_SNAPSHOT_COLLECTION));
+            snap.forEach((d) => docs.push({ id: d.id, ...(d.data() || {}) }));
+        }
+        return docs
+            .filter((d) => d && d.locked === true)
+            .map((d) => String(d.month || d.id || '').slice(0, 7))
+            .filter((m) => KPI_MONTH_RE.test(m))
+            .sort()
+            .reverse();
+    } catch (err) {
+        console.warn('[kpi] locked snapshot list failed:', err);
+        return [];
+    }
+};
+
+const kpiFetchLockedSnapshotMonths = () => kpiCacheGet(
+    'kpi:snapshots:months',
+    kpiFetchLockedSnapshotMonthsUncached,
+    KPI_SNAPSHOT_READ_TTL
+);
+window.kpiFetchLockedSnapshotMonths = kpiFetchLockedSnapshotMonths;
+
+/* Read one locked month. Returns null when the month is not locked (or the read
+   failed), which makes the caller fall back to the live report. */
+const kpiFetchLockedSnapshotUncached = async (monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey);
+    try {
+        const header = await kpiReadDoc([KPI_SNAPSHOT_COLLECTION, period]);
+        if (!header || header.locked !== true) return null;
+        const reps = [];
+        /* A field rep only ever receives their OWN frozen row (same hard
+           identity scoping as the live personal screen), so peers' rows never
+           reach their client. */
+        if (window.isFieldRepUser()) {
+            const ownName = String((window.currentUser && window.currentUser.name) || '').trim();
+            const own = await kpiReadDoc([KPI_SNAPSHOT_COLLECTION, period, 'reps', kpiRepId(ownName)]);
+            if (own) reps.push(own);
+        } else if (window.kanjoRest && typeof window.kanjoRest.list === 'function') {
+            const rows = await window.kanjoRest.list(
+                [KPI_SNAPSHOT_COLLECTION, period, 'reps'],
+                { select: ['repId', 'repName', 'team', 'metrics', 'baseline'] }
+            );
+            (rows || []).forEach((r) => reps.push(r));
+        } else {
+            const snap = await window.getDocs(window.collection(window.db, KPI_SNAPSHOT_COLLECTION, period, 'reps'));
+            snap.forEach((d) => reps.push({ id: d.id, ...(d.data() || {}) }));
+        }
+        reps.sort((a, b) => {
+            const ea = kpiIsEditorName(a.repName || a.id);
+            const eb = kpiIsEditorName(b.repName || b.id);
+            if (ea !== eb) return ea ? 1 : -1;
+            return String(a.repName || a.id || '').localeCompare(String(b.repName || b.id || ''), 'ar');
+        });
+        return { header, reps };
+    } catch (err) {
+        /* Rule-denied / offline: fall back to the live report, never throw into
+           the dashboard render path. */
+        console.warn('[kpi] locked snapshot read failed; using live data:', err);
+        return null;
+    }
+};
+
+const kpiFetchLockedSnapshot = (monthKey) => {
+    const period = kpiNormalizeMonthKey(monthKey);
+    return kpiCacheGet(
+        'kpi:snapshot:' + period,
+        () => kpiFetchLockedSnapshotUncached(period),
+        KPI_SNAPSHOT_READ_TTL
+    );
+};
+window.kpiFetchLockedSnapshot = kpiFetchLockedSnapshot;
+
+/* ─────────── Locked-snapshot report (immutable payroll months) ───────────
+   A locked month is NOT re-derived from merchant_products. Every field below is
+   copied verbatim from payroll_snapshots/{YYYY-MM}/reps, so the dashboard and
+   the CSV export reproduce the exact record that was paid. Time- and
+   description-based metrics (which the vault does not freeze) are deliberately
+   left absent rather than shown as zeros. NO summary publish happens here: a
+   frozen month must never overwrite rep_kpis with snapshot-derived values. */
+const kpiBuildLockedSnapshotReport = (monthKey, snapshot) => {
+    const period = kpiNormalizeMonthKey(monthKey);
+    const rows = (snapshot.reps || []).map((rep) => {
+        const m = rep.metrics || {};
+        const name = String(rep.repName || rep.id || '').trim();
+        const products = Math.max(0, Number(m.products) || 0);
+        const vendors = Math.max(0, Number(m.vendors) || 0);
+        const photos = Math.max(0, Number(m.photos) || 0);
+        return {
+            repId: kpiRepId(name),
+            name,
+            team: String(rep.team || '').trim(),
+            isEditor: kpiIsEditorName(name),
+            /* The three frozen payroll metrics. `photos` is surfaced both as the
+               processed-images counter and (for field reps) as their media
+               metric; it is never inferred from the live catalog. */
+            totalProducts: products,
+            merchantsCount: vendors,
+            snapshotVendors: vendors,
+            snapshotPhotos: photos,
+            withImage: photos,
+            withoutImage: 0,
+            editedImagesCount: photos,
+            importImagesUploaded: 0,
+            /* Not frozen by the vault — kept null so no card fabricates a zero. */
+            totalSeconds: null,
+            activeSeconds: null,
+            imageEditSeconds: null,
+            historicalSeconds: null,
+            avgDescriptionLength: null,
+            validRatioRaw: null,
+            junkRatioRaw: null,
+            emptyRatioRaw: null,
+            imageRatioRaw: null,
+            avgVariablesRaw: null,
+            minutesPerProductRaw: null,
+            avgSecondsPerProduct: null,
+            variableProducts: 0,
+            variationCount: 0,
+            validDescriptions: 0,
+            nonEmptyDescriptions: 0,
+            junkDescriptions: 0,
+            emptyDescriptions: 0,
+            trackedDays: 0,
+            activeDays: 0,
+            dailyCounts: [],
+            lastActiveDate: null,
+            /* No competitive score on a frozen payroll record: the inputs are not
+               part of the snapshot and inventing one would be misleading. */
+            kanjoScore: null,
+            kanjoBreakdown: null,
+            rank: null,
+            period
+        };
+    });
+
+    rows.sort((a, b) => {
+        if (a.isEditor !== b.isEditor) return a.isEditor ? 1 : -1;
+        if (a.isEditor && b.isEditor) return a.name.localeCompare(b.name, 'ar');
+        return (b.totalProducts - a.totalProducts) || a.name.localeCompare(b.name, 'ar');
+    });
+
+    const totals = rows.reduce((acc, r) => {
+        acc.products += r.totalProducts;
+        acc.vendors += r.snapshotVendors;
+        acc.photos += r.snapshotPhotos;
+        if (r.isEditor) acc.editors += 1; else acc.reps += 1;
+        return acc;
+    }, { products: 0, vendors: 0, photos: 0, reps: 0, editors: 0 });
+
+    const header = snapshot.header || {};
+    return {
+        rows,
+        totals,
+        generatedAt: new Date(),
+        period,
+        locked: true,
+        snapshot: {
+            month: period,
+            source: header.source || '',
+            note: header.note || '',
+            lockedAt: header.lockedAt || null,
+            lockedBy: header.lockedBy || '',
+            evidenceHash: header.evidenceHash || '',
+            repCount: Number(header.repCount) || rows.length
+        }
+    };
+};
+
+const kpiSnapshotSourceLabel = (source) => {
+    const s = String(source || '');
+    if (s === 'excel_manual') return 'شيت الإكسيل اليدوي';
+    if (s === 'founder_override') return 'تسوية معتمدة من المؤسس';
+    return s || 'سجل مُعتمد';
+};
+
 const kpiToMillis = (value) => {
     if (!value) return 0;
     if (typeof value.toMillis === 'function') return value.toMillis();
@@ -1610,6 +1808,11 @@ const kpiMinutesPerProductRaw = (seconds, products) => {
 
 const kpiBuildReport = async (monthKey) => {
     const period = kpiNormalizeMonthKey(monthKey || window._kpiReportMonth);
+    /* A locked payroll month is served EXCLUSIVELY from the immutable vault.
+       This check runs before any merchant_products / daily_stats read so a
+       frozen month can never be re-derived from mutated live data. */
+    const lockedSnapshot = await kpiFetchLockedSnapshot(period);
+    if (lockedSnapshot) return kpiBuildLockedSnapshotReport(period, lockedSnapshot);
     /* September and earlier keep the historical backfill; October 2026 onward
        relies exclusively on the live trackers (no double counting). */
     const includeHistorical = kpiPeriodIncludesHistorical(period);
@@ -2106,8 +2309,106 @@ const kpiGlobalSummaryHtml = (report) => {
     </section>`;
 };
 
-const kpiRepCardHtml = (row, selected) => {
+/* Small, unmissable indicator that the numbers on screen come from the
+   immutable payroll vault rather than the live catalog. Rendered on the global
+   summary, the rep cards' panel head, and the personal/deep-dive panel. */
+const kpiLockedBadgeHtml = (report) => {
+    if (!report || !report.locked) return '';
+    const snap = report.snapshot || {};
+    const lockedAt = snap.lockedAt ? new Date(snap.lockedAt) : null;
+    const stamp = lockedAt && !Number.isNaN(lockedAt.getTime())
+        ? lockedAt.toLocaleDateString('ar-EG')
+        : '';
+    const title = 'هذه الأرقام مُجمّدة في سجل الرواتب المعتمد ولا تتغير مع تعديل بيانات الكتالوج'
+        + (snap.evidenceHash ? ' • بصمة السجل: ' + String(snap.evidenceHash).slice(0, 12) : '');
+    return `<span class="kpi-chip kpi-chip-locked" title="${kpiEscape(title)}">
+        <i class="fa-solid fa-lock"></i> مُجمّد${snap.source ? ' • ' + kpiEscape(kpiSnapshotSourceLabel(snap.source)) : ''}${stamp ? ' • ' + kpiEscape(stamp) : ''}
+    </span>`;
+};
+
+const kpiSnapshotValue = (value) => (value == null ? '—' : value);
+
+/* Locked months carry only the three frozen payroll metrics. Rendering them
+   through the live cards (which assume time/description data) would print
+   fabricated zeros, so the summary gets a dedicated vault layout. */
+const kpiLockedSummaryHtml = (report) => {
+    const t = report.totals;
+    const periodLabel = kpiMonthLabel(report.period);
+    const snap = report.snapshot || {};
+    return `
+    <section class="kpi-panel kpi-panel-locked">
+        <div class="kpi-panel-head">
+            <div class="flex items-center gap-2">
+                <span class="kpi-panel-icon"><i class="fa-solid fa-lock"></i></span>
+                <div>
+                    <h3 class="font-black text-sm text-[#230535]">الملخص العام المُجمّد — كشف شهر ${periodLabel}</h3>
+                    <p class="text-[11px] font-bold text-slate-400">سجل رواتب معتمد وثابت: المنتجات والتجار والصور كما تم الدفع عليها</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                ${kpiLockedBadgeHtml(report)}
+                <span class="kpi-chip">${t.reps} مندوب${t.editors ? ' + ' + t.editors + ' محرر' : ''}</span>
+                <span class="kpi-chip kpi-chip-dark"><i class="fa-regular fa-calendar"></i> ${periodLabel}</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 items-start">
+            ${kpiMetricCard({ icon: 'fa-box-open', iconBg: '#230535', iconColor: '#FFD700', value: t.products, label: 'إجمالي المنتجات' })}
+            ${kpiMetricCard({ icon: 'fa-store', iconBg: '#FFD700', iconColor: '#230535', value: t.vendors, label: 'إجمالي التجار' })}
+            ${kpiMetricCard({ icon: 'fa-images', iconBg: '#37d99a', iconColor: '#fff', value: t.photos, label: 'إجمالي الصور المُعالجة' })}
+        </div>
+        ${snap.note ? `<p class="mt-3 text-[11px] font-bold text-slate-500"><i class="fa-solid fa-circle-info"></i> ${kpiEscape(snap.note)}</p>` : ''}
+    </section>`;
+};
+
+/* Deep-dive for a single rep inside a locked month. Deliberately excludes the
+   score, charts and efficiency metrics the vault does not freeze. */
+const kpiLockedRepHtml = (row) => {
+    if (!row) {
+        return `<section class="kpi-panel"><div class="text-center py-10 text-slate-400 font-bold">
+            <i class="fa-solid fa-hand-pointer text-3xl text-[#230535]/20 mb-2"></i>
+            <div>اختر مندوباً من القائمة أعلاه لعرض أرقامه المُجمّدة</div>
+        </div></section>`;
+    }
+    return `
+    <section class="kpi-panel kpi-panel-locked" id="kpiDeepDivePanel">
+        <div class="kpi-deep-head">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
+                <div class="min-w-0">
+                    <h3 class="font-black text-base text-[#230535] truncate">${kpiEscape(row.name)}</h3>
+                    <p class="text-[10px] font-bold text-slate-400">أرقام مُجمّدة من سجل الرواتب المعتمد${row.team ? ' • ' + kpiEscape(row.team) : ''}</p>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <span class="kpi-chip kpi-chip-locked"><i class="fa-solid fa-lock"></i> مُجمّد</span>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 items-start">
+            ${kpiMetricCard({ icon: 'fa-box-open', iconBg: '#230535', iconColor: '#FFD700', value: row.totalProducts, label: 'عدد المنتجات' })}
+            ${kpiMetricCard({ icon: 'fa-store', iconBg: '#FFD700', iconColor: '#230535', value: kpiSnapshotValue(row.snapshotVendors), label: 'عدد التجار' })}
+            ${kpiMetricCard({ icon: 'fa-images', iconBg: '#37d99a', iconColor: '#fff', value: kpiSnapshotValue(row.snapshotPhotos), label: 'الصور المُعالجة' })}
+        </div>
+    </section>`;
+};
+
+const kpiRepCardHtml = (row, selected, locked) => {
     const initials = (String(row.name || '').trim().charAt(0)) || '?';
+    if (locked) {
+        /* Frozen month: no score, no duration, no junk audit — only the three
+           numbers the vault actually holds. */
+        return `
+    <button type="button" class="kpi-rep-pick ${selected ? 'kpi-rep-pick-active' : ''} ${row.isEditor ? 'kpi-rep-pick-editor' : ''}" data-kpi-rep="${kpiEscape(row.repId)}" onclick="selectKpiRep('${kpiEscape(row.repId)}')">
+        <div class="flex items-center gap-2.5 min-w-0 w-full">
+            <div class="kpi-avatar-ring">${kpiAvatarHtml(row.name)}</div>
+            <div class="min-w-0 text-right flex-1">
+                <div class="font-black text-[13px] text-[#230535] truncate">${kpiEscape(row.name || initials)}</div>
+                <div class="text-[10px] font-bold text-slate-400 truncate">${row.snapshotVendors} تاجر • ${row.totalProducts} منتج</div>
+            </div>
+        </div>
+        <div class="kpi-rep-score"><i class="fa-solid fa-images"></i> الصور المُعالجة: ${row.snapshotPhotos}</div>
+        <div class="mt-2 w-full flex justify-start"><span class="kpi-chip kpi-chip-locked"><i class="fa-solid fa-lock"></i> مُجمّد</span></div>
+    </button>`;
+    }
     const badge = row.junkDescriptions > 0
         ? `<span class="kpi-junk-badge"><i class="fa-solid fa-triangle-exclamation"></i> ${row.junkDescriptions} وصف وهمي</span>`
         : `<span class="kpi-clean-badge"><i class="fa-solid fa-circle-check"></i> لا يوجد وصف وهمي</span>`;
@@ -2136,21 +2437,25 @@ const kpiRepCardHtml = (row, selected) => {
     </button>`;
 };
 
-const kpiRepSelectorHtml = (report) => `
+const kpiRepSelectorHtml = (report) => {
+    const locked = !!report.locked;
+    return `
     <section class="kpi-panel">
         <div class="kpi-panel-head">
             <div class="flex items-center gap-2">
                 <span class="kpi-panel-icon"><i class="fa-solid fa-users-viewfinder"></i></span>
                 <div>
-                    <h3 class="font-black text-sm text-[#230535]">الترتيب حسب التقييم الشامل (Kanjo Score / 100)</h3>
-                    <p class="text-[11px] font-bold text-slate-400">اضغط على البطاقة لفتح القسم الثالث (Deep Dive)</p>
+                    <h3 class="font-black text-sm text-[#230535]">${locked ? 'أرقام المناديب المُجمّدة' : 'الترتيب حسب التقييم الشامل (Kanjo Score / 100)'}</h3>
+                    <p class="text-[11px] font-bold text-slate-400">${locked ? 'اضغط على البطاقة لعرض أرقام المندوب المُجمّدة' : 'اضغط على البطاقة لفتح القسم الثالث (Deep Dive)'}</p>
                 </div>
             </div>
+            ${locked ? `<div class="flex flex-wrap items-center gap-2">${kpiLockedBadgeHtml(report)}</div>` : ''}
         </div>
         <div id="kpiRepSelectorGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 items-start">
-            ${report.rows.map((r) => kpiRepCardHtml(r, r.repId === window._kpiSelectedRepId)).join('')}
+            ${report.rows.map((r) => kpiRepCardHtml(r, r.repId === window._kpiSelectedRepId, locked)).join('')}
         </div>
     </section>`;
+};
 
 const kpiDeepDiveHtml = (row) => {
     if (!row) {
@@ -2452,6 +2757,12 @@ const kpiScoreBreakdownHtml = (row) => {
 
 window.openKpiScoreBreakdown = (repId) => {
     const report = window._kpiLatestReport;
+    /* A locked payroll month has no score/breakdown inputs, so the modal would
+       render empty weights. Refuse explicitly instead of showing zeros. */
+    if (report && report.locked) {
+        if (window.showToast) window.showToast('هذا الشهر مُجمّد في سجل الرواتب — لا يوجد تقييم قابل لإعادة الحساب', false);
+        return;
+    }
     const row = report && (report.rows || []).find((r) => r.repId === repId);
     const modal = document.getElementById('kpiScoreBreakdownModal');
     const body = document.getElementById('kpiScoreBreakdownBody');
@@ -3149,7 +3460,11 @@ const kpiScopeReportForRep = (report, repId) => {
         rows: row ? [row] : [],
         totals: report.totals || {},
         generatedAt: report.generatedAt || new Date(),
-        period: report.period
+        period: report.period,
+        /* Preserve the lock metadata so a scoped view still renders the badge
+           and the CSV export still knows the month is frozen. */
+        locked: !!report.locked,
+        snapshot: report.snapshot || null
     };
 };
 
@@ -3177,19 +3492,42 @@ window.renderKpiDashboard = async () => {
     const viewTitle = document.getElementById('kpiViewTitle');
     content.innerHTML = '<div class="text-center py-16 text-slate-400 font-bold"><i class="fa-solid fa-circle-notch fa-spin text-3xl mb-3"></i><div>جاري تحميل المؤشرات...</div></div>';
 
-    /* Fetch the shared product scope once here (memoized; zero reads when warm)
-       so the cold-boot emptiness check below sees the real store state before
-       any zero-valued leaderboard is painted. */
-    const scopeProducts = await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
+    /* Locked payroll months are listed first: a frozen month must render even
+       when the live product store is cold or empty, and the cold-boot guard
+       below must not block it. */
+    const lockedMonths = await kpiFetchLockedSnapshotMonths();
 
-    /* Default (not user-picked) view: land on the most recent month that actually
-       has data instead of a still-empty current month, so a rep always sees a
-       populated board and a real comparison. The product set is memoized, so the
-       report build below reuses it without any extra Firestore reads. */
-    if (!window._kpiReportMonthUserSet) {
-        window._kpiReportMonth = kpiLatestProductMonth(scopeProducts) || kpiCurrentMonthKey();
+    /* Resolve the month BEFORE rendering, because a locked month must bypass the
+       live collection entirely.
+
+       - Explicit month choice: use it. If it is locked, the live catalog is
+         never queried — this is the payroll-vault path.
+       - No explicit choice: keep the original navigation (latest month that has
+         data), so the dashboard does not silently change what month it opens
+         on. If that month happens to be locked, the vault path is still used. */
+    const requestedMonth = window._kpiReportMonthUserSet
+        ? kpiNormalizeMonthKey(window._kpiReportMonth)
+        : null;
+    let isLockedMonth = !!requestedMonth && lockedMonths.indexOf(requestedMonth) !== -1;
+
+    /* Only query the live catalog when the selected month is NOT frozen. */
+    const scopeProducts = isLockedMonth
+        ? []
+        : await kpiFetchProductsForScope((window.currentUser && window.currentUser.name) || '');
+
+    if (requestedMonth) {
+        window._kpiReportMonth = requestedMonth;
     } else {
-        window._kpiReportMonth = kpiNormalizeMonthKey(window._kpiReportMonth);
+        window._kpiReportMonth = kpiLatestProductMonth(scopeProducts) || kpiCurrentMonthKey();
+        isLockedMonth = lockedMonths.indexOf(window._kpiReportMonth) !== -1;
+    }
+
+    /* A frozen month has no preview mode and no historical recomputation: both
+       would imply the numbers can still change. Keep the export button (it is
+       exactly how the founder gets the locked CSV). */
+    if (isLockedMonth) {
+        if (previewBtn) previewBtn.classList.add('hidden');
+        if (historicalBtn) historicalBtn.classList.add('hidden');
     }
 
     /* Cold-boot race guard: the shared merchant_products store can still be
@@ -3197,8 +3535,9 @@ window.renderKpiDashboard = async () => {
        read). Painting an all-zero board in that window is what made the KPI
        screen look unstable. Show an explicit loading state and give the shared
        store two short retries; a bounded count prevents an endless loop on a
-       genuinely empty database. */
-    const productStoreEmpty = !(scopeProducts && scopeProducts.length)
+       genuinely empty database. A locked month is exempt: its numbers never
+       depend on the live store. */
+    const productStoreEmpty = !isLockedMonth && !(scopeProducts && scopeProducts.length)
         && !!(window.kanjoSync && typeof window.kanjoSync.size === 'function')
         && window.kanjoSync.size(KPI_PRODUCTS_COLLECTION) === 0;
     if (productStoreEmpty) {
@@ -3242,8 +3581,9 @@ window.renderKpiDashboard = async () => {
         const period = window._kpiReportMonth;
         /* The rep's personal view needs the published leaderboard, and those
            two reads are independent — start both before awaiting either so the
-           rank/benchmark round-trip overlaps the report build. */
-        const summariesPromise = isRep ? kpiFetchLeaderboardSummaries(period) : null;
+           rank/benchmark round-trip overlaps the report build. A locked month
+           has no ranking at all, so that read is skipped. */
+        const summariesPromise = (isRep && !isLockedMonth) ? kpiFetchLeaderboardSummaries(period) : null;
         const report = await kpiBuildReport(period);
         const stampEl = document.getElementById('kpiLastUpdated');
         if (stampEl) stampEl.textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-EG');
@@ -3252,6 +3592,16 @@ window.renderKpiDashboard = async () => {
            comparison against the company best. Peers are never shown. */
         if (isRep) {
             const ownId = window.kpiResolvePersonalRepId('');
+            /* A locked payroll month is shown to the rep as-is: there is no
+               score to recompute (the vault holds counts, not scoring inputs),
+               so the personal live panel must not be used. */
+            if (report.locked) {
+                const lockedOwn = kpiScopeReportForRep(report, ownId);
+                window._kpiLatestReport = lockedOwn;
+                content.innerHTML =
+                    `<div id="kpiDeepDiveWrapper">${kpiLockedRepHtml(lockedOwn.rows[0] || null)}</div>`;
+                return;
+            }
             const ownReport = kpiScopeReportForRep(report, ownId);
             const ownRow = ownReport.rows[0] || null;
             /* Published summaries feed the rank, the score and the best-value
@@ -3285,7 +3635,14 @@ window.renderKpiDashboard = async () => {
         }
         const selectedRow = report.rows.find((r) => r.repId === window._kpiSelectedRepId) || null;
         const previewMode = window._kpiRepPreviewMode && canPreview;
-        if (previewMode) {
+        if (report.locked) {
+            /* Frozen payroll month: skip charts and the preview mode entirely —
+               their inputs were never captured in the vault. */
+            content.innerHTML =
+                kpiLockedSummaryHtml(report) +
+                kpiRepSelectorHtml(report) +
+                `<div id="kpiDeepDiveWrapper">${kpiLockedRepHtml(selectedRow)}</div>`;
+        } else if (previewMode) {
             content.innerHTML =
                 kpiRepSelectorHtml(report) +
                 `<div id="kpiDeepDiveWrapper">${kpiPersonalPanelHtml(report, selectedRow, { liveMode: false })}</div>`;
@@ -3323,7 +3680,9 @@ window.selectKpiRep = (repId) => {
 
     const wrapper = document.getElementById('kpiDeepDiveWrapper');
     if (wrapper) {
-        if (window._kpiRepPreviewMode && window.canPreviewRepPersonalKpi()) {
+        if (report.locked) {
+            wrapper.innerHTML = kpiLockedRepHtml(row);
+        } else if (window._kpiRepPreviewMode && window.canPreviewRepPersonalKpi()) {
             wrapper.innerHTML = kpiPersonalPanelHtml(report, row, { liveMode: false });
         } else {
             wrapper.innerHTML = kpiDeepDiveHtml(row);
@@ -3398,16 +3757,39 @@ window.exportKpiLeaderboardCsv = () => {
         return;
     }
     const period = kpiNormalizeMonthKey(report.period || window._kpiReportMonth);
-    const header = ['المندوب', 'الفريق', 'عدد المنتجات', 'الوقت الصافي (دقيقة)', 'متوسط طول الوصف',
-        'نسبة الوصف الصحيح', 'نسبة الصور', 'منتجات بصور', 'درجة كانجو', 'الترتيب'];
+    /* A locked month exports its frozen payroll metrics verbatim (products,
+       vendors, processed images). A live month keeps the analytical columns and
+       adds the same processed-images column the vault uses, so the media editor's
+       work is visible in every export, not just the locked ones. */
+    const locked = !!report.locked;
+    const header = locked
+        ? ['المندوب', 'الفريق', 'عدد المنتجات', 'عدد التجار', 'الصور المُعالجة', 'الحالة']
+        : ['المندوب', 'الفريق', 'عدد المنتجات', 'الوقت الصافي (دقيقة)', 'متوسط طول الوصف',
+            'نسبة الوصف الصحيح', 'نسبة الصور', 'منتجات بصور', 'الصور المُعالجة',
+            'درجة كانجو', 'الترتيب'];
     const lines = [header];
     report.rows
         .slice()
         .sort((a, b) => {
             if (a.isEditor !== b.isEditor) return a.isEditor ? 1 : -1;
+            if (locked) return (b.totalProducts || 0) - (a.totalProducts || 0) || String(a.name).localeCompare(String(b.name), 'ar');
             return (b.kanjoScore || 0) - (a.kanjoScore || 0) || String(a.name).localeCompare(String(b.name), 'ar');
         })
         .forEach((r) => {
+            if (locked) {
+                lines.push([
+                    r.name,
+                    r.team || kpiRepTeamName(r.name),
+                    r.totalProducts,
+                    kpiSnapshotValue(r.snapshotVendors),
+                    kpiSnapshotValue(r.snapshotPhotos),
+                    'مُجمّد'
+                ]);
+                return;
+            }
+            /* `editedImagesCount` is the image editor's processed count; for a
+               field rep it is the number of their products whose images were
+               completed, so the column is meaningful for every row. */
             lines.push([
                 r.name,
                 kpiRepTeamName(r.name),
@@ -3417,6 +3799,7 @@ window.exportKpiLeaderboardCsv = () => {
                 Math.round(Number(r.validRatioRaw || 0) * 100) + '%',
                 Math.round(Number(r.imageRatioRaw || 0) * 100) + '%',
                 r.withImage,
+                Number(r.editedImagesCount || 0),
                 r.isEditor ? '' : Number(r.kanjoScore || 0).toFixed(1),
                 r.isEditor ? '' : (r.rank || '')
             ]);
