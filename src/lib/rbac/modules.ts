@@ -20,8 +20,7 @@ export type ModuleIcon =
   | "marketing"
   | "finance"
   | "operations"
-  | "clearinghouse"
-  | "data-entry";
+  | "clearinghouse";
 
 export type ModuleDefinition = {
   href: string;

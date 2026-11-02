@@ -5,8 +5,8 @@
  * with no rule or selector change; the files below load in their original
  * source order so the cascade is identical.
  *
- * Domain rules (bi, catalog, kpi, accounts, payroll, commissions, marketing,
- * data-entry) stay in their own manifests and are imported first.
+ * Domain rules (bi, catalog, kpi, accounts, payroll, commissions, marketing)
+ * stay in their own manifests and are imported first.
  */
 
 /* Shell and navigation */

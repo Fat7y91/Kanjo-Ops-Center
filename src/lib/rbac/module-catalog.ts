@@ -146,15 +146,6 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "marketing",
   },
   {
-    href: "/data-entry",
-    label: "إدخال البيانات",
-    shortLabel: "الإدخال",
-    description: "استعراض التجار أولاً ثم منتجات كل تاجر وأسعاره.",
-    permission: "view_pricing_and_status",
-    alsoGrantedBy: ["view_catalog"],
-    icon: "data-entry",
-  },
-  {
     href: "/admin/finance/reviews",
     label: "اعتماد رأس المال",
     shortLabel: "الاعتمادات",

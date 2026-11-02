@@ -33,8 +33,6 @@ const paths: Record<ModuleIconName, string> = {
     "M4 5h16v14H4V5Zm4 4h8M8 13h5M16 13h.01M16 9h.01",
   clearinghouse:
     "M4 7h16M4 12h16M4 17h10M17 15v4M15 17h4",
-  "data-entry":
-    "M5 4h10l4 4v12H5V4Zm10 0v4h4M8 12h8M8 16h5",
 };
 
 export function ModuleIcon({ name }: { name: ModuleIconName }) {

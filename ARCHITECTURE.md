@@ -583,16 +583,9 @@ logout therefore POST to plain route handlers. Rules locked in:
   constrained: `clicks ≤ impressions`, `conversions ≤ clicks` and
   `leads ≤ clicks`.
 
-### Data Entry (Tier 1 + 2)
-- UI: `src/app/(workspace)/data-entry/page.tsx` plus
-  `components/data-entry/data-entry-view.tsx`.
-- Flow is merchants first, then that merchant's products. Selecting a row is
-  view state only; the page is a server container that passes scoped rows down.
-- Shares the `view_catalog` capability and the same city scope as the catalog.
-
 ### CSS
 - Manifest: `src/app/globals.css` (4807 lines — still over limit, extraction backlog).
-- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing,data-entry}.css` plus
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
 
@@ -719,7 +712,6 @@ labels live in `src/lib/rbac/permissions.ts` and the SQL seed mirrors the keys:
 | الحسابات البنكية (Banking) | `view_bank_balances`, `add_bank_account`, `view_bank_transactions`, `record_bank_transaction` |
 | الرواتب (Payroll) | `view_payroll_sheets`, `view_employee_payslip` |
 | التسويق (Marketing) | `view_campaigns`, `create_campaign`, `record_campaign_results`, `view_marketing_logs`, `manage_platform_settings` |
-| إدخال البيانات (Data Entry) | `view_pricing_and_status` |
 | أسعار العمولات (Commission Rates) | `manage_commission_rates` |
 | مستخدمين النظام (System Users) | `manage_system_users` |
 
