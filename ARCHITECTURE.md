@@ -331,6 +331,15 @@ logout therefore POST to plain route handlers. Rules locked in:
   The concrete repositories are `store/{cities,merchants,tasks,visits,transfers,
   edits,documents,state,crm,dates}.ts`; `store/seed.ts` (565) is seed data.
 - Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`.
+- Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
+  is authoritative; `components/field-ops/visit/validate-visit-form.ts`
+  mirrors it client-side and must return the failing field key. The follow-up
+  contact number is mandatory whenever a follow-up date exists **or** the
+  outcome is a commission outcome, and the schema accepts `null` because the
+  visit engine clears the field as `report.followUpContactNumber || null`.
+  Form state and submit live in `components/field-ops/use-visit-report-form.ts`;
+  `visit-report-form.tsx` is presentation only. Failures render inline under
+  the offending control, never as a raw Zod 422.
 
 ### Taxonomy (Tier 1–5)
 - UI: `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` (764 — over

@@ -16,6 +16,10 @@ type OutcomeSectionProps = {
   outcomeOptions: OutcomeOption[];
   outcome: ContractState;
   agreedCommission: string;
+  /** Inline error for the outcome choice, surfaced by the form validator. */
+  outcomeError?: string;
+  /** Inline error for the commission input, surfaced by the form validator. */
+  commissionError?: string;
   onOutcomeChange: (value: ContractState) => void;
   onCommissionChange: (value: string) => void;
 };
@@ -27,6 +31,8 @@ export function OutcomeSection({
   outcomeOptions,
   outcome,
   agreedCommission,
+  outcomeError,
+  commissionError,
   onOutcomeChange,
   onCommissionChange,
 }: OutcomeSectionProps) {
@@ -61,6 +67,12 @@ export function OutcomeSection({
         ))}
       </div>
 
+      {outcomeError ? (
+        <span className="field-error" role="alert">
+          {outcomeError}
+        </span>
+      ) : null}
+
       <p className="inline-note">
         اعتماد توقيع العقد يتم حصرياً من كارت التاجر بواسطة مدير الحالات.
       </p>
@@ -73,7 +85,11 @@ export function OutcomeSection({
       ) : null}
 
       {needsCommission ? (
-        <label className="field field-commission">
+        <label
+          className={`field field-commission${
+            commissionError ? " field-invalid" : ""
+          }`}
+        >
           <span>النسبة المتفق عليها (%)</span>
           <input
             type="number"
@@ -85,11 +101,17 @@ export function OutcomeSection({
             onChange={(event) => onCommissionChange(event.target.value)}
             placeholder="مثال: 12"
             required
+            aria-invalid={commissionError ? true : undefined}
           />
           <span className="field-hint">
             إلزامية عند الاتفاق المبدئي أو النهائي. تُحفظ في كارت التاجر وتُقفل
             نهائياً عند اعتماد التوقيع.
           </span>
+          {commissionError ? (
+            <span className="field-error" role="alert">
+              {commissionError}
+            </span>
+          ) : null}
         </label>
       ) : null}
     </section>

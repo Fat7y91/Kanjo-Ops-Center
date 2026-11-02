@@ -13,6 +13,8 @@ type OpinionSectionProps = {
   customEnabled: boolean;
   customLabel: string;
   customWeight: number;
+  /** Inline error for the custom opinion rule, surfaced by the validator. */
+  customError?: string;
   onPatch: (trait: string, patch: Partial<OpinionState>) => void;
   onToggleCustom: (enabled: boolean) => void;
   onCustomLabelChange: (value: string) => void;
@@ -25,6 +27,7 @@ export function OpinionSection({
   customEnabled,
   customLabel,
   customWeight,
+  customError,
   onPatch,
   onToggleCustom,
   onCustomLabelChange,
@@ -99,6 +102,7 @@ export function OpinionSection({
         </div>
         <input
           type="text"
+          aria-invalid={customError ? true : undefined}
           value={customLabel}
           disabled={!customEnabled}
           onChange={(event) => onCustomLabelChange(event.target.value)}
@@ -115,6 +119,11 @@ export function OpinionSection({
           onChange={(event) => onCustomWeightChange(Number(event.target.value))}
           aria-label="وزن الرأي المخصص"
         />
+        {customError ? (
+          <span className="field-error" role="alert">
+            {customError}
+          </span>
+        ) : null}
       </div>
     </section>
   );

@@ -6,11 +6,11 @@ import { FollowupSection } from "@/components/field-ops/visit/followup-section";
 import { OpinionSection } from "@/components/field-ops/visit/opinion-section";
 import { OutcomeSection } from "@/components/field-ops/visit/outcome-section";
 import type { VisitDraft } from "@/components/field-ops/visit-mode";
-import {
-  type ContractState,
-  type FollowUpKind,
-  type Merchant,
-  type RepOpinion,
+import type {
+  ContractState,
+  FollowUpKind,
+  Merchant,
+  RepOpinion,
 } from "@/lib/field-ops/types";
 
 import { useVisitReportForm } from "./use-visit-report-form";
@@ -72,7 +72,11 @@ export function VisitReportForm({
       onClose={onClose}
       wide
     >
-      <form className="form-stack visit-report-form" onSubmit={form.submit}>
+      <form
+        className="form-stack visit-report-form"
+        onSubmit={form.submit}
+        noValidate
+      >
         <ContactSection
           draft={draft}
           visitCount={visitCount}
@@ -91,11 +95,13 @@ export function VisitReportForm({
           outcomeOptions={form.outcomeOptions}
           outcome={form.outcome}
           agreedCommission={form.agreedCommission}
+          outcomeError={form.fieldError("outcome")}
+          commissionError={form.fieldError("agreedCommission")}
           onOutcomeChange={form.setOutcome}
           onCommissionChange={form.setAgreedCommission}
         />
 
-        <label className="field">
+        <label className={`field${form.fieldError("notes") ? " field-invalid" : ""}`}>
           <span>التقرير النوعي الكامل</span>
           <textarea
             rows={5}
@@ -108,6 +114,11 @@ export function VisitReportForm({
           <span className="field-hint">
             10 أحرف على الأقل. يُحفظ التقرير في السجل الزمني لكارت التاجر.
           </span>
+          {form.fieldError("notes") ? (
+            <span className="field-error" role="alert">
+              {form.fieldError("notes")}
+            </span>
+          ) : null}
         </label>
 
         <OpinionSection
@@ -116,6 +127,7 @@ export function VisitReportForm({
           customEnabled={form.customEnabled}
           customLabel={form.customLabel}
           customWeight={form.customWeight}
+          customError={form.fieldError("customLabel") ?? form.fieldError("customWeight")}
           onPatch={form.patchOpinion}
           onToggleCustom={form.setCustomEnabled}
           onCustomLabelChange={form.setCustomLabel}
@@ -127,18 +139,15 @@ export function VisitReportForm({
           followUpKind={form.followUpKind}
           followUpNote={form.followUpNote}
           followUpContactNumber={form.followUpContactNumber}
+          outcome={form.outcome}
           merchantTeam={merchant.team}
+          atError={form.fieldError("followUpAt")}
+          error={form.fieldError("followUpContactNumber")}
           onAtChange={form.setFollowUpAt}
           onKindChange={form.changeFollowUpKind}
           onNoteChange={form.setFollowUpNote}
-          onContactNumberChange={form.setFollowUpContactNumber}
+          onContactNumberChange={form.changeContactNumber}
         />
-
-        {form.error ? (
-          <p className="form-error" role="alert">
-            {form.error}
-          </p>
-        ) : null}
 
         <div className="form-actions">
           <button

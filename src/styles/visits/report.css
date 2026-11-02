@@ -31,10 +31,19 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* The follow-up section now always shows four controls: kind, date, note and
+ * the contact number. A three-column track would push the fourth onto a row of
+ * its own with a ragged width, so the track is two-up and the note spans. */
 .visit-followup-grid {
   display: grid;
-  grid-template-columns: 0.8fr 1fr 1.4fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* A layout that reflows the moment an error appears reads as a jump; only the
+ * note spans, and the error text grows inside its own cell. */
+.visit-followup-grid .visit-followup-note {
+  grid-column: 1 / -1;
 }
 
 .visit-advanced-note {

@@ -237,3 +237,36 @@ textarea {
   font-weight: 500;
 }
 
+/*
+ * Inline validation. Errors live under the control that failed instead of in a
+ * toast, so the rep can see which input to fix while the form is still open.
+ * The border uses the shared danger token rather than a new red.
+ */
+.field-invalid > input,
+.field-invalid > textarea,
+.field-invalid > select {
+  border-color: var(--red);
+}
+
+.field-invalid > input:focus-visible,
+.field-invalid > textarea:focus-visible {
+  outline-color: var(--red);
+}
+
+.field-required {
+  margin-inline-start: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.field-error {
+  color: var(--red);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+

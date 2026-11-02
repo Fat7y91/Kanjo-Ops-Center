@@ -64,14 +64,44 @@ export const visitReportSchema = z.object({
     .max(100, "النسبة المتفق عليها يجب أن تكون بين 1% و100%.")
     .nullable()
     .optional(),
-  followUpAt: z.string().trim().min(1).nullable().optional(),
-  followUpKind: z.enum(FOLLOW_UP_KINDS).optional(),
-  followUpNote: z.string().trim().max(500).optional(),
-  followUpContactNumber: z
-    .string()
+  followUpAt: z
+    .string({ invalid_type_error: "موعد المتابعة غير صالح." })
     .trim()
-    .max(40)
+    .nullable()
+    .optional(),
+  followUpKind: z
+    .enum(FOLLOW_UP_KINDS, {
+      required_error: "اختر نوع المتابعة.",
+      invalid_type_error: "نوع المتابعة غير صالح.",
+    })
+    .optional(),
+  followUpNote: z
+    .string({ invalid_type_error: "ملاحظة المتابعة غير صالحة." })
+    .trim()
+    .max(500, "ملاحظة المتابعة لا تتجاوز 500 حرف.")
+    .optional(),
+  /*
+   * Dialable contact for a follow-up. Spaces, dashes and parentheses are
+   * removed before the value reaches the store so the board can build `tel:`
+   * and `wa.me` links without re-parsing.
+   *
+   * `null` is accepted deliberately: the visit engine clears the field by
+   * sending `report.followUpContactNumber || null`, and a schema that only
+   * allowed `undefined` answered that with "Expected string, received null"
+   * — a raw Zod message leaking to the rep as a 422 instead of an inline
+   * Arabic error. Emptiness is not the same as absence here: the mandatory
+   * rule lives in `superRefine`, so a blank number stays a validation issue
+   * about the field rather than a type failure.
+   */
+  followUpContactNumber: z
+    .string({
+      required_error: "رقم هاتف المتابعة مطلوب",
+      invalid_type_error: "رقم هاتف المتابعة مطلوب",
+    })
+    .trim()
+    .max(40, "رقم هاتف المتابعة طويل جداً.")
     .transform((value) => value.replace(/[\s\-()]/g, ""))
+    .nullable()
     .optional(),
   source: z.enum(["task", "unplanned", "offline"]).optional(),
   clientVisitId: z.string().trim().max(80).nullable().optional(),
@@ -89,19 +119,28 @@ export const visitReportSchema = z.object({
       });
     }
 
-    // A scheduled communication follow-up is only actionable with a dialable
-    // number. No follow-up date means no task is created, so no number needed.
-    const kind = value.followUpKind;
+    /*
+     * A follow-up OR an agreement always carries a reachable number. This is
+     * deliberately broader than the old call/WhatsApp-only condition — a
+     * "visit" follow-up and a negotiated outcome both need someone to call,
+     * and leaving the field optional made the recorded task unreachable in
+     * practice.
+     */
     const needsNumber =
-      Boolean(value.followUpAt) && (kind === "call" || kind === "whatsapp");
+      Boolean(value.followUpAt) || COMMISSION_OUTCOMES.includes(value.outcome);
     if (needsNumber) {
       const digits = (value.followUpContactNumber ?? "").replace(/\D/g, "");
-      if (digits.length < 8) {
+      if (digits.length === 0) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["followUpContactNumber"],
-          message:
-            "رقم هاتف المتابعة مطلوب عند اختيار المكالمة أو الواتساب.",
+          message: "رقم هاتف المتابعة مطلوب عند تسجيل متابعة أو اتفاق.",
+        });
+      } else if (digits.length < 8) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["followUpContactNumber"],
+          message: "رقم هاتف المتابعة يجب أن يحتوي 8 أرقام على الأقل.",
         });
       }
     }

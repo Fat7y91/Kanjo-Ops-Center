@@ -7,7 +7,10 @@ import {
   type OpinionState,
   type OutcomeOption,
 } from "@/components/field-ops/visit/outcome-options";
-import { validateVisitForm } from "@/components/field-ops/visit/validate-visit-form";
+import {
+  validateVisitForm,
+  type VisitFormField,
+} from "@/components/field-ops/visit/validate-visit-form";
 import { isCommunicationKind, sanitizePhone } from "@/lib/field-ops/phone";
 import {
   ADVANCED_OUTCOMES,
@@ -22,9 +25,10 @@ import type { VisitReportDraft } from "./visit-report-form";
  * State machine and submit handler for the visit report form.
  *
  * Extracted from the render module so the modal body stays a presentation of
- * state, and so the reset-on-open rule lives in one place. The form is a
- * controlled form, not React Hook Form: the app carries no form library, and
- * the validation rules are already pure functions in `validate-visit-form.ts`.
+ * state, and so the reset-on-open rule and the inline-error rule live in one
+ * testable place. The form is a controlled form, not React Hook Form: the app
+ * carries no form library, and the validation rules are already pure functions
+ * in `validate-visit-form.ts`.
  */
 export function useVisitReportForm(options: {
   open: boolean;
@@ -56,6 +60,17 @@ export function useVisitReportForm(options: {
   const [followUpNote, setFollowUpNote] = useState("");
   const [followUpContactNumber, setFollowUpContactNumber] = useState("");
   const [error, setError] = useState("");
+  const [errorField, setErrorField] = useState<VisitFormField | null>(null);
+
+  /** Only the field that failed carries a message; the rest stay clean. */
+  function fieldError(field: VisitFormField): string | undefined {
+    return errorField === field ? error : undefined;
+  }
+
+  function clearError() {
+    setError("");
+    setErrorField(null);
+  }
 
   const canUseAdvanced = visitCount > 0 || canManageState;
 
@@ -89,6 +104,7 @@ export function useVisitReportForm(options: {
     setFollowUpNote("");
     setFollowUpContactNumber("");
     setError("");
+    setErrorField(null);
   }, [open, merchant, visitCount]);
 
   const outcomeOptions = useMemo<OutcomeOption[]>(() => {
@@ -111,6 +127,13 @@ export function useVisitReportForm(options: {
     }
   }
 
+  function changeContactNumber(value: string) {
+    setFollowUpContactNumber(value);
+    // Typing in the failing field is the rep acknowledging it; keeping the old
+    // message on screen while the value changes reads as a stale error.
+    if (errorField === "followUpContactNumber") clearError();
+  }
+
   function patchOpinion(trait: string, patch: Partial<OpinionState>) {
     setOpinionState((current) => ({
       ...current,
@@ -120,7 +143,7 @@ export function useVisitReportForm(options: {
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
+    clearError();
 
     const result = validateVisitForm({
       outcome,
@@ -143,6 +166,7 @@ export function useVisitReportForm(options: {
 
     if (!result.ok) {
       setError(result.error);
+      setErrorField(result.field);
       return;
     }
 
@@ -179,13 +203,13 @@ export function useVisitReportForm(options: {
     followUpNote,
     setFollowUpNote,
     followUpContactNumber,
-    setFollowUpContactNumber,
     changeFollowUpKind,
+    changeContactNumber,
     outcomeOptions,
     activeOpinions,
     patchOpinion,
+    fieldError,
     submit,
     canUseAdvanced,
-    error,
   };
 }
