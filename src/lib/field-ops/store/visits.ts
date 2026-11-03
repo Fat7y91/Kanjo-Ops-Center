@@ -21,11 +21,13 @@ import {
   type Actor,
 } from "./core";
 import { mergeOpinions } from "./crm";
+import { loadVisitReports } from "./report-source";
 
-export function listVisitReports(merchantId?: string): VisitReport[] {
-  const reports = clone(getStore().reports).sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt),
-  );
+export async function listVisitReports(
+  merchantId?: string,
+  preloaded?: VisitReport[],
+): Promise<VisitReport[]> {
+  const reports = preloaded ?? (await loadVisitReports());
   return merchantId
     ? reports.filter((report) => report.merchantId === merchantId)
     : reports;
@@ -36,10 +38,9 @@ export function listVisitReports(merchantId?: string): VisitReport[] {
  * outcomes is derived from this count, so it stays correct even when the
  * earlier visit was logged offline and flushed later.
  */
-export function visitCountFor(merchantId: string): number {
-  return getStore().reports.filter(
-    (report) => report.merchantId === merchantId,
-  ).length;
+export async function visitCountFor(merchantId: string): Promise<number> {
+  const reports = await loadVisitReports();
+  return reports.filter((report) => report.merchantId === merchantId).length;
 }
 
 export function listFollowUpTasks(merchantId?: string): FollowUpTask[] {
@@ -51,17 +52,17 @@ export function listFollowUpTasks(merchantId?: string): FollowUpTask[] {
     : tasks;
 }
 
-export function createVisitReport(
+export async function createVisitReport(
   merchantId: string,
   input: VisitReportInput,
   actor: Actor,
   options: { canManageState: boolean },
-): {
+): Promise<{
   report: VisitReport;
   merchant: Merchant;
   followUp: FollowUpTask | null;
   duplicate: boolean;
-} {
+}> {
   const store = getStore();
   const merchant = store.merchants.find(
     (candidate) => candidate.id === merchantId,
@@ -71,8 +72,11 @@ export function createVisitReport(
   }
 
   // Offline flush is idempotent: a retried clientVisitId must not duplicate.
+  // The durable table is checked as well as the local store, so a replay in a
+  // different isolate is recognised before the merchant state is touched.
   if (input.clientVisitId) {
-    const existing = store.reports.find(
+    const known = await loadVisitReports();
+    const existing = known.find(
       (report) =>
         report.merchantId === merchantId &&
         report.clientVisitId === input.clientVisitId,
@@ -88,7 +92,7 @@ export function createVisitReport(
   }
 
   const current = merchant.contractState;
-  const priorVisits = visitCountFor(merchantId);
+  const priorVisits = await visitCountFor(merchantId);
   const outcome = input.outcome as ContractState;
 
   // A rep can never submit a signature: that is an admin governance action on

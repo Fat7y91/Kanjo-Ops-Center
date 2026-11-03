@@ -9,6 +9,7 @@ import type {
 } from "@/lib/field-ops/types";
 
 import { clone, getStore } from "./core";
+import { loadVisitReports } from "./report-source";
 
 export function calculateCommission(
   monthlyValue: number,
@@ -64,11 +65,15 @@ export type MerchantTimelineEntry =
   | { kind: "document"; at: string; document: MerchantDocument }
   | { kind: "follow_up"; at: string; followUp: FollowUpTask };
 
-export function merchantTimeline(merchantId: string): MerchantTimelineEntry[] {
+export async function merchantTimeline(
+  merchantId: string,
+  preloaded?: VisitReport[],
+): Promise<MerchantTimelineEntry[]> {
   const store = getStore();
   const entries: MerchantTimelineEntry[] = [];
+  const reports = preloaded ?? (await loadVisitReports());
 
-  for (const report of store.reports) {
+  for (const report of reports) {
     if (report.merchantId === merchantId) {
       entries.push({
         kind: "visit",
@@ -119,9 +124,12 @@ export type MerchantCrmSummary = {
   nextFollowUpAt: string | null;
 };
 
-export function merchantCrmSummary(merchantId: string): MerchantCrmSummary {
+export async function merchantCrmSummary(
+  merchantId: string,
+  preloaded?: VisitReport[],
+): Promise<MerchantCrmSummary> {
   const merchant = getStore().merchants.find((m) => m.id === merchantId);
-  const visits = getStore().reports.filter(
+  const visits = (preloaded ?? (await loadVisitReports())).filter(
     (report) => report.merchantId === merchantId,
   );
   const totalDuration = visits.reduce(

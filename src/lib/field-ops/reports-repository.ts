@@ -7,14 +7,50 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 import type { VisitReport } from "./types";
 
 /**
- * Durable write target for `app.visit_reports`.
+ * Durable store for `app.visit_reports`.
  *
- * The field-ops read path still comes from the process-local store; this seam
- * only makes sure a report that was acknowledged survives an isolate recycle.
- * It is also the only module that knows the column names.
+ * `app.visit_reports` is the shared, cross-isolate record of a completed visit;
+ * the process-local field-ops store only ever held the demo seed plus whatever
+ * the current worker wrote. Reads therefore prefer the table and fall back to
+ * the in-memory store only while the migration is not deployed, and writes go
+ * here before the route acknowledges the report.
+ *
+ * This is the only module that knows the column names.
  */
 
+const COLUMNS =
+  "id,merchant_id,merchant_name,task_id,rep_id,rep_name,team,outcome,previous_state,notes,commission_amount,agreed_commission,created_at,started_at,ended_at,duration_seconds,start_location,end_location,contact,opinions,follow_up_at,follow_up_task_id,follow_up_contact_number,source,client_visit_id,logged_by";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type VisitReportRow = {
+  id: string;
+  merchant_id: string;
+  merchant_name: string;
+  task_id: string | null;
+  rep_id: string;
+  rep_name: string;
+  team: string;
+  outcome: VisitReport["outcome"];
+  previous_state: VisitReport["previousState"];
+  notes: string;
+  commission_amount: number | string;
+  agreed_commission: number | string | null;
+  created_at: string;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  start_location: VisitReport["startLocation"];
+  end_location: VisitReport["endLocation"];
+  contact: VisitReport["contact"];
+  opinions: VisitReport["opinions"];
+  follow_up_at: string | null;
+  follow_up_task_id: string | null;
+  follow_up_contact_number: string | null;
+  source: VisitReport["source"] | null;
+  client_visit_id: string | null;
+  logged_by: string | null;
+};
 
 export type VisitReportPersistResult = "stored" | "duplicate" | "unavailable";
 
@@ -22,9 +58,40 @@ export function isVisitReportsDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
+function toReport(row: VisitReportRow): VisitReport {
+  return {
+    id: row.id,
+    merchantId: row.merchant_id,
+    merchantName: row.merchant_name,
+    taskId: row.task_id,
+    repId: row.rep_id,
+    repName: row.rep_name,
+    team: row.team,
+    outcome: row.outcome,
+    previousState: row.previous_state,
+    notes: row.notes,
+    commissionAmount: Number(row.commission_amount),
+    agreedCommission:
+      row.agreed_commission == null ? null : Number(row.agreed_commission),
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    durationSeconds: row.duration_seconds,
+    startLocation: row.start_location,
+    endLocation: row.end_location,
+    contact: row.contact,
+    opinions: Array.isArray(row.opinions) ? row.opinions : [],
+    followUpAt: row.follow_up_at,
+    followUpTaskId: row.follow_up_task_id,
+    followUpContactNumber: row.follow_up_contact_number,
+    source: row.source ?? "task",
+    clientVisitId: row.client_visit_id,
+  };
+}
+
 /**
  * Seeded field-ops actors use ids like `u-rep-fox`, which are not rows in
- * `app.users`. `logged_by` is a uuid FK, so anything else must be sent as null
+ * `app.users`. `logged_by` is a uuid FK, so anything else is sent as null
  * rather than rejected by the database.
  */
 function loggedByValue(actorId: string | null): string | null {
@@ -60,6 +127,30 @@ function toRow(report: VisitReport, loggedBy: string | null) {
     client_visit_id: report.clientVisitId ?? null,
     logged_by: loggedByValue(loggedBy),
   };
+}
+
+/**
+ * Every durable report, newest first.
+ *
+ * Returns `null` when the table is not deployed yet, which tells the caller to
+ * keep serving the in-memory store rather than showing an empty timeline.
+ */
+export async function listVisitReportRows(): Promise<VisitReport[] | null> {
+  if (!hasSupabaseConfig()) return null;
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("visit_reports")
+    .select(COLUMNS)
+    .order("created_at", { ascending: false })
+    .limit(5000);
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    throw error;
+  }
+  return ((data ?? []) as VisitReportRow[]).map(toReport);
 }
 
 /**

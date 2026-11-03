@@ -22,8 +22,8 @@ export function listPayrollProfiles(): PayrollProfile[] {
  * Derived from the live visit reports, so payroll never carries its own copy of
  * performance data and cannot disagree with the commission dashboard.
  */
-export function contributionFor(repId: string): number {
-  const reports = listVisitReports();
+export async function contributionFor(repId: string): Promise<number> {
+  const reports = await listVisitReports();
   const merchants = new Map(
     listMerchants().map((merchant) => [merchant.id, merchant]),
   );
@@ -43,13 +43,16 @@ export type Payslip = {
   result: PayrollResult;
 };
 
-export function buildPayslips(): Payslip[] {
-  return listPayrollProfiles().map((profile) => {
-    const contribution = contributionFor(profile.userId);
-    return {
-      profile,
-      contribution,
-      result: computePayroll(profile, contribution),
-    };
-  });
+export async function buildPayslips(): Promise<Payslip[]> {
+  const profiles = listPayrollProfiles();
+  return Promise.all(
+    profiles.map(async (profile) => {
+      const contribution = await contributionFor(profile.userId);
+      return {
+        profile,
+        contribution,
+        result: computePayroll(profile, contribution),
+      };
+    }),
+  );
 }

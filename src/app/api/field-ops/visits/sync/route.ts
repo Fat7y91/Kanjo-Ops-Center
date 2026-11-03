@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const priorVisits = visitCountFor(merchantId);
+    const priorVisits = await visitCountFor(merchantId);
     if (parsed.data.outcome === "signed_contract") {
       results.push({
         clientVisitId,
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      const created = createVisitReport(merchantId, parsed.data, actor, {
+      const created = await createVisitReport(merchantId, parsed.data, actor, {
         canManageState,
       });
       if (!created.duplicate) {

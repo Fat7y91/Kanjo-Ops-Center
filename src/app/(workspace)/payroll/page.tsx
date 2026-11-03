@@ -8,7 +8,7 @@ export const runtime = "edge";
 
 export default async function PayrollPage() {
   await requirePermission("view_payroll_sheets");
-  const payslips = buildPayslips();
+  const payslips = await buildPayslips();
 
   return (
     <>

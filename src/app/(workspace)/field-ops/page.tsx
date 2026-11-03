@@ -8,7 +8,7 @@ export const runtime = "edge";
 
 export default async function FieldOpsPage() {
   const session = await requirePermission("view_all_teams_visits");
-  const board = buildBoard(session);
+  const board = await buildBoard(session);
   const permissions = session.permissions;
 
   return (

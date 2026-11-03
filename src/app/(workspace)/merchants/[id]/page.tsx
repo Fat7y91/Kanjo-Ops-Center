@@ -13,7 +13,6 @@ import {
   listVisitReports,
   merchantCrmSummary,
   merchantTimeline,
-  visitCountFor,
 } from "@/lib/field-ops/store";
 import { teamLabel } from "@/lib/field-ops/types";
 
@@ -39,6 +38,7 @@ export default async function MerchantProfilePage({
 
   const city = getCityById(merchant.cityId);
   const permissions = session.permissions;
+  const reports = await listVisitReports(merchant.id);
 
   return (
     <>
@@ -51,13 +51,13 @@ export default async function MerchantProfilePage({
       <MerchantProfileClient
         merchant={merchant}
         cityName={city?.name ?? "مدينة غير محددة"}
-        reports={listVisitReports(merchant.id)}
+        reports={reports}
         overrides={listStateOverrides(merchant.id)}
         tasks={listTasks().filter((task) => task.merchantId === merchant.id)}
         followUps={listFollowUpTasks(merchant.id)}
-        timeline={merchantTimeline(merchant.id)}
-        summary={merchantCrmSummary(merchant.id)}
-        visitCount={visitCountFor(merchant.id)}
+        timeline={await merchantTimeline(merchant.id, reports)}
+        summary={await merchantCrmSummary(merchant.id, reports)}
+        visitCount={reports.length}
         viewerTeam={session.user.team}
         canEditMerchants={permissions.includes("view_merchant_profile")}
         canRequestTransfers={permissions.includes("request_ownership_transfer")}

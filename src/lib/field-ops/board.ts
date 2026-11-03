@@ -16,10 +16,12 @@ export type FieldOpsBoard = {
   merchants: ReturnType<typeof listMerchants>;
   transferRequests: ReturnType<typeof listTransferRequests>;
   editRequests: ReturnType<typeof listEditRequests>;
-  reports: ReturnType<typeof listVisitReports>;
+  reports: Awaited<ReturnType<typeof listVisitReports>>;
 };
 
-export function buildBoard(session: ActiveSession): FieldOpsBoard {
+export async function buildBoard(
+  session: ActiveSession,
+): Promise<FieldOpsBoard> {
   const canManageTasks = session.permissions.includes("assign_tasks");
   const canApproveTransfers =
     session.permissions.includes("approve_ownership_transfer");
@@ -33,7 +35,7 @@ export function buildBoard(session: ActiveSession): FieldOpsBoard {
   const editRequests = listEditRequests().filter(
     (request) => canApproveEdits || request.requestedBy === session.user.id,
   );
-  const reports = listVisitReports().filter(
+  const reports = (await listVisitReports()).filter(
     (report) => canManageTasks || report.team === session.user.team,
   );
 

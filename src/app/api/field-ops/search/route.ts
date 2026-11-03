@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorize } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { visitCountFor } from "@/lib/field-ops/store";
+import { loadVisitReports } from "@/lib/field-ops/store/report-source";
 import { searchMerchants } from "@/lib/search/merchant-search";
 
 export const dynamic = "force-dynamic";
@@ -20,14 +20,20 @@ export async function GET(request: Request) {
   if (!session) return response;
 
   const query = new URL(request.url).searchParams.get("q") ?? "";
-  const results = searchMerchants(
+  const matches = searchMerchants(
     query,
     session.user.team,
     20,
     effectiveCityIds(session),
-  ).map((result) => ({
+  );
+  // One durable read for the whole result page instead of one query per match.
+  const counts = new Map<string, number>();
+  for (const report of await loadVisitReports()) {
+    counts.set(report.merchantId, (counts.get(report.merchantId) ?? 0) + 1);
+  }
+  const results = matches.map((result) => ({
     ...result,
-    visitCount: visitCountFor(result.merchant.id),
+    visitCount: counts.get(result.merchant.id) ?? 0,
   }));
 
   return NextResponse.json(

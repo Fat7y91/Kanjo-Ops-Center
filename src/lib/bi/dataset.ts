@@ -79,7 +79,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
   const cities = listCities();
   const cityName = new Map(cities.map((city) => [city.id, city.name]));
   const merchants = listMerchants();
-  const reports = listVisitReports();
+  const reports = await listVisitReports();
   const products = listProducts();
 
   const publishedByMerchant = new Set(
@@ -198,7 +198,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
     ).values(),
   ).sort((left, right) => left.name.localeCompare(right.name));
 
-  const financials = buildFounderFinancials();
+  const financials = await buildFounderFinancials();
   const treasury = financials.accounts.map((snapshot) => ({
     currency: snapshot.currency,
     deposits: snapshot.deposits,
@@ -236,7 +236,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
       currency: entry.currency,
       occurredAt: entry.occurredAt,
     }));
-  const payslips = buildPayslips().map((slip) => ({
+  const payslips = (await buildPayslips()).map((slip) => ({
     userId: slip.profile.userId,
     userName: slip.profile.userName,
     title: slip.profile.title,

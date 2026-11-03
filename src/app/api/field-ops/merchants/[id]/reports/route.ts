@@ -58,7 +58,7 @@ export async function POST(
     // Server-side enforcement of the conditional state machine, independent
     // of whatever the offline client cached.
     if (
-      visitCountFor(id) === 0 &&
+      (await visitCountFor(id)) === 0 &&
       input.outcome === "final_contract" &&
       !session.permissions.includes("edit_contract")
     ) {
@@ -70,7 +70,7 @@ export async function POST(
     }
 
     const actor = actorFromSession(session);
-    const result = createVisitReport(id, input, actor, {
+    const result = await createVisitReport(id, input, actor, {
       canManageState: session.permissions.includes("edit_contract"),
     });
 
@@ -79,7 +79,7 @@ export async function POST(
     }
 
     return NextResponse.json(
-      { ...result, visitCount: visitCountFor(id) },
+      { ...result, visitCount: await visitCountFor(id) },
       { status: 201 },
     );
   } catch (error) {
@@ -103,11 +103,13 @@ export async function GET(
     );
   }
 
+  const visitCount = await visitCountFor(id);
+
   return NextResponse.json(
     {
       merchantId: id,
-      visitCount: visitCountFor(id),
-      canUseAdvancedOutcomes: visitCountFor(id) > 0,
+      visitCount,
+      canUseAdvancedOutcomes: visitCount > 0,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

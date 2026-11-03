@@ -11,7 +11,7 @@ export async function GET() {
   if (!session) return response;
 
   return NextResponse.json(
-    { board: buildBoard(session) },
+    { board: await buildBoard(session) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

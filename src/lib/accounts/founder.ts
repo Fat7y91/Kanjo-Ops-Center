@@ -33,11 +33,11 @@ export type FounderFinancials = {
  * currency is reported separately because riyals and pounds must never be
  * summed together.
  */
-export function buildFounderFinancials(): FounderFinancials {
+export async function buildFounderFinancials(): Promise<FounderFinancials> {
   const totals = totalByCurrency(listBankAccounts(), listLedgerEntries());
 
   const pending: Record<"EGP" | "SAR", number> = { EGP: 0, SAR: 0 };
-  for (const slip of buildPayslips()) {
+  for (const slip of await buildPayslips()) {
     pending[slip.profile.currency] += slip.result.net;
   }
 
