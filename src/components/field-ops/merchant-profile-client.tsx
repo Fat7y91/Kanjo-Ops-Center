@@ -90,9 +90,12 @@ export function MerchantProfileClient({
   const [visitTarget, setVisitTarget] = useState<VisitEngineTarget | null>(null);
 
   const otherTeam = Boolean(merchant.team) && merchant.team !== viewerTeam;
+  // The agreement gate follows the resolved state, not the stored column, so a
+  // merchant whose newest visit withdrew the agreement stops exposing the
+  // documents flow for an agreement that no longer exists.
   const agreementReached =
-    merchant.contractState === "final_contract" ||
-    merchant.contractState === "signed_contract";
+    summary.currentState === "final_contract" ||
+    summary.currentState === "signed_contract";
 
   function announce(message: string) {
     setToast(message);
@@ -112,6 +115,8 @@ export function MerchantProfileClient({
     <>
       <ProfileHero
         merchant={merchant}
+        state={summary.currentState}
+        stateAt={summary.currentStateAt}
         cityName={cityName}
         visitCount={visitCount}
         otherTeam={otherTeam}
@@ -130,6 +135,7 @@ export function MerchantProfileClient({
         <VisitHistory merchant={merchant} summary={summary} />
         <EconomicsPanel
           merchant={merchant}
+          state={summary.currentState}
           canViewFieldOps={canViewFieldOps}
           otherTeam={otherTeam}
           onRequestEdit={() => setEditOpen(true)}
@@ -220,7 +226,7 @@ export function MerchantProfileClient({
       <StateModal
         open={stateOpen}
         merchantName={merchant.name}
-        current={merchant.contractState}
+        current={summary.currentState}
         endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
         onClose={() => setStateOpen(false)}
         onDone={refreshWith}

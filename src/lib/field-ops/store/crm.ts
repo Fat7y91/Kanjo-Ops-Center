@@ -8,6 +8,12 @@ import type {
   VisitReport,
 } from "@/lib/field-ops/types";
 
+import {
+  latestStateEvent,
+  visitStateAt,
+  type MerchantStateEvent,
+} from "@/lib/field-ops/merchant-state";
+
 import { clone, getStore } from "./core";
 import { loadVisitReports } from "./report-source";
 
@@ -116,7 +122,12 @@ export type MerchantCrmSummary = {
   totalDurationSeconds: number;
   averageDurationSeconds: number;
   lastVisitAt: string | null;
+  /** Outcome of the newest visit, in visit time rather than insertion order. */
   lastOutcome: ContractState | null;
+  /** Newest agreement state across visits, overrides and the stored column. */
+  currentState: ContractState;
+  currentStateAt: string | null;
+  currentStateSource: MerchantStateEvent["source"];
   opinions: RepOpinion[];
   contact: VisitContact | null;
   contactUpdatedAt: string | null;
@@ -128,7 +139,8 @@ export async function merchantCrmSummary(
   merchantId: string,
   preloaded?: VisitReport[],
 ): Promise<MerchantCrmSummary> {
-  const merchant = getStore().merchants.find((m) => m.id === merchantId);
+  const store = getStore();
+  const merchant = store.merchants.find((m) => m.id === merchantId);
   const visits = (preloaded ?? (await loadVisitReports())).filter(
     (report) => report.merchantId === merchantId,
   );
@@ -138,14 +150,38 @@ export async function merchantCrmSummary(
   );
   const timed = visits.filter((report) => report.durationSeconds != null);
   const reps = Array.from(new Set(visits.map((report) => report.repName)));
+  // Ordered by when the visit actually happened: `createdAt` is the insertion
+  // stamp, so an offline replay could otherwise outrank a newer visit.
   const sortedVisits = [...visits].sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt),
+    visitStateAt(right).localeCompare(visitStateAt(left)),
   );
-  const openFollowUps = (getStore().followUps ?? [])
+  const openFollowUps = (store.followUps ?? [])
     .filter(
       (task) => task.merchantId === merchantId && task.status === "scheduled",
     )
     .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
+
+  const stateEvents: MerchantStateEvent[] = [
+    ...visits.map((report) => ({
+      state: report.outcome,
+      at: visitStateAt(report),
+      source: "visit" as const,
+    })),
+    ...store.overrides
+      .filter((override) => override.merchantId === merchantId)
+      .map((override) => ({
+        state: override.toState,
+        at: override.createdAt,
+        source: "override" as const,
+      })),
+  ];
+  const current = latestStateEvent(
+    {
+      state: merchant?.contractState ?? "no_agreement",
+      at: merchant?.updatedAt ?? null,
+    },
+    stateEvents,
+  );
 
   return {
     visitCount: visits.length,
@@ -159,6 +195,9 @@ export async function merchantCrmSummary(
         : 0,
     lastVisitAt: merchant?.lastVisitAt ?? null,
     lastOutcome: sortedVisits[0]?.outcome ?? null,
+    currentState: current.state,
+    currentStateAt: current.at || null,
+    currentStateSource: current.source,
     opinions: [...(merchant?.opinions ?? [])].sort(
       (left, right) => right.weight - left.weight,
     ),

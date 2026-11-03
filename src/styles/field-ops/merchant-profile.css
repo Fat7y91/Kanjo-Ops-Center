@@ -18,6 +18,31 @@
   gap: 8px;
 }
 
+/* The hero carries the agreement state as an accent so the current state is
+   readable before the badge text is: green = نهائي, gold = مبدئي,
+   red = بدون تعاقد, signed = موقّع. */
+.profile-hero.is-green {
+  border-inline-start: 4px solid var(--green);
+}
+
+.profile-hero.is-gold {
+  border-inline-start: 4px solid var(--gold);
+}
+
+.profile-hero.is-red {
+  border-inline-start: 4px solid var(--red);
+}
+
+.profile-hero.is-signed {
+  border-inline-start: 4px solid #7f6a2a;
+}
+
+.profile-state-stamp {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
 .profile-actions {
   display: flex;
   flex-wrap: wrap;

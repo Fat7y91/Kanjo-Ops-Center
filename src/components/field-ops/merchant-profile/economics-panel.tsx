@@ -2,12 +2,14 @@
 
 import { Protect } from "@/components/auth/protect";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
-import type { Merchant } from "@/lib/field-ops/types";
+import type { ContractState, Merchant } from "@/lib/field-ops/types";
 
 import { formatAmount } from "@/lib/field-ops/format";
 
 type EconomicsPanelProps = {
   merchant: Merchant;
+  /** Effective agreement state, resolved from visits + overrides + column. */
+  state: ContractState;
   canViewFieldOps: boolean;
   otherTeam: boolean;
   onRequestEdit: () => void;
@@ -16,14 +18,14 @@ type EconomicsPanelProps = {
 
 export function EconomicsPanel({
   merchant,
+  state,
   canViewFieldOps,
   otherTeam,
   onRequestEdit,
   onOpenSign,
 }: EconomicsPanelProps) {
-  const meta = CONTRACT_STATE_META[merchant.contractState];
-  const finalLocked =
-    merchant.contractState === "final_contract" && !merchant.editUnlocked;
+  const meta = CONTRACT_STATE_META[state];
+  const finalLocked = state === "final_contract" && !merchant.editUnlocked;
 
   return (
     <div className="panel">
@@ -61,7 +63,7 @@ export function EconomicsPanel({
       </div>
 
       <Protect require="edit_contract">
-        {merchant.contractState !== "signed_contract" ? (
+        {state !== "signed_contract" ? (
           <div className="sign-panel">
             <div className="sign-panel-head">
               <div>
@@ -75,8 +77,7 @@ export function EconomicsPanel({
               المقفلة، فتُحدَّث حالة التاجر إلى «توقيع العقد» وتُحتسب العمولة
               نهائياً.
             </p>
-            {merchant.contractState === "final_contract" ||
-            merchant.contractState === "provisional" ? (
+            {state === "final_contract" || state === "provisional" ? (
               <button
                 type="button"
                 className="button button-primary button-sign"
@@ -108,7 +109,7 @@ export function EconomicsPanel({
           </button>
         </div>
       ) : null}
-      {merchant.contractState === "signed_contract" ? (
+      {state === "signed_contract" ? (
         <p className="inline-note">
           العقود الموقّعة مقفلة تماماً. تم احتساب العمولة، وفقط صلاحية إدارة
           الحالات يمكنها تغيير هذا السجل.

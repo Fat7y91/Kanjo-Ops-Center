@@ -6,7 +6,8 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { listCities, listMerchants } from "@/lib/field-ops/store";
+import { listCities, listMerchants, listStateOverrides, listVisitReports } from "@/lib/field-ops/store";
+import { resolveMerchantState, stateEventsByMerchant } from "@/lib/field-ops/merchant-state";
 import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
 import { listVendorTypes } from "@/lib/taxonomy/store";
 
@@ -44,8 +45,19 @@ export default async function MerchantsPage({
     availableCities[0]?.id;
   const taxonomy = { vendorTypes: listVendorTypes() };
 
+  // The directory badge must agree with the merchant profile: the newest visit
+  // outcome or manager override wins over the stored column.
+  const stateEvents = stateEventsByMerchant(
+    await listVisitReports(),
+    listStateOverrides(),
+  );
+
   const rows: MerchantRow[] = scoped.map((merchant) => {
-    const meta = CONTRACT_STATE_META[merchant.contractState];
+    const state = resolveMerchantState(
+      merchant,
+      stateEvents.get(merchant.id),
+    );
+    const meta = CONTRACT_STATE_META[state.state];
     return {
       id: merchant.id,
       name: merchant.name,

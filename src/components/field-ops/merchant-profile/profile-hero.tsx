@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 
+import { formatDateTime } from "@/lib/field-ops/format";
 import { CONTRACT_STATE_META, teamLabel } from "@/lib/field-ops/types";
-import type { Merchant } from "@/lib/field-ops/types";
+import type { ContractState, Merchant } from "@/lib/field-ops/types";
 
 type ProfileHeroProps = {
   merchant: Merchant;
+  /** Effective agreement state, resolved from visits + overrides + column. */
+  state: ContractState;
+  stateAt: string | null;
   cityName: string;
   visitCount: number;
   otherTeam: boolean;
@@ -21,6 +25,8 @@ type ProfileHeroProps = {
 
 export function ProfileHero({
   merchant,
+  state,
+  stateAt,
   cityName,
   visitCount,
   otherTeam,
@@ -32,10 +38,12 @@ export function ProfileHero({
   onRequestTransfer,
   onOverrideState,
 }: ProfileHeroProps) {
-  const meta = CONTRACT_STATE_META[merchant.contractState];
+  const meta = CONTRACT_STATE_META[state];
 
   return (
-    <section className="profile-hero panel">
+    <section
+      className={`profile-hero panel is-${meta.tone.replace("badge-", "")}`}
+    >
       <div>
         <p className="eyebrow">{cityName}</p>
         <h2>{merchant.name}</h2>
@@ -51,6 +59,11 @@ export function ProfileHero({
             <span className="badge badge-gold">مملوك لفريق آخر</span>
           ) : null}
         </div>
+        {stateAt ? (
+          <p className="profile-state-stamp">
+            آخر تغيير للحالة · {formatDateTime(stateAt)}
+          </p>
+        ) : null}
       </div>
       <div className="profile-actions">
         {canStartVisit ? (

@@ -70,6 +70,46 @@ export function isMerchantProfilesDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
+/** Publish and VIP flags for the whole network, keyed by merchant id. */
+export type MerchantV1Flags = { appPublished: boolean; vipMenu: boolean };
+
+/**
+ * Batch read of the flags the catalog directory needs.
+ *
+ * The directory lists merchants, not one profile, so it must not issue a query
+ * per row. Missing table or missing config both mean "no flags set yet", which
+ * is exactly what the empty map expresses.
+ */
+export async function listMerchantV1Flags(): Promise<
+  Map<string, MerchantV1Flags>
+> {
+  const flags = new Map<string, MerchantV1Flags>();
+  if (!hasSupabaseConfig()) return flags;
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("merchant_v1_profiles")
+    .select("merchant_id,app_published,vip_menu");
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return flags;
+    throw error;
+  }
+
+  for (const row of (data ?? []) as Array<{
+    merchant_id: string;
+    app_published: boolean;
+    vip_menu: boolean;
+  }>) {
+    flags.set(row.merchant_id, {
+      appPublished: row.app_published,
+      vipMenu: row.vip_menu,
+    });
+  }
+  return flags;
+}
+
 /** The stored working fields, or the empty profile when none is saved yet. */
 export async function getMerchantV1Profile(
   merchantId: string,
