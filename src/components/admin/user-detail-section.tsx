@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import {
   canManageUser,
   clearanceLabel,
+  isSelf,
   toClearanceActor,
 } from "@/lib/rbac/hierarchy";
 import { PERMISSION_GROUPS } from "@/lib/rbac/permissions";
@@ -21,13 +22,18 @@ export async function UserDetailSection({ id, session }: UserDetailSectionProps)
   const user = await getUserById(id);
   const actor = toClearanceActor(session);
   if (!user || !canManageUser(actor, user)) notFound();
+  const ownAccount = isSelf(actor, user);
 
   return (
     <>
       <PageHeader
         eyebrow="ملف المشغّل"
         title={user.name}
-        description="القدرات الممنوحة والنطاق الجغرافي والرتبة الحالية لهذا المشغّل."
+        description={
+          ownAccount
+            ? "حسابك وقدراتك ونطاقك الجغرافي. يمكنك منح نفسك القدرات المضافة حديثاً، دون تغيير رتبتك."
+            : "القدرات الممنوحة والنطاق الجغرافي والرتبة الحالية لهذا المشغّل."
+        }
         actions={
           <span className="badge badge-gold">
             {clearanceLabel(user.clearanceLevel)} · L{user.clearanceLevel}

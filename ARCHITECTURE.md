@@ -914,8 +914,32 @@ render at all.
 `governsLevel()` is strict (`actor.level > target.level`) for every rank, and
 `maxAssignableLevel()` always returns `actor.level − 1`, so peer-minting is
 impossible by construction — no shared-custody exception, no `global_scope`
-escape hatch. Self-management stays blocked separately (`assertCanManage`
-rejects `target.id === actor.id`).
+escape hatch.
+
+**Self-access is the one exception, and it is about the actor's own row, not
+about rank.** `canManageUser()` returns true for `target.id === actor.id` once
+the actor holds `manage_system_users`, so their account always appears in the
+roster and its detail page. This is what lets an L4 grant themselves a
+capability seeded by a later migration: migrations backfill the top rank, but a
+capability added without a matching backfill would otherwise be unreachable from
+the UI. Self-grants are bounded by `maySelfGrant()`: the L4 rank is defined to
+hold the whole catalogue, so any single key is permitted; every lower rank stays
+inside `permissionsAreWithinActor()`, unchanged. Self-editing never relaxes
+rank: `assertCanPatch()` rejects a self `clearance_level` change,
+self-deactivation, and dropping one's own `manage_system_users`; and
+`assertCanGovern()` (city-manager assignment) still excludes self. Deletion
+passes `assertCanManage()` without the self allowance, so an account cannot
+delete itself.
+
+`updateUserProfile()` writes grants as a **diff**, never delete-all-then-insert.
+`app.user_permissions` carries a deferred constraint trigger
+(`app.assert_governor_remaining`) that aborts the transaction if the last active
+governor's `manage_system_users` grant disappears. A truncate-and-reinsert would
+remove and restore that grant within the same transaction, so the deferred check
+would still fail at commit for a sole governor. Additions are written before
+removals, so the invariant is only ever observed on the full set; revocation of
+`manage_system_users` from a sole governor still fails loudly in the database,
+as intended.
 
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual

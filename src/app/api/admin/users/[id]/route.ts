@@ -8,6 +8,7 @@ import {
 } from "@/lib/field-ops/store";
 import { PERMISSION_KEYS, type Permission } from "@/lib/rbac/permissions";
 import {
+  assertCanGrant,
   assertCanManage,
   assertCanPatch,
   RbacDeniedError,
@@ -109,28 +110,19 @@ export async function PATCH(request: Request, context: RouteContext) {
       }
     }
 
-    assertCanManage(session, target);
-
     const granted = (nextPermissions ?? []).filter(
       (permission) =>
         !target.permissions.includes(permission) &&
         PERMISSION_SET.has(permission),
     );
-    const unauthorizedGrant = granted.filter(
-      (permission) => !session.permissions.includes(permission),
-    );
-    if (unauthorizedGrant.length > 0) {
-      throw new RbacDeniedError(
-        "PERMISSION_ESCALATION",
-        "لا يمكنك منح صلاحيات لا تملكها.",
-      );
-    }
+    assertCanGrant(session, target, granted);
 
     assertCanPatch(session, target, {
       clearanceLevel: patch.clearanceLevel,
       accessibleCities: patch.accessibleCities,
       permissions:
         patch.permissions !== undefined ? patch.permissions : undefined,
+      active: patch.active,
     });
 
     const updated = await updateUser(id, {

@@ -11,11 +11,12 @@ type LevelOption = { level: number; label: string };
 
 type UserCardProps = {
   user: AppUser;
+  isSelf: boolean;
   levelOptions: LevelOption[];
   levelLabel: (level: number) => string;
   cityName: (cityId: string) => string;
   pendingKey: string | null;
-  canGrant: (permission: Permission) => boolean;
+  canGrant: (user: AppUser, permission: Permission) => boolean;
   groups: readonly {
     name: string;
     items: readonly { key: string; label: string }[];
@@ -43,6 +44,7 @@ function initials(name: string): string {
  */
 function UserCardBase({
   user,
+  isSelf,
   levelOptions,
   levelLabel,
   cityName,
@@ -87,21 +89,30 @@ function UserCardBase({
           <span className="matrix-scope">{scope}</span>
         </div>
         <div className="matrix-user-actions">
-          <select
-            className="matrix-level-select"
-            value={user.clearanceLevel}
-            disabled={busy}
-            onChange={(event) =>
-              onLevelChange(user, Number(event.target.value))
-            }
-            aria-label={`رتبة ${user.name}`}
-          >
-            {levelOptions.map((level) => (
-              <option key={level.level} value={level.level}>
-                {level.label} · L{level.level}
-              </option>
-            ))}
-          </select>
+          {isSelf ? (
+            <>
+              <span className="badge badge-gold">حسابك</span>
+              <span className={`badge ${clearanceTone(user.clearanceLevel)}`}>
+                {levelLabel(user.clearanceLevel)} · L{user.clearanceLevel}
+              </span>
+            </>
+          ) : (
+            <select
+              className="matrix-level-select"
+              value={user.clearanceLevel}
+              disabled={busy}
+              onChange={(event) =>
+                onLevelChange(user, Number(event.target.value))
+              }
+              aria-label={`رتبة ${user.name}`}
+            >
+              {levelOptions.map((level) => (
+                <option key={level.level} value={level.level}>
+                  {level.label} · L{level.level}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="button"
             className="button button-quiet button-small"
@@ -110,14 +121,16 @@ function UserCardBase({
           >
             النطاق
           </button>
-          <button
-            type="button"
-            className="button button-danger button-small"
-            onClick={() => onRemove(user)}
-            disabled={busy}
-          >
-            حذف
-          </button>
+          {!isSelf && (
+            <button
+              type="button"
+              className="button button-danger button-small"
+              onClick={() => onRemove(user)}
+              disabled={busy}
+            >
+              حذف
+            </button>
+          )}
           <span className="badge">
             {held.size} / {PERMISSION_KEYS.length}
           </span>
@@ -132,14 +145,15 @@ function UserCardBase({
               {group.items.map((permission) => {
                 const key = permission.key as Permission;
                 const keyId = `${user.id}:${key}`;
+                const grantable = canGrant(user, key);
                 return (
                   <label key={key} className="matrix-check">
                     <input
                       type="checkbox"
                       checked={held.has(key)}
-                      disabled={busy || (!held.has(key) && !canGrant(key))}
+                      disabled={busy || (!held.has(key) && !grantable)}
                       title={
-                        canGrant(key)
+                        grantable
                           ? undefined
                           : "لا يمكنك منح صلاحية لا تملكها."
                       }

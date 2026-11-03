@@ -73,8 +73,9 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
       </div>
 
       <p className="panel-note">
-        لا تظهر هنا إلا المشغّلون الأدنى من رتبتك والواقعون داخل نطاق مدنك.
-        تعديل الرتبة أو المدن أو الصلاحيات يمر عبر حاجز الخادم قبل الحفظ.
+        لا يظهر هنا إلا المشغّلون الأدنى من رتبتك والواقعون داخل نطاق مدنك، إضافة
+        إلى حسابك. تعديل الرتبة أو المدن أو الصلاحيات يمر عبر حاجز الخادم قبل
+        الحفظ.
       </p>
 
       <div className="clearance-legend">
@@ -111,6 +112,7 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
             <UserCard
               key={user.id}
               user={user}
+              isSelf={user.id === props.viewerId}
               levelOptions={matrix.levelOptions}
               levelLabel={matrix.levelLabel}
               cityName={matrix.cityName}

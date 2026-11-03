@@ -9,7 +9,12 @@ import type {
   CityOption,
   LevelOption,
 } from "@/components/admin/user-form-types";
-import { clearanceLabel, governsLevel } from "@/lib/rbac/hierarchy";
+import {
+  canManageUser,
+  clearanceLabel,
+  maySelfGrant,
+  type ClearanceActor,
+} from "@/lib/rbac/hierarchy";
 import type { Permission } from "@/lib/rbac/permissions";
 import type { AppUser } from "@/lib/rbac/types";
 
@@ -78,32 +83,35 @@ export function useUserCapabilities({
     return (cityId: string) => map.get(cityId) ?? cityId;
   }, [assignableCities]);
 
-  const manageableUsers = useMemo(
-    () => users.filter((user) => user.id !== viewerId),
-    [users, viewerId],
+  // The same hierarchy helpers the server guard uses, so the client cannot
+  // disagree with `canManageUser` / `maySelfGrant` about who is reachable. The
+  // actor is rebuilt from the live session, not the initial props, so a revoke
+  // broadcast re-filters the roster immediately.
+  const actor = useMemo<ClearanceActor>(
+    () => ({
+      id: viewerId,
+      clearanceLevel: viewerLevel,
+      permissions: [...permissions],
+      accessibleCities,
+      globalScope: viewerGlobalScope,
+    }),
+    [
+      viewerId,
+      viewerLevel,
+      permissions,
+      accessibleCities,
+      viewerGlobalScope,
+    ],
   );
 
-
-  // Mirrors `canGovernUser` on the server so a user that drops out of the
-  // strict hierarchy on a live permission event is not re-filtered here. Only
-  // strictly-lower ranks inside the viewer's city scope stay visible.
   const withinViewer = useCallback(
-    (user: AppUser): boolean => {
-      if (
-        !governsLevel(
-          { clearanceLevel: viewerLevel, globalScope: viewerGlobalScope },
-          user,
-        )
-      ) {
-        return false;
-      }
-      if (viewerGlobalScope) return true;
-      if (user.accessibleCities.length === 0) return true;
-      return user.accessibleCities.some((cityId) =>
-        accessibleCities.includes(cityId),
-      );
-    },
-    [viewerLevel, viewerGlobalScope, accessibleCities],
+    (user: AppUser) => canManageUser(actor, user),
+    [actor],
+  );
+
+  const manageableUsers = useMemo(
+    () => users.filter(withinViewer),
+    [users, withinViewer],
   );
 
   const ensureChannel = useCallback((): BroadcastChannel | null => {
@@ -237,6 +245,20 @@ export function useUserCapabilities({
     [permissions],
   );
 
+  /**
+   * Whether the viewer may hand `permission` to `user`.
+   *
+   * Uses the same self-grant rule as the server, so the checkbox and the PATCH
+   * guard cannot disagree about what an L4 may add to its own account.
+   */
+  const canGrant = useCallback(
+    (user: AppUser, permission: Permission): boolean => {
+      if (user.id === viewerId) return maySelfGrant(actor, [permission]);
+      return permissions.has(permission);
+    },
+    [actor, permissions, viewerId],
+  );
+
   return {
     users,
     revision,
@@ -248,7 +270,7 @@ export function useUserCapabilities({
     levelLabel,
     cityName,
     manageableUsers,
-    canGrant: hasPermission,
+    canGrant,
     withinViewer,
     toggle,
     changeLevel,
