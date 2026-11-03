@@ -46,7 +46,7 @@ export function NegotiationSection({
     <Widget
       eyebrow="كفاءة التفاوض"
       title="الأهداف مقابل المحقّق"
-      span={12}
+      span={6}
       badge={
         <span
           className={`badge ${attainment >= 0.98 ? "badge-green" : "badge-gold"}`}

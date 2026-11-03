@@ -39,7 +39,7 @@ export function FinanceSection({
     <Widget
       eyebrow="المالية"
       title="الموقف المالي"
-      span={12}
+      span={6}
       badge={<span className="badge badge-gold">الخزينة · {bankCurrency}</span>}
     >
       <div className="bi-stat-cluster bi-stat-cluster-row">

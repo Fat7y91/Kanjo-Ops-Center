@@ -1,32 +1,4 @@
-/* Executive dashboard — locked placeholders and the drill-down slide-over. */
-
-/* ── Locked section ───────────────────────────────────────────────────── */
-
-.bi-section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.bi-section-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.bi-section-head h2 {
-  font-size: 1rem;
-}
-
-.bi-locked {
-  padding: 18px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--surface-soft);
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-}
+/* Executive dashboard — drill-down slide-over. */
 
 /* ── Slide-over ───────────────────────────────────────────────────────── */
 

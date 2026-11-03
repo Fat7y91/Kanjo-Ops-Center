@@ -6,15 +6,8 @@
 /* ── Responsive ───────────────────────────────────────────────────────── */
 
 @media (max-width: 1100px) {
-  .bi-widget-4,
-  .bi-widget-5 {
-    grid-column: span 6;
-  }
-
-  .bi-widget-6,
-  .bi-widget-7,
-  .bi-widget-8 {
-    grid-column: 1 / -1;
+  .bi-bento > .bi-widget {
+    flex: 1 0 100%;
   }
 
   .bi-split {
@@ -60,17 +53,8 @@
 }
 
 @media (max-width: 720px) {
-  .bi-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .bi-widget-4,
-  .bi-widget-5,
-  .bi-widget-6,
-  .bi-widget-7,
-  .bi-widget-8,
-  .bi-widget-12 {
-    grid-column: 1 / -1;
+  .bi-bento {
+    flex-direction: column;
   }
 
   .bi-negotiation-stages {

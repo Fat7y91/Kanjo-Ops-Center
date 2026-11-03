@@ -12,7 +12,10 @@
 
 .bi-chart-canvas {
   width: 100%;
+  padding: 6px 0;
   direction: ltr;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
 }
 
 .bi-chart-empty {
@@ -27,8 +30,8 @@
 
 .bi-legend {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 2px 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -40,19 +43,29 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
   color: inherit;
   font-size: 0.76rem;
   text-align: start;
+  transition:
+    border-color 0.16s ease-out,
+    background 0.16s ease-out,
+    transform 0.16s ease-out;
 }
 
 .bi-legend-item:hover,
 .bi-legend-item.is-active {
-  border-color: var(--line);
+  border-color: var(--purple);
   background: var(--surface-soft);
+  transform: translateY(-1px);
+}
+
+.bi-legend-item strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .bi-legend-dot {

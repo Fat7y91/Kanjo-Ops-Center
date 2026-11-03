@@ -42,7 +42,19 @@ type ExecutiveDashboardProps = {
  */
 const EXECUTIVE_LEVEL = 3;
 
-export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps) {
+/**
+ * Command center.
+ *
+ * Each section is rendered only when its own `view_overview_*` grant is held.
+ * Revoked sections disappear entirely rather than advertising a locked
+ * placeholder, so the grid shows exactly what this operator may read. The
+ * `.bi-bento` flex rows keep the half-width widgets paired and stretch a lone
+ * survivor to the full row.
+ */
+export function ExecutiveDashboard({
+  dataset,
+  header,
+}: ExecutiveDashboardProps) {
   const { hasPermission, clearanceLevel } = usePermission();
   const [filters, setFilters] = useState<BiFilters>(DEFAULT_BI_FILTERS);
   const [drill, setDrill] = useState<DrillResolution | null>(null);
@@ -77,11 +89,14 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
     return counts;
   }, [funnel]);
 
+  const canSeeContracts = hasPermission("view_overview_contracts");
+  const canSeeNegotiation = hasPermission("view_overview_negotiation");
+  const canSeeCatalog = hasPermission("view_overview_catalog");
+  const canSeeCompliance = hasPermission("view_overview_compliance");
   const canSeeFinance =
     hasPermission("view_overview_finance") && clearanceLevel >= EXECUTIVE_LEVEL;
   const canSeeMarketing =
-    hasPermission("view_campaigns") &&
-    clearanceLevel >= EXECUTIVE_LEVEL;
+    hasPermission("view_campaigns") && clearanceLevel >= EXECUTIVE_LEVEL;
 
   function updateFilters(patch: Partial<BiFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
@@ -111,49 +126,44 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
         />
       </div>
 
-      <FunnelSection
-        steps={funnel}
-        activeStage={activeStage}
-        onStageFocus={setActiveStage}
-        onDrill={openDrill}
-      />
+      <div className="bi-bento">
+        {canSeeContracts ? (
+          <FunnelSection
+            steps={funnel}
+            activeStage={activeStage}
+            onStageFocus={setActiveStage}
+            onDrill={openDrill}
+          />
+        ) : null}
 
-      <NegotiationSection
-        rows={negotiation}
-        merchantsByStage={stageCounts}
-        onDrill={openDrill}
-      />
+        {canSeeFinance ? (
+          <FinanceSection
+            finance={finance}
+            treasury={dataset.treasury}
+            onDrill={openDrill}
+          />
+        ) : null}
 
-      {canSeeFinance ? (
-        <FinanceSection
-          finance={finance}
-          treasury={dataset.treasury}
-          onDrill={openDrill}
-        />
-      ) : (
-        <LockedSection
-          title="الأداء المالي"
-          requirement="view_overview_finance"
-          level={EXECUTIVE_LEVEL}
-        />
-      )}
+        {canSeeNegotiation ? (
+          <NegotiationSection
+            rows={negotiation}
+            merchantsByStage={stageCounts}
+            onDrill={openDrill}
+          />
+        ) : null}
 
-      <div className="bi-row">
-        <CatalogSection catalog={catalog} onDrill={openDrill} />
+        {canSeeCatalog ? (
+          <CatalogSection catalog={catalog} onDrill={openDrill} />
+        ) : null}
 
-        <ComplianceSection breakdown={compliance} onDrill={openDrill} />
+        {canSeeCompliance ? (
+          <ComplianceSection breakdown={compliance} onDrill={openDrill} />
+        ) : null}
+
+        {canSeeMarketing ? (
+          <MarketingSection marketing={marketing} onDrill={openDrill} />
+        ) : null}
       </div>
-
-
-      {canSeeMarketing ? (
-        <MarketingSection marketing={marketing} onDrill={openDrill} />
-      ) : (
-        <LockedSection
-          title="الوصول التسويقي"
-          requirement="view_campaigns"
-          level={EXECUTIVE_LEVEL}
-        />
-      )}
 
       <SlideOver
         open={drill !== null}
@@ -164,37 +174,5 @@ export function ExecutiveDashboard({ dataset, header }: ExecutiveDashboardProps)
         onClose={() => setDrill(null)}
       />
     </div>
-  );
-}
-
-/**
- * Explicit locked state instead of silently hiding the group: executives in
- * training can see that finance exists and what unlocks it.
- */
-function LockedSection({
-  title,
-  requirement,
-  level,
-}: {
-  title: string;
-  requirement: string;
-  level: number;
-}) {
-  return (
-    <section className="bi-section" aria-label={`${title} — مقفل`}>
-      <header className="bi-section-head">
-        <div>
-          <p className="eyebrow">صلاحية مقيّدة</p>
-          <h2>{title}</h2>
-        </div>
-        <span className="badge badge-red">مقفل</span>
-      </header>
-      <div className="bi-locked">
-        <p>
-          يتطلب هذا القسم صلاحية <code>{requirement}</code> ومستوى تصريح{" "}
-          {level} على الأقل.
-        </p>
-      </div>
-    </section>
   );
 }

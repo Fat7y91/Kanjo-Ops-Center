@@ -162,11 +162,27 @@
   min-width: 0;
 }
 
-/* Two widgets share one row on wide screens. */
-.bi-row {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+/* ── Bento grid ───────────────────────────────────────────────────────────
+ * Flexible rows instead of a fixed twelve-column grid. Half-width widgets share
+ * a row while both are visible, and the survivor stretches to the full row when
+ * its partner is hidden by permissions. That keeps the command center tight for
+ * every grant combination, with no empty slot where a revoked section was.
+ */
+
+.bi-bento {
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
+  align-items: stretch;
+}
+
+.bi-bento > .bi-widget {
+  flex: 1 1 calc(50% - 8px);
+  min-width: 0;
+}
+
+.bi-bento > .bi-widget-12 {
+  flex: 1 0 100%;
 }
 
 /* ── Split layout: chart + side stats ─────────────────────────────────── */

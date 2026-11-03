@@ -479,6 +479,16 @@ logout therefore POST to plain route handlers. Rules locked in:
   every slice is `0`, and `ComplianceDonut` when every `complete` is `0`,
   rendering `.bi-chart-empty` / `.bi-donut-empty` instead. Never mount a
   `Funnel`/`Pie` with `LabelList`/`Cell` children over zero rows.
+- Section visibility is grant-driven, not placeholder-driven. Each widget in
+  `ExecutiveDashboard` renders only when its own `view_overview_*` capability is
+  held (finance also requires clearance ≥ 3, marketing uses `view_campaigns`).
+  A revoked section is absent from the DOM: there is no locked banner, no raw
+  key in the copy, and no empty slot. `.bi-bento` is a wrapping flex row, so the
+  surviving half-width widget stretches across the full row when its partner is
+  hidden.
+- `.bi-bento` groups the widgets: full-width funnel and marketing widgets sit on
+  their own row, while finance, negotiation, catalog and compliance pair up and
+  collapse to one column at ≤1100px.
 
 ### Agent KPI (Tier 1–5)
 - UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus
@@ -771,7 +781,7 @@ NoSQL. A document never spans both stores.
 
 The capability catalogue has one direction of truth: `app.permissions` is the
 database record, and `src/lib/rbac/data/permissions.ts` is generated from it so
-the two can never drift (96 keys, verified key-for-key). `src/lib/rbac/`
+the two can never drift (97 keys, verified key-for-key). `src/lib/rbac/`
 `permissions.ts` adds the derived `Permission` union, the `isPermission` guard
 and the grouping on top. `app.users.clearance_level` follows `hierarchy.ts`
 (1–4).
@@ -1026,10 +1036,22 @@ as intended.
 
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual
-capability grants, grouped by the 15 `PERMISSION_GROUPS`. The client never
+capability grants, grouped by the 20 `PERMISSION_GROUPS`. The client never
 posts to the legacy `POST /api/admin/users`; provisioning goes through the
 route above and the roster is re-read afterwards, because the auth account,
 grants and scope are all assigned server-side.
+
+The capability dialog (`UserPermissionsModal`) keeps the same immediate-PATCH
+contract as the old inline matrix, with one relationship layered on top:
+`view_overview` is the parent of the six `view_overview_*` section keys
+(`src/lib/rbac/permission-tree.ts`). Revoking the parent queues a per-key
+revoke for the master and every held section, so no operator can keep a section
+grant whose master is gone. Granting a section on its own stays allowed because
+each also opens the overview module via `alsoGrantedBy`. The cascade reuses the
+existing `{ permission, enabled: false }` PATCH, so the route only has to
+validate additions, as before; the mapping is UI-side grouping only.
+`scripts/lib/permission-tree.test.mjs` guards the parent-child wiring against
+catalogue drift.
 
 Rules enforced for every creation:
 
