@@ -8,16 +8,8 @@ import { requirePermission } from "@/lib/auth/guard";
 import { isCatalogEligibleContract } from "@/lib/catalog/types";
 import { listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import {
-  resolveMerchantState,
-  stateEventsByMerchant,
-} from "@/lib/field-ops/merchant-state";
-import {
-  getCityById,
-  getMerchantById,
-  listStateOverrides,
-  listVisitReports,
-} from "@/lib/field-ops/store";
+import { loadMerchantStates } from "@/lib/field-ops/state-source";
+import { getCityById, getMerchantById } from "@/lib/field-ops/store";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
 import {
   listCategories,
@@ -42,14 +34,10 @@ export default async function MerchantCatalogPage({
     notFound();
   }
 
-  const state = resolveMerchantState(
-    merchant,
-    stateEventsByMerchant(
-      await listVisitReports(merchant.id),
-      listStateOverrides(merchant.id),
-    ).get(merchant.id),
-  );
-  const meta = CONTRACT_STATE_META[state.state];
+  const states = await loadMerchantStates([merchant]);
+  const contractState =
+    states.get(merchant.id)?.state ?? merchant.contractState;
+  const meta = CONTRACT_STATE_META[contractState];
   const city = getCityById(merchant.cityId);
 
   // The picker stays in the form, so the merchant must be listed even when its
@@ -60,7 +48,7 @@ export default async function MerchantCatalogPage({
       name: merchant.name,
       vendorTypeId: merchant.vendorTypeId,
       vendorType: merchant.vendorType,
-      contractState: state.state,
+      contractState,
       cityName: city?.name ?? "—",
     },
   ];
@@ -88,7 +76,7 @@ export default async function MerchantCatalogPage({
         }
       />
 
-      {isCatalogEligibleContract(state.state) ? null : (
+      {isCatalogEligibleContract(contractState) ? null : (
         <p className="inline-note cat-eligibility-note">
           لا يمكن إضافة منتجات قبل اعتماد اتفاق نهائي أو توقيع العقد. الحالة
           الحالية: {meta.label}.
@@ -98,7 +86,7 @@ export default async function MerchantCatalogPage({
       <CatalogClient
         initialProducts={products}
         merchants={
-          isCatalogEligibleContract(state.state) ? merchantOptions : []
+          isCatalogEligibleContract(contractState) ? merchantOptions : []
         }
         vendorTypes={listVendorTypes()}
         categories={listCategories()}

@@ -339,7 +339,31 @@ logout therefore POST to plain route handlers. Rules locked in:
   `merchantCrmSummary`, `buildBoard`, payroll, BI) are async; the merchant page
   reads once and passes the rows into the timeline/summary. Rows are
   append-only (update/delete raise `VISIT_REPORT_IMMUTABLE`); corrections go
-  through the edit-request workflow.
+  through the edit-request workflow. Reads that only need one merchant are
+  narrowed in SQL (`listVisitReportRows(merchantId)`) — the profile page must
+  not pay for the whole network's visit history.
+- Merchant state (SSOT): the agreement state of a merchant is *not*
+  `merchant.contractState`. It is the newest of three signals — a completed visit
+  outcome, a manager override, and the stored column — with an exact tie resolved
+  override > visit > stored (`src/lib/field-ops/merchant-state.ts`).
+  - `app.merchant_state_rollup` (migration `20261103000000`) resolves that once in
+    SQL and exposes `current_state`, `current_state_at`, `current_state_source`,
+    the visit counters and the last outcome/rep. `security_invoker = true`, so the
+    caller's RLS still applies.
+  - `app.merchant_state_overrides` is the durable, append-only record of a
+    manager decision (UPDATE/DELETE raise `MERCHANT_STATE_OVERRIDE_IMMUTABLE`).
+    Before it existed, an override lived only in the process-local store and
+    disappeared with the isolate that served it.
+  - `merchant-state-repository.ts` is the only module that knows those column
+    names; `state-source.ts` is the single read seam every screen calls
+    (`loadMerchantStates`, `loadMerchantRollup`, `loadMerchantVisitCounts`). It
+    falls back to the in-memory derivation only when the migration is not
+    deployed, and never substitutes seed data when the database is merely slow —
+    a busy database throws and the route segment's `error.tsx` offers a retry.
+  - Why it matters for the Edge runtime: `/merchants`, `/catalog`, `/field-ops`
+    and `/api/field-ops/search` used to download the report table and reduce it
+    per merchant on every request, which exceeded the Cloudflare Worker CPU limit
+    (error 1102 / HTTP 500). They now perform one small read.
 - V1 parity fields: `app.merchant_v1_profiles` (migration `20261102000006`)
   holds the street address, socials, app publish state, VIP listing flag and the
   official Drive folder, kept out of the contract record because they are

@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-
-import { Button } from "@/components/ui/button";
+import { ErrorPanel } from "@/components/ui/error-panel";
 
 /**
  * Segment boundary for the workspace shell.
@@ -20,23 +18,12 @@ export default function WorkspaceError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    console.error(error);
-  }, [error]);
-
   return (
-    <section className="panel" role="alert">
-      <div className="panel-head">
-        <h2>تعذر عرض هذه الصفحة</h2>
-      </div>
-      <p className="muted">
-        حدث خطأ غير متوقع أثناء تجهيز البيانات. يمكنك إعادة المحاولة الآن.
-      </p>
-      <div className="form-actions">
-        <Button variant="primary" onClick={() => reset()}>
-          إعادة المحاولة
-        </Button>
-      </div>
-    </section>
+    <ErrorPanel
+      error={error}
+      reset={reset}
+      title="تعذر عرض هذه الصفحة"
+      description="حدث خطأ غير متوقع أثناء تجهيز البيانات. يمكنك إعادة المحاولة الآن."
+    />
   );
 }

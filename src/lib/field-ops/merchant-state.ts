@@ -105,3 +105,51 @@ export function resolveMerchantState(
     events ?? [],
   );
 }
+
+/**
+ * One pre-computed row of `app.merchant_state_rollup`.
+ *
+ * The rollup is the single source of merchant state: SQL resolves the newest of
+ * visit outcome, manager override and stored column once per merchant, so no
+ * screen has to scan the report table. `state` is `null` only when no source
+ * carries a timestamp at all, which the resolver treats as an unknown signal.
+ */
+export type MerchantStateRollup = {
+  merchantId: string;
+  state: ContractState | null;
+  at: string | null;
+  source: MerchantStateSource | "none";
+  /** Rep who closed the visit, or manager who decided the override. */
+  actor: string | null;
+  visitCount: number;
+  totalDurationSeconds: number;
+  lastVisitAt: string | null;
+  lastOutcome: ContractState | null;
+  lastRepName: string | null;
+};
+
+/** The rollup row as a state event, or `null` when it carries no timestamp. */
+export function stateEventFromRollup(
+  rollup?: MerchantStateRollup | null,
+): MerchantStateEvent | null {
+  if (!rollup || !rollup.at || !rollup.state || rollup.source === "none") {
+    return null;
+  }
+  return { state: rollup.state, at: rollup.at, source: rollup.source };
+}
+
+/**
+ * Resolves a merchant's state from its rollup row.
+ *
+ * The stored column stays in the comparison: a rollup row exists only for
+ * merchants the database has seen, and a merchant created in the current
+ * session still has to render its own state honestly.
+ */
+export function resolveMerchantStateFromRollup(
+  merchant: { contractState: ContractState; updatedAt: string },
+  rollup?: MerchantStateRollup | null,
+): MerchantStateEvent {
+  const event = stateEventFromRollup(rollup);
+  return resolveMerchantState(merchant, event ? [event] : undefined);
+}
+

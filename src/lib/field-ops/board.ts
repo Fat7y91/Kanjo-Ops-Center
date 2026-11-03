@@ -9,6 +9,8 @@ import {
 } from "@/lib/field-ops/store";
 import type { ActiveSession } from "@/lib/rbac/types";
 
+import { loadMerchantStates } from "./state-source";
+
 export type FieldOpsBoard = {
   today: string;
   tasks: ReturnType<typeof tasksForViewer>;
@@ -45,9 +47,17 @@ export async function buildBoard(
     ? new Set(listCities().map((city) => city.id))
     : new Set(session.accessibleCities);
   const cities = listCities().filter((city) => scopedCityIds.has(city.id));
-  const merchants = listMerchants().filter((merchant) =>
+  const scopedMerchants = listMerchants().filter((merchant) =>
     scopedCityIds.has(merchant.cityId),
   );
+  // The board hands merchants to the client, which renders the state badge from
+  // the row. Resolving here keeps that badge identical to the directory and the
+  // profile without a second client-side pass over the visit history.
+  const states = await loadMerchantStates(scopedMerchants);
+  const merchants = scopedMerchants.map((merchant) => ({
+    ...merchant,
+    contractState: states.get(merchant.id)?.state ?? merchant.contractState,
+  }));
 
   return {
     today: today(),

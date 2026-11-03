@@ -27,7 +27,7 @@ export async function listVisitReports(
   merchantId?: string,
   preloaded?: VisitReport[],
 ): Promise<VisitReport[]> {
-  const reports = preloaded ?? (await loadVisitReports());
+  const reports = preloaded ?? (await loadVisitReports(merchantId));
   return merchantId
     ? reports.filter((report) => report.merchantId === merchantId)
     : reports;
@@ -37,9 +37,12 @@ export async function listVisitReports(
  * How many visits a merchant has ever had. The first-visit gate for advanced
  * outcomes is derived from this count, so it stays correct even when the
  * earlier visit was logged offline and flushed later.
+ *
+ * The read is narrowed by merchant in the query: a rep submitting a report must
+ * not pay for the whole network's visit history.
  */
 export async function visitCountFor(merchantId: string): Promise<number> {
-  const reports = await loadVisitReports();
+  const reports = await loadVisitReports(merchantId);
   return reports.filter((report) => report.merchantId === merchantId).length;
 }
 
@@ -75,7 +78,7 @@ export async function createVisitReport(
   // The durable table is checked as well as the local store, so a replay in a
   // different isolate is recognised before the merchant state is touched.
   if (input.clientVisitId) {
-    const known = await loadVisitReports();
+    const known = await loadVisitReports(merchantId);
     const existing = known.find(
       (report) =>
         report.merchantId === merchantId &&

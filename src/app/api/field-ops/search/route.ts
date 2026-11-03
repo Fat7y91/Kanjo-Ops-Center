@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorize } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
+import { loadMerchantVisitCounts } from "@/lib/field-ops/state-source";
 import { loadVisitReports } from "@/lib/field-ops/store/report-source";
 import { searchMerchants } from "@/lib/search/merchant-search";
 
@@ -26,11 +27,11 @@ export async function GET(request: Request) {
     20,
     effectiveCityIds(session),
   );
-  // One durable read for the whole result page instead of one query per match.
-  const counts = new Map<string, number>();
-  for (const report of await loadVisitReports()) {
-    counts.set(report.merchantId, (counts.get(report.merchantId) ?? 0) + 1);
-  }
+  // Visit counts come pre-aggregated from the rollup. The report scan below is
+  // the demo-mode fallback, where the store only holds a handful of rows.
+  const counts =
+    (await loadMerchantVisitCounts()) ??
+    (await countReportsByMerchant());
   const results = matches.map((result) => ({
     ...result,
     visitCount: counts.get(result.merchant.id) ?? 0,
@@ -40,4 +41,12 @@ export async function GET(request: Request) {
     { results },
     { headers: { "Cache-Control": "no-store" } },
   );
+}
+
+async function countReportsByMerchant(): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  for (const report of await loadVisitReports()) {
+    counts.set(report.merchantId, (counts.get(report.merchantId) ?? 0) + 1);
+  }
+  return counts;
 }

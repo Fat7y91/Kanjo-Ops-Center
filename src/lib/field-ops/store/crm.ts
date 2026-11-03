@@ -10,8 +10,10 @@ import type {
 
 import {
   latestStateEvent,
+  stateEventFromRollup,
   visitStateAt,
   type MerchantStateEvent,
+  type MerchantStateRollup,
 } from "@/lib/field-ops/merchant-state";
 
 import { clone, getStore } from "./core";
@@ -138,6 +140,7 @@ export type MerchantCrmSummary = {
 export async function merchantCrmSummary(
   merchantId: string,
   preloaded?: VisitReport[],
+  rollup?: MerchantStateRollup | null,
 ): Promise<MerchantCrmSummary> {
   const store = getStore();
   const merchant = store.merchants.find((m) => m.id === merchantId);
@@ -175,6 +178,14 @@ export async function merchantCrmSummary(
         source: "override" as const,
       })),
   ];
+
+  // The rollup is authoritative for merchants the database knows: it carries
+  // decisions recorded by other isolates, which the process-local override list
+  // cannot see. It joins the same ranking rather than replacing it, so the
+  // stored column still wins only when it is genuinely the newest signal.
+  const rollupEvent = stateEventFromRollup(rollup);
+  if (rollupEvent) stateEvents.push(rollupEvent);
+
   const current = latestStateEvent(
     {
       state: merchant?.contractState ?? "no_agreement",

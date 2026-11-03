@@ -8,6 +8,22 @@
  */
 
 /**
+ * True when a read was cancelled by its own deadline.
+ *
+ * Edge requests that wait on a slow database get killed by the platform with a
+ * CPU/wall-clock error the runtime cannot report as a 500. Callers use this to
+ * distinguish "the database is busy" from a real defect, so the UI can offer a
+ * retry instead of a generic failure.
+ */
+export function isQueryTimeout(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const name = (error as { name?: unknown }).name;
+  const message = (error as { message?: unknown }).message;
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  return typeof message === "string" && /AbortError|TimeoutError|timed out|aborted/i.test(message);
+}
+
+/**
  * True when PostgREST reports that a column, table or function is absent.
  *
  * `42703` is an undefined column, `42P01` an undefined table, `PGRST202` /

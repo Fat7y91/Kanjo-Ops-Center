@@ -15,6 +15,7 @@ import {
   merchantTimeline,
 } from "@/lib/field-ops/store";
 import { getMerchantV1Profile } from "@/lib/field-ops/merchant-profile-repository";
+import { loadMerchantRollup } from "@/lib/field-ops/state-source";
 import { teamLabel } from "@/lib/field-ops/types";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,10 @@ export default async function MerchantProfilePage({
   const permissions = session.permissions;
   const reports = await listVisitReports(merchant.id);
   const v1Profile = await getMerchantV1Profile(merchant.id);
+  // State decisions recorded by another worker only exist in the rollup; the
+  // profile is the screen managers trust, so it reads the same source as the
+  // directory badge.
+  const rollup = await loadMerchantRollup(merchant.id);
 
   return (
     <>
@@ -59,8 +64,8 @@ export default async function MerchantProfilePage({
         tasks={listTasks().filter((task) => task.merchantId === merchant.id)}
         followUps={listFollowUpTasks(merchant.id)}
         timeline={await merchantTimeline(merchant.id, reports)}
-        summary={await merchantCrmSummary(merchant.id, reports)}
-        visitCount={reports.length}
+        summary={await merchantCrmSummary(merchant.id, reports, rollup)}
+        visitCount={rollup?.visitCount ?? reports.length}
         viewerTeam={session.user.team}
         canEditMerchants={permissions.includes("view_merchant_profile")}
         canRequestTransfers={permissions.includes("request_ownership_transfer")}

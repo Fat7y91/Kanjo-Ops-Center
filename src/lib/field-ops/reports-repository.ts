@@ -130,21 +130,30 @@ function toRow(report: VisitReport, loggedBy: string | null) {
 }
 
 /**
- * Every durable report, newest first.
+ * Durable reports, newest first, optionally narrowed to one merchant.
  *
  * Returns `null` when the table is not deployed yet, which tells the caller to
  * keep serving the in-memory store rather than showing an empty timeline.
+ *
+ * The merchant filter is applied by the database: loading the whole table and
+ * filtering in JavaScript is what made the profile page pay for the entire
+ * visit history of the network.
  */
-export async function listVisitReportRows(): Promise<VisitReport[] | null> {
+export async function listVisitReportRows(
+  merchantId?: string,
+): Promise<VisitReport[] | null> {
   if (!hasSupabaseConfig()) return null;
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
+  const base = client
     .schema("app")
     .from("visit_reports")
     .select(COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(5000);
+    .order("created_at", { ascending: false });
+
+  const { data, error } = merchantId
+    ? await base.eq("merchant_id", merchantId)
+    : await base.limit(5000);
 
   if (error) {
     if (isMissingSchemaObject(error)) return null;

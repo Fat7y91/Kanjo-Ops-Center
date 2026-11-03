@@ -10,17 +10,9 @@ import {
 } from "@/lib/catalog/merchants";
 import { listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import {
-  resolveMerchantState,
-  stateEventsByMerchant,
-} from "@/lib/field-ops/merchant-state";
 import { listMerchantV1Flags } from "@/lib/field-ops/merchant-profile-repository";
-import {
-  listCities,
-  listMerchants,
-  listStateOverrides,
-  listVisitReports,
-} from "@/lib/field-ops/store";
+import { loadMerchantStates } from "@/lib/field-ops/state-source";
+import { listCities, listMerchants } from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -42,10 +34,7 @@ export default async function CatalogPage() {
 
   // The tile badge must agree with the merchant profile: the newest visit
   // outcome or manager override wins over the stored column.
-  const stateEvents = stateEventsByMerchant(
-    await listVisitReports(),
-    listStateOverrides(),
-  );
+  const states = await loadMerchantStates(merchants);
   const flags = await listMerchantV1Flags();
   const cityName = new Map(listCities().map((city) => [city.id, city.name]));
 
@@ -54,8 +43,7 @@ export default async function CatalogPage() {
     name: merchant.name,
     cityName: cityName.get(merchant.cityId) ?? "—",
     vendorType: merchant.vendorType,
-    contractState: resolveMerchantState(merchant, stateEvents.get(merchant.id))
-      .state,
+    contractState: states.get(merchant.id)?.state ?? merchant.contractState,
     vipMenu: flags.get(merchant.id)?.vipMenu ?? false,
     appPublished: flags.get(merchant.id)?.appPublished ?? false,
   }));
