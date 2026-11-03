@@ -27,7 +27,10 @@ export async function POST(request: Request) {
 
   try {
     const { drafts } = catalogSyncSchema.parse(await readJson(request));
-    const outcome = syncProducts(drafts);
+    const outcome = syncProducts(drafts, {
+      id: session.user.id,
+      name: session.user.name,
+    });
     return NextResponse.json(
       { ...outcome, revision: catalogRevision() },
       { headers: { "Cache-Control": "no-store" } },

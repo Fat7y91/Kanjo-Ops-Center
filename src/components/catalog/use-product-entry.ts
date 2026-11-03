@@ -48,6 +48,8 @@ type UseProductEntryArgs = {
   merchants: CatalogMerchantOption[];
   variants: TaxonomyVariant[];
   refreshQueue: () => Promise<void>;
+  /** Merchant page entry: keeps the merchant fixed for the whole session. */
+  defaultMerchantId?: string;
 };
 
 /**
@@ -61,8 +63,15 @@ export function useProductEntry({
   merchants,
   variants,
   refreshQueue,
+  defaultMerchantId,
 }: UseProductEntryArgs) {
-  const [values, setValues] = useState<ProductFormValues>(emptyValues);
+  const [values, setValues] = useState<ProductFormValues>(() => {
+    const empty = emptyValues();
+    const preset = defaultMerchantId
+      ? (merchants.find((option) => option.id === defaultMerchantId) ?? null)
+      : null;
+    return preset ? { ...empty, merchant: preset } : empty;
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -87,7 +96,9 @@ export function useProductEntry({
   function resetDetails(keepMerchant: boolean) {
     setValues((current) => ({
       ...emptyValues(),
-      merchant: keepMerchant ? current.merchant : null,
+      merchant: keepMerchant
+        ? current.merchant
+        : (merchants.find((option) => option.id === defaultMerchantId) ?? null),
       productType: current.productType,
     }));
   }

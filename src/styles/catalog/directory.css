@@ -1,0 +1,307 @@
+/* Catalog module — merchant directory, entry leaderboard and home layout.
+ *
+ * Loaded from catalog.css before responsive.css. Namespaced with `cat-` so the
+ * product card rules in cards.css stay untouched.
+ */
+
+/* ── Home layout ───────────────────────────────────────────────────────── */
+
+.cat-home {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+  margin-top: 22px;
+}
+
+.cat-home-main {
+  min-width: 0;
+}
+
+.cat-home-side {
+  position: sticky;
+  top: 16px;
+}
+
+/* ── Headline numbers ──────────────────────────────────────────────────── */
+
+.cat-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.cat-summary-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.cat-summary-tile span {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.cat-summary-tile strong {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+/* ── Directory toolbar ─────────────────────────────────────────────────── */
+
+.cat-directory-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cat-directory-search {
+  max-width: 280px;
+}
+
+.cat-merchant-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* ── Merchant tile ─────────────────────────────────────────────────────── */
+
+.cat-merchant-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 160ms ease-out,
+    border-color 160ms ease-out;
+}
+
+.cat-merchant-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+}
+
+.cat-merchant-cover {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 92px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--kanjo-purple-interactive) 12%, var(--surface-soft)),
+      var(--surface-soft)
+    );
+}
+
+.cat-merchant-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cat-merchant-initials {
+  color: var(--kanjo-purple-interactive);
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.cat-merchant-vip {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+}
+
+.cat-merchant-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.cat-merchant-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cat-merchant-head strong {
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.cat-merchant-meta {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.cat-merchant-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.cat-merchant-stats strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+}
+
+.cat-merchant-flag {
+  align-self: flex-start;
+  padding: 3px 9px;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.cat-merchant-flag.is-live {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+/* ── Entry leaderboard ─────────────────────────────────────────────────── */
+
+.cat-leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cat-leaderboard-list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.cat-leaderboard-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.cat-leaderboard-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cat-leaderboard-main strong {
+  overflow: hidden;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-leaderboard-bar {
+  display: block;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.cat-leaderboard-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--kanjo-purple-interactive);
+}
+
+.cat-leaderboard-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 44px;
+}
+
+.cat-leaderboard-side strong {
+  font-size: 0.92rem;
+}
+
+.cat-leaderboard-side span {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.cat-leaderboard-note {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.cat-eligibility-note {
+  margin-bottom: 14px;
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .cat-home {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cat-home-side {
+    position: static;
+  }
+}
+
+@media (max-width: 900px) {
+  .cat-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cat-merchant-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cat-directory-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cat-directory-search {
+    max-width: none;
+  }
+}
+
+[data-theme="dark"] .cat-merchant-flag.is-live {
+  background: rgba(89, 214, 155, 0.14);
+}

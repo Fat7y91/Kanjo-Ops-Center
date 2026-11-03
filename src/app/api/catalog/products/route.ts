@@ -43,7 +43,10 @@ export async function POST(request: Request) {
 
   try {
     const input = productCreateSchema.parse(await readJson(request));
-    const product = createProduct(input);
+    const product = createProduct(input, {
+      id: session.user.id,
+      name: session.user.name,
+    });
     return NextResponse.json(
       { product, revision: catalogRevision() },
       { status: 201 },

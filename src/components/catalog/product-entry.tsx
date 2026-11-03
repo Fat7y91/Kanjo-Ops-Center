@@ -25,6 +25,8 @@ type ProductEntryProps = {
   vendorTypes: TaxonomyVendorType[];
   categories: TaxonomyCategory[];
   variants: TaxonomyVariant[];
+  /** Set on a merchant page so the merchant stays fixed. */
+  defaultMerchantId?: string;
   onClose: () => void;
   onOpen: () => void;
   onSynced: () => void;
@@ -42,6 +44,7 @@ export function ProductEntry({
   vendorTypes,
   categories,
   variants,
+  defaultMerchantId,
   onClose,
   onOpen,
   onSynced,
@@ -52,6 +55,7 @@ export function ProductEntry({
     merchants,
     variants,
     refreshQueue: queue.refresh,
+    defaultMerchantId,
   });
   const [toast, setToast] = useState("");
 

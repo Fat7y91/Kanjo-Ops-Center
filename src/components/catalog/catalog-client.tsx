@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Protect } from "@/components/auth/protect";
 import { CatalogGrid } from "@/components/catalog/catalog-grid";
 import { ProductEntry } from "@/components/catalog/product-entry";
+import { Button } from "@/components/ui/button";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import type { CatalogProduct } from "@/lib/catalog/types";
 import type {
@@ -19,24 +20,27 @@ type CatalogClientProps = {
   vendorTypes: TaxonomyVendorType[];
   categories: TaxonomyCategory[];
   variants: TaxonomyVariant[];
+  /** Set on a merchant page: entry stays pinned to that merchant. */
+  defaultMerchantId?: string;
 };
 
+/**
+ * Product workspace for one merchant.
+ *
+ * The catalog home lists merchants, so this container is mounted on the
+ * merchant route where the product rows actually belong. It owns the product
+ * list, the entry modal and the post-sync reload.
+ */
 export function CatalogClient({
   initialProducts,
   merchants,
   vendorTypes,
   categories,
   variants,
+  defaultMerchantId,
 }: CatalogClientProps) {
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState("");
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(""), 4500);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
 
   const reload = useCallback(async () => {
     try {
@@ -66,14 +70,13 @@ export function CatalogClient({
             mode="any"
             fallback={<span className="badge">عرض فقط</span>}
           >
-            <button
-              type="button"
-              className="button button-primary"
+            <Button
+              variant="primary"
               onClick={() => setOpen(true)}
               disabled={merchants.length === 0}
             >
               إضافة منتج
-            </button>
+            </Button>
           </Protect>
         </div>
       </section>
@@ -84,6 +87,7 @@ export function CatalogClient({
         vendorTypes={vendorTypes}
         categories={categories}
         variants={variants}
+        defaultMerchantId={defaultMerchantId}
         onClose={() => setOpen(false)}
         onOpen={() => setOpen(true)}
         onSynced={handleSynced}
@@ -95,27 +99,6 @@ export function CatalogClient({
         variants={variants}
         onProductsChange={setProducts}
       />
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <p className="eyebrow">ملاحظة حوكمة</p>
-            <h2>ضوابط مدفوعة بالصلاحيات</h2>
-          </div>
-        </div>
-        <p className="panel-note">
-          يظهر زر «إضافة منتج» فقط لمن يملك <code>add_catalog</code> أو{" "}
-          <code>edit_catalog</code>، ويتحقق الخادم من نفس القدرات قبل إنشاء
-          الطلب. التصنيفات والمتغيرات تُقرأ من التصنيف المركزي فقط، ولا يمكن
-          تجاوزها من الواجهة.
-        </p>
-      </section>
-
-      {toast ? (
-        <div className="toast" role="status">
-          {toast}
-        </div>
-      ) : null}
     </>
   );
 }

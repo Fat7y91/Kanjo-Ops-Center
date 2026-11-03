@@ -1,68 +1,95 @@
-import { CatalogClient } from "@/components/catalog/catalog-client";
+import { CatalogDirectory } from "@/components/catalog/catalog-directory";
+import { CatalogSummary } from "@/components/catalog/catalog-summary";
+import { EntryLeaderboard } from "@/components/catalog/entry-leaderboard";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/lib/auth/guard";
-import { getServerSession } from "@/lib/auth/server-session";
-import { listProducts } from "@/lib/catalog/store";
-import { isCatalogEligibleContract } from "@/lib/catalog/types";
-import { effectiveCityIds } from "@/lib/city-scope-query";
-import { listCities, listMerchants } from "@/lib/field-ops/store";
 import {
-  listCategories,
-  listVendorTypes,
-  listVariants,
-} from "@/lib/taxonomy/store";
+  buildEntryLeaderboard,
+  buildMerchantCards,
+  type CatalogMerchantSource,
+} from "@/lib/catalog/merchants";
+import { listProducts } from "@/lib/catalog/store";
+import { effectiveCityIds } from "@/lib/city-scope-query";
+import {
+  resolveMerchantState,
+  stateEventsByMerchant,
+} from "@/lib/field-ops/merchant-state";
+import { listMerchantV1Flags } from "@/lib/field-ops/merchant-profile-repository";
+import {
+  listCities,
+  listMerchants,
+  listStateOverrides,
+  listVisitReports,
+} from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CatalogPage() {
-  await requirePermission("view_catalog");
-  const session = await getServerSession();
+  const session = await requirePermission("view_catalog");
+  const allowed = new Set(effectiveCityIds(session));
 
-  const allowed = new Set(session ? effectiveCityIds(session) : []);
-  const cityName = new Map(listCities().map((city) => [city.id, city.name]));
-  const merchantCity = new Map(
-    listMerchants().map((merchant) => [merchant.id, merchant.cityId]),
+  const merchants = listMerchants().filter((merchant) =>
+    allowed.has(merchant.cityId),
   );
+  const merchantIds = new Set(merchants.map((merchant) => merchant.id));
 
   // City scope applies to the catalog too: a reviewer only sees products whose
   // merchant sits inside their effective cities.
-  const products = listProducts().filter((product) => {
-    const cityId = merchantCity.get(product.merchantId);
-    return cityId !== undefined && allowed.has(cityId);
-  });
+  const products = listProducts().filter((product) =>
+    merchantIds.has(product.merchantId),
+  );
 
-  // Only merchants whose contract is final or signed may receive products.
-  const merchants = listMerchants()
-    .filter(
-      (merchant) =>
-        allowed.has(merchant.cityId) &&
-        isCatalogEligibleContract(merchant.contractState),
-    )
-    .map((merchant) => ({
-      id: merchant.id,
-      name: merchant.name,
-      vendorTypeId: merchant.vendorTypeId,
-      vendorType: merchant.vendorType,
-      contractState: merchant.contractState,
-      cityName: cityName.get(merchant.cityId) ?? merchant.cityId,
-    }));
+  // The tile badge must agree with the merchant profile: the newest visit
+  // outcome or manager override wins over the stored column.
+  const stateEvents = stateEventsByMerchant(
+    await listVisitReports(),
+    listStateOverrides(),
+  );
+  const flags = await listMerchantV1Flags();
+  const cityName = new Map(listCities().map((city) => [city.id, city.name]));
+
+  const sources: CatalogMerchantSource[] = merchants.map((merchant) => ({
+    id: merchant.id,
+    name: merchant.name,
+    cityName: cityName.get(merchant.cityId) ?? "—",
+    vendorType: merchant.vendorType,
+    contractState: resolveMerchantState(merchant, stateEvents.get(merchant.id))
+      .state,
+    vipMenu: flags.get(merchant.id)?.vipMenu ?? false,
+    appPublished: flags.get(merchant.id)?.appPublished ?? false,
+  }));
+
+  const cards = buildMerchantCards(sources, products);
+  const board = buildEntryLeaderboard(products);
+  const pending = products.filter(
+    (product) => product.state === "pending_review",
+  ).length;
 
   return (
     <>
       <PageHeader
         eyebrow="حوكمة الكتالوج"
-        title="كتالوج المنتجات"
-        description="الأسعار وحالة النشر ومراجعة الجودة لمنتجات التجار. أدوات الإنشاء والحذف محكومة بالصلاحيات."
+        title="كتالوج التجار"
+        description="لكل تاجر ملف منتجات مستقل: الأسعار وحالة النشر ومراجعة الجودة. ابدأ بالتاجر ثم أضف منتجاته."
+        actions={<span className="badge">{cards.length} تاجر</span>}
       />
 
-      <CatalogClient
-        initialProducts={products}
-        merchants={merchants}
-        vendorTypes={listVendorTypes()}
-        categories={listCategories()}
-        variants={listVariants()}
+      <CatalogSummary
+        merchants={cards.length}
+        liveMerchants={cards.filter((card) => card.live).length}
+        products={products.length}
+        pending={pending}
       />
+
+      <div className="cat-home">
+        <div className="cat-home-main">
+          <CatalogDirectory cards={cards} />
+        </div>
+        <aside className="cat-home-side">
+          <EntryLeaderboard board={board} />
+        </aside>
+      </div>
     </>
   );
 }

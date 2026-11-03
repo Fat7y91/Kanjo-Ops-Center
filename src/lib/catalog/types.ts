@@ -27,10 +27,23 @@ export type CatalogProduct = {
   price: number;
   state: CatalogProductState;
   reviewNote: string;
+  /**
+   * Who entered the product. Kept on the row because the catalog attributes
+   * entry volume per rep, and the draft queue can flush hours after the rep
+   * created it.
+   */
+  enteredById: string | null;
+  enteredByName: string | null;
   /** Client-generated id echoed back so offline replays stay idempotent. */
   clientProductId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Identity of the person creating a product, taken from the session. */
+export type CatalogAuthor = {
+  id: string;
+  name: string;
 };
 
 export type CatalogProductInput = {

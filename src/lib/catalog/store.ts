@@ -6,6 +6,7 @@ import {
 } from "@/lib/taxonomy/store";
 import {
   isCatalogEligibleContract,
+  type CatalogAuthor,
   type CatalogProduct,
   type CatalogProductInput,
   type CatalogProductState,
@@ -84,7 +85,10 @@ function uniqueSku(vendorTypeId: number | null): string {
   );
 }
 
-export function createProduct(input: CatalogProductInput): CatalogProduct {
+export function createProduct(
+  input: CatalogProductInput,
+  author: CatalogAuthor | null = null,
+): CatalogProduct {
   const store = getStore();
   const merchant = getMerchantById(input.merchantId);
   if (!merchant) {
@@ -188,6 +192,8 @@ export function createProduct(input: CatalogProductInput): CatalogProduct {
     price: input.price,
     state: input.state,
     reviewNote: input.reviewNote.trim() || "بانتظار المراجعة",
+    enteredById: author?.id ?? null,
+    enteredByName: author?.name.trim() || null,
     clientProductId: input.clientProductId ?? null,
     createdAt: now,
     updatedAt: now,
@@ -235,6 +241,7 @@ export type SyncProductInput = CatalogProductInput & {
  */
 export function syncProducts(
   inputs: SyncProductInput[],
+  author: CatalogAuthor | null = null,
 ): { results: SyncProductResult[]; synced: number; failed: number } {
   const results: SyncProductResult[] = [];
   let synced = 0;
@@ -242,7 +249,7 @@ export function syncProducts(
 
   for (const input of inputs) {
     try {
-      const product = createProduct(input);
+      const product = createProduct(input, author);
       results.push({
         clientProductId: input.clientProductId ?? null,
         status: "synced",
