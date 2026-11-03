@@ -205,10 +205,19 @@ states; call sites never hand-roll purple/gold classes.
 Aesthetic contract: rounded-full pills for tabs and menu triggers, rounded-lg
 inside menu panels, high-contrast purple focus/open/hover states
 (`--kanjo-interactive-hover` + white text, never white-on-white), soft shadows,
-interactive-purple / gold accents. Selected tabs use the interactive purple with
-white text (AA) so contrast never depends on the pastel wash alone. Dark mode is
+interactive-purple / gold accents. Selected tabs use the
+`--gradient-primary` fill with white text (AA) so contrast never depends on the
+pastel wash alone. Dark mode is
 driven by `data-theme="dark"` on `<html>` (see `tailwind.config.ts` `darkMode`
 selector).
+
+Colour, elevation and geometry inherit V1: the deep navigation shell is the
+`--gradient-nav` recipe (`#240038 → #3b0764`), raised cards carry
+`--gradient-card` (white to `#faf5ff`), active nav rows use the gold tab fill
+with `--kanjo-purple-base` ink, and status badges use the V1 tinted-fill +
+hairline recipe (emerald / amber / orange / red / blue). Brand inputs live in
+`src/styles/tokens.css`; the Tailwind `kanjo-*` and `brand-*` aliases point at
+those variables, so components never hard-code the hex values.
 
 ### Primitive rule: every `Label` needs a provider
 

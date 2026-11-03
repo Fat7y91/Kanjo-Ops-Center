@@ -5,11 +5,16 @@
    for colour, radius, elevation and type. Components must reference these
    variables (or the Tailwind `kanjo-*` aliases) — never raw hex values.
 
-   Brand contract:
+   Brand contract (ported from V1 `public/index.html` + `public/style.css`):
      purple-base        #230535  backgrounds / headings / navigation shell
-     purple-interactive #6C35B6  buttons, focus rings, active states ONLY
+     purple-deep        #14021D  deepest gradient stop on dark surfaces
+     purple-soft        #331047  secondary dark surface
+     interactive        #6C35B6  buttons, focus rings, active states ONLY
      gold               #FFD700  accents and active text on dark surfaces
-     orange             #F97316  secondary accent beside gold, never a surface
+     gold-warm          #FACC15  active tab fill (sits with gold in gradients)
+     orange             #E57723  V1 brand orange, secondary accent
+     cream              #FBF7F0  marketing canvas
+     ink                #1B0F26  V1 body copy
      surface            #FFFFFF  raised content
      canvas             #F8FAFC  app background (slate-50)
    ========================================================================== */
@@ -19,14 +24,20 @@
 
   /* ── Brand palette ──────────────────────────────────────────────────── */
   --kanjo-purple-base: #230535;
+  --kanjo-purple-deep: #14021d;
+  --kanjo-purple-soft: #331047;
   --kanjo-purple-interactive: #6c35b6;
   --kanjo-interactive-hover: #5a2b98;
   --kanjo-interactive-active: #4a237d;
   --kanjo-gold: #ffd700;
+  --kanjo-gold-warm: #facc15;
   --kanjo-gold-deep: #7a5b00;
-  --kanjo-orange: #f97316;
+  --kanjo-gold-light: #ffd700;
+  --kanjo-orange: #e57723;
   --kanjo-orange-deep: #b45309;
   --kanjo-orange-soft: #fff4ea;
+  --kanjo-cream: #fbf7f0;
+  --kanjo-ink-deep: #1b0f26;
   --kanjo-surface: #ffffff;
   --kanjo-canvas: #f8fafc;
 
@@ -40,20 +51,20 @@
   --kanjo-focus-ring-strong: rgba(108, 53, 182, 0.4);
 
   /* ── Semantic aliases (consumed by app + domain CSS) ─────────────────── */
-  --ink: #0f172a;
+  --ink: #1b0f26;
   --ink-soft: #64748b;
   --canvas: var(--kanjo-canvas);
   --surface: var(--kanjo-surface);
-  --surface-soft: #f1f5f9;
+  --surface-soft: #f5f3ff;
   --surface-raised: var(--kanjo-surface);
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
+  --line: #f3e8ff;
+  --line-strong: #e4d4f7;
   --nav: var(--kanjo-purple-base);
-  --nav-soft: #35104f;
+  --nav-soft: var(--kanjo-purple-soft);
   --nav-ink: #ffffff;
-  --nav-ink-soft: #b9c2d4;
-  --nav-ink-muted: #8e9ab0;
-  --nav-line: rgba(255, 255, 255, 0.1);
+  --nav-ink-soft: #e9d5ff;
+  --nav-ink-muted: #c4b5fd;
+  --nav-line: rgba(250, 204, 21, 0.18);
   --gold: var(--kanjo-gold);
   --gold-deep: var(--kanjo-gold-deep);
   --gold-contrast: #161106;
@@ -71,43 +82,56 @@
   --red: #b91c1c;
   --red-soft: #fef2f2;
 
-  /* ── Gradients ──────────────────────────────────────────────────────── */
+  /* ── Gradients (V1 card + shell recipes) ────────────────────────────── */
   --gradient-primary: linear-gradient(
     135deg,
-    var(--kanjo-purple-interactive),
-    var(--kanjo-interactive-active)
+    var(--kanjo-purple-base),
+    #4c1d95
   );
   --gradient-gold: linear-gradient(
     145deg,
-    #f5d27a,
-    var(--kanjo-gold-deep)
+    var(--kanjo-gold-warm),
+    var(--kanjo-gold)
   );
   --gradient-accent: linear-gradient(
     135deg,
     var(--kanjo-orange),
     var(--kanjo-gold-deep)
   );
+  /* Raised card wash: white fading into a whisper of purple. */
+  --gradient-card: linear-gradient(135deg, #ffffff 0%, #faf5ff 100%);
+  /* Deep navigation shell: #240038 → #3b0764, exactly as V1 painted it. */
+  --gradient-nav: linear-gradient(180deg, #240038 0%, #3b0764 100%);
+  /* Icon tile: brand purple into deep violet, gold glyph on top. */
+  --gradient-tile: linear-gradient(
+    135deg,
+    var(--kanjo-purple-base),
+    #4c1d95
+  );
 
-  /* ── Elevation: deep, diffused, purple-tinted ───────────────────────── */
+  /* ── Elevation: deep, diffused, purple-tinted (V1 shadow DNA) ───────── */
   --shadow-sm: 0 1px 2px rgba(35, 5, 53, 0.05);
-  --shadow: 0 10px 40px -10px rgba(35, 5, 53, 0.08);
-  --shadow-md: 0 16px 48px -12px rgba(35, 5, 53, 0.12);
+  --shadow: 0 2px 6px rgba(35, 5, 53, 0.04), 0 20px 50px -20px rgba(35, 5, 53, 0.14);
+  --shadow-md: 0 4px 12px rgba(35, 5, 53, 0.06),
+    0 30px 70px -25px rgba(35, 5, 53, 0.25);
   --shadow-lg: 0 24px 80px -12px rgba(35, 5, 53, 0.25);
   --shadow-modal: 0 24px 80px -12px rgba(35, 5, 53, 0.25);
+  --shadow-gold: 0 20px 60px -15px rgba(229, 119, 35, 0.55);
+  --shadow-glow: 0 0 60px rgba(255, 215, 0, 0.18);
+  --shadow-tab-active: 0 6px 18px rgba(250, 204, 21, 0.45);
 
   /* ── Geometry ───────────────────────────────────────────────────────── */
-  /* Flat 2026 SaaS geometry: one 10px control radius and one card radius.
-   * Buttons, tabs, inputs and pills all share `--radius-control` so the
-   * silhouette never mixes square and pill shapes inside one surface. */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-control: 10px;
-  --radius: 12px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-input: 10px;
-  --radius-card: 14px;
-  --radius-modal: 18px;
+  /* V1 rounded-2xl leaning shell: controls sit at 12px, raised cards at 18px,
+   * and overlays at 20px, so the whole surface family reads as one system. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-control: 12px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 20px;
+  --radius-input: 12px;
+  --radius-card: 18px;
+  --radius-modal: 20px;
 
   /* Height of the app topbar; sticky section headers pin below it. */
   --topbar-height: 72px;
@@ -129,7 +153,7 @@
   --kanjo-field-border: rgba(167, 139, 250, 0.24);
   --kanjo-focus-ring: rgba(167, 139, 250, 0.25);
   --kanjo-focus-ring-strong: rgba(167, 139, 250, 0.45);
-  --kanjo-orange-soft: rgba(249, 115, 22, 0.14);
+  --kanjo-orange-soft: rgba(229, 119, 35, 0.14);
 
   --ink: #f8fafc;
   --ink-soft: #94a3b8;
@@ -139,18 +163,18 @@
   --surface-raised: #24324a;
   --line: #334155;
   --line-strong: #475569;
-  --nav: var(--kanjo-purple-base);
-  --nav-soft: #35104f;
+  --nav: var(--kanjo-purple-deep);
+  --nav-soft: var(--kanjo-purple-soft);
   --nav-ink: #ffffff;
-  --nav-ink-soft: #cbd5e1;
-  --nav-ink-muted: #94a3b8;
-  --nav-line: rgba(255, 255, 255, 0.12);
+  --nav-ink-soft: #e9d5ff;
+  --nav-ink-muted: #c4b5fd;
+  --nav-line: rgba(250, 204, 21, 0.18);
   --gold: var(--kanjo-gold);
   --gold-deep: #ffd75e;
   --gold-contrast: #161106;
   --orange: #fdba74;
   --orange-deep: #fdba74;
-  --orange-soft: rgba(249, 115, 22, 0.14);
+  --orange-soft: rgba(229, 119, 35, 0.14);
   --purple: #c4b5fd;
   --primary: var(--kanjo-purple-interactive);
   --primary-ink: #ffffff;
@@ -167,6 +191,10 @@
   --shadow-md: 0 16px 48px -12px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 24px 80px -12px rgba(0, 0, 0, 0.6);
   --shadow-modal: 0 24px 80px -12px rgba(0, 0, 0, 0.6);
+
+  /* Dark surfaces keep the same silhouette but drop the light card wash. */
+  --gradient-card: linear-gradient(135deg, #1e293b 0%, #241b33 100%);
+  --gradient-nav: linear-gradient(180deg, #14021d 0%, #2a0a45 100%);
 }
 
 [data-theme="dark"] body {

@@ -23,10 +23,16 @@ const config: Config = {
       colors: {
         kanjo: {
           base: "var(--kanjo-purple-base)",
+          deep: "var(--kanjo-purple-deep)",
+          soft: "var(--kanjo-purple-soft)",
           interactive: "var(--kanjo-purple-interactive)",
           hover: "var(--kanjo-interactive-hover)",
           active: "var(--kanjo-interactive-active)",
           gold: "var(--kanjo-gold)",
+          "gold-warm": "var(--kanjo-gold-warm)",
+          "gold-light": "var(--kanjo-gold-light)",
+          orange: "var(--kanjo-orange)",
+          cream: "var(--kanjo-cream)",
           surface: "var(--kanjo-surface)",
           canvas: "var(--kanjo-canvas)",
           pastel: "var(--kanjo-pastel)",
@@ -38,8 +44,12 @@ const config: Config = {
         },
         brand: {
           DEFAULT: "var(--kanjo-purple-base)",
-          soft: "var(--nav-soft)",
+          deep: "var(--kanjo-purple-deep)",
+          soft: "var(--kanjo-purple-soft)",
           gold: "var(--kanjo-gold)",
+          "gold-light": "var(--kanjo-gold-light)",
+          cream: "var(--kanjo-cream)",
+          ink: "var(--kanjo-ink-deep)",
         },
         surface: {
           light: "var(--kanjo-surface)",
@@ -59,6 +69,8 @@ const config: Config = {
         modal: "var(--shadow-modal)",
         kanjo: "var(--shadow)",
         "kanjo-lg": "var(--shadow-lg)",
+        gold: "var(--shadow-gold)",
+        glow: "var(--shadow-glow)",
       },
       fontFamily: {
         sans: ["var(--font-cairo)", "Cairo", "system-ui", "sans-serif"],
