@@ -1,8 +1,16 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions`. This file is data, not logic, and lives under
- * `data/` so it is exempt from the source-file line budget.
+ * Mirrors `app.permissions` exactly (96 rows). This file is data, not logic,
+ * and lives under `data/` so it is exempt from the source-file line budget.
+ *
+ * Source query:
+ *   select key, label, description, group_key, sort_order
+ *     from app.permissions order by sort_order, key;
+ *
+ * Regenerate it after any permission migration. The key set must match the
+ * database key-for-key; `permissions.ts` derives the `Permission` union from
+ * this array, so a key missing here is invisible to every UI guard.
  */
 
 export type PermissionDefinition = {
@@ -13,7 +21,20 @@ export type PermissionDefinition = {
 };
 
 export const PERMISSIONS = [
-  /* ── 1. Overview ──────────────────────────────────────────────────────── */
+  /* ── 1. مساحة العمل ── */
+  {
+    key: "view_overview",
+    label: "عرض النظرة العامة",
+    description: "فتح النظرة العامة للمؤسسة والمؤشرات الرئيسية.",
+    group: "مساحة العمل",
+  },
+  {
+    key: "view_finance",
+    label: "عرض الملخص المالي",
+    description: "الاطلاع على اللقطة المالية في النظرة العامة.",
+    group: "مساحة العمل",
+  },
+  /* ── 2. نظرة عامة ── */
   {
     key: "view_overview_contracts",
     label: "نظرة عامة · العقود",
@@ -50,8 +71,37 @@ export const PERMISSIONS = [
     description: "عرض مؤشرات التسويق في النظرة العامة.",
     group: "نظرة عامة",
   },
-
-  /* ── 2. Cities ────────────────────────────────────────────────────────── */
+  /* ── 3. المدن ── */
+  {
+    key: "view_cities",
+    label: "عرض المدن",
+    description: "فتح دورة حياة المدن وسجل النطاقات التشغيلية.",
+    group: "المدن",
+  },
+  {
+    key: "create_city",
+    label: "إنشاء مدينة",
+    description: "إنشاء مدينة جديدة عبر معالج ذكاء الأعمال الجغرافي.",
+    group: "المدن",
+  },
+  {
+    key: "update_city_zone",
+    label: "تحديث النطاق الجغرافي",
+    description: "تعديل حدود المدينة ونطاقها التشغيلي وبياناتها الميدانية.",
+    group: "المدن",
+  },
+  {
+    key: "view_city_analytics",
+    label: "عرض تحليلات المدينة",
+    description: "الاطلاع على تقديرات السكان والتجار ومؤشر المنافسة داخل النطاق.",
+    group: "المدن",
+  },
+  {
+    key: "assign_city_managers",
+    label: "إسناد مديري التشغيل",
+    description: "تعيين أو إلغاء مديري التشغيل للمدينة وتوسيع نطاق مدنهم المتاحة.",
+    group: "المدن",
+  },
   {
     key: "manage_cities",
     label: "إدارة المدن",
@@ -76,12 +126,35 @@ export const PERMISSIONS = [
     description: "إنشاء مدينة جديدة عبر معالج ذكاء الأعمال الجغرافي.",
     group: "المدن",
   },
-
-  /* ── 3. Merchants ─────────────────────────────────────────────────────── */
+  /* ── 4. التجار ── */
+  {
+    key: "create_merchants",
+    label: "إضافة التجار",
+    description: "إضافة سجلات تجار جديدة.",
+    group: "التجار",
+  },
+  {
+    key: "edit_merchants",
+    label: "تعديل التجار",
+    description: "تغيير ملف التاجر وبياناته التجارية.",
+    group: "التجار",
+  },
+  {
+    key: "delete_merchants",
+    label: "حذف التجار",
+    description: "أرشفة أو حذف سجلات التجار.",
+    group: "التجار",
+  },
   {
     key: "view_merchants",
     label: "عرض التجار",
     description: "فتح دليل التجار.",
+    group: "التجار",
+  },
+  {
+    key: "transfer_merchants",
+    label: "نقل ملكية التجار",
+    description: "نقل ملكية التاجر بين الفرق.",
     group: "التجار",
   },
   {
@@ -120,12 +193,23 @@ export const PERMISSIONS = [
     description: "فتح ملفات التاجر الرسمية وتصدير بياناته إلى Excel.",
     group: "التجار",
   },
-
-  /* ── 4. Catalog ───────────────────────────────────────────────────────── */
+  /* ── 5. الكتالوج ── */
+  {
+    key: "manage_catalog",
+    label: "إدارة الكتالوج",
+    description: "صلاحية شاملة لإدارة منتجات الكتالوج، تشمل الإضافة والتعديل والحذف.",
+    group: "الكتالوج",
+  },
   {
     key: "view_catalog",
     label: "عرض الكتالوج",
     description: "فتح كتالوج المنتجات.",
+    group: "الكتالوج",
+  },
+  {
+    key: "create_products",
+    label: "إضافة المنتجات",
+    description: "إضافة منتجات إلى الكتالوج.",
     group: "الكتالوج",
   },
   {
@@ -140,8 +224,31 @@ export const PERMISSIONS = [
     description: "إضافة منتجات جديدة إلى الكتالوج.",
     group: "الكتالوج",
   },
-
-  /* ── 5. Images ────────────────────────────────────────────────────────── */
+  {
+    key: "review_catalog_images",
+    label: "مراجعة وتعديل صور الكتالوج",
+    description: "مراجعة صور المنتجات المعلّقة، تحسينها واعتمادها قبل النشر في الكتالوج.",
+    group: "الكتالوج",
+  },
+  {
+    key: "delete_products",
+    label: "حذف المنتجات",
+    description: "إزالة المنتجات من الكتالوج.",
+    group: "الكتالوج",
+  },
+  {
+    key: "view_taxonomy",
+    label: "عرض التصنيف المركزي",
+    description: "الاطلاع على أنواع التجار والتصنيفات والمتغيرات المرتبطة بمعرّفات لوحة المستهلك.",
+    group: "الكتالوج",
+  },
+  {
+    key: "request_taxonomy",
+    label: "طلب إضافة تصنيف",
+    description: "إرسال طلب إضافة نوع تاجر أو تصنيف أو متغير إلى قائمة المراجعة المركزية.",
+    group: "الكتالوج",
+  },
+  /* ── 6. مراجعة الصور ── */
   {
     key: "edit_product_images",
     label: "تعديل صور المنتجات",
@@ -154,8 +261,7 @@ export const PERMISSIONS = [
     description: "اعتماد صور المنتجات أو رفضها قبل النشر.",
     group: "مراجعة الصور",
   },
-
-  /* ── 6. Categories ────────────────────────────────────────────────────── */
+  /* ── 7. التصنيفات ── */
   {
     key: "review_add_requests",
     label: "مراجعة طلبات الإضافة",
@@ -180,26 +286,54 @@ export const PERMISSIONS = [
     description: "إدارة المتغيرات المرتبطة بالتصنيفات.",
     group: "التصنيفات",
   },
-
-  /* ── 7. Rep KPIs ──────────────────────────────────────────────────────── */
+  /* ── 8. الحوكمة ── */
   {
-    key: "view_global_kpi",
-    label: "عرض مؤشرات كل المناديب",
-    description: "فتح مؤشرات مناديب كل المدن مع التصفية.",
-    group: "مؤشرات المناديب",
+    key: "manage_taxonomy",
+    label: "إدارة التصنيف المركزي",
+    description: "اعتماد طلبات التصنيف وربطها بمعرّفات لوحة المستهلك الرسمية.",
+    group: "الحوكمة",
   },
   {
-    key: "view_rep_kpi",
-    label: "عرض مؤشرات المندوب",
-    description: "عرض مؤشرات المندوب الخاصة فقط.",
-    group: "مؤشرات المناديب",
+    key: "manage_permissions",
+    label: "إدارة الصلاحيات",
+    description: "فتح مصفوفة الصلاحيات ومنح القدرات أو سحبها.",
+    group: "الحوكمة",
   },
-
-  /* ── 8. Field Ops ─────────────────────────────────────────────────────── */
+  /* ── 9. العمليات الميدانية ── */
+  {
+    key: "view_field_ops",
+    label: "عرض العمليات الميدانية",
+    description: "فتح لوحة العمليات الميدانية ومسار الزيارات.",
+    group: "العمليات الميدانية",
+  },
+  {
+    key: "view_agent_kpi",
+    label: "عرض لوحة مؤشرات المناديب",
+    description: "فتح لوحة مؤشرات الأداء الأربع مراحل وتصفية المناديب والفرق والمدن.",
+    group: "العمليات الميدانية",
+  },
+  {
+    key: "manage_tasks",
+    label: "إدارة المهام",
+    description: "إدارة المهام الميدانية ومراجعة لوحة التشغيل.",
+    group: "العمليات الميدانية",
+  },
+  {
+    key: "approve_tasks",
+    label: "اعتماد المهام",
+    description: "اعتماد العمل الميداني المكتمل.",
+    group: "العمليات الميدانية",
+  },
   {
     key: "assign_tasks",
     label: "إسناد المهام",
     description: "إنشاء المهام الميدانية وإسنادها للمناديب.",
+    group: "العمليات الميدانية",
+  },
+  {
+    key: "request_transfers",
+    label: "طلب نقل التجار",
+    description: "طلب نقل تاجر إلى فريق المندوب.",
     group: "العمليات الميدانية",
   },
   {
@@ -209,15 +343,33 @@ export const PERMISSIONS = [
     group: "العمليات الميدانية",
   },
   {
+    key: "approve_transfers",
+    label: "اعتماد النقل",
+    description: "اعتماد أو رفض طلبات نقل التجار بين الفرق.",
+    group: "العمليات الميدانية",
+  },
+  {
     key: "start_end_visit",
     label: "بدء وإنهاء الزيارات",
     description: "بدء الزيارة الميدانية وإنهاؤها وتسجيل مدتها.",
     group: "العمليات الميدانية",
   },
   {
+    key: "approve_edit_requests",
+    label: "اعتماد تعديل التقارير",
+    description: "اعتماد أو رفض طلبات تعديل تقارير الزيارات المقفلة.",
+    group: "العمليات الميدانية",
+  },
+  {
     key: "write_report",
     label: "كتابة التقارير",
     description: "كتابة تقارير الزيارات وإرسالها للاعتماد.",
+    group: "العمليات الميدانية",
+  },
+  {
+    key: "manage_merchant_state",
+    label: "إدارة حالة التاجر",
+    description: "تجاوز حالات الاتفاق النهائي والتوقيع وتعديل السجلات المقفلة.",
     group: "العمليات الميدانية",
   },
   {
@@ -238,8 +390,32 @@ export const PERMISSIONS = [
     description: "اعتماد طلبات تعديل التقارير المقفلة.",
     group: "العمليات الميدانية",
   },
-
-  /* ── 9. Contracts ─────────────────────────────────────────────────────── */
+  /* ── 10. مؤشرات المناديب ── */
+  {
+    key: "view_global_kpi",
+    label: "عرض مؤشرات كل المناديب",
+    description: "فتح مؤشرات مناديب كل المدن مع التصفية.",
+    group: "مؤشرات المناديب",
+  },
+  {
+    key: "view_rep_kpi",
+    label: "عرض مؤشرات المندوب",
+    description: "عرض مؤشرات المندوب الخاصة فقط.",
+    group: "مؤشرات المناديب",
+  },
+  /* ── 11. العقود ── */
+  {
+    key: "view_contracts",
+    label: "عرض العقود",
+    description: "فتح سجل العقود.",
+    group: "العقود",
+  },
+  {
+    key: "create_contracts",
+    label: "إنشاء العقود",
+    description: "صياغة عقود تجار جديدة.",
+    group: "العقود",
+  },
   {
     key: "draft_contract",
     label: "صياغة العقود",
@@ -247,9 +423,27 @@ export const PERMISSIONS = [
     group: "العقود",
   },
   {
+    key: "edit_contracts",
+    label: "تعديل العقود",
+    description: "تحديث شروط العقود وبياناتها الوصفية.",
+    group: "العقود",
+  },
+  {
     key: "edit_contract",
     label: "تعديل العقود",
     description: "تحديث شروط العقود وبياناتها الوصفية.",
+    group: "العقود",
+  },
+  {
+    key: "sign_contracts",
+    label: "توقيع العقود",
+    description: "تطبيق التوقيع المعتمد على العقد.",
+    group: "العقود",
+  },
+  {
+    key: "delete_contracts",
+    label: "حذف العقود",
+    description: "إلغاء أو حذف سجلات العقود.",
     group: "العقود",
   },
   {
@@ -264,8 +458,7 @@ export const PERMISSIONS = [
     description: "إلغاء سجلات العقود وأرشفتها.",
     group: "العقود",
   },
-
-  /* ── 10. Banking ──────────────────────────────────────────────────────── */
+  /* ── 12. الحسابات البنكية ── */
   {
     key: "view_bank_balances",
     label: "عرض الأرصدة البنكية",
@@ -290,22 +483,56 @@ export const PERMISSIONS = [
     description: "تسجيل الودائع والمصروفات على الحسابات البنكية.",
     group: "الحسابات البنكية",
   },
-
-  /* ── 11. Payroll ──────────────────────────────────────────────────────── */
+  /* ── 13. المالية ── */
   {
-    key: "view_payroll_sheets",
-    label: "عرض مسير الرواتب",
-    description: "الاطلاع على مسير الرواتب لكل المناديب.",
-    group: "الرواتب",
+    key: "view_financials",
+    label: "عرض البيانات المالية",
+    description: "الاطلاع على الإيرادات والعمولات والمصروفات في مركز القيادة التنفيذي.",
+    group: "المالية",
   },
   {
-    key: "view_employee_payslip",
-    label: "عرض قسيمة الموظف",
-    description: "عرض قسيمة راتب الموظف الخاصة.",
-    group: "الرواتب",
+    key: "manage_expenses",
+    label: "إدارة المصروفات",
+    description: "تسجيل مصروفات التشغيل واعتمادها في دفتر المالية.",
+    group: "المالية",
   },
-
-  /* ── 12. Marketing ────────────────────────────────────────────────────── */
+  {
+    key: "view_accounts",
+    label: "عرض الحسابات البنكية",
+    description: "الاطلاع على الحسابات البنكية وأرصدة الودائع والمصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "manage_accounts",
+    label: "إدارة الحسابات البنكية",
+    description: "إضافة الحسابات البنكية وتسجيل الودائع والمصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "record_deposits",
+    label: "تسجيل الإيداعات",
+    description: "تسجيل إيداعات الحسابات البنكية المصرية فقط، دون الاطلاع على الأرصدة أو المصروفات.",
+    group: "المالية",
+  },
+  {
+    key: "view_payroll",
+    label: "عرض الرواتب والعمولات",
+    description: "الاطلاع على مسير الرواتب وحساب العمولات لكل مندوب.",
+    group: "المالية",
+  },
+  {
+    key: "manage_payroll",
+    label: "إدارة الرواتب والعمولات",
+    description: "تعديل بنود الرواتب والعمولات واعتماد المسير.",
+    group: "المالية",
+  },
+  /* ── 14. التسويق ── */
+  {
+    key: "manage_marketing_metrics",
+    label: "إدارة مؤشرات التسويق",
+    description: "تحديث أرقام الوصول والحملات المستخدمة في لوحة التسويق.",
+    group: "التسويق",
+  },
   {
     key: "view_campaigns",
     label: "عرض الحملات",
@@ -336,24 +563,41 @@ export const PERMISSIONS = [
     description: "تعديل إعدادات منصات الإعلان المربوطة.",
     group: "التسويق",
   },
-
-  /* ── 13. Data Entry ───────────────────────────────────────────────────── */
+  /* ── 15. الرواتب ── */
+  {
+    key: "view_payroll_sheets",
+    label: "عرض مسير الرواتب",
+    description: "الاطلاع على مسير الرواتب لكل المناديب.",
+    group: "الرواتب",
+  },
+  {
+    key: "view_employee_payslip",
+    label: "عرض قسيمة الموظف",
+    description: "عرض قسيمة راتب الموظف الخاصة.",
+    group: "الرواتب",
+  },
+  /* ── 16. إدخال البيانات ── */
   {
     key: "view_pricing_and_status",
     label: "عرض الأسعار والحالات",
     description: "استعراض التجار والمنتجات وأسعارها وحالاتها.",
     group: "إدخال البيانات",
   },
-
-  /* ── 14. Commission Rates ─────────────────────────────────────────────── */
+  /* ── 17. أسعار العمولات ── */
   {
     key: "manage_commission_rates",
     label: "إدارة أسعار العمولات",
     description: "تعديل رسوم التفعيل والصور والتعاقد لكل مدينة.",
     group: "أسعار العمولات",
   },
-
-  /* ── 15. Clearinghouse ────────────────────────────────────────────────── */
+  /* ── 18. مستخدمين النظام ── */
+  {
+    key: "manage_system_users",
+    label: "إدارة مستخدمين النظام",
+    description: "إنشاء المستخدمين وتعديل رتبهم وصلاحياتهم ونطاق مدنهم.",
+    group: "مستخدمين النظام",
+  },
+  /* ── 19. المقاصة والعمليات ── */
   {
     key: "log_operations",
     label: "تسجيل العمليات",
@@ -371,13 +615,5 @@ export const PERMISSIONS = [
     label: "تسوية المقاصة",
     description: "اعتماد سداد أو تحصيل بند في المقاصة وإغلاقه.",
     group: "المقاصة والعمليات",
-  },
-
-  /* ── 16. System Users ─────────────────────────────────────────────────── */
-  {
-    key: "manage_system_users",
-    label: "إدارة مستخدمين النظام",
-    description: "إنشاء المستخدمين وتعديل رتبهم وصلاحياتهم ونطاق مدنهم.",
-    group: "مستخدمين النظام",
   },
 ] as const;
