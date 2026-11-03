@@ -10,6 +10,7 @@ import {
   PERMISSION_KEYS,
   type Permission,
 } from "@/lib/rbac/permissions";
+import { cascadeRevoke } from "@/lib/rbac/permission-tree";
 import type { AppUser } from "@/lib/rbac/types";
 
 type UserPermissionsModalProps = {
@@ -18,6 +19,8 @@ type UserPermissionsModalProps = {
   /** Same self-grant rule as the server, so a checkbox cannot over-promise. */
   canGrant: (user: AppUser, permission: Permission) => boolean;
   onToggle: (userId: string, permission: Permission, enabled: boolean) => void;
+  /** Multi-key revoke used when a parent cascades into its children. */
+  onRevokeMany: (userId: string, permissions: Permission[]) => void;
   onClose: () => void;
 };
 
@@ -27,12 +30,18 @@ type UserPermissionsModalProps = {
  * Every toggle commits immediately through the same PATCH route the matrix used
  * inline, so the dialog stays open while the card behind it re-renders with the
  * new grant count.
+ *
+ * Parent capabilities (`view_overview`) group the `view_overview_*` sections.
+ * Revoking the parent also revokes its held sections, so no orphaned section
+ * grant survives; granting any section on its own stays allowed because each
+ * also opens the overview module.
  */
 export function UserPermissionsModal({
   target,
   pendingKey,
   canGrant,
   onToggle,
+  onRevokeMany,
   onClose,
 }: UserPermissionsModalProps) {
   const held = useMemo(
@@ -42,6 +51,22 @@ export function UserPermissionsModal({
   const busy = pendingKey !== null;
   const grantable = (permission: Permission) =>
     target ? canGrant(target, permission) : false;
+
+  function change(permission: Permission, checked: boolean) {
+    if (!target) return;
+
+    if (checked) {
+      onToggle(target.id, permission, true);
+      return;
+    }
+
+    const children = cascadeRevoke(target.permissions, permission);
+    if (children) {
+      onRevokeMany(target.id, [permission, ...children]);
+      return;
+    }
+    onToggle(target.id, permission, false);
+  }
 
   return (
     <Modal
@@ -76,9 +101,7 @@ export function UserPermissionsModal({
                     }
                     checked={granted}
                     disabled={busy || (!granted && !grantable(key))}
-                    onChange={(checked) =>
-                      target ? onToggle(target.id, key, checked) : undefined
-                    }
+                    onChange={(checked) => change(key, checked)}
                   />
                 );
               })}

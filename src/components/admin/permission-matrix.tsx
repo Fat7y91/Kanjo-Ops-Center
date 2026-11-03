@@ -135,6 +135,9 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
         onToggle={(userId, permission, enabled) =>
           void matrix.toggle(userId, permission, enabled)
         }
+        onRevokeMany={(userId, permissions) =>
+          void matrix.revokeMany(userId, permissions)
+        }
         onClose={matrix.closePermissions}
       />
 

@@ -188,6 +188,26 @@ export function useUserCapabilities({
     [patchUser],
   );
 
+  /**
+   * Revokes several keys through the single-key PATCH path.
+   *
+   * A cascade (the overview master dropping its section grants) needs the
+   * multi-key form, but the per-key route is the safest contract: it only
+   * validates additions, so it works even when the target already holds a
+   * capability the actor does not.
+   */
+  const revokeMany = useCallback(
+    async (userId: string, permissions: readonly Permission[]) => {
+      for (const permission of permissions) {
+        await patchUser(`${userId}:${permission}`, userId, {
+          permission,
+          enabled: false,
+        });
+      }
+    },
+    [patchUser],
+  );
+
   const changeLevel = useCallback(
     async (user: AppUser, level: number) => {
       await patchUser(`level:${user.id}`, user.id, { clearanceLevel: level });
@@ -273,6 +293,7 @@ export function useUserCapabilities({
     canGrant,
     withinViewer,
     toggle,
+    revokeMany,
     changeLevel,
     removeUser,
     patchUser,

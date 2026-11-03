@@ -185,17 +185,41 @@
   text-transform: uppercase;
 }
 
-/* The modal grid scrolls independently so the action row stays reachable. */
+/* The modal grid scrolls independently so the action row stays reachable.
+ *
+ * Masonry columns instead of a CSS grid: capability groups have very different
+ * heights, and a grid row would stretch every group to the tallest one, leaving
+ * a hole under the short groups. Columns pack them tight with no dead space. */
 .modal-body .matrix-groups {
+  display: block;
   max-height: 320px;
   overflow-y: auto;
   padding: 4px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 10px;
+  columns: 3;
+  column-gap: 10px;
+}
+
+.modal-body .matrix-groups .matrix-group-modal {
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 10px;
+  break-inside: avoid;
 }
 
 /* The dedicated capability dialog owns the whole overlay, so its grid gets the
    taller viewport-relative cap instead of the inline create-form budget. */
 .modal-body .matrix-groups-dialog {
   max-height: min(58vh, 460px);
+}
+
+@media (max-width: 1180px) {
+  .modal-body .matrix-groups {
+    columns: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-body .matrix-groups {
+    columns: 1;
+  }
 }

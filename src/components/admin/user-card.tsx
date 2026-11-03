@@ -36,7 +36,7 @@ function initials(name: string): string {
 /**
  * One operator as a compact roster card.
  *
- * The 96-capability grid lives in `UserPermissionsModal`, so the list stays
+ * The 97-capability grid lives in `UserPermissionsModal`, so the list stays
  * scannable and a card only re-renders when its own user object changes.
  */
 function UserCardBase({
