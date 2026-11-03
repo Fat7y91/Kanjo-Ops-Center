@@ -186,23 +186,47 @@ export async function updateUserProfile(
   }
 
   if (patch.permissions !== undefined) {
-    const { error: clearError } = await client
+    // Diff, never truncate-and-reinsert. `manage_system_users` is protected by a
+    // deferred constraint trigger (`assert_governor_remaining`), so deleting the
+    // sole governor's grant and re-adding it in a second statement would abort
+    // the transaction at commit. Additions first, removals second: the invariant
+    // is only ever observed on a full set.
+    const { data: current, error: readError } = await client
       .schema("app")
       .from("user_permissions")
-      .delete()
+      .select("permission_key")
       .eq("user_id", id);
-    if (clearError) throw clearError;
+    if (readError) throw readError;
 
-    if (patch.permissions.length > 0) {
+    const held = new Set(
+      (current ?? []).map(
+        (row) => (row as { permission_key: string }).permission_key,
+      ),
+    );
+    const next = new Set<string>(patch.permissions);
+    const added = [...next].filter((key) => !held.has(key));
+    const removed = [...held].filter((key) => !next.has(key));
+
+    if (added.length > 0) {
       const { error } = await client
         .schema("app")
         .from("user_permissions")
         .insert(
-          patch.permissions.map((permissionKey) => ({
+          added.map((permissionKey) => ({
             user_id: id,
             permission_key: permissionKey,
           })),
         );
+      if (error) throw error;
+    }
+
+    if (removed.length > 0) {
+      const { error } = await client
+        .schema("app")
+        .from("user_permissions")
+        .delete()
+        .eq("user_id", id)
+        .in("permission_key", removed);
       if (error) throw error;
     }
   }
