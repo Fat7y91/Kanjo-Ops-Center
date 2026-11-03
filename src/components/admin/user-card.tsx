@@ -1,9 +1,11 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo } from "react";
 import Link from "next/link";
 
-import { PERMISSION_KEYS, type Permission } from "@/lib/rbac/permissions";
+import { Button } from "@/components/ui/button";
+import { SelectMenu } from "@/components/ui/select-menus";
+import { PERMISSION_KEYS } from "@/lib/rbac/permissions";
 import { clearanceTone } from "@/lib/rbac/hierarchy";
 import type { AppUser } from "@/lib/rbac/types";
 
@@ -11,18 +13,14 @@ type LevelOption = { level: number; label: string };
 
 type UserCardProps = {
   user: AppUser;
+  /** Own row: grants stay open, rank change and deletion stay forbidden. */
   isSelf: boolean;
   levelOptions: LevelOption[];
   levelLabel: (level: number) => string;
   cityName: (cityId: string) => string;
   pendingKey: string | null;
-  canGrant: (user: AppUser, permission: Permission) => boolean;
-  groups: readonly {
-    name: string;
-    items: readonly { key: string; label: string }[];
-  }[];
-  onToggle: (userId: string, permission: Permission, enabled: boolean) => void;
   onLevelChange: (user: AppUser, level: number) => void;
+  onOpenPermissions: (user: AppUser) => void;
   onOpenScope: (user: AppUser) => void;
   onRemove: (user: AppUser) => void;
 };
@@ -36,11 +34,10 @@ function initials(name: string): string {
 }
 
 /**
- * One user's capability grid.
+ * One operator as a compact roster card.
  *
- * Memoized on the user object plus the identity-stable callbacks from the
- * matrix hook: editing one user's permissions re-renders only that card instead
- * of every row in the list.
+ * The 96-capability grid lives in `UserPermissionsModal`, so the list stays
+ * scannable and a card only re-renders when its own user object changes.
  */
 function UserCardBase({
   user,
@@ -49,131 +46,112 @@ function UserCardBase({
   levelLabel,
   cityName,
   pendingKey,
-  canGrant,
-  groups,
-  onToggle,
   onLevelChange,
+  onOpenPermissions,
   onOpenScope,
   onRemove,
 }: UserCardProps) {
-  const held = useMemo(() => new Set(user.permissions), [user.permissions]);
-  const scope = useMemo(
-    () =>
-      user.accessibleCities.length === 0
-        ? "بدون نطاق مدن"
-        : user.accessibleCities.map((cityId) => cityName(cityId)).join(" · "),
-    [user.accessibleCities, cityName],
-  );
+  const held = user.permissions.length;
+  const total = PERMISSION_KEYS.length;
+  const percent = total === 0 ? 0 : Math.round((held / total) * 100);
+  const scope =
+    user.accessibleCities.length === 0
+      ? "بدون نطاق مدن"
+      : user.accessibleCities.map((cityId) => cityName(cityId)).join(" · ");
   const busy = pendingKey !== null;
+  const saving = pendingKey?.startsWith(`${user.id}:`) ?? false;
 
   return (
-    <article className="matrix-user">
-      <header className="matrix-user-head">
+    <article className="matrix-card">
+      <header className="matrix-card-head">
         <span className="account-avatar account-avatar-small">
           {initials(user.name)}
         </span>
-        <div className="matrix-user-copy">
-          <div className="matrix-user-name">
-            <Link
-              className="matrix-user-link"
-              href={`/admin/users/${user.id}`}
-            >
-              {user.name}
-            </Link>
-            <span className={`badge ${clearanceTone(user.clearanceLevel)}`}>
-              {levelLabel(user.clearanceLevel)} · L{user.clearanceLevel}
-            </span>
-          </div>
-          <span>{user.title}</span>
-          <span className="account-email">{user.email}</span>
-          <span className="matrix-scope">{scope}</span>
+        <div className="matrix-card-copy">
+          <Link className="matrix-user-link" href={`/admin/users/${user.id}`}>
+            {user.name}
+          </Link>
+          <span className="matrix-card-role">{user.title}</span>
         </div>
-        <div className="matrix-user-actions">
-          {isSelf ? (
-            <>
-              <span className="badge badge-gold">حسابك</span>
-              <span className={`badge ${clearanceTone(user.clearanceLevel)}`}>
-                {levelLabel(user.clearanceLevel)} · L{user.clearanceLevel}
-              </span>
-            </>
-          ) : (
-            <select
-              className="matrix-level-select"
-              value={user.clearanceLevel}
-              disabled={busy}
-              onChange={(event) =>
-                onLevelChange(user, Number(event.target.value))
-              }
-              aria-label={`رتبة ${user.name}`}
-            >
-              {levelOptions.map((level) => (
-                <option key={level.level} value={level.level}>
-                  {level.label} · L{level.level}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            type="button"
-            className="button button-quiet button-small"
-            onClick={() => onOpenScope(user)}
-            disabled={busy}
-          >
-            النطاق
-          </button>
-          {!isSelf && (
-            <button
-              type="button"
-              className="button button-danger button-small"
-              onClick={() => onRemove(user)}
-              disabled={busy}
-            >
-              حذف
-            </button>
-          )}
-          <span className="badge">
-            {held.size} / {PERMISSION_KEYS.length}
-          </span>
-        </div>
+        {isSelf && <span className="badge badge-gold">حسابك</span>}
+        <span className={`badge ${clearanceTone(user.clearanceLevel)}`}>
+          L{user.clearanceLevel}
+        </span>
       </header>
 
-      <div className="matrix-groups grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-        {groups.map((group) => (
-          <div key={group.name} className="matrix-group">
-            <h3>{group.name}</h3>
-            <div className="matrix-perms">
-              {group.items.map((permission) => {
-                const key = permission.key as Permission;
-                const keyId = `${user.id}:${key}`;
-                const grantable = canGrant(user, key);
-                return (
-                  <label key={key} className="matrix-check">
-                    <input
-                      type="checkbox"
-                      checked={held.has(key)}
-                      disabled={busy || (!held.has(key) && !grantable)}
-                      title={
-                        grantable
-                          ? undefined
-                          : "لا يمكنك منح صلاحية لا تملكها."
-                      }
-                      onChange={(event) =>
-                        onToggle(user.id, key, event.target.checked)
-                      }
-                    />
-                    <span>
-                      {permission.label}
-                      {pendingKey === keyId && (
-                        <em className="sync-mark">جارٍ الحفظ</em>
-                      )}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <dl className="matrix-card-facts">
+        <div>
+          <dt>الرتبة</dt>
+          <dd>{levelLabel(user.clearanceLevel)}</dd>
+        </div>
+        <div>
+          <dt>الدخول</dt>
+          <dd className="account-email" dir="ltr">
+            {user.email}
+          </dd>
+        </div>
+        <div>
+          <dt>النطاق</dt>
+          <dd className="matrix-scope">{scope}</dd>
+        </div>
+      </dl>
+
+      <div className="matrix-card-grants">
+        <span>
+          <strong>{held}</strong> / {total} صلاحية
+        </span>
+        <span className="matrix-card-bar" aria-hidden="true">
+          <span style={{ width: `${percent}%` }} />
+        </span>
       </div>
+
+      <footer className="matrix-card-actions">
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() => onOpenPermissions(user)}
+          disabled={busy}
+        >
+          الصلاحيات
+        </Button>
+        {isSelf ? (
+          <span className="matrix-card-self" title="لا يمكنك تغيير رتبتك">
+            رتبتك ثابتة
+          </span>
+        ) : (
+          <SelectMenu
+            value={user.clearanceLevel}
+            onChange={(level) => onLevelChange(user, level)}
+            options={levelOptions.map((option) => ({
+              value: option.level,
+              label: option.label,
+            }))}
+            disabled={busy}
+            ariaLabel={`رتبة ${user.name}`}
+            className="matrix-level-select"
+          />
+        )}
+        <Button
+          size="sm"
+          variant="quiet"
+          onClick={() => onOpenScope(user)}
+          disabled={busy}
+        >
+          النطاق
+        </Button>
+        {!isSelf && (
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => onRemove(user)}
+            disabled={busy}
+          >
+            حذف
+          </Button>
+        )}
+      </footer>
+
+      {saving && <p className="matrix-card-sync">جارٍ الحفظ…</p>}
     </article>
   );
 }

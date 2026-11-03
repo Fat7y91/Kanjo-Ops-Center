@@ -47,6 +47,8 @@ export type SelectMenuProps<T extends string | number> = {
   hint?: ReactNode;
   required?: boolean;
   className?: string;
+  /** Accessible name for the trigger when no visible label is rendered. */
+  ariaLabel?: string;
 };
 
 /**
@@ -65,6 +67,7 @@ export function SelectMenu<T extends string | number>({
   hint,
   required,
   className,
+  ariaLabel,
 }: SelectMenuProps<T>) {
   const current = options.find((option) => option.value === value);
 
@@ -75,7 +78,7 @@ export function SelectMenu<T extends string | number>({
       disabled={disabled}
       by={(left, right) => left === right}
     >
-      <ListboxButton className={TRIGGER}>
+      <ListboxButton className={TRIGGER} aria-label={ariaLabel}>
         <span className={current ? undefined : "text-[color:var(--ink-soft)]"}>
           {current?.label ?? placeholder}
         </span>

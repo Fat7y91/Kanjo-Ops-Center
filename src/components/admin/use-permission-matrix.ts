@@ -40,6 +40,9 @@ export function usePermissionMatrix(args: Args) {
   const [scopeTarget, setScopeTarget] = useState<AppUser | null>(null);
   const [scopeCities, setScopeCities] = useState<string[]>([]);
   const [savingScope, setSavingScope] = useState(false);
+  const [permissionsTargetId, setPermissionsTargetId] = useState<string | null>(
+    null,
+  );
 
   /**
    * A team is city-bound, so dropping its city from the courier scope must also
@@ -82,6 +85,27 @@ export function usePermissionMatrix(args: Args) {
     },
     [args.assignableCities, caps.setError],
   );
+
+  const openPermissions = useCallback(
+    (user: AppUser) => {
+      setPermissionsTargetId(user.id);
+      caps.setError(null);
+    },
+    [caps.setError],
+  );
+
+  const closePermissions = useCallback(() => {
+    setPermissionsTargetId(null);
+  }, []);
+
+  /**
+   * Resolved from the live roster, not captured on open, so a granted or revoked
+   * capability repaints the dialog while it stays open.
+   */
+  const permissionsTarget = permissionsTargetId
+    ? (caps.manageableUsers.find((user) => user.id === permissionsTargetId) ??
+      null)
+    : null;
 
   const saveScope = useCallback(async () => {
     if (!scopeTarget) return;
@@ -161,6 +185,7 @@ export function usePermissionMatrix(args: Args) {
     scopeTarget,
     scopeCities,
     savingScope,
+    permissionsTarget,
     teams,
     setCreateForm,
     setCreateOpen,
@@ -168,6 +193,8 @@ export function usePermissionMatrix(args: Args) {
     setScopeTarget,
     openCreate,
     openScope,
+    openPermissions,
+    closePermissions,
     saveScope,
     submitCreate,
     addTeam,

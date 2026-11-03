@@ -58,49 +58,6 @@ export default async function PermissionsPage() {
           teams={teams}
         />
       </Protect>
-
-      <section className="panel">
-        <div className="panel-head">
-          <div>
-            <p className="eyebrow">سلسلة التنفيذ</p>
-            <h2>أربعة فحوص مستقلة</h2>
-          </div>
-        </div>
-        <div className="enforcement-grid">
-          <div>
-            <span className="badge">1</span>
-            <h3>الوسيط</h3>
-            <p>
-              يتحقق من الجلسة الموقّعة ويمنع روابط الوحدات غير المصرّح بها قبل
-              عرض الصفحة.
-            </p>
-          </div>
-          <div>
-            <span className="badge">2</span>
-            <h3>حاجز الخادم</h3>
-            <p>
-              كل صفحة تستدعي <code>requirePermission()</code> وتعيد قراءة مجموعة
-              القدرات الحية، فلا يمكن لكوكي قديم تجاوز السحب.
-            </p>
-          </div>
-          <div>
-            <span className="badge">3</span>
-            <h3>حاجز الرتبة</h3>
-            <p>
-              لا يمكن إدارة أو منح صلاحية لمشغّل يعادل رتبتك أو يتجاوزها، ولا
-              إنشاء مشغّل خارج نطاق مدنك.
-            </p>
-          </div>
-          <div>
-            <span className="badge">4</span>
-            <h3>بوابة المكوّن</h3>
-            <p>
-              المصفوفة لا تعرض إلا المشغّلين الأدنى منك رتبةً وداخل نطاقك
-              الجغرافي، مع تعطيل الأزرار خارج ذلك.
-            </p>
-          </div>
-        </div>
-      </section>
     </>
   );
 }

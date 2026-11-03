@@ -26,6 +26,147 @@
   margin-bottom: 16px;
 }
 
+/* ── Operator roster cards ──────────────────────────────────────────────── */
+
+.matrix-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+}
+
+.matrix-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 15px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color 140ms ease;
+}
+
+.matrix-card:hover {
+  border-color: var(--line-strong);
+}
+
+.matrix-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-card-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.matrix-card-role {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-card-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.matrix-card-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.matrix-card-facts dt {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.matrix-card-facts dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-card-grants {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.matrix-card-grants strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.matrix-card-bar {
+  display: block;
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.matrix-card-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--purple);
+}
+
+.matrix-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.matrix-card-sync {
+  margin: 0;
+  color: var(--gold-deep);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* Own row: the rank is read-only, so it shows as a note instead of a select. */
+.matrix-card-self {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* ── Capability dialog ─────────────────────────────────────────────────── */
+
+.matrix-dialog-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.matrix-dialog-count {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
 /* ── Add-user dialog: capability grid ───────────────────────────────────── */
 
 .matrix-group-modal {
@@ -51,4 +192,10 @@
   padding: 4px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 10px;
+}
+
+/* The dedicated capability dialog owns the whole overlay, so its grid gets the
+   taller viewport-relative cap instead of the inline create-form budget. */
+.modal-body .matrix-groups-dialog {
+  max-height: min(58vh, 460px);
 }

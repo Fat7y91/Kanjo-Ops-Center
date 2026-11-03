@@ -4,10 +4,10 @@ import { Suspense } from "react";
 
 import { CreateUserModal } from "@/components/admin/permission-modals";
 import { ScopeModal } from "@/components/admin/scope-modal";
+import { UserPermissionsModal } from "@/components/admin/user-permissions-modal";
 import { Button } from "@/components/ui/button";
 import { UserCard } from "@/components/admin/user-card";
 import { usePermissionMatrix } from "@/components/admin/use-permission-matrix";
-import { PERMISSION_GROUPS } from "@/lib/rbac/permissions";
 import { clearanceTone } from "@/lib/rbac/hierarchy";
 import type { AppUser, CityTeam } from "@/lib/rbac/types";
 import type {
@@ -45,8 +45,8 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
           </div>
         </div>
         <p className="panel-note">
-          لم تعد جلساتك تحمل <code>manage_system_users</code>. أزالت بوابة
-          القدرات المصفوفة.
+          لم تعد جلستك تحمل صلاحية إدارة المستخدمين. حدّث الصفحة بعد أن يمنحك
+          المسؤول الصلاحية من جديد.
         </p>
       </section>
     );
@@ -102,7 +102,7 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
           <p className="panel-note">جارٍ تحميل المشغّلين القابلين للإدارة…</p>
         }
       >
-        <div className="matrix-list overflow-hidden">
+        <div className="matrix-card-grid">
           {matrix.manageableUsers.length === 0 && (
             <p className="panel-note">
               لا يوجد مشغّلون أدنى من رتبتك داخل نطاقك الحالي.
@@ -117,20 +117,26 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
               levelLabel={matrix.levelLabel}
               cityName={matrix.cityName}
               pendingKey={matrix.pendingKey}
-              canGrant={matrix.canGrant}
-              groups={PERMISSION_GROUPS}
-              onToggle={(userId, permission, enabled) =>
-                void matrix.toggle(userId, permission, enabled)
-              }
               onLevelChange={(target, level) =>
                 void matrix.changeLevel(target, level)
               }
+              onOpenPermissions={matrix.openPermissions}
               onOpenScope={matrix.openScope}
               onRemove={(target) => void matrix.removeUser(target)}
             />
           ))}
         </div>
       </Suspense>
+
+      <UserPermissionsModal
+        target={matrix.permissionsTarget}
+        pendingKey={matrix.pendingKey}
+        canGrant={matrix.canGrant}
+        onToggle={(userId, permission, enabled) =>
+          void matrix.toggle(userId, permission, enabled)
+        }
+        onClose={matrix.closePermissions}
+      />
 
       <CreateUserModal
         open={matrix.createOpen}

@@ -94,8 +94,7 @@
   .two-column,
   .board,
   .card-grid,
-  .finance-grid,
-  .enforcement-grid {
+  .finance-grid {
     grid-template-columns: 1fr;
   }
 
@@ -176,21 +175,16 @@
     border-radius: var(--radius-card);
   }
 
-  .matrix-user-head {
-    flex-wrap: wrap;
+  .matrix-card-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .matrix-user-head > .badge {
-    margin-inline-start: 48px;
-  }
-
-  .matrix-user-actions {
-    width: 100%;
-    margin-inline-start: 48px;
+  .matrix-card-actions {
+    gap: 8px;
   }
 
   .matrix-level-select {
-    flex: 1;
+    flex: 1 1 100%;
   }
 
   .matrix-groups {
