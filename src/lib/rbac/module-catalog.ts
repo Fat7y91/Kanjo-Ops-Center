@@ -42,6 +42,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "merchants",
   },
   {
+    // The intake queue sits beside the directory but has its own capability:
+    // an operator who reviews applications is not necessarily allowed to edit
+    // the merchant book, and vice versa.
+    href: "/merchants/applications",
+    label: "طلبات انضمام التجار",
+    shortLabel: "الطلبات",
+    description: "الطلبات الواردة من صفحة الانضمام العامة والتواصل مع مقدّميها.",
+    permission: "manage_merchant_applications",
+    icon: "merchants",
+  },
+  {
     href: "/catalog",
     label: "الكتالوج",
     shortLabel: "الكتالوج",

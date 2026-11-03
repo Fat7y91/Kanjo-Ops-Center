@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (96 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (97 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:
@@ -615,5 +615,12 @@ export const PERMISSIONS = [
     label: "تسوية المقاصة",
     description: "اعتماد سداد أو تحصيل بند في المقاصة وإغلاقه.",
     group: "المقاصة والعمليات",
+  },
+  /* ── 20. طلبات التجار ── */
+  {
+    key: "manage_merchant_applications",
+    label: "إدارة طلبات انضمام التجار",
+    description: "مراجعة طلبات التجار الواردة من صفحة الانضمام العامة وتحديث حالتها.",
+    group: "طلبات التجار",
   },
 ] as const;

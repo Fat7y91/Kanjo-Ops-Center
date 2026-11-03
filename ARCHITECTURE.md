@@ -265,7 +265,7 @@ runs on the in-memory stores below until it is migrated one at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance` (server components), `requireAnyPermission`.
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (96 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (97 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
 - `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
@@ -391,6 +391,50 @@ logout therefore POST to plain route handlers. Rules locked in:
   carries an id from `visit/field-anchors.ts`; a rejected submit scrolls and
   focuses the failing field, because the Save button sits at the bottom of a
   long form and the error would otherwise be off-screen.
+
+### Merchant Applications — public intake (Tier 1–5)
+- Landing page: `https://joinus.kanjo.com.eg` is static and unauthenticated. It
+  owns no database access; its only integration point is
+  `POST /api/public/merchants/apply`.
+- Controller: `src/app/api/public/merchants/apply/route.ts` (`POST`, `OPTIONS`).
+  `/api` is excluded from the session middleware, so this route carries its own
+  three defences: a strict origin allow-list, zod validation, and the table's
+  constraints plus the `anon` insert policy.
+- CORS (`src/lib/merchant-applications/cors.ts`): the allow-list is a literal
+  (`https://joinus.kanjo.com.eg`) — no wildcard, no pattern. A non-matching
+  origin receives no `Access-Control-Allow-Origin` header and a `403`, and every
+  response carries `Vary: Origin` so no cache can cross the boundary. A
+  `PUBLIC_APPLICATIONS_DEV_ORIGIN` env var adds one extra origin for local
+  integration runs and is ignored when `NODE_ENV=production`. A request with no
+  `Origin` header (a worker retry, a smoke test) is served but never granted a
+  CORS header, because it is not a browser caller.
+- Validation: `src/lib/schemas/merchant-applications.ts` validates the four
+  answers and normalises the phone number to international digits
+  (`01012345678` → `201012345678`) using `whatsappNumber()`, so repeats from the
+  same contact are matchable and every row is dialable.
+  `src/lib/merchant-applications/input.ts` maps `storeName` / `store_name` /
+  `store` onto one canonical field, because the form is deployed separately.
+- Persistence: `src/lib/merchant-applications/repository.ts` is the only module
+  that knows `app.merchant_applications` (migration `20261104000000`). Writes go
+  through the service-role client and the route answers `201` only when the row
+  exists; a deployment without the table answers `503` instead of a false
+  success. `phone_number` is `text` with no FK to `app.merchants`: an
+  application is not a merchant, and promotion is a reviewed action.
+- Immutability: an operator may move `status` (`pending`, `contacted`,
+  `approved`, `rejected`); a trigger raises `MERCHANT_APPLICATION_IMMUTABLE` if
+  an update touches the applicant's answers. Delete is service-role only, for a
+  lawful erasure request.
+- RLS: `insert` for `anon` with `status = 'pending'` forced and length/regex
+  checks, so the public form cannot forge a status or a malformed number, and
+  cannot read any row back — a read grant would turn the form into a customer
+  lookup service. `select`/`update` for `authenticated` require
+  `manage_merchant_applications`; the schema also grants `usage` on `app` to
+  `anon`, which previously existed only for `authenticated`/`service_role`.
+- UI: `src/app/(workspace)/merchants/applications/page.tsx` (server component,
+  `requirePermission("manage_merchant_applications")` before any read). The
+  route is its own module in `src/lib/rbac/module-catalog.ts`, so the sidebar and
+  the middleware agree with the page guard: reviewing applications does not
+  require `view_merchants`, and `view_merchants` does not open the queue.
 
 ### Taxonomy (Tier 1–5)
 - UI: `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` (764 — over
@@ -738,7 +782,7 @@ policies. It is validated end-to-end against PostgreSQL 15.
 Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
 `app.field_teams` must exist before `app.users.team_id` can reference it.
 
-The capability catalogue is 96 keys. The rows (Arabic labels included) are
+The capability catalogue is 97 keys. The rows (Arabic labels included) are
 generated data in `src/lib/rbac/data/permissions.ts`, derived from
 `app.permissions`; `src/lib/rbac/permissions.ts` only adds the derived types,
 the `isPermission` guard and the grouping. Regenerate the data file after any
@@ -774,6 +818,7 @@ against a live `app.permissions` when `DATABASE_URL` is set. Both run in
 | أسعار العمولات | `manage_commission_rates` | 1 |
 | مستخدمين النظام | `manage_system_users` | 1 |
 | المقاصة والعمليات | `log_operations`, `view_clearinghouse`, `settle_clearinghouse` | 3 |
+| طلبات التجار | `manage_merchant_applications` | 1 |
 
 **Teams are city-owned, not global.** `app.field_teams(id, city_id, name)` is
 unique per `(city_id, lower(name))`, and `app.users.team_id` points at one row.
@@ -815,16 +860,20 @@ write bypasses the application.
 | Stale sessions can be invalidated | `auth_revision` counter |
 | Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql`, converged by `20261101000000_seed_l4_new_permissions.sql` |
 
-Level 4 is the supreme tier: an L4 account holds exactly the 49 catalogue keys,
-so it always reports 49/49. Suspension is expressed by `app.users.active` and
-`is_active_user()`, never by withholding grants — a reactivated L4 returns whole
-instead of half-blind. `20261101000000` upserts the 15-module catalogue, deletes
-the L4 grants that point at keys the catalogue no longer contains, re-grants the
-49, bumps `auth_revision`, and raises an exception if any L4 row does not end up
-with exactly 49. It is keyed to `clearance_level = 4` only — under the Hierarchy
-Security Rule L3 is strictly below L4, so L3 keeps whatever it was granted.
-`20261030000700` used `>= 3` for the five treasury keys; that was a one-time
-delta, not the tier rule.
+Level 4 is the supreme tier: an L4 account holds the whole catalogue, so it
+always reports 100% of it — 49 keys under `20261101000000`, 97 today. Suspension
+is expressed by `app.users.active` and `is_active_user()`, never by withholding
+grants — a reactivated L4 returns whole instead of half-blind.
+`20261101000000` upserts the 15-module catalogue, deletes the L4 grants that
+point at keys the catalogue no longer contains, re-grants the 49, bumps
+`auth_revision`, and raises an exception if any L4 row does not end up with
+exactly 49. The count is that migration's, not a constant: every later
+capability migration appends a key and grants it to L4 in the same transaction
+(`20261030000700` treasury, `20261104000000` merchant applications), so an L4
+account stays whole. `20261101000000` itself is keyed to `clearance_level = 4`
+only — under the Hierarchy Security Rule L3 is strictly below L4, so L3 keeps
+whatever it was granted, and a one-time backfill for L3 (as in
+`20261030000700` and `20261104000000`) is a delta, not the tier rule.
 
 The governor guard is the SQL twin of `assertActiveGovernor()` in
 `src/lib/rbac/users.ts`. It rejects removing or deactivating the last active
@@ -839,8 +888,8 @@ Firestore, so referential integrity is a Tier 3 responsibility. The column is
 
 ### 8.5 Row Level Security
 
-All four tables have RLS enabled *and* forced, so even the table owner is
-subject to policy. `has_permission()` and `is_active_user()` are
+Every table in the `app` schema has RLS enabled *and* forced, so even the table
+owner is subject to policy. `has_permission()` and `is_active_user()` are
 `security definer` to avoid a policy on `app.users` recursing into itself.
 
 | Surface | Policy |
@@ -850,6 +899,7 @@ subject to policy. `has_permission()` and `is_active_user()` are
 | `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_system_users` |
 | `app.user_city_scope` | Same shape as grants |
 | `app.field_teams` | Read by any active operator (needed to pick a team); insert/update/delete only via `can_manage_city(city_id)` |
+| `app.merchant_applications` | `insert` for `anon` (status forced to `pending`); `select`/`update` for an active operator holding `manage_merchant_applications`; delete is service-role only |
 
 Self-service profile edits must go through a dedicated RPC rather than a direct
 `UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
