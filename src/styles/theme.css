@@ -55,16 +55,6 @@
   background: var(--surface-soft);
 }
 
-[data-theme="dark"] .scope-option {
-  background: var(--surface-soft);
-  border-color: var(--line);
-}
-
-[data-theme="dark"] .scope-option.is-selected {
-  background: rgba(167, 148, 255, 0.16);
-  color: #cbb9ff;
-}
-
 [data-theme="dark"] .clearance-legend {
   background: var(--surface-soft);
 }

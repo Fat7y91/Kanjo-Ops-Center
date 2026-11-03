@@ -126,32 +126,4 @@
   gap: 8px;
 }
 
-.scope-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-  font-weight: 650;
-  cursor: pointer;
-  transition:
-    border-color 120ms ease,
-    background 120ms ease,
-    color 120ms ease;
-}
-
-.scope-option:hover {
-  border-color: var(--purple);
-}
-
-.scope-option.is-selected {
-  border-color: var(--purple);
-  background: rgba(91, 31, 134, 0.1);
-  color: var(--purple);
-}
-
 
