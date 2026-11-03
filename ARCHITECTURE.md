@@ -330,11 +330,23 @@ logout therefore POST to plain route handlers. Rules locked in:
   `store/core.ts` (store accessor, ids, clock) and `store/operations.ts`.
   The concrete repositories are `store/{cities,merchants,tasks,visits,transfers,
   edits,documents,state,crm,dates}.ts`; `store/seed.ts` (565) is seed data.
-- Durable writes: `src/lib/field-ops/reports-repository.ts` inserts a created
-  report into `app.visit_reports` (migration `20261102000005`). Reads still come
-  from the in-memory store, so a report is re-readable once the read tier is
-  moved onto the same table. Report rows are append-only (update/delete raise
-  `VISIT_REPORT_IMMUTABLE`); corrections go through the edit-request workflow.
+- Durable reports: `src/lib/field-ops/reports-repository.ts` is the only module
+  that knows `app.visit_reports` (migration `20261102000005`). Writes go there
+  before the route acknowledges; reads go through
+  `store/report-source.ts`, which prefers the table and falls back to the
+  in-memory seed only while the migration is not deployed. Report readers
+  (`listVisitReports`, `visitCountFor`, `merchantTimeline`,
+  `merchantCrmSummary`, `buildBoard`, payroll, BI) are async; the merchant page
+  reads once and passes the rows into the timeline/summary. Rows are
+  append-only (update/delete raise `VISIT_REPORT_IMMUTABLE`); corrections go
+  through the edit-request workflow.
+- V1 parity fields: `app.merchant_v1_profiles` (migration `20261102000006`)
+  holds the street address, socials, app publish state, VIP listing flag and the
+  official Drive folder, kept out of the contract record because they are
+  operational/product state. `merchant-profile-repository.ts` maps it; the
+  `.../profile` route authorises each supplied field against its own capability
+  (`edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`,
+  `export_merchant_data`), and `.../export` streams a SpreadsheetML `.xls`.
 - Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`.
 - Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
   is authoritative; `components/field-ops/visit/validate-visit-form.ts`
