@@ -83,6 +83,20 @@ export async function loadMerchantRollup(
   return rollups?.find((row) => row.merchantId === merchantId) ?? null;
 }
 
+/**
+ * The resolved agreement state of one merchant.
+ *
+ * Used where the state is audit data rather than a badge — a visit report's
+ * `previousState` — so it must reflect decisions taken by other workers, not
+ * whatever the current isolate happens to remember.
+ */
+export async function loadMerchantState(
+  merchant: StateSourceMerchant,
+): Promise<ContractState> {
+  const states = await loadMerchantStates([merchant]);
+  return states.get(merchant.id)?.state ?? merchant.contractState;
+}
+
 export type MerchantVisitCounts = Map<string, number>;
 
 /**

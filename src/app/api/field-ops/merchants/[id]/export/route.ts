@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { actorFromSession, apiError, authorize } from "@/lib/auth/api";
+import { loadMerchantStates } from "@/lib/field-ops/state-source";
 import { getMerchantById } from "@/lib/field-ops/store";
 import { getMerchantV1Profile } from "@/lib/field-ops/merchant-profile-repository";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
@@ -49,7 +50,11 @@ export async function GET(
   } catch (error) {
     return apiError(error);
   }
-  const meta = CONTRACT_STATE_META[merchant.contractState];
+  // The export is an official document: it must print the resolved agreement
+  // state, not the last value some writer happened to store.
+  const states = await loadMerchantStates([merchant]);
+  const contractState = states.get(merchant.id)?.state ?? merchant.contractState;
+  const meta = CONTRACT_STATE_META[contractState];
   const actor = actorFromSession(session);
 
   const rows = [

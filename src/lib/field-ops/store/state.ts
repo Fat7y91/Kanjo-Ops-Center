@@ -31,6 +31,12 @@ export function setMerchantState(
   note: string,
   actor: Actor,
   agreedCommission?: number | null,
+  /**
+   * The resolved state *before* this decision. The caller resolves it from the
+   * rollup, because the override's `fromState` is audit data and the stored
+   * column only knows what this isolate last wrote.
+   */
+  previousState?: ContractState,
 ): { merchant: Merchant; override: StateOverride } {
   const store = getStore();
   const merchant = store.merchants.find(
@@ -40,7 +46,7 @@ export function setMerchantState(
     throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
 
-  const previous = merchant.contractState;
+  const previous = previousState ?? merchant.contractState;
 
   // Signing is the one transition that must carry a final, locked commission
   // percentage. It is recorded on the merchant permanently and drives the

@@ -11,6 +11,7 @@ import {
 } from "@/lib/field-ops/types";
 import type { VisitReportInput } from "@/lib/schemas/visit";
 
+import { loadMerchantState } from "../state-source";
 import {
   FieldOpsError,
   bump,
@@ -94,7 +95,7 @@ export async function createVisitReport(
     }
   }
 
-  const current = merchant.contractState;
+  const current = await loadMerchantState(merchant);
   const priorVisits = await visitCountFor(merchantId);
   const outcome = input.outcome as ContractState;
 
