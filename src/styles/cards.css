@@ -10,9 +10,9 @@
   display: flex;
   gap: 16px;
   padding: 18px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(35, 5, 53, 0.1);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--gradient-card);
   box-shadow: var(--shadow);
   transition:
     box-shadow 160ms ease,
@@ -21,9 +21,9 @@
 }
 
 .product-card:hover {
-  border-color: var(--line-strong);
+  border-color: rgba(108, 53, 182, 0.28);
   box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .product-thumb {
@@ -33,10 +33,8 @@
   width: 74px;
   height: 74px;
   border-radius: var(--radius-card);
-  background:
-    linear-gradient(135deg, rgba(255, 215, 0, 0.22), rgba(109, 40, 217, 0.14)),
-    var(--surface-soft);
-  color: var(--purple);
+  background: var(--gradient-tile);
+  color: var(--gold);
   font-size: 1.15rem;
   font-weight: 800;
   letter-spacing: 0.02em;

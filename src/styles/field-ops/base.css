@@ -81,7 +81,7 @@ textarea {
 }
 
 .badge-purple {
-  border-color: var(--kanjo-pastel);
+  border-color: #ddd6fe;
   background: var(--kanjo-pastel);
   color: var(--kanjo-pastel-ink);
 }
@@ -93,16 +93,17 @@ textarea {
 }
 
 .chip-team {
-  background: var(--surface-soft);
-  color: #3d4a63;
+  border-color: #ddd6fe;
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
   font-family: inherit;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .empty-state {
   padding: 18px;
   border: 1px dashed var(--line-strong);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-soft);
   color: var(--ink-soft);
   font-size: 0.86rem;
@@ -110,10 +111,10 @@ textarea {
 
 .inline-note {
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid #ddd6fe;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
-  color: var(--purple);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
   font-size: 0.8rem;
 }
 
@@ -228,7 +229,7 @@ textarea {
 }
 
 .field > span:first-child {
-  color: #364154;
+  color: var(--kanjo-purple-base);
 }
 
 .field-hint {

@@ -2,7 +2,7 @@
 
 .eyebrow {
   margin-bottom: 8px;
-  color: var(--gold-deep);
+  color: var(--orange-deep);
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.15em;
@@ -70,21 +70,22 @@
 }
 
 .button-primary {
-  background: var(--kanjo-purple-interactive);
+  background: var(--gradient-primary);
   color: var(--primary-ink);
+  box-shadow: 0 8px 22px -12px rgba(35, 5, 53, 0.7);
 }
 
 .button-primary:hover {
-  background: var(--primary-hover);
+  background: linear-gradient(135deg, #2c0643, #5a24a6);
 }
 
 .button-quiet {
   background: var(--surface-soft);
-  color: var(--ink);
+  color: var(--kanjo-purple-base);
 }
 
 .button-quiet:hover {
-  background: color-mix(in srgb, var(--kanjo-purple-interactive) 10%, var(--surface));
+  background: var(--kanjo-pastel);
   color: var(--kanjo-pastel-ink);
 }
 
@@ -116,7 +117,7 @@
 
 .panel {
   padding: 22px;
-  border: 0;
+  border: 1px solid rgba(35, 5, 53, 0.08);
   border-radius: var(--radius-card);
   background: var(--kanjo-surface);
   box-shadow: var(--shadow);
@@ -156,8 +157,8 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 0;
-  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  border-radius: 999px;
   background: var(--kanjo-pastel);
   color: var(--kanjo-pastel-ink);
   font-size: 0.7rem;
@@ -166,29 +167,35 @@
   white-space: nowrap;
 }
 
+/* V1 status-chip recipe: tinted fill, matching hairline, deep readable ink. */
 .badge-green {
-  background: var(--green-soft);
-  color: var(--green);
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .badge-gold {
-  background: color-mix(in srgb, var(--gold) 20%, var(--surface));
-  color: var(--gold-deep);
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .badge-orange {
-  background: var(--orange-soft);
-  color: var(--orange-deep);
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .badge-red {
-  background: var(--red-soft);
-  color: var(--red);
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .badge-blue {
-  background: color-mix(in srgb, var(--info) 12%, var(--kanjo-surface));
-  color: var(--info);
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .muted {

@@ -16,9 +16,10 @@
   overflow-y: auto;
   color: var(--nav-ink-soft);
   background:
-    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.08), transparent 42%),
-    radial-gradient(circle at 92% 100%, rgba(255, 215, 0, 0.1), transparent 48%),
-    var(--nav);
+    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.06), transparent 42%),
+    radial-gradient(circle at 92% 100%, rgba(255, 215, 0, 0.08), transparent 48%),
+    var(--gradient-nav);
+  border-inline-end: 1px solid rgba(250, 204, 21, 0.25);
 }
 
 .sidebar-head {
@@ -153,21 +154,18 @@
   color: var(--nav-ink);
 }
 
-/* Active pill: borderless gold wash with a gold icon. The 3px inline bar is an
- * inset accent, so the row keeps its full rounded silhouette. */
+/* Active pill: V1's gold tab fill with deep-purple ink, so the current
+ * destination reads as a solid chip rather than a tinted row. */
 .nav-link.is-active {
   border-color: transparent;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--kanjo-gold) 18%, transparent),
-    color-mix(in srgb, var(--kanjo-orange) 14%, transparent)
-  );
-  box-shadow: inset -3px 0 0 var(--gold);
-  color: var(--nav-ink);
+  background: var(--gradient-gold);
+  box-shadow: var(--shadow-tab-active);
+  color: var(--kanjo-purple-base);
+  font-weight: 700;
 }
 
 .nav-link.is-active .module-icon {
-  color: var(--gold);
+  color: var(--kanjo-purple-base);
 }
 
 .nav-empty {

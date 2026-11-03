@@ -12,9 +12,9 @@
   flex-direction: column;
   gap: 6px;
   padding: 20px;
-  border: 0;
+  border: 1px solid rgba(35, 5, 53, 0.08);
   border-radius: var(--radius-card);
-  background: var(--surface);
+  background: var(--gradient-card);
   box-shadow: var(--shadow-sm);
 }
 
@@ -27,7 +27,7 @@
 
 .stat-card-green {
   box-shadow:
-    inset 0 3px 0 #22c55e,
+    inset 0 3px 0 #10b981,
     var(--shadow-sm);
 }
 
@@ -154,16 +154,18 @@
 }
 
 .chip {
-  padding: 5px 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-soft);
-  color: var(--ink-soft);
+  padding: 5px 9px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.7rem;
 }
 
 .chip-muted {
+  border-color: var(--line);
+  background: var(--surface-soft);
   color: var(--ink-soft);
   font-family: inherit;
 }

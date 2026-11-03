@@ -48,9 +48,9 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(35, 5, 53, 0.1);
   border-radius: var(--radius-lg);
-  background: var(--kanjo-surface);
+  background: var(--gradient-card);
   box-shadow: var(--shadow-sm);
 }
 

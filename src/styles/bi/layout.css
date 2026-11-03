@@ -98,10 +98,10 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px 18px 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: 0 8px 26px rgba(19, 28, 48, 0.04);
+  border: 1px solid rgba(35, 5, 53, 0.08);
+  border-radius: var(--radius-card);
+  background: var(--gradient-card);
+  box-shadow: var(--shadow);
 }
 
 .bi-widget-4 {

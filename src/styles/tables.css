@@ -20,9 +20,9 @@
   gap: 10px;
   width: min(440px, 100%);
   padding: 8px 14px;
-  border: 1px solid var(--line);
+  border: 1.5px solid rgba(35, 5, 53, 0.12);
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.76rem;
   transition:
@@ -31,8 +31,8 @@
 }
 
 .search-shell:focus-within {
-  border-color: var(--purple);
-  box-shadow: 0 0 0 3px var(--focus);
+  border-color: var(--kanjo-purple-base);
+  box-shadow: 0 0 0 4px rgba(35, 5, 53, 0.08);
 }
 
 .search-shell input {
@@ -55,15 +55,23 @@
 }
 
 .data-table th {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line-strong);
-  color: var(--ink-soft);
-  font-size: 0.69rem;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-purple-base);
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-align: start;
-  text-transform: uppercase;
   white-space: nowrap;
+}
+
+.data-table th:first-child {
+  border-start-start-radius: var(--radius-control);
+}
+
+.data-table th:last-child {
+  border-start-end-radius: var(--radius-control);
 }
 
 .data-table td {
@@ -76,8 +84,12 @@
   border-bottom: 0;
 }
 
+.data-table tbody tr {
+  transition: background 140ms ease;
+}
+
 .data-table tbody tr:hover {
-  background: var(--surface-soft);
+  background: color-mix(in srgb, var(--kanjo-pastel) 55%, var(--surface));
 }
 
 .align-right {

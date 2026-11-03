@@ -15,10 +15,10 @@
 .login-panel {
   width: min(760px, 100%);
   padding: 34px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(35, 5, 53, 0.1);
   border-radius: var(--radius-modal);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  background: var(--gradient-card);
+  box-shadow: var(--shadow-lg);
 }
 
 .login-brand {
@@ -37,8 +37,8 @@
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--purple) 10%, var(--surface));
-  color: var(--purple);
+  background: var(--gradient-tile);
+  color: var(--gold);
   font-size: 0.82rem;
   font-weight: 800;
 }

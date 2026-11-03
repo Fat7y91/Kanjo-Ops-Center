@@ -21,9 +21,9 @@ const BASE =
 /** Interactive purple is the only colour allowed on primary actions. */
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
-    "bg-[color:var(--kanjo-purple-interactive)] text-white hover:bg-[color:var(--kanjo-interactive-hover)] active:scale-[0.98] active:bg-[color:var(--kanjo-interactive-active)]",
+    "bg-[image:var(--gradient-primary)] text-white shadow-[0_8px_22px_-12px_rgba(35,5,53,0.7)] hover:brightness-110 active:scale-[0.98]",
   quiet:
-    "border-0 bg-[color:var(--surface-soft)] text-[color:var(--ink)] hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-pastel-ink)]",
+    "border-0 bg-[color:var(--surface-soft)] text-[color:var(--kanjo-purple-base)] hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-pastel-ink)]",
   danger:
     "border-0 bg-[color:var(--red-soft)] text-[color:var(--red)] hover:bg-red-100 dark:hover:bg-red-500/20",
   ghost:

@@ -46,7 +46,14 @@
   color: #e5d7ee;
 }
 
+[data-theme="dark"] .chip-muted {
+  border-color: var(--line);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+}
+
 [data-theme="dark"] .chip-team {
+  border-color: #4c3a63;
   background: var(--surface-soft);
   color: #dccbe8;
 }
@@ -96,6 +103,12 @@
   border-color: rgba(124, 196, 255, 0.35);
   background: rgba(64, 150, 220, 0.16);
   color: #9ed4ff;
+}
+
+[data-theme="dark"] .badge-orange {
+  border-color: rgba(253, 186, 116, 0.35);
+  background: var(--orange-soft);
+  color: var(--orange);
 }
 
 [data-theme="dark"] .badge-signed {
@@ -199,7 +212,27 @@
 }
 
 [data-theme="dark"] .stat-card {
+  border-color: var(--line);
+  background: var(--surface);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="dark"] .stat-card-gold {
+  box-shadow:
+    inset 0 3px 0 var(--gold),
+    0 8px 26px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="dark"] .stat-card-green {
+  box-shadow:
+    inset 0 3px 0 #10b981,
+    0 8px 26px rgba(0, 0, 0, 0.28);
+}
+
+[data-theme="dark"] .stat-card-red {
+  box-shadow:
+    inset 0 3px 0 #ef4444,
+    0 8px 26px rgba(0, 0, 0, 0.28);
 }
 
 [data-theme="dark"] .modal-card {
@@ -255,7 +288,15 @@
 
 [data-theme="dark"] .csv-table th,
 [data-theme="dark"] .data-table th {
-  color: #a1a1aa;
+  background: var(--surface-soft);
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] .product-card,
+[data-theme="dark"] .bi-widget,
+[data-theme="dark"] .account-card,
+[data-theme="dark"] .panel {
+  border-color: var(--line);
 }
 
 [data-theme="dark"] .rule-card {
