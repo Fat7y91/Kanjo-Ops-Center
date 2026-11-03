@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"scripts/**/*.test.mjs\"",
+    "check:permissions": "node scripts/check-permission-drift.mjs",
     "build:cf": "next-on-pages"
   },
   "dependencies": {

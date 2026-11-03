@@ -718,7 +718,16 @@ The capability catalogue is 96 keys. The rows (Arabic labels included) are
 generated data in `src/lib/rbac/data/permissions.ts`, derived from
 `app.permissions`; `src/lib/rbac/permissions.ts` only adds the derived types,
 the `isPermission` guard and the grouping. Regenerate the data file after any
-permission migration:
+permission migration.
+
+Drift is enforced mechanically rather than by review. `npm test` runs
+`scripts/lib/permission-catalogue.test.mjs`, which parses every literal key
+inserted into `app.permissions` (including the `l4_catalogue` staging table) and
+fails if the data file has a duplicate, a key no migration inserts, or a key a
+migration inserts that the data file omits. `npm run check:permissions` runs the
+same comparison as a standalone gate, and `--database` additionally diffs
+against a live `app.permissions` when `DATABASE_URL` is set. Both run in
+`.github/workflows/permission-catalogue.yml` on push and pull request.
 
 | Group (as seeded) | Keys | Count |
 |---|---|---|
