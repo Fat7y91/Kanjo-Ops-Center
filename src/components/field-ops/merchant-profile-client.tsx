@@ -20,6 +20,7 @@ import type {
   FieldTask,
   FollowUpTask,
   Merchant,
+  MerchantV1Profile,
   StateOverride,
   VisitReport,
 } from "@/lib/field-ops/types";
@@ -27,6 +28,7 @@ import type {
 import { CrmMetrics } from "./merchant-profile/crm-metrics";
 import { DocumentsPanel } from "./merchant-profile/documents-panel";
 import { EconomicsPanel } from "./merchant-profile/economics-panel";
+import { MerchantV1Panel } from "./merchant-profile/merchant-v1-panel";
 import { ProfileHero } from "./merchant-profile/profile-hero";
 import { TasksFollowups } from "./merchant-profile/tasks-followups";
 import { TimelinePanel } from "./merchant-profile/timeline-panel";
@@ -35,6 +37,7 @@ import { VisitHistory } from "./merchant-profile/visit-history";
 type MerchantProfileClientProps = {
   merchant: Merchant;
   cityName: string;
+  v1Profile: MerchantV1Profile;
   reports: VisitReport[];
   overrides: StateOverride[];
   tasks: FieldTask[];
@@ -49,11 +52,16 @@ type MerchantProfileClientProps = {
   canViewFieldOps: boolean;
   canViewFieldOpsPage: boolean;
   canStartVisit: boolean;
+  canEditMerchantSocials: boolean;
+  canToggleAppPublish: boolean;
+  canManageVipMenu: boolean;
+  canExportMerchantData: boolean;
 };
 
 export function MerchantProfileClient({
   merchant,
   cityName,
+  v1Profile,
   reports,
   overrides,
   tasks,
@@ -68,6 +76,10 @@ export function MerchantProfileClient({
   canViewFieldOps,
   canViewFieldOpsPage,
   canStartVisit,
+  canEditMerchantSocials,
+  canToggleAppPublish,
+  canManageVipMenu,
+  canExportMerchantData,
 }: MerchantProfileClientProps) {
   const router = useRouter();
   const [transferOpen, setTransferOpen] = useState(false);
@@ -129,6 +141,17 @@ export function MerchantProfileClient({
         merchant={merchant}
         timeline={timeline}
         summary={summary}
+      />
+
+      <MerchantV1Panel
+        merchantId={merchant.id}
+        merchantName={merchant.name}
+        profile={v1Profile}
+        canEditSocials={canEditMerchantSocials}
+        canTogglePublish={canToggleAppPublish}
+        canManageVip={canManageVipMenu}
+        canExport={canExportMerchantData}
+        onAnnounce={announce}
       />
 
       <section className="profile-grid">

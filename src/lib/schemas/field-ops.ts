@@ -139,8 +139,27 @@ export const merchantDocumentSchema = z.object({
   ]),
 });
 
-export type CityCreateInput = z.infer<typeof cityCreateSchema>;
-export type CityManagerAssignInput = z.infer<typeof cityManagerAssignSchema>;
+const optionalUrl = z.union([
+  z.string().trim().url("أدخل رابطاً صالحاً يبدأ بـ https://."),
+  z.literal(""),
+]);
+
+/**
+ * V1 merchant working fields.
+ *
+ * Every key is optional so a single toggle patch never has to resend the
+ * address, and the API can validate each field against its own capability.
+ */
+export const merchantV1ProfileSchema = z.object({
+  actualAddress: z.string().trim().max(240).optional(),
+  facebookUrl: optionalUrl.optional(),
+  instagramUrl: optionalUrl.optional(),
+  driveFolderUrl: optionalUrl.optional(),
+  appPublished: z.boolean().optional(),
+  vipMenu: z.boolean().optional(),
+});
+
+export type CityCreateInput = z.infer<typeof cityCreateSchema>;export type CityManagerAssignInput = z.infer<typeof cityManagerAssignSchema>;
 export type CityManagerRevokeInput = z.infer<typeof cityManagerRevokeSchema>;
 export type MerchantCreateInput = z.infer<typeof merchantCreateSchema>;
 export type TaskAssignInput = z.infer<typeof taskAssignSchema>;
@@ -150,6 +169,7 @@ export type EditRequestInput = z.infer<typeof editRequestSchema>;
 export type DecisionInput = z.infer<typeof decisionSchema>;
 export type MerchantStateInput = z.infer<typeof merchantStateSchema>;
 export type MerchantDocumentInput = z.infer<typeof merchantDocumentSchema>;
+export type MerchantV1ProfileInput = z.infer<typeof merchantV1ProfileSchema>;
 
 export function zodErrorMessage(error: z.ZodError): string {
   const first = error.errors[0];

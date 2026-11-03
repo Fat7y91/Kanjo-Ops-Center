@@ -14,6 +14,7 @@ import {
   merchantCrmSummary,
   merchantTimeline,
 } from "@/lib/field-ops/store";
+import { getMerchantV1Profile } from "@/lib/field-ops/merchant-profile-repository";
 import { teamLabel } from "@/lib/field-ops/types";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export default async function MerchantProfilePage({
   const city = getCityById(merchant.cityId);
   const permissions = session.permissions;
   const reports = await listVisitReports(merchant.id);
+  const v1Profile = await getMerchantV1Profile(merchant.id);
 
   return (
     <>
@@ -52,6 +54,7 @@ export default async function MerchantProfilePage({
         merchant={merchant}
         cityName={city?.name ?? "مدينة غير محددة"}
         reports={reports}
+        v1Profile={v1Profile}
         overrides={listStateOverrides(merchant.id)}
         tasks={listTasks().filter((task) => task.merchantId === merchant.id)}
         followUps={listFollowUpTasks(merchant.id)}
@@ -65,6 +68,10 @@ export default async function MerchantProfilePage({
         canViewFieldOps={permissions.includes("view_all_teams_visits")}
         canViewFieldOpsPage={permissions.includes("view_all_teams_visits")}
         canStartVisit={permissions.includes("view_all_teams_visits")}
+        canEditMerchantSocials={permissions.includes("edit_merchant_socials")}
+        canToggleAppPublish={permissions.includes("toggle_app_publish")}
+        canManageVipMenu={permissions.includes("manage_vip_menu")}
+        canExportMerchantData={permissions.includes("export_merchant_data")}
       />
     </>
   );

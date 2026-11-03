@@ -95,6 +95,30 @@ export const PERMISSIONS = [
     description: "إضافة سجلات تجار جديدة.",
     group: "التجار",
   },
+  {
+    key: "edit_merchant_socials",
+    label: "تعديل عنوان وروابط التاجر",
+    description: "تحديث العنوان الفعلي وروابط فيسبوك وإنستغرام والموقع.",
+    group: "التجار",
+  },
+  {
+    key: "toggle_app_publish",
+    label: "نشر التاجر في التطبيق",
+    description: "التحكم في ظهور التاجر ومنتجاته داخل تطبيق كانجو.",
+    group: "التجار",
+  },
+  {
+    key: "manage_vip_menu",
+    label: "إدارة قائمة VIP",
+    description: "إدراج التاجر تحت التعاقد أو عرض مبدئي دون اتفاق نهائي.",
+    group: "التجار",
+  },
+  {
+    key: "export_merchant_data",
+    label: "تصدير بيانات التاجر",
+    description: "فتح ملفات التاجر الرسمية وتصدير بياناته إلى Excel.",
+    group: "التجار",
+  },
 
   /* ── 4. Catalog ───────────────────────────────────────────────────────── */
   {

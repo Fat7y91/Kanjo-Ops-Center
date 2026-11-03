@@ -447,3 +447,30 @@ export type MerchantSearchResult = {
   /** Populated by the global Visit Engine search endpoint. */
   visitCount?: number;
 };
+
+/**
+ * V1 merchant working fields.
+ *
+ * These live outside the contract record: whether a merchant is published to
+ * the customer app, or listed as a VIP before the commission contract is
+ * signed, is a product decision, not a contract term.
+ */
+export type MerchantV1Profile = {
+  actualAddress: string;
+  facebookUrl: string;
+  instagramUrl: string;
+  driveFolderUrl: string;
+  appPublished: boolean;
+  vipMenu: boolean;
+  updatedAt: string | null;
+};
+
+export const EMPTY_MERCHANT_V1_PROFILE: MerchantV1Profile = {
+  actualAddress: "",
+  facebookUrl: "",
+  instagramUrl: "",
+  driveFolderUrl: "",
+  appPublished: false,
+  vipMenu: false,
+  updatedAt: null,
+};
