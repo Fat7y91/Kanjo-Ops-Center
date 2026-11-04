@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/db/supabase/config";
 import { createSessionToken } from "@/lib/auth/session";
 import { firstPermittedPath } from "@/lib/rbac/modules";
-import { getRbacRevision, getUserById } from "@/lib/rbac/users";
+import { getSessionSnapshot } from "@/lib/rbac/users";
 
 export const LOGIN_ERROR_PATH = "/login?error=invalid-credentials";
 export const LOGIN_DISABLED_PATH = "/login?error=login-disabled";
@@ -72,16 +72,13 @@ export async function resolveLoginRequest(
     return { ok: false, redirectTo: LOGIN_ERROR_PATH };
   }
 
-  const user = await getUserById(data.user.id);
-  if (!user || !user.active) {
+  const snapshot = await getSessionSnapshot(data.user.id);
+  if (!snapshot || !snapshot.user.active) {
     return { ok: false, redirectTo: LOGIN_ERROR_PATH };
   }
 
-  const token = await createSessionToken(
-    user.id,
-    user.permissions,
-    await getRbacRevision(),
-  );
+  const { user, revision } = snapshot;
+  const token = await createSessionToken(user.id, user.permissions, revision);
 
   return {
     ok: true,

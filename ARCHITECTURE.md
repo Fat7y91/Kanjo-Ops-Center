@@ -1092,6 +1092,11 @@ the page.**
   missing `user_permissions` / `user_city_scope` table as empty during a
   migration window, so session resolution keeps working while the schema
   catches up; every non-schema error is still re-thrown.
+- Session resolution reads `app.rbac_session(uuid)` — profile, grants, city
+  scope and revision in one document (`src/lib/rbac/session-snapshot.ts`).
+  When PostgREST reports that function as absent, the three-query path above is
+  used instead, so a deployment that has not applied `20261107000000` renders at
+  Phase 0 cost rather than failing.
 - `listCommissionRateRows()` (finance rates page) never throws inside a Server
   Component: any read failure — missing table, stale schema cache, transient
   outage — degrades to `null`, and the page renders its "finance database
@@ -1218,7 +1223,7 @@ server.
 
 ```
 POST /api/admin/users/provision        (protected Route Handler, edge)
-  → getServerSession()                 verify cookie + re-read live grants
+  → getServerSession()                 verify cookie + re-read live grants (one read)
   → require manage_system_users        else 401 / 403
   → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
   → assertCanCreate(session, input)    rank / permission / city subset
@@ -1433,6 +1438,7 @@ commission fee schedule: a rate is a price list in EGP, stored as
 | `20261102000003_operations_clearinghouse.sql` | `app.couriers`, `app.operation_logs`, `app.financial_ledgers`; enums `payment_method` / `clearing_entity_type` / `clearing_ledger_status` | Operations are append-only (`OPERATION_IMMUTABLE`). `operation_freeze_amounts()` derives and freezes commission and courier cut before insert. `operation_route_ledgers()` writes exactly one merchant row and one courier row per order: **COD** → merchant `-(commission)`, courier `-(delivery_fee − courier_cut)`; **ONLINE** → merchant `+(order_value − commission)`, courier `+(courier_cut)`. A unique `(operation_id, entity_type)` index makes a retry unable to double-route. `clearing_ledger_guard()` forbids changing money terms or reopening a settled row. |
 | `20261102000004_fix_l4_missing_grants.sql` | re-grants `log_operations` / `view_clearinghouse` / `settle_clearinghouse` to active L3+ operators; bumps `auth_revision` | Repair for `49 / 52`: replaying `20261101000000_seed_l4_new_permissions.sql` after Pillar 2 deletes every L4 grant absent from its hardcoded 49-key snapshot, including the three new keys. The patch re-grants them and asserts every active L3+ operator holds all three before committing. |
 | `20261105000000_edge_rollups.sql` | views `app.payroll_contributions_rollup`, `app.bi_merchant_rollup`, `app.agent_kpi_rank_rollup` (all `security_invoker = true`) | Moves the remaining P0 Edge CPU 1102 work into SQL. Each view is one indexed read that replaces a Worker-side scan: payroll contributions (was O(profiles × reports)), overview merchant facts (was a report-table reduction plus a nested product join), and live-month KPI city rank (was O(agents² × city)). Re-runnable via guarded `drop ... if exists`; grants are idempotent. |
+| `20261107000000_rbac_session_read.sql` | `app.rbac_revision()`, `app.rbac_session(uuid)` | Collapses session resolution from six queries to one: the profile, capability keys, city scope and revision arrive as a single jsonb document, and the revision is a scalar instead of a rebuild of the graph it guards. The revision keeps its meaning — newest timestamp across profiles, grants and scope, floored to seconds — so cookies minted earlier stay valid. `rbac_session` is `security definer` and revokes the `PUBLIC` grant that implies, because its payload is another operator's grants; only the service role may call it. |
 
 Commission rates are **numeric EGP, not minor units**: the schedule is a price
 list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres

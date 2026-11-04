@@ -1,8 +1,6 @@
 import { isPermission, type Permission } from "./permissions";
 import {
   deleteUserProfile,
-  getRbacRevision as getRemoteRevision,
-  getUserProfile,
   isRbacDatabaseConfigured,
   listUserProfiles,
   updateUserProfile,
@@ -15,6 +13,12 @@ import {
   normalizeLevel,
   PermissionInvariantError,
 } from "./seed-store";
+import {
+  readRbacRevision,
+  readSessionSnapshot,
+  type RbacSessionSnapshot,
+} from "./session-snapshot";
+import { memoizeRead } from "./snapshot-cache";
 import type { AppUser } from "./types";
 
 /**
@@ -28,7 +32,18 @@ import type { AppUser } from "./types";
  */
 export { PermissionInvariantError };
 
-export async function listUsers(): Promise<AppUser[]> {
+/**
+ * The whole roster, memoised for the current request.
+ *
+ * An admin render resolves users more than once (the page, the capability
+ * matrix, the assignable-manager picker) and every caller wants the same rows.
+ * The memo is request-scoped, so a grant revoked between two requests is still
+ * observed on the next one.
+ *
+ * Write paths use the repository directly instead: an invariant check that runs
+ * *after* a write in the same request must not read a pre-write snapshot.
+ */
+export const listUsers = memoizeRead(async (): Promise<AppUser[]> => {
   // An empty table is a valid answer ("no operators provisioned yet"), so the
   // presence of the database — not the row count — decides which source wins.
   if (isRbacDatabaseConfigured()) {
@@ -39,22 +54,38 @@ export async function listUsers(): Promise<AppUser[]> {
   return Array.from(getSeedStore().users.values())
     .map(cloneUser)
     .sort((left, right) => left.name.localeCompare(right.name));
-}
+});
 
 export async function getUserById(id: string): Promise<AppUser | null> {
   // Never fall back to the seed once a database is attached: a missing row must
   // mean "no such operator", not "resolve a demo account instead".
   if (isRbacDatabaseConfigured()) {
-    const remote = await getUserProfile(id);
-    return remote ? cloneUser(remote) : null;
+    const snapshot = await readSessionSnapshot(id);
+    return snapshot ? snapshot.user : null;
   }
 
   const user = getSeedStore().users.get(id);
   return user ? cloneUser(user) : null;
 }
 
+/**
+ * Profile and revision from one read.
+ *
+ * Session resolution and login both need the pair, and reading them together is
+ * the difference between one query and six (see `session-snapshot.ts`).
+ */
+export async function getSessionSnapshot(
+  id: string,
+): Promise<RbacSessionSnapshot | null> {
+  if (isRbacDatabaseConfigured()) return readSessionSnapshot(id);
+
+  const store = getSeedStore();
+  const user = store.users.get(id);
+  return user ? { user: cloneUser(user), revision: store.revision } : null;
+}
+
 export async function getRbacRevision(): Promise<number> {
-  if (isRbacDatabaseConfigured()) return getRemoteRevision();
+  if (isRbacDatabaseConfigured()) return readRbacRevision();
   return getSeedStore().revision;
 }
 

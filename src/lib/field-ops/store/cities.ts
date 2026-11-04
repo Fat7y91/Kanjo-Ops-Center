@@ -10,6 +10,7 @@ import {
   listUsers,
   removeUserCityScope,
 } from "@/lib/rbac/users";
+import { memoizeRead } from "@/lib/rbac/snapshot-cache";
 import type { CityCreateInput } from "@/lib/schemas/field-ops";
 
 import {
@@ -140,10 +141,16 @@ export async function listCityManagers(cityId: string): Promise<AppUser[]> {
   return resolved.filter((user): user is AppUser => Boolean(user));
 }
 
-export async function listAssignableManagers(): Promise<AppUser[]> {
-  const users = await listUsers();
-  return users.filter((user) => user.active);
-}
+/**
+ * Active operators the city form may offer, memoised for the current request:
+ * `listUsers()` is already the roster, so a page that renders both pays once.
+ */
+export const listAssignableManagers = memoizeRead(
+  async (): Promise<AppUser[]> => {
+    const users = await listUsers();
+    return users.filter((user) => user.active);
+  },
+);
 
 export async function assignCityManagers(
   cityId: string,

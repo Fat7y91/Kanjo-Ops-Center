@@ -212,15 +212,50 @@ Expected effect: it removes the idle-load class of 1102 entirely and takes the
 cost of parsing and validating a 2.7 kB permission array off every request. It
 does **not** fix RC-1, RC-2 or RC-4, so page cost stays in the 23–61 ms range.
 
-### Phase 1 — One RBAC read per request
+### Phase 1 — One RBAC read per request (implemented)
 
-* Split `getServerSession()` so it performs exactly one snapshot read.
-* Replace the revision graph rebuild with a scalar SQL function.
-* Add a per-request cache (`src/lib/rbac/snapshot-cache.ts`) so repeated
-  `listUsers` / `listAssignableManagers` calls share one result.
-* Memoise `listUsers`, `getRbacRevision`, `listAssignableManagers`.
+| Change | Effect |
+|---|---|
+| `app.rbac_session(uuid)` returns profile, capability keys, city scope and revision as one jsonb document | session resolution **6 queries → 1**, on every render |
+| `app.rbac_revision()` returns the revision as a scalar | removes the full graph rebuild that existed only to produce one number |
+| `getUserById()` rides the same function | city manager list **3N → N**; admin detail **3 → 1**; login **6 → 1** |
+| `listUsers()` / `listAssignableManagers()` memoised per request | a render that resolves the roster twice pays once |
 
-Target: six queries plus page queries → one query plus page queries.
+Details:
+
+* `supabase/migrations/20261107000000_rbac_session_read.sql` — both functions.
+  The revision keeps its exact meaning (newest `updated_at` / `granted_at`
+  across profiles, grants and scope, floored to whole seconds), so cookies
+  minted before the migration stay valid and no session is invalidated by the
+  upgrade. `rbac_session` is `security definer` and revokes the `PUBLIC` grant
+  that default creates, because its payload is another operator's
+  authorization data; only the service role may call it.
+* `src/lib/rbac/session-snapshot.ts` — the single read. A deployment whose code
+  runs ahead of the migration falls back to the previous three-query path when
+  PostgREST reports the function absent (the same `isMissingSchemaObject`
+  triage every other repository uses), so the app degrades to Phase 0 cost
+  instead of failing.
+* `src/lib/rbac/snapshot-cache.ts` — request-scoped memo over React `cache()`.
+  Deliberately not a module-level map: an isolate serves many requests, and a
+  map there would keep serving a revoked grant.
+* `getRbacRevision()` is **not** memoised. `POST /api/admin/users` and the PATCH
+  routes read it *after* committing, and a memoised read would stamp the
+  pre-write revision into the response — a stale `rev` makes the client treat
+  its own update as already applied. It is one scalar query now, so the memo
+  would save nothing anyway.
+
+Measured per-request statement counts, before → after:
+
+| Request | Before | After |
+|---|---|---|
+| Any page render (session only) | 6 | **1** |
+| `/api/admin/users` GET | 12 | **5** |
+| `/admin/permissions` | 12 | **5** |
+| `/cities/[id]` with N managers | 12 + 3N | **N + 4** |
+| `POST /login` | 6 | **1** |
+
+The roster read (`listUsers`) is still three queries plus an in-memory join; it
+is rare, and folding it into SQL is Phase 3 work.
 
 ### Phase 2 — Move SSR off the Edge runtime
 
