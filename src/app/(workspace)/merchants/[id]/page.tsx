@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { MerchantProfileClient } from "@/components/field-ops/merchant-profile-client";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import {
   getCityById,
@@ -28,7 +28,7 @@ type MerchantPageProps = {
 export default async function MerchantProfilePage({
   params,
 }: MerchantPageProps) {
-  const session = await requirePermission("view_merchants");
+  const session = await requireModuleAccess("/merchants");
   const { id } = await params;
   const merchant = await getMerchantById(id);
   // Merchant profiles follow the merchant directory's scope: any city the

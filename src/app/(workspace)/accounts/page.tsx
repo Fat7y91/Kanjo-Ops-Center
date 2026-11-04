@@ -10,17 +10,13 @@ import {
   listBankAccounts,
   listLedgerEntries,
 } from "@/lib/accounts/store";
-import { requireAnyPermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function AccountsPage() {
-  const session = await requireAnyPermission([
-    "view_bank_balances",
-    "add_bank_account",
-    "record_bank_transaction",
-  ]);
+  const session = await requireModuleAccess("/accounts");
   const access = resolveTreasuryAccess(session);
   const accounts = visibleAccounts(listBankAccounts(), access);
   const entries = visibleEntries(listLedgerEntries(), access);
@@ -35,7 +31,9 @@ export default async function AccountsPage() {
         description={
           access.full
             ? "أرصدة الحسابات المصرية والسعودية وحركاتها المسجّلة."
-            : "إيداعات الحسابات المصرية المخصصة لمدينتك."
+            : access.canViewTransactions
+              ? "حركات الحسابات البنكية المسجّلة دون أرصدة."
+              : "إيداعات الحسابات المصرية المخصصة لمدينتك."
         }
         actions={
           <span className="badge badge-gold">{accounts.length} حساب</span>
@@ -47,6 +45,7 @@ export default async function AccountsPage() {
         entries={entries}
         totals={totals}
         full={access.full}
+        canViewTransactions={access.canViewTransactions}
         canRecordDeposits={access.canRecordDeposits}
         canRecordExpenses={access.canRecordExpenses}
         canAddAccount={session.permissions.includes("add_bank_account")}

@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 
-import { authorize } from "@/lib/auth/api";
+import { authorizeAny } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { loadMerchantVisitCounts } from "@/lib/field-ops/state-source";
 import { loadVisitReports } from "@/lib/field-ops/store/report-source";
+import { permissionsForModule } from "@/lib/rbac/modules";
 import { searchMerchants } from "@/lib/search/merchant-search";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
+
+/** Mirrors the `/field-ops` nav module so a rep can search within the board. */
+const FIELD_OPS_MODULE = permissionsForModule("/field-ops");
 
 /**
  * Global merchant search for the Visit Engine.
@@ -17,7 +21,7 @@ export const runtime = "edge";
  * visit for any merchant on the fly.
  */
 export async function GET(request: Request) {
-  const { session, response } = await authorize("view_all_teams_visits");
+  const { session, response } = await authorizeAny(FIELD_OPS_MODULE);
   if (!session) return response;
 
   const query = new URL(request.url).searchParams.get("q") ?? "";

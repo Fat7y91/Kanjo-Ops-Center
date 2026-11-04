@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { actorFromSession, authorize, readJson } from "@/lib/auth/api";
+import { actorFromSession, authorizeAny, readJson } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { persistVisitReport } from "@/lib/field-ops/reports-repository";
+import { permissionsForModule } from "@/lib/rbac/modules";
 import { visitReportSchema } from "@/lib/schemas/visit";
 import {
   createVisitReport,
@@ -13,6 +14,9 @@ import {
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
+
+/** Reps sync from the board, so accept every capability that opens it. */
+const FIELD_OPS_MODULE = permissionsForModule("/field-ops");
 
 type QueuedVisit = {
   merchantId?: unknown;
@@ -37,7 +41,7 @@ type SyncResult = {
  * `clientVisitId` makes retries idempotent.
  */
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_all_teams_visits");
+  const { session, response } = await authorizeAny(FIELD_OPS_MODULE);
   if (!session) return response;
 
   const body = (await readJson(request)) as { visits?: QueuedVisit[] };

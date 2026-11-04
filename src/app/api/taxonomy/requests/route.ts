@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 
-import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  actorFromSession,
+  authorize,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
+import { permissionsForModule } from "@/lib/rbac/modules";
 import { taxonomyRequestCreateSchema } from "@/lib/schemas/taxonomy";
 import {
   createTaxonomyRequest,
@@ -12,7 +19,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET() {
-  const { session, response } = await authorize("manage_categories");
+  const { session, response } = await authorizeAny(
+    permissionsForModule("/catalog/taxonomy"),
+  );
   if (!session) return response;
 
   return NextResponse.json(

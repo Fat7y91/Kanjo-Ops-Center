@@ -2,7 +2,7 @@ import { CatalogDirectory } from "@/components/catalog/catalog-directory";
 import { CatalogSummary } from "@/components/catalog/catalog-summary";
 import { EntryLeaderboard } from "@/components/catalog/entry-leaderboard";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import {
   buildEntryLeaderboard,
   buildMerchantCards,
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CatalogPage() {
-  const session = await requirePermission("view_catalog");
+  const session = await requireModuleAccess("/catalog");
   const allowed = new Set(effectiveCityIds(session));
 
   const merchants = (await listMerchants()).filter((merchant) =>

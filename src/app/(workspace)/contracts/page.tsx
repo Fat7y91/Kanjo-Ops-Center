@@ -1,6 +1,6 @@
 import { Protect } from "@/components/auth/protect";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -43,7 +43,7 @@ const statusTone: Record<string, string> = {
 };
 
 export default async function ContractsPage() {
-  await requirePermission("draft_contract");
+  await requireModuleAccess("/contracts");
 
   return (
     <>

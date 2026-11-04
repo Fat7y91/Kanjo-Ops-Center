@@ -11,6 +11,10 @@ type ImageQaCardProps = {
   product: CatalogProduct;
   busy: boolean;
   preparing: boolean;
+  /** May approve the current image. */
+  canApprove: boolean;
+  /** May replace the image with an enhanced version. */
+  canEnhance: boolean;
   onDownload: () => void;
   onApprove: () => void;
   onUploadEnhanced: (file: File) => void;
@@ -27,6 +31,8 @@ export function ImageQaCard({
   product,
   busy,
   preparing,
+  canApprove,
+  canEnhance,
   onDownload,
   onApprove,
   onUploadEnhanced,
@@ -100,7 +106,7 @@ export function ImageQaCard({
             size="sm"
             variant="quiet"
             onClick={() => inputRef.current?.click()}
-            disabled={locked}
+            disabled={locked || !canEnhance}
           >
             {preparing ? "جارٍ المعالجة…" : "رفع المحسنة"}
           </Button>
@@ -109,7 +115,7 @@ export function ImageQaCard({
             size="sm"
             variant="primary"
             onClick={onApprove}
-            disabled={locked}
+            disabled={locked || !canApprove}
           >
             اعتماد مباشر
           </Button>

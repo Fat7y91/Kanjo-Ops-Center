@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
+import { usePermission } from "@/components/auth/use-permission";
 import { TaxonomyRequestButton } from "@/components/taxonomy/taxonomy-request-button";
 import {
   TAXONOMY_KIND_META,
@@ -55,7 +56,26 @@ export function TaxonomyCenter({
   const [snapshot, setSnapshot] = useState<Snapshot>(initialSnapshot);
   const [requests, setRequests] = useState<TaxonomyRequest[]>(initialRequests);
   const [revision, setRevision] = useState(initialRevision);
-  const [tab, setTab] = useState<TabKey>("requests");
+  const { hasPermission } = usePermission();
+  // Each tab and mutation maps to its own capability. The page opens on any one
+  // of them, and the operator only sees the surfaces their grants unlock.
+  const canDecide = hasPermission("review_add_requests");
+  const canManageVendorTypes = hasPermission("manage_merchant_types");
+  const canManageCategories = hasPermission("manage_categories");
+  const canManageVariants = hasPermission("manage_variables");
+  // `manage_categories` is the umbrella grant: it also approves requests.
+  const canApproveRequests = canManageCategories || canDecide;
+  // Only render the tabs this operator's grants unlock. `manage_categories` is
+  // the umbrella grant and unlocks all of them.
+  const visibleTabs = TABS.filter((entry) => {
+    if (canManageCategories) return true;
+    if (entry.key === "requests") return canDecide;
+    if (entry.key === "vendor_types") return canManageVendorTypes;
+    if (entry.key === "categories") return canManageCategories;
+    if (entry.key === "variants") return canManageVariants;
+    return false;
+  });
+  const [tab, setTab] = useState<TabKey>(visibleTabs[0]?.key ?? "requests");
   const [vendorFilter, setVendorFilter] = useState<number | "all">("all");
   const [categoryQuery, setCategoryQuery] = useState("");
   const [toast, setToast] = useState("");
@@ -237,7 +257,7 @@ export function TaxonomyCenter({
     <>
       <section className="panel">
         <div className="taxonomy-tabs" role="tablist">
-          {TABS.map((entry) => (
+          {visibleTabs.map((entry) => (
             <button
               key={entry.key}
               type="button"
@@ -318,28 +338,32 @@ export function TaxonomyCenter({
                     </dl>
                     <p className="taxonomy-justification">{request.justification}</p>
                     <div className="form-actions">
-                      <button
-                        type="button"
-                        className="button button-danger"
-                        onClick={() => {
-                          setRejectTarget(request);
-                          setRejectReason("");
-                          setRejectError("");
-                        }}
-                      >
-                        رفض
-                      </button>
-                      <button
-                        type="button"
-                        className="button button-primary"
-                        onClick={() => {
-                          setApproveTarget(request);
-                          setApproveId("");
-                          setApproveError("");
-                        }}
-                      >
-                        اعتماد وربط المعرّف
-                      </button>
+                      {canApproveRequests ? (
+                        <>
+                          <button
+                            type="button"
+                            className="button button-danger"
+                            onClick={() => {
+                              setRejectTarget(request);
+                              setRejectReason("");
+                              setRejectError("");
+                            }}
+                          >
+                            رفض
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-primary"
+                            onClick={() => {
+                              setApproveTarget(request);
+                              setApproveId("");
+                              setApproveError("");
+                            }}
+                          >
+                            اعتماد وربط المعرّف
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </article>
                 ))}

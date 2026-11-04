@@ -111,6 +111,18 @@ export function permissionsForPath(pathname: string): Permission[] {
   return [module.permission, ...(module.alsoGrantedBy ?? [])];
 }
 
+/**
+ * Every capability that opens the module with this exact href.
+ *
+ * API controllers reuse this so their `authorizeAny` set matches the page and
+ * the sidebar: a client that can open the screen can also load its data.
+ */
+export function permissionsForModule(href: string): Permission[] {
+  const module = MODULES.find((candidate) => candidate.href === href);
+  if (!module || module.sessionOnly) return [];
+  return [module.permission, ...(module.alsoGrantedBy ?? [])];
+}
+
 export function firstPermittedPath(
   permissions: readonly Permission[],
   clearanceLevel = 0,

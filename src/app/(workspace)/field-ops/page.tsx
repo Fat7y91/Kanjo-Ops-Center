@@ -1,13 +1,13 @@
 import { FieldOpsClient } from "@/components/field-ops/field-ops-client";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { buildBoard } from "@/lib/field-ops/board";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function FieldOpsPage() {
-  const session = await requirePermission("view_all_teams_visits");
+  const session = await requireModuleAccess("/field-ops");
   const board = await buildBoard(session);
   const permissions = session.permissions;
 

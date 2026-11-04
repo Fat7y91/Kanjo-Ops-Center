@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 
-import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  actorFromSession,
+  authorize,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
 import { cityCreateSchema } from "@/lib/schemas/field-ops";
 import { createCity } from "@/lib/field-ops/store";
 import { scopedCities } from "@/lib/city-scope-query";
+import { permissionsForModule } from "@/lib/rbac/modules";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+/** Mirrors the `/cities` nav module so a screen that opens can load its data. */
+const CITY_MODULE = permissionsForModule("/cities");
+
 export async function GET() {
-  const { session, response } = await authorize("view_active_cities");
+  const { session, response } = await authorizeAny(CITY_MODULE);
   if (!session) return response;
 
   return NextResponse.json(

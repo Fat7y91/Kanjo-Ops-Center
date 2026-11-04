@@ -8,8 +8,9 @@ import {
   Tooltip,
 } from "recharts";
 
-import { BI_DEAL_STAGE_META, type BiDealStage } from "@/lib/bi/types";
+import { Button } from "@/components/ui/button";
 import type { FunnelStep } from "@/lib/bi/select";
+import { BI_DEAL_STAGE_META, type BiDealStage } from "@/lib/bi/types";
 
 type FunnelStageChartProps = {
   steps: FunnelStep[];
@@ -101,9 +102,10 @@ export function FunnelStageChart({
           const active = activeStage === step.stage;
           return (
             <li key={step.stage}>
-              <button
-                type="button"
-                className={`bi-legend-item${active ? " is-active" : ""}`}
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`bi-legend-item w-full justify-start gap-2${active ? " is-active" : ""}`}
                 onClick={() => onSelect(step.stage)}
                 aria-label={`عرض تفاصيل مرحلة ${meta.label}`}
               >
@@ -111,9 +113,9 @@ export function FunnelStageChart({
                   className="bi-legend-dot"
                   style={{ background: STAGE_COLORS[step.stage] }}
                 />
-                <span className="bi-legend-label">{meta.label}</span>
+                <span className="bi-legend-label flex-1">{meta.label}</span>
                 <strong>{step.count}</strong>
-              </button>
+              </Button>
             </li>
           );
         })}

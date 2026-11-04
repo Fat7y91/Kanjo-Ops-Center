@@ -33,8 +33,15 @@ export function TaxonomyRequestButton({
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
 
-  // Operators who can manage the taxonomy never enter the request queue.
-  if (hasPermission("manage_categories")) {
+  // A dedicated manager capability for this kind creates directly; the umbrella
+  // `manage_categories` grant also implies direct entry for every kind.
+  const canManageKind =
+    hasPermission("manage_categories") ||
+    (kind === "vendor_type" && hasPermission("manage_merchant_types")) ||
+    (kind === "category" && hasPermission("manage_categories")) ||
+    (kind === "variant" && hasPermission("manage_variables"));
+
+  if (canManageKind) {
     return (
       <TaxonomyDirectAddButton
         kind={kind}

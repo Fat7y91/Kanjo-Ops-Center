@@ -9,9 +9,15 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
-const REVIEW_CAPABILITIES = [
+const APPROVE_CAPABILITIES = [
   "edit_catalog",
   "review_image_quality",
+] as const;
+
+/** Replacing image content additionally accepts the image-editor grant. */
+const ENHANCE_CAPABILITIES = [
+  ...APPROVE_CAPABILITIES,
+  "edit_product_images",
 ] as const;
 
 const imageQaSchema = z.object({
@@ -31,12 +37,30 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorizeAny([...REVIEW_CAPABILITIES]);
+  const { session, response } = await authorizeAny(ENHANCE_CAPABILITIES);
   if (!session) return response;
 
   try {
     const { id } = await context.params;
     const patch = imageQaSchema.parse(await readJson(request));
+
+    // Approving and replacing are separate capabilities. The union gate above
+    // admits either operator; this check rejects the cross-case: an
+    // image-editor cannot approve, and a reviewer cannot overwrite the image.
+    const required =
+      patch.imageDataUrl !== undefined
+        ? ENHANCE_CAPABILITIES
+        : APPROVE_CAPABILITIES;
+    const allowed = required.some((permission) =>
+      session.permissions.includes(permission),
+    );
+    if (!allowed) {
+      throw new ImageQaError(
+        "IMAGE_QA_FORBIDDEN",
+        "لا تملك الصلاحية المطلوبة لهذا الإجراء.",
+        403,
+      );
+    }
 
     const record = await findCatalogRecord(id);
     const cityScope = effectiveCityIds(session);

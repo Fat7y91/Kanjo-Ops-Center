@@ -23,7 +23,11 @@ type MarketingViewProps = {
   entries: MarketingEntry[];
   settings: PlatformSettings[];
   cities: { id: string; name: string }[];
-  canManage: boolean;
+  canViewCampaigns: boolean;
+  canCreate: boolean;
+  canRecord: boolean;
+  canViewLogs: boolean;
+  canManageSettings: boolean;
 };
 
 export function MarketingView({
@@ -32,11 +36,16 @@ export function MarketingView({
   entries,
   settings,
   cities,
-  canManage,
+  canViewCampaigns,
+  canCreate,
+  canRecord,
+  canViewLogs,
+  canManageSettings,
 }: MarketingViewProps) {
   const router = useRouter();
   const [notice, setNotice] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const canManageCampaigns = canCreate || canRecord;
 
   function done(message: string) {
     setNotice(message);
@@ -76,16 +85,10 @@ export function MarketingView({
     campaigns.map((campaign) => [campaign.id, campaign.name]),
   );
 
-  return (
-    <div className="marketing-view">
-      {notice ? (
-        <p className="accounts-notice" role="status">
-          {notice}
-        </p>
-      ) : null}
-
-      <Tabs
-        items={[
+  const canViewRecords = canViewCampaigns || canViewLogs;
+  const tabs = [
+    ...(canViewCampaigns
+      ? [
           {
             id: "campaigns",
             label: `الحملات (${campaigns.length})`,
@@ -101,7 +104,7 @@ export function MarketingView({
                       key={item.campaign.id}
                       progress={item}
                       busy={busyId === item.campaign.id}
-                      canManage={canManage}
+                      canManage={canManageCampaigns}
                       onStatus={(campaignId, status) =>
                         void changeStatus(campaignId, status)
                       }
@@ -111,24 +114,28 @@ export function MarketingView({
               </div>
             ),
           },
+        ]
+      : []),
+    ...(canCreate
+      ? [
           {
             id: "new-campaign",
             label: "حملة جديدة",
-            content: canManage ? (
-              <CampaignForm cities={cities} onDone={done} />
-            ) : (
-              <p className="marketing-locked">لا تملك صلاحية الإنشاء.</p>
-            ),
+            content: <CampaignForm cities={cities} onDone={done} />,
           },
+        ]
+      : []),
+    ...(canRecord
+      ? [
           {
             id: "entry",
             label: "نتائج يومية",
-            content: canManage ? (
-              <DailyEntryForm campaigns={campaigns} onDone={done} />
-            ) : (
-              <p className="marketing-locked">لا تملك صلاحية الإدخال.</p>
-            ),
+            content: <DailyEntryForm campaigns={campaigns} onDone={done} />,
           },
+        ]
+      : []),
+    ...(canViewRecords
+      ? [
           {
             id: "records",
             label: `السجلات (${entries.length})`,
@@ -139,17 +146,28 @@ export function MarketingView({
               />
             ),
           },
+        ]
+      : []),
+    ...(canManageSettings
+      ? [
           {
             id: "settings",
             label: "إعدادات المنصات",
-            content: canManage ? (
-              <SettingsPanel settings={settings} onDone={done} />
-            ) : (
-              <p className="marketing-locked">لا تملك صلاحية التعديل.</p>
-            ),
+            content: <SettingsPanel settings={settings} onDone={done} />,
           },
-        ]}
-      />
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="marketing-view">
+      {notice ? (
+        <p className="accounts-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
+
+      <Tabs items={tabs} />
     </div>
   );
 }

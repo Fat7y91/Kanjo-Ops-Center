@@ -16,6 +16,7 @@ export async function GET() {
   const { session, response } = await authorizeAny([
     "view_bank_balances",
     "add_bank_account",
+    "view_bank_transactions",
     "record_bank_transaction",
   ]);
   if (!session) return response;
@@ -29,6 +30,7 @@ export async function GET() {
       accounts: summarizeAll(accounts, entries),
       entries,
       full: access.full,
+      canViewTransactions: access.canViewTransactions,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

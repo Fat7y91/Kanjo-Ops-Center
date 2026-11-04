@@ -22,7 +22,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_campaigns");
+  const { session, response } = await authorize("create_campaign");
   if (!session) return response;
 
   try {

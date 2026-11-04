@@ -32,12 +32,22 @@ export type Payslip = {
  * what pushed `/payroll` past the Edge CPU limit. The in-memory fallback still
  * does one pass over the reports, never one pass per profile.
  */
-export async function buildPayslips(): Promise<Payslip[]> {
+export async function buildPayslips(viewer?: {
+  /** The signed-in operator's user id; only their row survives a self-only view. */
+  userId: string;
+  /** When false the caller may only read its own payslip. */
+  canViewAll: boolean;
+}): Promise<Payslip[]> {
   const profiles = listPayrollProfiles();
   const contributions =
     (await listContributionRollup()) ?? (await fallbackContributions());
 
-  return profiles.map((profile) => {
+  const scoped =
+    viewer && !viewer.canViewAll
+      ? profiles.filter((profile) => profile.userId === viewer.userId)
+      : profiles;
+
+  return scoped.map((profile) => {
     const contribution = contributions.get(profile.userId)?.contribution ?? 0;
     return {
       profile,

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CityDetailsClient } from "@/components/field-ops/city-details-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { canAccessCity } from "@/lib/city-scope-query";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import {
   getCityById,
   listAssignableManagers,
@@ -24,7 +24,7 @@ type CityDetailsPageProps = {
 export default async function CityDetailsPage({
   params,
 }: CityDetailsPageProps) {
-  const session = await requirePermission("view_active_cities");
+  const session = await requireModuleAccess("/cities");
   const { id } = await params;
   const city = getCityById(id);
   if (!city || !canAccessCity(session, city.id)) notFound();

@@ -4,7 +4,7 @@ import {
   type MerchantRow,
 } from "@/components/merchants/merchants-directory";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listCities, listMerchants } from "@/lib/field-ops/store";
 import { loadMerchantStates } from "@/lib/field-ops/state-source";
@@ -27,7 +27,7 @@ const currency = new Intl.NumberFormat("ar-EG-u-nu-latn", {
 export default async function MerchantsPage({
   searchParams,
 }: MerchantsPageProps) {
-  const session = await requirePermission("view_merchants");
+  const session = await requireModuleAccess("/merchants");
   const { q } = await searchParams;
   const query = (q ?? "").trim();
   const allCities = listCities();

@@ -1,29 +1,33 @@
 import { NextResponse } from "next/server";
 
-import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
-import { getServerSession } from "@/lib/auth/server-session";
+import {
+  apiError,
+  actorFromSession,
+  authorize,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { loadMerchantStates } from "@/lib/field-ops/state-source";
 import { createMerchant, listCities, listMerchants } from "@/lib/field-ops/store";
+import { permissionsForModule } from "@/lib/rbac/modules";
 import { merchantCreateSchema } from "@/lib/schemas/field-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+/**
+ * Directory reads serve both the merchant screen and the visit engine's picker,
+ * so accept every capability that opens either module.
+ */
+const MERCHANT_READ_CAPABILITIES = [
+  ...permissionsForModule("/merchants"),
+  ...permissionsForModule("/field-ops"),
+];
+
 export async function GET() {
-  const session = await getServerSession();
-  if (!session) {
-    return NextResponse.json({ error: "يلزم تسجيل الدخول." }, { status: 401 });
-  }
-  if (
-    !session.permissions.includes("view_merchants") &&
-    !session.permissions.includes("assign_tasks")
-  ) {
-    return NextResponse.json(
-      { error: "لا تملك هذه الصلاحية." },
-      { status: 403 },
-    );
-  }
+  const { session, response } = await authorizeAny(MERCHANT_READ_CAPABILITIES);
+  if (!session) return response;
 
   const allowed = new Set(effectiveCityIds(session));
   const cityMap = new Map(listCities().map((city) => [city.id, city]));

@@ -17,6 +17,8 @@ import type { BankAccount, LedgerEntry } from "./types";
 export type TreasuryAccess = {
   /** Sees every account, every entry, balances and expense totals. */
   full: boolean;
+  /** May read every movement (deposits and expenses) without balances. */
+  canViewTransactions: boolean;
   /** May append entries, but deposits only. */
   canRecordDeposits: boolean;
   /** May append expenses. Implies full. */
@@ -32,10 +34,14 @@ export function resolveTreasuryAccess(
   // Capability, not clearance, decides the tier. A Head of Accounts can sit at
   // any clearance level; what matters is that they were granted the book.
   const full = held.has("add_bank_account") || held.has("view_bank_balances");
+  // An auditor may read every movement without seeing current balances or the
+  // company's expense total; the ledger capability alone opens that read.
+  const canViewTransactions = full || held.has("view_bank_transactions");
 
   return {
     full,
-    canView: full || held.has("record_bank_transaction"),
+    canViewTransactions,
+    canView: canViewTransactions || held.has("record_bank_transaction"),
     canRecordDeposits: full || held.has("record_bank_transaction"),
     canRecordExpenses: full,
   };
@@ -52,7 +58,10 @@ export function visibleAccounts(
   accounts: readonly BankAccount[],
   access: TreasuryAccess,
 ): BankAccount[] {
-  if (access.full) return [...accounts];
+  // Full-book and ledger-only viewers read across every account. A
+  // deposit-only city manager is limited to Egyptian accounts, because that is
+  // the only remit the record capability grants.
+  if (access.canViewTransactions) return [...accounts];
   if (!access.canView) return [];
   return accounts.filter((account) => account.country === "EG");
 }
@@ -68,7 +77,9 @@ export function visibleEntries(
   entries: readonly LedgerEntry[],
   access: TreasuryAccess,
 ): LedgerEntry[] {
-  if (access.full) return [...entries];
+  // A full viewer and a ledger-only auditor both read every movement; only the
+  // deposit-only city manager is narrowed to deposits.
+  if (access.canViewTransactions) return [...entries];
   if (!access.canView) return [];
   return entries.filter((entry) => entry.kind === "deposit");
 }

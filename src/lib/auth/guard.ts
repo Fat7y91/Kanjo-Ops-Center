@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getServerSession } from "@/lib/auth/server-session";
+import { moduleForPath, permissionsForPath } from "@/lib/rbac/modules";
 import type { Permission } from "@/lib/rbac/permissions";
 import type { ActiveSession } from "@/lib/rbac/types";
 
@@ -54,4 +55,30 @@ export async function requireAnyPermission(
     redirect(`/forbidden?permission=${encodeURIComponent(permissions[0])}`);
   }
   return session;
+}
+
+/**
+ * Page guard derived from the navigation catalogue.
+ *
+ * The sidebar and middleware already decide access with
+ * `permissionsForPath`, so a page that hard-codes a narrower key can bounce a
+ * visitor who saw the nav entry and passed the middleware — the
+ * "visible but forbidden" bug. Reading the same catalogue here keeps the page
+ * in lockstep with the nav: if an operator can see the module, they can open
+ * it, and each restricted subsection then unmounts itself on its own grant.
+ *
+ * An empty permission list means "signed in is enough" (personal surfaces such
+ * as `/profile`), mirroring the middleware's session-only rule.
+ */
+export async function requireModuleAccess(
+  pathname: string,
+): Promise<ActiveSession> {
+  const module = moduleForPath(pathname);
+  if (module?.minClearance !== undefined) {
+    await requireMinClearance(module.minClearance);
+  }
+  const accepted = permissionsForPath(pathname);
+  // Empty means unmapped or session-only (`/profile`): signed in is enough.
+  if (accepted.length === 0) return requireSession();
+  return requireAnyPermission(accepted);
 }

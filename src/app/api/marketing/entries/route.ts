@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { apiError, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  authorize,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
 import {
   listMarketingEntries,
   recordMarketingEntry,
@@ -11,7 +16,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const { session, response } = await authorize("view_campaigns");
+  const { session, response } = await authorizeAny([
+    "view_campaigns",
+    "view_marketing_logs",
+  ]);
   if (!session) return response;
 
   const campaignId = new URL(request.url).searchParams.get("campaignId");
@@ -23,7 +31,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_campaigns");
+  const { session, response } = await authorize("record_campaign_results");
   if (!session) return response;
 
   try {

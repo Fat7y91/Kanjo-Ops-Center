@@ -275,7 +275,7 @@ at a time.
 - `src/app/api/auth/login/route.ts` — `POST` login Route Handler; sets the cookie and returns `NextResponse.redirect`.
 - `src/app/api/auth/logout/route.ts` — `POST` logout Route Handler; clears the cookie and redirects.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
-- `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance` (server components), `requireAnyPermission`.
+- `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance`, `requireAnyPermission` (server components), and `requireModuleAccess(pathname)` — the nav-derived page guard (§8.7).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
 - `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (97 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
@@ -307,6 +307,28 @@ logout therefore POST to plain route handlers. Rules locked in:
 - `src/app/login/actions.ts` is a deprecated, redirect-free shim; the forms now
   target `/api/auth/login` and `/api/auth/logout` directly.
 
+#### Nav / page / API parity (one catalogue, three callers)
+
+`src/lib/rbac/module-catalog.ts` is the single source of truth for which
+capabilities open a module. Three layers read it and must never drift:
+
+- **Sidebar** filters entries with `permissionsForPath(pathname)`.
+- **Middleware** admits a request when `permissionsForPath(pathname)` matches.
+- **Pages** call `requireModuleAccess(pathname)` (`src/lib/auth/guard.ts`),
+  which applies `minClearance` first, then `requireAnyPermission(permissionsForPath(pathname))`.
+  An empty list (unmapped or `sessionOnly`, e.g. `/profile`) means "signed in is
+  enough".
+- **Route Handlers** call `authorizeAny(permissionsForModule(href))`
+  (`src/lib/rbac/modules.ts`, exact-href lookup) so a screen that opens can load
+  its data.
+
+The rule this enforces: **if an operator can see a nav item, they must never hit
+`/forbidden`.** That bug came from pages hard-coding a narrower key than the nav
+advertised (e.g. `/cities` gated on `view_active_cities` while the nav also
+opened on `manage_cities` / `add_city`). Sub-sections stay strictly hidden: each
+restricted block still unmounts itself via `Protect` / `usePermission`, so
+parity widens *access to the module*, never *visibility of a guarded control*.
+
 
 ### Catalog (Tier 1–5)
 - UI: `src/components/catalog/` (`catalog-client` 121, `product-card` 133,
@@ -326,9 +348,11 @@ logout therefore POST to plain route handlers. Rules locked in:
   resolution + QA commits.
 - Schema: `src/lib/schemas/catalog.ts`.
 - State enum: `pending_review → completed → published`.
-- Image QA gated by `manage_catalog | review_catalog_images`; drafts edit gated
-  by `manage_catalog | create_products`.
-- QA workspace lives at `/catalog/qa` (nav module `review_catalog_images`).
+- Image QA: approving needs `edit_catalog | review_image_quality`, replacing the
+  image also accepts `edit_product_images`; drafts edit gated by
+  `add_catalog | edit_catalog`.
+- QA workspace lives at `/catalog/qa` (nav module `review_image_quality` +
+  `edit_product_images`).
 - Storage is `app.catalog_products` (migration `20261106000000`), the single
   source of truth; there is no seed fallback. The migration adds the columns the
   domain model carries (vendor type, category, product type, variants, review
@@ -473,6 +497,16 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Controller: `src/app/api/taxonomy/**` (entries, requests, approve, reject).
 - Repository: `src/lib/taxonomy/store.ts` (707 — over limit);
   `src/lib/taxonomy/data.generated.ts` (2219 — allowed, generated).
+- Page opens on any capability in the `/catalog/taxonomy` nav module
+  (`manage_categories`, `review_add_requests`, `manage_merchant_types`,
+  `manage_variables`), but each tab and mutation maps to its own grant:
+  `manage_categories` is the umbrella (all tabs, approvals); `review_add_requests`
+  alone sees only the requests tab and may approve/reject; the two per-kind
+  manager keys see only their own tab and add directly into it. Unavailable
+  tabs are not rendered at all. API gates mirror this: `GET` on `/api/taxonomy`
+  and `/requests` accepts the module set; `POST /requests` needs
+  `review_add_requests`; `POST /entries` needs one of the three manager keys;
+  approve/reject needs `manage_categories` or `review_add_requests`.
 
 ### BI / Overview (Tier 1 + 3)
 - UI: `src/app/(workspace)/overview/`, `src/components/` charts.
@@ -564,17 +598,24 @@ logout therefore POST to plain route handlers. Rules locked in:
 - App/Edge: `GET|POST /api/accounts` and `POST /api/accounts/ledger`.
   `manage_accounts` implies read, so a manager can resolve the account it
   writes to.
-- Access tiers (`src/lib/accounts/access.ts`, pure): treasury has two
-  audiences, both derived from capabilities, never job titles.
-  - **Full book** — holding `view_accounts` or `manage_accounts`. Sees every
-    account in both countries, every movement, the derived balance and expense
-    totals. This is the Founder / System Admin / Head of Accounts audience.
-  - **Deposit-only** — holding `record_deposits`. Opens the module to record
-    deposits into Egyptian accounts only. `visibleAccounts` drops non-Egyptian
-    accounts, `visibleEntries` drops every expense row, and the page renders no
-    balance and no expense total. `assertCanRecord` rejects an expense or a
-    Saudi account before the store is touched, so editing the request body
-    cannot escalate the tier.
+- Access tiers (`src/lib/accounts/access.ts`, pure): treasury is not one
+  audience; every tier is derived from capabilities, never job titles.
+  - **Full book** — holding `view_bank_balances` or `add_bank_account`. Sees
+    every account in both countries, every movement, the derived balance and
+    expense totals. Founder / System Admin / Head of Accounts.
+  - **Ledger-only** — holding `view_bank_transactions` without a full-book
+    capability. Reads every movement but no derived balance and no expense
+    total; the page renders the movements list with an explicit "no balances"
+    note.
+  - **Deposit-only** — holding only `record_bank_transaction`. Opens the module
+    to record deposits into Egyptian accounts only. `visibleAccounts` drops
+    non-Egyptian accounts, `visibleEntries` drops every expense row, and the
+    page renders no balance and no expense total. `assertCanRecord` rejects an
+    expense or a Saudi account before the store is touched, so editing the
+    request body cannot escalate the tier.
+- The page opens on any capability in `/accounts`'s nav module
+  (`requireModuleAccess("/accounts")`); each tier then narrows its own data. The
+  API mirrors the same union via `authorizeAny`.
 - The ledger is append-only at both tiers: TypeScript exposes no update/delete,
   and `app.ledger_reject_mutation()` blocks UPDATE/DELETE even for the owner.
   A correction is a new opposing entry.
@@ -643,6 +684,13 @@ logout therefore POST to plain route handlers. Rules locked in:
   per profile (O(profiles × reports)), a P0 Edge CPU 1102 offender. When the
   view is not deployed, a single-pass fallback keeps local dev and CI truthful
   without reintroducing the per-profile scan.
+- **`view_employee_payslip` means "own payslip only".** The page guard is
+  `requireModuleAccess("/payroll")`, which opens on either payroll capability,
+  but `buildPayslips({ userId, canViewAll })` narrows the profile list to the
+  viewer's own row unless they also hold `view_payroll_sheets`. The full sheet
+  header and multi-row table are only shown to the latter; everyone else sees a
+  single-row "كشف راتبي". The narrowing happens in the data layer, so an API
+  caller cannot read a peer's payslip by id — there is no id parameter.
 - SQL: `20261030000200_payroll.sql` — `payroll_profiles`,
   `payroll_commission_tiers` (cumulative bands), `payroll_kpi_links`,
   `payroll_runs`, `payroll_lines`, and the `payroll_run_totals` view.
@@ -704,7 +752,18 @@ logout therefore POST to plain route handlers. Rules locked in:
 ### Marketing Measurement (Tier 1–5)
 - UI: `src/app/(workspace)/marketing/page.tsx` plus
   `components/marketing/{marketing-view,marketing-entry-form,campaign-form,campaign-card,settings-panel}.tsx`.
-  Five tabs: campaigns, new campaign, daily results, records, platform settings.
+  Tabs are capability-filtered, not shown-then-locked: campaigns
+  (`view_campaigns`), new campaign (`create_campaign`), daily results
+  (`record_campaign_results`), records (`view_campaigns` | `view_marketing_logs`),
+  platform settings (`manage_platform_settings`). There is no "Restricted"
+  placeholder tab; a grant simply does not add its tab. The page also avoids
+  loading data it will not render — settings-only users never receive campaign
+  rows and campaign users never receive platform credentials.
+- API parity: `GET /api/marketing/campaigns` (`view_campaigns`),
+  `POST` (`create_campaign`), `PATCH /[id]` (`create_campaign` |
+  `record_campaign_results`), `GET /api/marketing/entries` (`view_campaigns` |
+  `view_marketing_logs`), `POST entries` (`record_campaign_results`),
+  `GET|PUT /api/marketing/settings` (`manage_platform_settings`).
 - Data: `src/lib/marketing/{store,types,platforms}.ts`. Manual entries are
   append-only.
 - Campaign is the unit of work: a campaign owns the plan (name, platform,
@@ -1418,9 +1477,9 @@ The QA workspace proves the 5-tier model end-to-end with server actions.
 
 | Tier | File | Responsibility |
 |---|---|---|
-| 1 — UI | `src/app/(workspace)/catalog/qa/page.tsx` | Server container: `requirePermission("review_catalog_images")`, calls the service, renders stats + board. |
-| 1 — UI | `src/components/catalog/image-qa-board.tsx` | Client shell; owns lightbox state and message timeout only. |
-| 1 — UI | `src/components/catalog/image-qa-card.tsx` | Dumb card: image, price, SKU and the three exits (تحميل / رفع المحسنة / اعتماد مباشر) built from `Button` + `DropdownMenu`. |
+| 1 — UI | `src/app/(workspace)/catalog/qa/page.tsx` | Server container: `requireModuleAccess("/catalog/qa")`, calls the service, renders stats + board. |
+| 1 — UI | `src/components/catalog/image-qa-board.tsx` | Client shell; owns lightbox state and message timeout, and forwards `canApprove` / `canEnhance` from the session. |
+| 1 — UI | `src/components/catalog/image-qa-card.tsx` | Dumb card: image, price, SKU and the available exits (تحميل / رفع المحسنة / اعتماد مباشر); enhance and approve render only when their own capability is held. |
 | 2 — Controller | `src/app/(workspace)/catalog/qa/actions.ts` | `"use server"` actions enforce RBAC, validate the data URL, call the service, `revalidatePath`. |
 | 2 — Controller | `src/components/catalog/use-image-qa-board.ts` | Client glue: busy state, optimistic removal, `prepareImage` before upload. No domain rules. |
 | 2 — Controller | `src/app/api/catalog/products/[id]/image-qa/route.ts` | Legacy REST entry point; same service + repository, same guards. |
@@ -1446,8 +1505,13 @@ Rules locked in by this pipeline:
 - City scope is enforced twice: in the service (`getPendingReviewProducts`,
   `approveImage`, `uploadEnhancedImage`) and in the legacy route. An
   out-of-scope reviewer receives `PRODUCT_NOT_FOUND` (verified).
-- RBAC: page and actions both require `manage_catalog | review_catalog_images`;
-  a user without it is redirected to `/forbidden` (verified).
+- RBAC: the page opens on the `/catalog/qa` nav module
+  (`review_image_quality`, `edit_product_images`). Approving the current image
+  needs `edit_catalog` or `review_image_quality`; replacing it additionally
+  accepts `edit_product_images`. The actions split `APPROVE_CAPABILITIES` from
+  `ENHANCE_CAPABILITIES`, the REST route applies the union gate then a per-op
+  re-check, and the card only renders an exit the viewer can actually finish —
+  so an image-editor cannot approve and a reviewer cannot overwrite content.
 - All buttons in the QA surfaces use the `Button` primitive; row extras use
   `DropdownMenu`.
 

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export async function GET() {
-  const { session, response } = await authorize("view_campaigns");
+  const { session, response } = await authorize("manage_platform_settings");
   if (!session) return response;
 
   return NextResponse.json(
@@ -26,7 +26,7 @@ export async function GET() {
  * the sync switch can never report "connected" for an unverified credential.
  */
 export async function PUT(request: Request) {
-  const { session, response } = await authorize("view_campaigns");
+  const { session, response } = await authorize("manage_platform_settings");
   if (!session) return response;
 
   try {

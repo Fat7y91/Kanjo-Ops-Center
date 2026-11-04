@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  actorFromSession,
+  authorize,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { taskAssignSchema } from "@/lib/schemas/field-ops";
 import {
@@ -9,12 +15,16 @@ import {
   tasksForViewer,
   today,
 } from "@/lib/field-ops/store";
+import { permissionsForModule } from "@/lib/rbac/modules";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+/** Mirrors the `/field-ops` nav module: opening the board loads its tasks. */
+const FIELD_OPS_MODULE = permissionsForModule("/field-ops");
+
 export async function GET() {
-  const { session, response } = await authorize("view_all_teams_visits");
+  const { session, response } = await authorizeAny(FIELD_OPS_MODULE);
   if (!session) return response;
 
   return NextResponse.json(

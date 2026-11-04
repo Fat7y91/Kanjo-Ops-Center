@@ -1,13 +1,13 @@
 import { CitiesClient } from "@/components/field-ops/cities-client";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { scopedCities } from "@/lib/city-scope-query";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CitiesPage() {
-  const session = await requirePermission("view_active_cities");
+  const session = await requireModuleAccess("/cities");
   const canManage =
     session.permissions.includes("add_city") ||
     session.permissions.includes("manage_cities");

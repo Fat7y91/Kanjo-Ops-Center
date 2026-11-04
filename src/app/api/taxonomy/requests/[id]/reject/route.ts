@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  actorFromSession,
+  authorizeAny,
+  readJson,
+} from "@/lib/auth/api";
 import { taxonomyRejectSchema } from "@/lib/schemas/taxonomy";
 import { rejectTaxonomyRequest } from "@/lib/taxonomy/store";
 
@@ -11,7 +16,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { session, response } = await authorize("manage_categories");
+  const { session, response } = await authorizeAny([
+    "manage_categories",
+    "review_add_requests",
+  ]);
   if (!session) return response;
 
   try {

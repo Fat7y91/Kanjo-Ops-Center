@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { usePermission } from "@/components/auth/use-permission";
 import { ImageQaCard } from "@/components/catalog/image-qa-card";
 import { LightboxModal } from "@/components/catalog/lightbox-modal";
 import { useImageQaBoard } from "@/components/catalog/use-image-qa-board";
@@ -19,6 +20,15 @@ type ImageQaBoardProps = {
  */
 export function ImageQaBoard({ initialProducts }: ImageQaBoardProps) {
   const board = useImageQaBoard({ initialProducts });
+  const { hasAny } = usePermission();
+  // Approving and replacing are separate capabilities: a reviewer may approve
+  // the current image, while only an image editor may overwrite it.
+  const canApprove = hasAny(["edit_catalog", "review_image_quality"]);
+  const canEnhance = hasAny([
+    "edit_catalog",
+    "review_image_quality",
+    "edit_product_images",
+  ]);
   const [lightbox, setLightbox] = useState<CatalogProduct | null>(null);
 
   useEffect(() => {
@@ -47,6 +57,8 @@ export function ImageQaBoard({ initialProducts }: ImageQaBoardProps) {
               product={product}
               busy={board.busyId === product.id}
               preparing={board.preparingId === product.id}
+              canApprove={canApprove}
+              canEnhance={canEnhance}
               onDownload={() => board.downloadOriginal(product)}
               onApprove={() => void board.approve(product)}
               onUploadEnhanced={(file) => void board.uploadEnhanced(product, file)}

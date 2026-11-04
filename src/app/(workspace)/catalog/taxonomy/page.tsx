@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import {
   listCategories,
   listTaxonomyRequests,
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
 export default async function CatalogTaxonomyPage() {
-  const session = await requirePermission("manage_categories");
+  const session = await requireModuleAccess("/catalog/taxonomy");
 
   const snapshot = {
     vendorTypes: listVendorTypes(),

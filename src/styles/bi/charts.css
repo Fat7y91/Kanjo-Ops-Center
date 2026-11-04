@@ -37,11 +37,11 @@
   list-style: none;
 }
 
-.bi-legend-item {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+/* Scoped with `.bi-legend` so the domain look wins over the Button primitive's
+ * Tailwind utilities, which are emitted after this manifest. */
+.bi-legend .bi-legend-item {
   align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
   width: 100%;
   padding: 6px 9px;
   border: 1px solid var(--line);
@@ -49,6 +49,7 @@
   background: var(--surface);
   color: inherit;
   font-size: 0.76rem;
+  font-weight: 600;
   text-align: start;
   transition:
     border-color 0.16s ease-out,
@@ -56,14 +57,14 @@
     transform 0.16s ease-out;
 }
 
-.bi-legend-item:hover,
-.bi-legend-item.is-active {
+.bi-legend .bi-legend-item:hover,
+.bi-legend .bi-legend-item.is-active {
   border-color: var(--purple);
   background: var(--surface-soft);
   transform: translateY(-1px);
 }
 
-.bi-legend-item strong {
+.bi-legend .bi-legend-item strong {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }

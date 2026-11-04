@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { CatalogClient } from "@/components/catalog/catalog-client";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { PageHeader } from "@/components/ui/page-header";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { isCatalogEligibleContract } from "@/lib/catalog/types";
 import { listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
@@ -27,7 +27,7 @@ type MerchantCatalogPageProps = {
 export default async function MerchantCatalogPage({
   params,
 }: MerchantCatalogPageProps) {
-  const session = await requirePermission("view_catalog");
+  const session = await requireModuleAccess("/catalog");
   const { merchantId } = await params;
   const merchant = await getMerchantById(merchantId);
   if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {

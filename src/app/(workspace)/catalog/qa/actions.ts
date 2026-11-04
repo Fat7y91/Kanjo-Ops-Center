@@ -27,9 +27,24 @@ import type { Permission } from "@/lib/rbac/permissions";
  * to `catalog/repository.ts`.
  */
 
-const REVIEW_CAPABILITIES: readonly Permission[] = [
+/**
+ * Approving the current image needs a review capability. `edit_catalog` is the
+ * broader grant that has always implied it, and `review_image_quality` is the
+ * dedicated key the nav module opens on.
+ */
+const APPROVE_CAPABILITIES: readonly Permission[] = [
   "edit_catalog",
   "review_image_quality",
+];
+
+/**
+ * Replacing the image is editing image content, so `edit_product_images` is
+ * sufficient on its own — that is the second capability the QA module opens on.
+ */
+const ENHANCE_CAPABILITIES: readonly Permission[] = [
+  "edit_catalog",
+  "review_image_quality",
+  "edit_product_images",
 ];
 
 export type ImageQaActionResult = {
@@ -39,12 +54,12 @@ export type ImageQaActionResult = {
 };
 
 /** Server-only hard gate: no session or no capability means no QA action. */
-async function requireReviewer() {
+async function requireCapability(capabilities: readonly Permission[]) {
   const session = await getServerSession();
   if (!session) {
     return { session: null, error: "انتهت الجلسة. سجّل الدخول مجدداً." };
   }
-  const allowed = REVIEW_CAPABILITIES.some((permission) =>
+  const allowed = capabilities.some((permission) =>
     session.permissions.includes(permission),
   );
   if (!allowed) {
@@ -86,7 +101,7 @@ async function toResult(
 export async function approveProductImage(
   productId: string,
 ): Promise<ImageQaActionResult> {
-  const { session, error } = await requireReviewer();
+  const { session, error } = await requireCapability(APPROVE_CAPABILITIES);
   if (!session) return { ok: false, error: error ?? undefined };
 
   return toResult(() =>
@@ -99,7 +114,7 @@ export async function uploadEnhancedProductImage(
   productId: string,
   imageDataUrl: string,
 ): Promise<ImageQaActionResult> {
-  const { session, error } = await requireReviewer();
+  const { session, error } = await requireCapability(ENHANCE_CAPABILITIES);
   if (!session) return { ok: false, error: error ?? undefined };
 
   if (typeof imageDataUrl !== "string" || !imageDataUrl.startsWith("data:image/")) {

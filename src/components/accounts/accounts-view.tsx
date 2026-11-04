@@ -24,6 +24,12 @@ type AccountsViewProps = {
    * the API never sends them those numbers in the first place.
    */
   full: boolean;
+  /**
+   * Ledger-only viewers read every movement without the derived balance or the
+   * expense total. Deposit-only viewers are narrowed further to Egyptian
+   * deposits.
+   */
+  canViewTransactions: boolean;
   canRecordDeposits: boolean;
   canRecordExpenses: boolean;
   canAddAccount: boolean;
@@ -34,6 +40,7 @@ export function AccountsView({
   entries,
   totals,
   full,
+  canViewTransactions,
   canRecordDeposits,
   canRecordExpenses,
   canAddAccount,
@@ -86,6 +93,12 @@ export function AccountsView({
               </div>
             ))}
           </div>
+        </Widget>
+      ) : canViewTransactions ? (
+        <Widget eyebrow="المالية" title="حركات الحسابات" span={12}>
+          <p className="accounts-scope-note">
+            تُعرض الحركات المسجّلة فقط. لا تُعرض الأرصدة أو إجمالي المصروفات.
+          </p>
         </Widget>
       ) : (
         <Widget eyebrow="المالية" title="حسابات الإيداع" span={12}>

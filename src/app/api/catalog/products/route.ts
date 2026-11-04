@@ -8,6 +8,7 @@ import {
 import { catalogRevision, createProduct, listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listMerchants } from "@/lib/field-ops/store";
+import { permissionsForModule } from "@/lib/rbac/modules";
 import { productCreateSchema } from "@/lib/schemas/catalog";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,11 @@ const PRODUCT_CREATE_CAPABILITIES = [
   "edit_catalog",
 ] as const;
 
+/** Mirrors the `/catalog` nav module so any screen that opens can load rows. */
+const CATALOG_READ_CAPABILITIES = permissionsForModule("/catalog");
+
 export async function GET() {
-  const { session, response } = await authorizeAny(["view_catalog"]);
+  const { session, response } = await authorizeAny(CATALOG_READ_CAPABILITIES);
   if (!session) return response;
 
   // Same city scope as the page: the client reload must never widen visibility.

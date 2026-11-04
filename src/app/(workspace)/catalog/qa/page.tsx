@@ -1,7 +1,7 @@
 import { ImageQaBoard } from "@/components/catalog/image-qa-board";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
-import { requirePermission } from "@/lib/auth/guard";
+import { requireModuleAccess } from "@/lib/auth/guard";
 import { listCatalogRecords } from "@/lib/catalog/repository";
 import { getPendingReviewProducts } from "@/lib/catalog/services/image-qa-service";
 import { effectiveCityIds } from "@/lib/city-scope-query";
@@ -16,7 +16,7 @@ export const runtime = "edge";
  * pending queue, and hands display-ready data to the client board.
  */
 export default async function CatalogQaPage() {
-  const session = await requirePermission("review_image_quality");
+  const session = await requireModuleAccess("/catalog/qa");
 
   const cityScope = effectiveCityIds(session);
   const pending = getPendingReviewProducts(await listCatalogRecords(), cityScope);

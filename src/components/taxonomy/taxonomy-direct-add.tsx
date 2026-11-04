@@ -24,6 +24,12 @@ export function TaxonomyDirectAddButton({
   onCreated,
 }: TaxonomyDirectAddButtonProps) {
   const { hasPermission } = usePermission();
+  // Each kind has its own manager grant; `manage_categories` is the umbrella
+  // that also covers direct entry for every kind.
+  const canCreate =
+    hasPermission("manage_categories") ||
+    (kind === "vendor_type" && hasPermission("manage_merchant_types")) ||
+    (kind === "variant" && hasPermission("manage_variables"));
   const [open, setOpen] = useState(false);
   const [nameAr, setNameAr] = useState("");
   const [nameEn, setNameEn] = useState("");
@@ -47,7 +53,7 @@ export function TaxonomyDirectAddButton({
     [vendorTypes, vendorTypeId],
   );
 
-  if (!hasPermission("manage_categories")) return null;
+  if (!canCreate) return null;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
