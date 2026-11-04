@@ -1,0 +1,84 @@
+/* ── Connection / reconnecting fallback ────────────────────────────────────
+ *
+ * Used inside the shell (route `error.tsx` and island boundaries) when a
+ * network drop is mistaken for a crash. It must read as "temporary, coming
+ * back", never as an error page: amber accent, pulsing dot, calm copy.
+ * The root `global-error` inlines its own styles because the stylesheet may be
+ * unavailable when the root layout itself failed.
+ */
+
+.connection-fallback {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--gold) 9%, var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.connection-fallback-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.connection-fallback-copy h2 {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.connection-fallback-copy p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.connection-fallback-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--gold-deep);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 60%, transparent);
+  animation: connection-pulse 1.8s ease-out infinite;
+}
+
+.connection-fallback-dot[data-state="offline"] {
+  background: var(--red);
+  animation: none;
+}
+
+@keyframes connection-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (max-width: 640px) {
+  .connection-fallback {
+    flex-wrap: wrap;
+  }
+
+  .connection-fallback > button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-fallback-dot {
+    animation: none;
+  }
+}

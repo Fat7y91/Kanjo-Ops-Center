@@ -20,6 +20,9 @@
 @import "../styles/marketing.css";
 @import "../styles/login.css";
 
+/* Resilience: in-shell reconnecting / error fallbacks */
+@import "../styles/errors.css";
+
 /* 3. Workspace shell and shared surfaces */
 @import "../styles/workspace.css";
 

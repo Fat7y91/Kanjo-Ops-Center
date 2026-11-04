@@ -1,3 +1,4 @@
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary";
 import { FieldOpsClient } from "@/components/field-ops/field-ops-client";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireModuleAccess } from "@/lib/auth/guard";
@@ -18,17 +19,23 @@ export default async function FieldOpsPage() {
         title="لوحة التنفيذ"
         description="زيارات اليوم والملكية ومسار الاعتماد. كل عنصر تحكم مستمد من صلاحية، وليس من مسمى وظيفي."
       />
-      <FieldOpsClient
-        initialBoard={board}
-        viewerTeam={session.user.team}
-        canManageTasks={permissions.includes("assign_tasks")}
-        canRequestTransfers={permissions.includes("request_ownership_transfer")}
-        canApproveTransfers={permissions.includes("approve_ownership_transfer")}
-        canApproveEdits={permissions.includes("approve_report_edits")}
-        canManageState={permissions.includes("edit_contract")}
-        canViewMerchants={permissions.includes("view_merchants")}
-        canAssignTasks={permissions.includes("assign_tasks")}
-      />
+      <ClientErrorBoundary
+        title="تعذر عرض لوحة التنفيذ"
+        description="لم يكتمل تجهيز مهام اليوم وحالات التجار. أعد المحاولة دون مغادرة الصفحة."
+        connectionTitle="انقطع الاتصال أثناء تحميل لوحة التنفيذ"
+      >
+        <FieldOpsClient
+          initialBoard={board}
+          viewerTeam={session.user.team}
+          canManageTasks={permissions.includes("assign_tasks")}
+          canRequestTransfers={permissions.includes("request_ownership_transfer")}
+          canApproveTransfers={permissions.includes("approve_ownership_transfer")}
+          canApproveEdits={permissions.includes("approve_report_edits")}
+          canManageState={permissions.includes("edit_contract")}
+          canViewMerchants={permissions.includes("view_merchants")}
+          canAssignTasks={permissions.includes("assign_tasks")}
+        />
+      </ClientErrorBoundary>
     </>
   );
 }

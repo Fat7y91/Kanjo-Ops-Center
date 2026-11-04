@@ -1,4 +1,5 @@
 import { ExecutiveDashboard } from "@/components/bi/executive-dashboard";
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireModuleAccess } from "@/lib/auth/guard";
 import { buildBiDataset } from "@/lib/bi/dataset";
@@ -15,15 +16,21 @@ export default async function OverviewPage() {
   const dataset = await buildBiDataset();
 
   return (
-    <ExecutiveDashboard
-      dataset={dataset}
-      header={
-        <PageHeader
-          eyebrow="مركز القيادة التنفيذي"
-          title={`لوحة القيادة، ${firstName}`}
-          description="حالة الشبكة والتفاوض والمالية والتسويق في لقطة واحدة."
-        />
-      }
-    />
+    <ClientErrorBoundary
+      title="تعذر عرض لوحة القيادة"
+      description="لم تكتمل قراءة بيانات الشبكة والمالية والتسويق. أعد المحاولة دون مغادرة الصفحة."
+      connectionTitle="انقطع الاتصال أثناء تحميل لوحة القيادة"
+    >
+      <ExecutiveDashboard
+        dataset={dataset}
+        header={
+          <PageHeader
+            eyebrow="مركز القيادة التنفيذي"
+            title={`لوحة القيادة، ${firstName}`}
+            description="حالة الشبكة والتفاوض والمالية والتسويق في لقطة واحدة."
+          />
+        }
+      />
+    </ClientErrorBoundary>
   );
 }

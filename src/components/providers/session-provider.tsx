@@ -49,7 +49,10 @@ export function SessionProvider({
   const inFlightRef = useRef(false);
 
   const permissions = useMemo(
-    () => new Set<Permission>(session?.permissions ?? []),
+    () =>
+      new Set<Permission>(
+        Array.isArray(session?.permissions) ? session.permissions : [],
+      ),
     [session],
   );
 
@@ -69,6 +72,9 @@ export function SessionProvider({
         session: ActiveSession | null;
       };
       const next = payload.session;
+      // Validate before storing: a malformed payload must not poison render
+      // through `new Set(session.permissions)` or a missing `user`.
+      if (next && (!Array.isArray(next.permissions) || !next.user)) return;
       const previous = sessionRef.current;
 
       sessionRef.current = next;
@@ -100,8 +106,14 @@ export function SessionProvider({
 
     let channel: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== "undefined") {
-      channel = new BroadcastChannel(PERMISSION_CHANNEL);
-      channel.onmessage = () => void refresh();
+      try {
+        channel = new BroadcastChannel(PERMISSION_CHANNEL);
+        channel.onmessage = () => void refresh();
+      } catch {
+        // Some hardened browsers expose the constructor but forbid channels.
+        // Cross-tab refresh is a convenience, never a requirement.
+        channel = null;
+      }
     }
 
     window.addEventListener("focus", onFocus);

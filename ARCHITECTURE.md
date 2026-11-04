@@ -330,6 +330,38 @@ restricted block still unmounts itself via `Protect` / `usePermission`, so
 parity widens *access to the module*, never *visibility of a guarded control*.
 
 
+### Resilience — no white screens (T1)
+
+A dropped network, an aborted `fetch`, or a severed RSC stream must degrade to
+a reconnecting state, never a fatal "Application error" screen. Three layers:
+
+- **`src/app/global-error.tsx`** — the root boundary. Next replaces the whole
+  document when this renders, so it ships its own `<html>/<body>` and inline
+  brand styles (the root layout or `globals.css` may be exactly what failed).
+  It classifies the error and, for a connection drop, retries on `online` plus a
+  slow poll instead of demanding a reload.
+- **Route `error.tsx`** — one per segment that reads data (`overview`,
+  `catalog`, `field-ops`, `merchants`, `cities`, `contracts`, `accounts`,
+  `payroll`, `marketing`, `admin`, `profile`, `operations`, `finance`,
+  `agent-kpi`). Each is a thin wrapper over `ErrorPanel`, keeping the shell and
+  every other module mounted while offering a retry that re-renders only the
+  failed segment.
+- **`ClientErrorBoundary`** (`src/components/errors/`) — wraps a single client
+  island (the Overview dashboard, the Field Ops board) so a widget crash cannot
+  take out the page header or the shell. It remounts the subtree on retry.
+
+Classification lives in `src/lib/errors/connection.ts` (`isConnectionError`,
+`isOffline`): it walks the `cause` chain and matches RSC `Connection closed`,
+`Failed to fetch`, `NetworkError`, `AbortError`/`TimeoutError`, socket resets and
+their Arabic equivalents. A connection error renders `ConnectionFallback`
+(`src/components/ui/connection-fallback.tsx`, styles in
+`src/styles/errors.css`) — amber "reconnecting" surface that retries on
+`online` and on an 8 s poll — while a genuine defect renders the plain retry
+panel and is logged. The session provider is hardened to the same standard: it
+rejects a malformed `/api/session` payload before it can poison `new Set()`, and
+tolerates a browser that forbids `BroadcastChannel`.
+
+
 ### Catalog (Tier 1–5)
 - UI: `src/components/catalog/` (`catalog-client` 121, `product-card` 133,
   `product-form` 256, `cascading-taxonomy` 164, `use-product-entry` 270,
