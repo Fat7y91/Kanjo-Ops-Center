@@ -220,6 +220,7 @@ does **not** fix RC-1, RC-2 or RC-4, so page cost stays in the 23–61 ms range.
 | `app.rbac_revision()` returns the revision as a scalar | removes the full graph rebuild that existed only to produce one number |
 | `getUserById()` rides the same function | city manager list **3N → N**; admin detail **3 → 1**; login **6 → 1** |
 | `listUsers()` / `listAssignableManagers()` memoised per request | a render that resolves the roster twice pays once |
+| `app.rbac_user_directory()` returns the whole roster in one jsonb array | roster read **3 queries + in-memory join → 1**; the admin matrix, the manager picker and the governor check stop assembling it in the Worker |
 
 Details:
 
@@ -253,9 +254,16 @@ Measured per-request statement counts, before → after:
 | `/admin/permissions` | 12 | **5** |
 | `/cities/[id]` with N managers | 12 + 3N | **N + 4** |
 | `POST /login` | 6 | **1** |
+| Roster read (`listUsers`) | 3 + in-memory join | **1** |
 
-The roster read (`listUsers`) is still three queries plus an in-memory join; it
-is rare, and folding it into SQL is Phase 3 work.
+The roster read is no longer three queries plus an in-memory join.
+`app.rbac_user_directory()` (see `20261108000000_rbac_user_directory.sql`)
+aggregates the same documents `rbac_session` returns per operator — profile,
+ordered capability keys, ordered city scope — so the join and the per-grant
+filtering happen in one statement. `src/lib/rbac/documents.ts` holds the single
+document → `AppUser` mapper both reads use, so a profile column cannot be added to
+one path and forgotten in the other. A deployment whose code runs ahead of the
+migration falls back to the three-query snapshot, exactly like `rbac_session`.
 
 ### Phase 2 — Move SSR off the Edge runtime
 
@@ -317,6 +325,42 @@ browser), but the request is authorized per user, so caching it belongs with the
 pattern — still needs Phase 2: a Worker that cannot cache its own HTML cannot
 serve a cached one either.
 
+#### Rollout — `/field-ops`, `/catalog/[merchantId]`, `/accounts`, `/merchants` (shipped)
+
+The four remaining server-rendered data screens use the same pattern. Each render
+is now the session read plus a header and a skeleton; the facts come from an
+endpoint that already existed or was extended in place:
+
+| Screen | Shell render | Data endpoint |
+|---|---|---|
+| `/field-ops` | session, capability flags, team | `GET /api/field-ops/board` (existing) |
+| `/catalog/[merchantId]` | merchant, resolved contract state, taxonomy | `GET /api/catalog/products?merchantId=…` (narrowed) |
+| `/accounts` | session, treasury tier | `GET /api/accounts` (extended: totals + tier flags) |
+| `/merchants` | city scope, add-form taxonomy | `GET /api/merchants` (new; the projection the page used to build) |
+
+* `src/components/data/use-endpoint-data.ts` is the one fetch / validate / abort /
+  retry hook. The four islands and the overview hook are thin wrappers over it, so
+  abort-on-unmount and payload validation cannot drift between screens.
+* Each payload is validated at the boundary (`src/lib/accounts/payload.ts`,
+  `src/lib/catalog/payload.ts`, `src/lib/field-ops/merchant-rows.ts`) — except the
+  board. Its six collections already have one definition in `board.ts`, shared by
+  the route that builds them and the island that renders them, so re-declaring
+  them as Zod objects would duplicate the definition the schema exists to
+  protect. The board check is on the envelope (six arrays and a `today`), which
+  catches the realistic failures: an error envelope, a redirect an edge runtime
+  returned, a renamed key.
+* `/api/accounts` gained `totals` and the record/add flags because the client
+  decides from them what to draw. The tier is still derived on the server from the
+  session; nothing the client sends can raise it.
+* `/api/catalog/products` gained `?merchantId=`. It narrows an already
+  city-scoped read, so a crafted parameter cannot widen visibility.
+* Directory rows moved to `src/lib/field-ops/merchant-rows.ts`, so the page
+  render and the endpoint cannot disagree about how a merchant is labelled.
+
+What this buys: the board build, the ledger reduction, the catalog read and the
+merchant rollup no longer sit between the request and the first byte, and a failed
+read leaves the header plus a retry panel instead of an error page.
+
 ### Phase 4 — Bundle and data diet
 
 Hoist `Intl` formatters to module scope; validate BI payloads once at the data
@@ -324,13 +368,28 @@ boundary instead of per render; remove `structuredClone` from seed stores; fix
 the O(n²) `buildBoard`; drop `firebase-admin` from the runtime dependency graph;
 lazy-load `recharts` and `leaflet` so they never enter a server bundle.
 
-### Phase 5 — Guardrails
+### Phase 5 — Guardrails (implemented)
 
-* `scripts/check-bundle-budget.mjs` — fail the build when any Edge function
-  exceeds a fixed budget.
-* `scripts/check-runtime-usage.mjs` — fail when `runtime = "edge"` or
-  `force-dynamic` appears outside an allowlist.
-* `scripts/perf-smoke.mjs` — measure per-route CPU in CI and fail on regression.
+Three of the budget's rules are invisible to `tsc` and survive code review, so
+they are enforced by `.github/workflows/cpu-budget.yml`, which runs typecheck, the
+runtime check, a production build and the payload check on every push and pull
+request:
+
+* `scripts/check-runtime-usage.mjs` (`npm run check:runtime`) — every
+  `page.tsx` / `route.ts` under `src/app` must declare `runtime = "edge"` and pin
+  its caching intent with `dynamic` / `revalidate`; no `"use client"` module may
+  import a `server-only` module. The check resolves the import graph to real files
+  and exempts `import type`, which is erased before bundling. Current tree: 119 app
+  modules, 31 server-only modules, 0 violations.
+* `scripts/perf-smoke.mjs` (`npm run check:perf`) — fails when a route's
+  first-load script weight grows more than 5 % past
+  `scripts/perf-baseline.json`, or when the total static output grows past its
+  recorded size. The budget is a measurement rather than a guess: re-record it
+  with `--update`, and the new numbers appear in the diff.
+* Per-route Worker CPU (`check-bundle-budget.mjs` in the original plan) is folded
+  into `perf-smoke.mjs`. Script weight is the part of CPU cost a build can measure
+  deterministically; the Worker's own milliseconds need a live environment, which
+  is Phase 2 work.
 
 ---
 
