@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test \"scripts/**/*.test.mjs\"",
     "check:permissions": "node scripts/check-permission-drift.mjs",
+    "check:runtime": "node scripts/check-runtime-usage.mjs",
+    "check:perf": "node scripts/perf-smoke.mjs",
     "build:cf": "next-on-pages"
   },
   "dependencies": {
