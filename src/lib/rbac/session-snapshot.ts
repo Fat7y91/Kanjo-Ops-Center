@@ -4,7 +4,7 @@ import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
-import { isPermission } from "./permissions";
+import { toOperator, type OperatorDocument } from "./documents";
 import { getUserProfile, loadRbacSnapshot } from "./repository";
 import type { AppUser } from "./types";
 
@@ -28,23 +28,12 @@ import type { AppUser } from "./types";
  * missing migration.
  */
 
-/** The jsonb document `app.rbac_session(uuid)` returns. */
-type SessionSnapshotRow = {
-  user: {
-    id: string;
-    name: string;
-    email: string | null;
-    title: string;
-    team: string | null;
-    teamId: string | null;
-    teamName: string | null;
-    clearanceLevel: number;
-    globalScope: boolean;
-    active: boolean;
-    updatedAt: string;
-  };
-  permissions: string[] | null;
-  cities: string[] | null;
+/**
+ * `app.rbac_session(uuid)` returns one operator document plus the global
+ * revision; the document half is mapped by the shared `toOperator`, which the
+ * roster read (`app.rbac_user_directory()`) uses as well.
+ */
+type SessionSnapshotRow = OperatorDocument & {
   revision: number | string | null;
 };
 
@@ -53,30 +42,6 @@ export type RbacSessionSnapshot = {
   /** Newest authorization mutation, unix seconds. Stamped into the session. */
   revision: number;
 };
-
-/**
- * Grant keys are filtered through the TypeScript catalogue, never trusted
- * as-is: a key the application does not know is not a capability it can check,
- * and `isPermission` is the single definition of that contract.
- */
-function toAppUser(row: SessionSnapshotRow): AppUser {
-  const profile = row.user;
-  return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email ?? "",
-    title: profile.title,
-    team: profile.team ?? "",
-    teamName: profile.teamName,
-    teamId: profile.teamId,
-    permissions: (row.permissions ?? []).filter(isPermission),
-    accessibleCities: row.cities ?? [],
-    clearanceLevel: profile.clearanceLevel,
-    globalScope: profile.globalScope,
-    active: profile.active,
-    updatedAt: profile.updatedAt,
-  };
-}
 
 /**
  * Previous query path, kept for a deployment that has not applied the session
@@ -114,7 +79,7 @@ export async function readSessionSnapshot(
   if (!data) return null;
 
   const row = data as SessionSnapshotRow;
-  return { user: toAppUser(row), revision: Number(row.revision ?? 0) };
+  return { user: toOperator(row), revision: Number(row.revision ?? 0) };
 }
 
 /**

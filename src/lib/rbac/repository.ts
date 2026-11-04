@@ -2,6 +2,7 @@ import "server-only";
 
 import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
+import { toOperator, type OperatorDocument } from "./documents";
 import { isPermission, type Permission } from "./permissions";
 import {
   isMissingSchemaObject,
@@ -52,8 +53,14 @@ function epochSeconds(value: string | null | undefined): number {
 }
 
 /**
- * Loads the whole operator set in three queries and joins in memory. The
- * operator catalogue is tens of rows, not thousands, so avoiding per-user
+ * Pre-migration path for the whole roster.
+ *
+ * `listUserProfiles()` prefers `app.rbac_user_directory()`; this three-query
+ * snapshot is what answers when that function is not deployed yet. It stays
+ * because a code deploy that lands ahead of its migration must still render —
+ * slower by design, never wrong by accident.
+ *
+ * The operator catalogue is tens of rows, not thousands, so avoiding per-user
  * queries matters far more than avoiding the in-memory join.
  */
 export async function loadRbacSnapshot(): Promise<RbacSnapshot | null> {
@@ -118,9 +125,35 @@ export async function loadRbacSnapshot(): Promise<RbacSnapshot | null> {
   return { users, revision };
 }
 
+/**
+ * Whole operator directory: the roster, its grants and its city scope.
+ *
+ * `app.rbac_user_directory()` (see
+ * `20261108000000_rbac_user_directory.sql`) aggregates the same documents
+ * `app.rbac_session(uuid)` returns per operator, so the join and the per-user
+ * permission filtering happen in one statement instead of three queries plus a
+ * Worker-side merge — the difference between one read and six on the admin
+ * matrix, the assignable-manager picker and the governor invariant check.
+ *
+ * A deployment whose code runs ahead of that migration keeps working: a missing
+ * function is treated exactly like a missing table and the three-query snapshot
+ * answers instead. Every other error keeps failing loudly, so a broken database
+ * is never mistaken for a missing migration.
+ */
 export async function listUserProfiles(): Promise<AppUser[] | null> {
-  const snapshot = await loadRbacSnapshot();
-  return snapshot ? snapshot.users : null;
+  if (!hasSupabaseConfig()) return null;
+
+  const { data, error } = await getSupabaseServerClient()
+    .schema("app")
+    .rpc("rbac_user_directory");
+
+  if (error) {
+    if (!isMissingSchemaObject(error)) throw error;
+    const snapshot = await loadRbacSnapshot();
+    return snapshot ? snapshot.users : null;
+  }
+
+  return ((data ?? []) as OperatorDocument[]).map(toOperator);
 }
 
 export async function getUserProfile(id: string): Promise<AppUser | null> {
