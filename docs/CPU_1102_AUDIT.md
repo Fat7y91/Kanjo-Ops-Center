@@ -377,15 +377,20 @@ request:
 
 * `scripts/check-runtime-usage.mjs` (`npm run check:runtime`) — every
   `page.tsx` / `route.ts` under `src/app` must declare `runtime = "edge"` and pin
-  its caching intent with `dynamic` / `revalidate`; no `"use client"` module may
-  import a `server-only` module. The check resolves the import graph to real files
-  and exempts `import type`, which is erased before bundling. Current tree: 119 app
-  modules, 31 server-only modules, 0 violations.
+  its caching intent with `dynamic` / `revalidate`; no module marked `"use client"`
+  may reach a `server-only` module. The check walks the import graph rather than a
+  single hop, because a helper that re-exports one value from a store pulls the
+  whole server graph into the bundle while the import at the call site reads as
+  harmless. `import type` is not an edge — it is erased before bundling — and
+  neither is a `"use server"` module, which the bundle replaces with a reference.
+  Current tree: 119 app modules, 31 server-only modules, 0 violations.
 * `scripts/perf-smoke.mjs` (`npm run check:perf`) — fails when a route's
   first-load script weight grows more than 5 % past
   `scripts/perf-baseline.json`, or when the total static output grows past its
-  recorded size. The budget is a measurement rather than a guess: re-record it
-  with `--update`, and the new numbers appear in the diff.
+  recorded size. The budget is a measurement rather than a guess: `--update`
+  re-records it, a tree with no baseline records one instead of failing on the
+  change that introduced the check, and CI uploads the recorded file so committing
+  it is a reviewable diff.
 * Per-route Worker CPU (`check-bundle-budget.mjs` in the original plan) is folded
   into `perf-smoke.mjs`. Script weight is the part of CPU cost a build can measure
   deterministically; the Worker's own milliseconds need a live environment, which
