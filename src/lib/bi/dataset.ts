@@ -6,11 +6,11 @@ import type { Merchant } from "@/lib/field-ops/types";
 import { buildFounderFinancials } from "@/lib/accounts/founder";
 import { listBankAccounts, listLedgerEntries } from "@/lib/accounts/store";
 import { summarizeAll } from "@/lib/accounts/ledger";
+import { listCampaigns, listMarketingEntries } from "@/lib/marketing/store";
 import { buildPayslips } from "@/lib/payroll/store";
 
+import { buildLiveExpenses, buildLiveMarketing } from "./live-facts";
 import { loadMerchantFacts } from "./merchant-facts";
-import { buildMockExpenses, buildMockMarketing } from "./mock";
-import { sum } from "./select";
 import {
   biDatasetSchema,
   type BiCatalogRow,
@@ -73,16 +73,17 @@ function achievedCommission(
 }
 
 /**
- * Aggregates the live field-ops and catalog stores into a single typed BI
- * payload, then layers deterministic mock finance/marketing facts on top.
+ * Aggregates the live field-ops and catalog tables into a single typed BI
+ * payload. Finance and marketing facts come from `live-facts.ts`, which reads
+ * the treasury and marketing tables — there is no synthetic dataset.
  *
  * Report-derived facts (last visit, latest negotiated commission) are read from
  * the pre-computed `app.bi_merchant_rollup` view when it is available; local
  * dev and CI use a single-pass fallback. Merchants and products are read from
- * their SQL tables, which are now the single source of truth.
+ * their SQL tables, which are the single source of truth.
  */
 export async function buildBiDataset(): Promise<BiDataset> {
-  const cities = listCities();
+  const cities = await listCities();
   const cityName = new Map(cities.map((city) => [city.id, city.name]));
   const merchants = await listMerchants();
   const products = await listProducts();
@@ -155,19 +156,6 @@ export async function buildBiDataset(): Promise<BiDataset> {
       })),
   ];
 
-  // Mock finance/marketing spend is sized against each city's monthly GMV so
-  // the numbers stay proportionate to the real merchant book.
-  const scopes = cities.map((city) => ({
-    cityId: city.id,
-    cityName: city.name,
-    team: city.opsManagers.length > 0 ? "City Operations" : "Executive",
-    monthlyValue: sum(
-      merchants
-        .filter((merchant) => merchant.cityId === city.id)
-        .map((merchant) => merchant.monthlyValue),
-    ),
-  }));
-
   const repOptions = Array.from(
     new Map(
       Array.from(facts.values())
@@ -194,8 +182,15 @@ export async function buildBiDataset(): Promise<BiDataset> {
       )?.amount ?? 0,
   }));
 
-  const bankAccounts = listBankAccounts();
-  const ledgerEntries = listLedgerEntries();
+  const [bankAccounts, ledgerEntries, campaigns, marketingEntries] =
+    await Promise.all([
+      listBankAccounts(),
+      listLedgerEntries(),
+      listCampaigns(),
+      listMarketingEntries(),
+    ]);
+  const resolveCity = (cityId: string | null) =>
+    cityId ? (cityName.get(cityId) ?? cityId) : "غير محدد";
   const accounts = summarizeAll(bankAccounts, ledgerEntries).map(
     (summary) => ({
       id: summary.account.id,
@@ -246,8 +241,8 @@ export async function buildBiDataset(): Promise<BiDataset> {
       ),
     ).sort((left, right) => left.localeCompare(right)),
     merchants: merchantRows,
-    expenses: buildMockExpenses(scopes),
-    marketing: buildMockMarketing(scopes),
+    expenses: buildLiveExpenses(bankAccounts, ledgerEntries, resolveCity),
+    marketing: buildLiveMarketing(campaigns, marketingEntries, resolveCity),
     catalog: catalogRows,
     treasury,
     accounts,

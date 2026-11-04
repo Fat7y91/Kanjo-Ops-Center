@@ -22,24 +22,34 @@ export function isGlobalSession(session: ActiveSession): boolean {
   return session.globalScope || session.clearanceLevel >= 4;
 }
 
-export function effectiveCityIds(session: ActiveSession): string[] {
+/**
+ * Every city id the session may operate in.
+ *
+ * Cities are rows in `app.cities`, so this is an async read: a global session
+ * gets the ids that exist *now*, not the ids that existed when a seed literal
+ * was written into the bundle.
+ */
+export async function effectiveCityIds(
+  session: ActiveSession,
+): Promise<string[]> {
   if (isGlobalSession(session)) {
-    return listCities().map((city) => city.id);
+    const cities = await listCities();
+    return cities.map((city) => city.id);
   }
   return [...session.accessibleCities];
 }
 
-export function canAccessCity(
+export async function canAccessCity(
   session: ActiveSession,
   cityId: string,
-): boolean {
-  return (
-    canOpenCities(session) && effectiveCityIds(session).includes(cityId)
-  );
+): Promise<boolean> {
+  if (!canOpenCities(session)) return false;
+  return (await effectiveCityIds(session)).includes(cityId);
 }
 
-export function scopedCities(session: ActiveSession): City[] {
+export async function scopedCities(session: ActiveSession): Promise<City[]> {
   if (!canOpenCities(session)) return [];
-  const allowed = new Set(effectiveCityIds(session));
-  return listCities().filter((city) => allowed.has(city.id));
+  const allowed = new Set(await effectiveCityIds(session));
+  const cities = await listCities();
+  return cities.filter((city) => allowed.has(city.id));
 }

@@ -23,7 +23,7 @@ export async function GET() {
   if (!session) return response;
 
   return NextResponse.json(
-    { cities: scopedCities(session) },
+    { cities: await scopedCities(session) },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
   try {
     const input = cityCreateSchema.parse(await readJson(request));
-    const city = createCity(input, actorFromSession(session));
+    const city = await createCity(input, actorFromSession(session));
     return NextResponse.json({ city }, { status: 201 });
   } catch (error) {
     return apiError(error);

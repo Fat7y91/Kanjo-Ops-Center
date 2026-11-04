@@ -15,10 +15,18 @@ export async function GET() {
   const { session, response } = await authorize("view_campaigns");
   if (!session) return response;
 
-  return NextResponse.json(
-    { campaigns: listCampaigns(), progress: campaignProgress() },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  try {
+    const [campaigns, progress] = await Promise.all([
+      listCampaigns(),
+      campaignProgress(),
+    ]);
+    return NextResponse.json(
+      { campaigns, progress },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 export async function POST(request: Request) {
@@ -26,7 +34,7 @@ export async function POST(request: Request) {
   if (!session) return response;
 
   try {
-    const campaign = createCampaign(
+    const campaign = await createCampaign(
       (await readJson(request)) as CampaignInput,
       session.user.id,
     );

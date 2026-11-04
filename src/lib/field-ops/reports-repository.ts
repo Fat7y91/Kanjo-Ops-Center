@@ -9,11 +9,10 @@ import type { VisitReport } from "./types";
 /**
  * Durable store for `app.visit_reports`.
  *
- * `app.visit_reports` is the shared, cross-isolate record of a completed visit;
- * the process-local field-ops store only ever held the demo seed plus whatever
- * the current worker wrote. Reads therefore prefer the table and fall back to
- * the in-memory store only while the migration is not deployed, and writes go
- * here before the route acknowledges the report.
+ * `app.visit_reports` is the shared, cross-isolate record of a completed visit.
+ * Before it existed, a report acknowledged by one worker was invisible to the
+ * next. Reads come from the table; writes go here before the route
+ * acknowledges the report.
  *
  * This is the only module that knows the column names.
  */
@@ -132,8 +131,8 @@ function toRow(report: VisitReport, loggedBy: string | null) {
 /**
  * Durable reports, newest first, optionally narrowed to one merchant.
  *
- * Returns `null` when the table is not deployed yet, which tells the caller to
- * keep serving the in-memory store rather than showing an empty timeline.
+ * Returns `null` when the table is not deployed yet, which the callers treat as
+ * an empty timeline rather than a fabricated one.
  *
  * The merchant filter is applied by the database: loading the whole table and
  * filtering in JavaScript is what made the profile page pay for the entire
@@ -165,8 +164,8 @@ export async function listVisitReportRows(
 /**
  * Persists one report.
  *
- * `unavailable` means the migration is not deployed yet, so the route keeps
- * serving the in-memory copy and the deployment converges after the migration.
+ * `unavailable` means the migration is not deployed yet and the caller must
+ * fail the request instead of pretending the write landed.
  * `duplicate` means an offline replay already stored this `client_visit_id`.
  * Every other error is thrown, so a write is never silently dropped.
  */

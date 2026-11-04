@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     const body = (await readJson(request)) as { cityId?: unknown };
     const cityId = typeof body.cityId === "string" ? body.cityId.trim() : "";
-    if (cityId && !listCities().some((city) => city.id === cityId)) {
+    if (cityId && !(await listCities()).some((city) => city.id === cityId)) {
       return NextResponse.json(
         { error: "مدينة غير معروفة.", code: "UNKNOWN_CITY" },
         { status: 422 },

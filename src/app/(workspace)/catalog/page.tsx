@@ -19,7 +19,7 @@ export const runtime = "edge";
 
 export default async function CatalogPage() {
   const session = await requireModuleAccess("/catalog");
-  const allowed = new Set(effectiveCityIds(session));
+  const allowed = new Set(await effectiveCityIds(session));
 
   const merchants = (await listMerchants()).filter((merchant) =>
     allowed.has(merchant.cityId),
@@ -36,7 +36,9 @@ export default async function CatalogPage() {
   // outcome or manager override wins over the stored column.
   const states = await loadMerchantStates(merchants);
   const flags = await listMerchantV1Flags();
-  const cityName = new Map(listCities().map((city) => [city.id, city.name]));
+  const cityName = new Map(
+    (await listCities()).map((city) => [city.id, city.name]),
+  );
 
   const sources: CatalogMerchantSource[] = merchants.map((merchant) => ({
     id: merchant.id,

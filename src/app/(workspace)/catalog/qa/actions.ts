@@ -104,9 +104,8 @@ export async function approveProductImage(
   const { session, error } = await requireCapability(APPROVE_CAPABILITIES);
   if (!session) return { ok: false, error: error ?? undefined };
 
-  return toResult(() =>
-    approveImage(repository, productId, effectiveCityIds(session)),
-  );
+  const cityIds = await effectiveCityIds(session);
+  return toResult(() => approveImage(repository, productId, cityIds));
 }
 
 /** Replaces the image with an enhanced version and completes the review. */
@@ -121,12 +120,8 @@ export async function uploadEnhancedProductImage(
     return { ok: false, error: "ملف الصورة غير صالح." };
   }
 
+  const cityIds = await effectiveCityIds(session);
   return toResult(() =>
-    uploadEnhancedImage(
-      repository,
-      productId,
-      imageDataUrl,
-      effectiveCityIds(session),
-    ),
+    uploadEnhancedImage(repository, productId, imageDataUrl, cityIds),
   );
 }

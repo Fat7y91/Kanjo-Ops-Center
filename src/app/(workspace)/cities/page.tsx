@@ -27,7 +27,7 @@ export default async function CitiesPage() {
         }
       />
       <CitiesClient
-        initialCities={scopedCities(session)}
+        initialCities={await scopedCities(session)}
         viewerName={session.user.name}
       />
     </>

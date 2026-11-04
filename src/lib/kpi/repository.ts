@@ -33,7 +33,9 @@ function isFieldAgent(user: AppUser): boolean {
 }
 
 export async function loadKpiDataset(month: string): Promise<KpiDataset> {
-  const cities = new Map(listCities().map((city) => [city.id, city]));
+  const cities = new Map(
+    (await listCities()).map((city) => [city.id, city]),
+  );
   const users = (await listUsers()).filter(isFieldAgent);
 
   const agents: KpiAgent[] = users.flatMap((user) => {

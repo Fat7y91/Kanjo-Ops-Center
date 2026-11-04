@@ -16,9 +16,11 @@ import {
   type MerchantStateRollup,
 } from "@/lib/field-ops/merchant-state";
 
-import { clone, getStore } from "./core";
+import { clone } from "./core";
 import { getMerchantById } from "./merchants";
 import { loadVisitReports } from "./report-source";
+import { listStateOverrideRows } from "../merchant-state-repository";
+import { listFollowUpRows } from "../task-repository";
 
 export function calculateCommission(
   monthlyValue: number,
@@ -78,10 +80,13 @@ export async function merchantTimeline(
   merchantId: string,
   preloaded?: VisitReport[],
 ): Promise<MerchantTimelineEntry[]> {
-  const store = getStore();
   const merchant = await getMerchantById(merchantId);
   const entries: MerchantTimelineEntry[] = [];
-  const reports = preloaded ?? (await loadVisitReports());
+  const [reports, overrides, followUps] = await Promise.all([
+    preloaded ?? loadVisitReports(),
+    listStateOverrideRows(merchantId),
+    listFollowUpRows(merchantId),
+  ]);
 
   for (const report of reports) {
     if (report.merchantId === merchantId) {
@@ -92,14 +97,12 @@ export async function merchantTimeline(
       });
     }
   }
-  for (const override of store.overrides) {
-    if (override.merchantId === merchantId) {
-      entries.push({
-        kind: "override",
-        at: override.createdAt,
-        override: clone(override),
-      });
-    }
+  for (const override of overrides) {
+    entries.push({
+      kind: "override",
+      at: override.createdAt,
+      override: clone(override),
+    });
   }
   for (const document of merchant?.documents ?? []) {
     entries.push({
@@ -108,14 +111,12 @@ export async function merchantTimeline(
       document: clone(document),
     });
   }
-  for (const followUp of store.followUps ?? []) {
-    if (followUp.merchantId === merchantId) {
-      entries.push({
-        kind: "follow_up",
-        at: followUp.createdAt,
-        followUp: clone(followUp),
-      });
-    }
+  for (const followUp of followUps) {
+    entries.push({
+      kind: "follow_up",
+      at: followUp.createdAt,
+      followUp: clone(followUp),
+    });
   }
 
   return entries.sort((left, right) => right.at.localeCompare(left.at));
@@ -144,9 +145,13 @@ export async function merchantCrmSummary(
   preloaded?: VisitReport[],
   rollup?: MerchantStateRollup | null,
 ): Promise<MerchantCrmSummary> {
-  const store = getStore();
   const merchant = await getMerchantById(merchantId);
-  const visits = (preloaded ?? (await loadVisitReports())).filter(
+  const [allVisits, overrides, followUps] = await Promise.all([
+    preloaded ?? loadVisitReports(),
+    listStateOverrideRows(merchantId),
+    listFollowUpRows(merchantId),
+  ]);
+  const visits = allVisits.filter(
     (report) => report.merchantId === merchantId,
   );
   const totalDuration = visits.reduce(
@@ -160,10 +165,8 @@ export async function merchantCrmSummary(
   const sortedVisits = [...visits].sort((left, right) =>
     visitStateAt(right).localeCompare(visitStateAt(left)),
   );
-  const openFollowUps = (store.followUps ?? [])
-    .filter(
-      (task) => task.merchantId === merchantId && task.status === "scheduled",
-    )
+  const openFollowUps = followUps
+    .filter((task) => task.status === "scheduled")
     .sort((left, right) => left.dueAt.localeCompare(right.dueAt));
 
   const stateEvents: MerchantStateEvent[] = [
@@ -172,8 +175,7 @@ export async function merchantCrmSummary(
       at: visitStateAt(report),
       source: "visit" as const,
     })),
-    ...store.overrides
-      .filter((override) => override.merchantId === merchantId)
+    ...overrides
       .map((override) => ({
         state: override.toState,
         at: override.createdAt,
@@ -181,10 +183,10 @@ export async function merchantCrmSummary(
       })),
   ];
 
-  // The rollup is authoritative for merchants the database knows: it carries
-  // decisions recorded by other isolates, which the process-local override list
-  // cannot see. It joins the same ranking rather than replacing it, so the
-  // stored column still wins only when it is genuinely the newest signal.
+  // The rollup is authoritative for merchants the database knows: it resolves
+  // the three signals in SQL. It joins the same ranking rather than replacing
+  // it, so the stored column still wins only when it is genuinely the newest
+  // signal.
   const rollupEvent = stateEventFromRollup(rollup);
   if (rollupEvent) stateEvents.push(rollupEvent);
 

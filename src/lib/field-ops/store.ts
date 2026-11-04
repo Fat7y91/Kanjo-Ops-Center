@@ -1,9 +1,4 @@
-export {
-  FieldOpsError,
-  getFieldOpsRevision,
-  type Actor,
-  type FieldOpsStore,
-} from "./store/core";
+export { FieldOpsError, type Actor } from "./store/core";
 
 export {
   addMerchantDocument,

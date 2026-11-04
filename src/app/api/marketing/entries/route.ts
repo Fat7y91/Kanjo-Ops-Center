@@ -24,10 +24,14 @@ export async function GET(request: Request) {
 
   const campaignId = new URL(request.url).searchParams.get("campaignId");
 
-  return NextResponse.json(
-    { entries: listMarketingEntries(campaignId || undefined) },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  try {
+    return NextResponse.json(
+      { entries: await listMarketingEntries(campaignId || undefined) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 export async function POST(request: Request) {
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
   if (!session) return response;
 
   try {
-    const entry = recordMarketingEntry(
+    const entry = await recordMarketingEntry(
       (await readJson(request)) as MarketingEntryInput,
       session.user.id,
     );

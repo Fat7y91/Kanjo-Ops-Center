@@ -34,14 +34,20 @@ export default async function MerchantProfilePage({
   // Merchant profiles follow the merchant directory's scope: any city the
   // viewer can operate in, not just cities they have the `view_active_cities`
   // dashboard permission for.
-  if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {
+  if (!merchant || !(await effectiveCityIds(session)).includes(merchant.cityId)) {
     notFound();
   }
 
-  const city = getCityById(merchant.cityId);
   const permissions = session.permissions;
-  const reports = await listVisitReports(merchant.id);
-  const v1Profile = await getMerchantV1Profile(merchant.id);
+  const [city, reports, v1Profile, overrides, allTasks, followUps] =
+    await Promise.all([
+      getCityById(merchant.cityId),
+      listVisitReports(merchant.id),
+      getMerchantV1Profile(merchant.id),
+      listStateOverrides(merchant.id),
+      listTasks(),
+      listFollowUpTasks(merchant.id),
+    ]);
   // State decisions recorded by another worker only exist in the rollup; the
   // profile is the screen managers trust, so it reads the same source as the
   // directory badge.
@@ -60,9 +66,9 @@ export default async function MerchantProfilePage({
         cityName={city?.name ?? "مدينة غير محددة"}
         reports={reports}
         v1Profile={v1Profile}
-        overrides={listStateOverrides(merchant.id)}
-        tasks={listTasks().filter((task) => task.merchantId === merchant.id)}
-        followUps={listFollowUpTasks(merchant.id)}
+        overrides={overrides}
+        tasks={allTasks.filter((task) => task.merchantId === merchant.id)}
+        followUps={followUps}
         timeline={await merchantTimeline(merchant.id, reports)}
         summary={await merchantCrmSummary(merchant.id, reports, rollup)}
         visitCount={rollup?.visitCount ?? reports.length}

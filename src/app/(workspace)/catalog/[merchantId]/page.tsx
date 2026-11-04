@@ -39,7 +39,7 @@ export default async function MerchantCatalogPage({
   const session = await requireModuleAccess("/catalog");
   const { merchantId } = await params;
   const merchant = await getMerchantById(merchantId);
-  if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {
+  if (!merchant || !(await effectiveCityIds(session)).includes(merchant.cityId)) {
     notFound();
   }
 
@@ -47,7 +47,7 @@ export default async function MerchantCatalogPage({
   const contractState =
     states.get(merchant.id)?.state ?? merchant.contractState;
   const meta = CONTRACT_STATE_META[contractState];
-  const city = getCityById(merchant.cityId);
+  const city = await getCityById(merchant.cityId);
   const eligible = isCatalogEligibleContract(contractState);
 
   // The picker stays in the form, so the merchant must be listed even when its

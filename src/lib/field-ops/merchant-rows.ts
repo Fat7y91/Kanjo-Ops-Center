@@ -29,9 +29,14 @@ const currency = new Intl.NumberFormat("ar-EG-u-nu-latn", {
 export async function buildMerchantRows(
   session: ActiveSession,
 ): Promise<MerchantRow[]> {
-  const cityMap = new Map(listCities().map((city) => [city.id, city]));
-  const allowedCities = new Set(effectiveCityIds(session));
-  const scoped = (await listMerchants()).filter((merchant) =>
+  const [cities, allowedCityIds, merchants] = await Promise.all([
+    listCities(),
+    effectiveCityIds(session),
+    listMerchants(),
+  ]);
+  const cityMap = new Map(cities.map((city) => [city.id, city]));
+  const allowedCities = new Set(allowedCityIds);
+  const scoped = merchants.filter((merchant) =>
     allowedCities.has(merchant.cityId),
   );
 

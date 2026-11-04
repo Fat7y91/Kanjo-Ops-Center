@@ -38,7 +38,7 @@ export async function GET(
 
   try {
     const { id } = await context.params;
-    if (!getCityById(id)) {
+    if (!(await getCityById(id))) {
       throw new RbacDeniedError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
     }
     if (!isGlobalSession(session) && !session.accessibleCities.includes(id)) {
@@ -69,7 +69,7 @@ export async function POST(
 
   try {
     const { id } = await context.params;
-    if (!getCityById(id)) {
+    if (!(await getCityById(id))) {
       throw new RbacDeniedError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
     }
     if (!isGlobalSession(session) && !session.accessibleCities.includes(id)) {

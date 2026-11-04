@@ -29,8 +29,12 @@ export async function GET() {
   const { session, response } = await authorizeAny(MERCHANT_READ_CAPABILITIES);
   if (!session) return response;
 
-  const allowed = new Set(effectiveCityIds(session));
-  const cityMap = new Map(listCities().map((city) => [city.id, city]));
+  const [allowedCityIds, cities] = await Promise.all([
+    effectiveCityIds(session),
+    listCities(),
+  ]);
+  const allowed = new Set(allowedCityIds);
+  const cityMap = new Map(cities.map((city) => [city.id, city]));
 
   const scoped = (await listMerchants()).filter((merchant) =>
     allowed.has(merchant.cityId),
@@ -69,8 +73,8 @@ export async function POST(request: Request) {
     const input = merchantCreateSchema.parse(await readJson(request));
 
     if (
-      !effectiveCityIds(session).includes(input.cityId) ||
-      !listCities().some((city) => city.id === input.cityId)
+      !(await effectiveCityIds(session)).includes(input.cityId) ||
+      !(await listCities()).some((city) => city.id === input.cityId)
     ) {
       return NextResponse.json(
         { error: "هذه المدينة خارج نطاق مدنك.", code: "CITY_OUT_OF_SCOPE" },

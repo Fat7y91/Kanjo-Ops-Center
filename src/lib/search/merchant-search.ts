@@ -23,7 +23,7 @@ export async function searchMerchants(
   if (trimmed.length < 1) return [];
 
   const cities = new Map<string, City>(
-    listCities().map((city) => [city.id, city]),
+    (await listCities()).map((city) => [city.id, city]),
   );
 
   const allowedCities = new Set(accessibleCityIds);

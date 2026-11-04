@@ -28,7 +28,7 @@ graph TD
 | 2 — Controller | Auth/authorization, input validation (Zod), status codes, shaping responses. No business rules. | `src/app/api/**/route.ts`, `src/lib/auth/api.ts` | T3 |
 | 3 — Business | Domain rules, invariants, calculations. Zero DB or UI imports. | `src/lib/<domain>/*.ts` | T4 (types only ideally) |
 | 4 — Repository | Only layer that reads/writes a database. Doc mapping and queries. | `src/lib/<domain>/repository.ts`, `src/lib/<domain>/store/**` | T5 |
-| 5 — Database | Hybrid: Supabase (PostgreSQL) for Financial/ERP, Firebase for Operations. Connecting clients live in `src/lib/db/`. | external + `src/lib/**/data/seed.ts` | — |
+| 5 — Database | Supabase (PostgreSQL) for all durable domains. Connecting clients live in `src/lib/db/`. | external | — |
 
 ### Tier rules in practice
 
@@ -402,10 +402,25 @@ tolerates a browser that forbids `BroadcastChannel`.
 - Business: `src/lib/field-ops/` — `offline-queue.ts`, `types.ts`,
   `firestore.ts` (doc mappers).
 - Repository: `src/lib/field-ops/store.ts` is a barrel over
-  `store/core.ts` (store accessor, ids, clock) and `store/operations.ts`.
-  The concrete repositories are `store/{cities,merchants,tasks,visits,transfers,
-  edits,documents,state,crm,dates}.ts`; `store/seed.ts` seeds the domains that
-  are still process-local (cities, tasks, reports).
+  `store/core.ts` (error type, ids, clock) and `store/operations.ts`. The
+  concrete modules are `store/{cities,merchants,tasks,visits,transfers,edits,
+  documents,state,crm,dates}.ts`, all async and all backed by SQL. There is no
+  process-local store and no seed: a Worker isolate is not a database.
+- Durable field-ops catalogue: `20261110000000_field_ops_catalogue.sql` creates
+  `app.cities`, `app.field_tasks`, `app.follow_up_tasks`,
+  `app.transfer_requests` and `app.edit_requests`. Tier 4 repositories
+  (`city-repository.ts`, `task-repository.ts`, `request-repository.ts`) own the
+  column names; the store modules enforce the domain rules. Reads degrade to an
+  empty list when the migration is not deployed; writes fail with a typed 503
+  rather than being acknowledged and dropped.
+  - Cities are text-id rows (`city-cairo`); managers are
+    `app.user_city_scope` grants, not a column, so there is one source of truth
+    for who manages a city. `city-scope-query.ts` is now async
+    (`effectiveCityIds`, `scopedCities`, `canAccessCity`) because the id list is
+    a database read.
+  - Transfers and edit requests carry a partial unique index: one `pending`
+    row per `(merchant, requester)`, so a double submit cannot create a second
+    request a manager must reject twice.
 - Merchant directory (SSOT): `src/lib/field-ops/merchant-repository.ts` is the
   only module that knows `app.merchants` (migration `20261106000000`).
   `store/merchants.ts` is the async domain facade (`listMerchants`,
@@ -418,8 +433,8 @@ tolerates a browser that forbids `BroadcastChannel`.
 - Durable reports: `src/lib/field-ops/reports-repository.ts` is the only module
   that knows `app.visit_reports` (migration `20261102000005`). Writes go there
   before the route acknowledges; reads go through
-  `store/report-source.ts`, which prefers the table and falls back to the
-  in-memory seed only while the migration is not deployed. Report readers
+  `store/report-source.ts`, which reads the table and returns an empty timeline
+  when the migration is not deployed. Report readers
   (`listVisitReports`, `visitCountFor`, `merchantTimeline`,
   `merchantCrmSummary`, `buildBoard`, payroll, BI) are async; the merchant page
   reads once and passes the rows into the timeline/summary. Rows are
@@ -456,9 +471,9 @@ tolerates a browser that forbids `BroadcastChannel`.
   `.../profile` route authorises each supplied field against its own capability
   (`edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`,
   `export_merchant_data`), and `.../export` streams a SpreadsheetML `.xls`.
-- Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`, now holding
-  only the domains that have not been migrated (cities, tasks, transfers, edit
-  requests). Merchants and catalog products live in Postgres.
+- Every field-ops domain now lives in Postgres (cities, tasks, follow-ups,
+  visits, merchants, transfers, edit requests, state overrides). No
+  `__kanjoV2FieldOpsStore` global remains.
 - Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
   is authoritative; `components/field-ops/visit/validate-visit-form.ts`
   mirrors it client-side and must return the failing field key.
@@ -527,8 +542,11 @@ tolerates a browser that forbids `BroadcastChannel`.
 - UI: `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` (764 — over
   limit).
 - Controller: `src/app/api/taxonomy/**` (entries, requests, approve, reject).
-- Repository: `src/lib/taxonomy/store.ts` (707 — over limit);
-  `src/lib/taxonomy/data.generated.ts` (2219 — allowed, generated).
+- Repository: `src/lib/taxonomy/store.ts` (in-memory reference catalogue, over
+  the 300-line limit — backlog). `data.generated.ts` (2219) is the generated
+  vendor-type/category/variant catalogue and is the allowed generated-data
+  exception. The review queue starts empty: a pending request is a real
+  operator submission, never seeded demo content.
 - Page opens on any capability in the `/catalog/taxonomy` nav module
   (`manage_categories`, `review_add_requests`, `manage_merchant_types`,
   `manage_variables`), but each tab and mutation maps to its own grant:
@@ -542,8 +560,9 @@ tolerates a browser that forbids `BroadcastChannel`.
 
 ### BI / Overview (Tier 1 + 3)
 - UI: `src/app/(workspace)/overview/`, `src/components/` charts.
-- Business: `src/lib/bi/` — `dataset.ts` (190), `select.ts`, `tables.ts`,
-  `drill.ts`, `export.ts`, `format.ts`, `mock.ts`, `types.ts`.
+- Business: `src/lib/bi/` — `dataset.ts`, `select.ts`, `tables.ts`,
+  `drill.ts`, `export.ts`, `format.ts`, `live-facts.ts`, `types.ts`. There is no
+  mock dataset: every fact is a live SQL read.
 - Overview header is sticky: `ExecutiveDashboard` accepts an optional `header`
   node and renders it inside `.bi-sticky-head`, pinned at
   `top: var(--topbar-height)`. `--topbar-height` is a token (72px), overridden
@@ -635,9 +654,10 @@ tolerates a browser that forbids `BroadcastChannel`.
   `components/accounts/{accounts-view,account-card,account-form,ledger-entry-form}.tsx`.
 - Business: `src/lib/accounts/ledger.ts` — `summarizeAccount`, `summarizeAll`,
   `totalByCurrency`. Balance is always `Σdeposits − Σexpenses`, never stored.
-- Data: `src/lib/accounts/{store,seed,types,format}.ts`. `store.ts` is the
-  process-local Tier 4 seam; `20261030000100_accounts_ledger.sql` is its SQL
-  mirror. Per-currency totals: EGP and SAR never sum together.
+- Data: `src/lib/accounts/{store,types,format}.ts` plus `repository.ts` (Tier 4)
+  over `app.bank_accounts` / `app.ledger_entries` (`20261030000100`). `store.ts`
+  is the async Tier 3 facade. Per-currency totals: EGP and SAR never sum
+  together.
 - App/Edge: `GET|POST /api/accounts` and `POST /api/accounts/ledger`.
   `manage_accounts` implies read, so a manager can resolve the account it
   writes to.
@@ -717,7 +737,7 @@ tolerates a browser that forbids `BroadcastChannel`.
   `components/payroll/{payroll-view,payroll-table}.tsx`.
 - Business: `src/lib/payroll/engine.ts` — `tieredCommission` (cumulative bands,
   sorted ascending), `computePayroll`, `finalize`. All pure.
-- Data: `src/lib/payroll/{store,seed,types}.ts`. Contribution is derived from
+- Data: `src/lib/payroll/{store,types}.ts` (+ `repository.ts`, `profiles-repository.ts`). Contribution is derived from
   live visit reports, not stored on the payroll profile, so payroll can never
   disagree with the commission dashboard.
 - Contributions: `src/lib/payroll/repository.ts` reads
@@ -896,7 +916,6 @@ The tiers exist conceptually; these are the concrete gaps to close.
    - `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` — 764
    - `src/components/field-ops/cities-client.tsx` — 760
    - `src/lib/taxonomy/store.ts` — 707
-   - `src/lib/field-ops/store/seed.ts` — 565
    - `src/components/field-ops/request-modals.tsx` — 506
    - `src/lib/field-ops/types.ts` — 449
    - `src/lib/geo/egypt.ts` — 426

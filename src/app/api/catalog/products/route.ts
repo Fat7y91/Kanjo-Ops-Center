@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   const merchantId = new URL(request.url).searchParams.get("merchantId");
 
   // Same city scope as the page: the client reload must never widen visibility.
-  const allowed = new Set(effectiveCityIds(session));
+  const allowed = new Set(await effectiveCityIds(session));
   const merchantCity = new Map(
     (await listMerchants()).map((merchant) => [merchant.id, merchant.cityId]),
   );

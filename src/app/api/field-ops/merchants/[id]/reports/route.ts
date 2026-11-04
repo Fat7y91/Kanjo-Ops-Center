@@ -35,7 +35,7 @@ export async function POST(
      * it must not block an unplanned, offline-capable visit.
      */
     const canManageTasks = session.permissions.includes("assign_tasks");
-    const inScope = effectiveCityIds(session).includes(merchant.cityId);
+    const inScope = (await effectiveCityIds(session)).includes(merchant.cityId);
     if (!canManageTasks && !inScope) {
       throw new FieldOpsError(
         "OUTSIDE_CITY_SCOPE",
@@ -75,7 +75,14 @@ export async function POST(
     });
 
     if (!result.duplicate) {
-      await persistVisitReport(result.report, actor.id);
+      const persisted = await persistVisitReport(result.report, actor.id);
+      if (persisted === "unavailable") {
+        throw new FieldOpsError(
+          "REPORTS_UNAVAILABLE",
+          "تعذر حفظ تقرير الزيارة في قاعدة البيانات.",
+          503,
+        );
+      }
     }
 
     return NextResponse.json(

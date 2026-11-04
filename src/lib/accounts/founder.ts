@@ -39,7 +39,11 @@ export type FounderFinancials = {
 export async function buildFounderFinancials(
   payslips?: Payslip[],
 ): Promise<FounderFinancials> {
-  const totals = totalByCurrency(listBankAccounts(), listLedgerEntries());
+  const [bankAccounts, ledgerEntries] = await Promise.all([
+    listBankAccounts(),
+    listLedgerEntries(),
+  ]);
+  const totals = totalByCurrency(bankAccounts, ledgerEntries);
 
   const pending: Record<"EGP" | "SAR", number> = { EGP: 0, SAR: 0 };
   for (const slip of payslips ?? (await buildPayslips())) {

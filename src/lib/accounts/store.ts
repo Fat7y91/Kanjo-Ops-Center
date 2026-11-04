@@ -1,5 +1,4 @@
 import {
-  ACCOUNT_COUNTRY_META,
   BANK_ACCOUNT_INPUT,
   LEDGER_ENTRY_INPUT,
   type BankAccount,
@@ -7,61 +6,51 @@ import {
   type LedgerEntry,
   type LedgerEntryInput,
 } from "./types";
-import { seedBankAccounts, seedLedgerEntries } from "./seed";
+import { AccountsError } from "./errors";
+import {
+  findBankAccountRow,
+  insertBankAccount,
+  insertLedgerEntry,
+  isAccountsDatabaseConfigured,
+  listBankAccountRows,
+  listLedgerRows,
+} from "./repository";
 
-export class AccountsError extends Error {
-  readonly code: string;
-  readonly status: number;
+export { AccountsError };
 
-  constructor(code: string, message: string, status = 400) {
-    super(message);
-    this.name = "AccountsError";
-    this.code = code;
-    this.status = status;
-  }
+/**
+ * Tier 3 treasury rules over `app.bank_accounts` / `app.ledger_entries`.
+ *
+ * The ledger is the single source of truth and there is no seed: a deployment
+ * without a database reads empty rather than inventing balances, and a write
+ * fails loudly instead of being acknowledged and dropped. Balance is never
+ * stored — it is derived from the append-only entries by `ledger.ts`.
+ */
+
+export function isAccountsConfigured(): boolean {
+  return isAccountsDatabaseConfigured();
 }
 
-type AccountsStore = {
-  accounts: BankAccount[];
-  ledger: LedgerEntry[];
-  revision: number;
-};
-
-const globalStore = globalThis as typeof globalThis & {
-  __kanjoV2AccountsStore?: AccountsStore;
-};
-
-function getStore(): AccountsStore {
-  if (!globalStore.__kanjoV2AccountsStore) {
-    globalStore.__kanjoV2AccountsStore = {
-      accounts: seedBankAccounts(),
-      ledger: seedLedgerEntries(),
-      revision: 1,
-    };
-  }
-  return globalStore.__kanjoV2AccountsStore;
+export async function listBankAccounts(): Promise<BankAccount[]> {
+  return listBankAccountRows();
 }
 
-export function accountsRevision(): number {
-  return getStore().revision;
+export async function listLedgerEntries(
+  accountId?: string,
+): Promise<LedgerEntry[]> {
+  return listLedgerRows(accountId);
 }
 
-export function listBankAccounts(): BankAccount[] {
-  return structuredClone(getStore().accounts);
+export async function findBankAccount(
+  id: string,
+): Promise<BankAccount | null> {
+  return findBankAccountRow(id);
 }
 
-export function listLedgerEntries(accountId?: string): LedgerEntry[] {
-  const entries = structuredClone(getStore().ledger);
-  return accountId
-    ? entries.filter((entry) => entry.accountId === accountId)
-    : entries;
-}
-
-export function findBankAccount(id: string): BankAccount | null {
-  return getStore().accounts.find((account) => account.id === id) ?? null;
-}
-
-export function createBankAccount(input: BankAccountInput): BankAccount {
+export async function createBankAccount(
+  input: BankAccountInput,
+  createdBy: string | null,
+): Promise<BankAccount> {
   const parsed = BANK_ACCOUNT_INPUT.safeParse(input);
   if (!parsed.success) {
     throw new AccountsError(
@@ -69,29 +58,17 @@ export function createBankAccount(input: BankAccountInput): BankAccount {
       "بيانات الحساب البنكي غير مكتملة أو غير صالحة.",
     );
   }
-  const store = getStore();
-  const duplicate = store.accounts.some(
-    (account) => account.iban.replace(/\s/g, "") === parsed.data.iban.replace(/\s/g, ""),
+  const accounts = await listBankAccountRows();
+  const duplicate = accounts.some(
+    (account) =>
+      account.iban.replace(/\s/g, "").toUpperCase() ===
+      parsed.data.iban.replace(/\s/g, "").toUpperCase(),
   );
   if (duplicate) {
     throw new AccountsError("DUPLICATE_IBAN", "رقم الآيبان مسجّل مسبقاً.");
   }
 
-  const account: BankAccount = {
-    id: `bank-${crypto.randomUUID().slice(0, 8)}`,
-    bankName: parsed.data.bankName,
-    accountName: parsed.data.accountName,
-    accountNumber: parsed.data.accountNumber,
-    iban: parsed.data.iban,
-    country: parsed.data.country,
-    currency: ACCOUNT_COUNTRY_META[parsed.data.country].currency,
-    cityId: null,
-    active: true,
-    createdAt: new Date().toISOString(),
-  };
-  store.accounts = [account, ...store.accounts];
-  store.revision += 1;
-  return structuredClone(account);
+  return insertBankAccount(parsed.data, createdBy);
 }
 
 /**
@@ -100,10 +77,10 @@ export function createBankAccount(input: BankAccountInput): BankAccount {
  * Amounts are stored in the account currency, not the caller's, so a ledger can
  * never mix denominations. There is no update or delete path by design.
  */
-export function appendLedgerEntry(
+export async function appendLedgerEntry(
   input: LedgerEntryInput,
-  recordedBy: string,
-): LedgerEntry {
+  recordedBy: string | null,
+): Promise<LedgerEntry> {
   const parsed = LEDGER_ENTRY_INPUT.safeParse(input);
   if (!parsed.success) {
     throw new AccountsError(
@@ -111,24 +88,10 @@ export function appendLedgerEntry(
       "بيانات الحركة المالية غير مكتملة أو غير صالحة.",
     );
   }
-  const account = findBankAccount(parsed.data.accountId);
+  const account = await findBankAccountRow(parsed.data.accountId);
   if (!account) {
     throw new AccountsError("ACCOUNT_NOT_FOUND", "الحساب البنكي غير موجود.", 404);
   }
 
-  const store = getStore();
-  const entry: LedgerEntry = {
-    id: `led-${crypto.randomUUID().slice(0, 8)}`,
-    accountId: account.id,
-    kind: parsed.data.kind,
-    label: parsed.data.label,
-    amount: parsed.data.amount,
-    currency: account.currency,
-    occurredAt: parsed.data.occurredAt,
-    recordedBy,
-    recordedAt: new Date().toISOString(),
-  };
-  store.ledger = [...store.ledger, entry];
-  store.revision += 1;
-  return structuredClone(entry);
+  return insertLedgerEntry(account, parsed.data, recordedBy);
 }

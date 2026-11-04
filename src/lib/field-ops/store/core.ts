@@ -1,15 +1,14 @@
-import type {
-  City,
-  EditRequest,
-  FieldTask,
-  FollowUpTask,
-  StateOverride,
-  TransferRequest,
-  VisitReport,
-  ZonePoint,
-} from "@/lib/field-ops/types";
+import type { ZonePoint } from "@/lib/field-ops/types";
 
-import { seedStore } from "./seed";
+/**
+ * Small shared plumbing for the field-ops domain.
+ *
+ * Every durable collection now lives in SQL (see `20261110000000_field_ops_catalogue.sql`
+ * and `20261102000005_visit_reports.sql`). What remains here is the error type,
+ * the actor shape, and the small pure helpers the repositories and stores both
+ * use. There is no process-local store any more: a Worker isolate is not a
+ * database, and pretending otherwise is what made a city disappear on refresh.
+ */
 
 export class FieldOpsError extends Error {
   readonly code: string;
@@ -23,25 +22,10 @@ export class FieldOpsError extends Error {
   }
 }
 
-export type FieldOpsStore = {
-  cities: City[];
-  tasks: FieldTask[];
-  reports: VisitReport[];
-  followUps: FollowUpTask[];
-  transferRequests: TransferRequest[];
-  editRequests: EditRequest[];
-  overrides: StateOverride[];
-  revision: number;
-};
-
 export type Actor = {
   id: string;
   name: string;
   team: string;
-};
-
-const globalStore = globalThis as typeof globalThis & {
-  __kanjoV2FieldOpsStore?: FieldOpsStore;
 };
 
 export function todayIso(offsetDays = 0): string {
@@ -64,19 +48,4 @@ export function clone<T>(value: T): T {
 
 export function zone(points: Array<[number, number]>): ZonePoint[] {
   return points.map(([lat, lng]) => ({ lat, lng }));
-}
-
-export function getStore(): FieldOpsStore {
-  if (!globalStore.__kanjoV2FieldOpsStore) {
-    globalStore.__kanjoV2FieldOpsStore = seedStore();
-  }
-  return globalStore.__kanjoV2FieldOpsStore;
-}
-
-export function bump(): void {
-  getStore().revision += 1;
-}
-
-export function getFieldOpsRevision(): number {
-  return getStore().revision;
 }

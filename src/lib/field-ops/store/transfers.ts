@@ -1,21 +1,37 @@
 import type { TransferRequest } from "@/lib/field-ops/types";
 
-import {
-  FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
-  type Actor,
-} from "./core";
+import { FieldOpsError, id, isoNow, type Actor } from "./core";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
+import { reassignTasksForMerchant } from "../task-repository";
+import {
+  decideTransferRow,
+  getTransferRow,
+  insertTransfer,
+  isRequestsDatabaseConfigured,
+  listTransferRows,
+} from "../request-repository";
 
-export function listTransferRequests(): TransferRequest[] {
-  return clone(getStore().transferRequests).sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt),
-  );
+/**
+ * Merchant ownership transfer requests, backed by `app.transfer_requests`.
+ *
+ * A transfer is a governance record: the rep asked, a manager decided. Keeping
+ * it in a process-local array meant the proof of the request could disappear on
+ * the next request while the merchant's team had already changed.
+ */
+
+function requireDatabase(): void {
+  if (!isRequestsDatabaseConfigured()) {
+    throw new FieldOpsError(
+      "REQUESTS_UNAVAILABLE",
+      "قاعدة بيانات الطلبات غير متصلة.",
+      503,
+    );
+  }
+}
+
+export async function listTransferRequests(): Promise<TransferRequest[]> {
+  return listTransferRows();
 }
 
 export async function createTransferRequest(
@@ -23,7 +39,7 @@ export async function createTransferRequest(
   justification: string,
   actor: Actor,
 ): Promise<TransferRequest> {
-  const store = getStore();
+  requireDatabase();
   const merchant = await requireMerchant(merchantId);
 
   if (!merchant.team) {
@@ -34,20 +50,16 @@ export async function createTransferRequest(
     );
   }
   if (merchant.team === actor.team) {
-    throw new FieldOpsError(
-      "SAME_TEAM",
-      "هذا التاجر تابع لفريقك بالفعل.",
-      400,
-    );
+    throw new FieldOpsError("SAME_TEAM", "هذا التاجر تابع لفريقك بالفعل.", 400);
   }
-  if (
-    store.transferRequests.some(
-      (request) =>
-        request.merchantId === merchantId &&
-        request.requestedBy === actor.id &&
-        request.status === "pending",
-    )
-  ) {
+
+  const open = (await listTransferRows()).find(
+    (request) =>
+      request.merchantId === merchantId &&
+      request.requestedBy === actor.id &&
+      request.status === "pending",
+  );
+  if (open) {
     throw new FieldOpsError(
       "TRANSFER_PENDING",
       "يوجد طلب نقل لهذا التاجر قيد المراجعة بالفعل.",
@@ -72,9 +84,7 @@ export async function createTransferRequest(
     reviewNote: "",
   };
 
-  store.transferRequests.push(request);
-  bump();
-  return clone(request);
+  return insertTransfer(request);
 }
 
 export async function decideTransferRequest(
@@ -83,10 +93,8 @@ export async function decideTransferRequest(
   actor: Actor,
   note: string,
 ): Promise<TransferRequest> {
-  const store = getStore();
-  const request = store.transferRequests.find(
-    (candidate) => candidate.id === requestId,
-  );
+  requireDatabase();
+  const request = await getTransferRow(requestId);
   if (!request) {
     throw new FieldOpsError("TRANSFER_NOT_FOUND", "الطلب غير موجود.", 404);
   }
@@ -98,21 +106,21 @@ export async function decideTransferRequest(
     );
   }
 
-  request.status = decision === "approve" ? "approved" : "rejected";
-  request.reviewedBy = actor.id;
-  request.reviewedByName = actor.name;
-  request.reviewedAt = isoNow();
-  request.reviewNote = note.trim();
+  const saved = await decideTransferRow(requestId, {
+    status: decision === "approve" ? "approved" : "rejected",
+    reviewedBy: actor.id,
+    reviewedByName: actor.name,
+    reviewedAt: isoNow(),
+    reviewNote: note.trim(),
+  });
+  if (!saved) {
+    throw new FieldOpsError("TRANSFER_NOT_FOUND", "الطلب غير موجود.", 404);
+  }
 
   if (decision === "approve") {
     await updateMerchantRow(request.merchantId, { team: request.toTeam });
-    store.tasks.forEach((task) => {
-      if (task.merchantId === request.merchantId && task.status === "scheduled") {
-        task.team = request.toTeam;
-      }
-    });
+    await reassignTasksForMerchant(request.merchantId, request.toTeam);
   }
 
-  bump();
-  return clone(request);
+  return saved;
 }

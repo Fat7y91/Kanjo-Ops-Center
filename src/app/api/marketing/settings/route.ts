@@ -14,10 +14,14 @@ export async function GET() {
   const { session, response } = await authorize("manage_platform_settings");
   if (!session) return response;
 
-  return NextResponse.json(
-    { settings: listPlatformSettings() },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  try {
+    return NextResponse.json(
+      { settings: await listPlatformSettings() },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 /**
@@ -30,8 +34,9 @@ export async function PUT(request: Request) {
   if (!session) return response;
 
   try {
-    const settings = updatePlatformSettings(
+    const settings = await updatePlatformSettings(
       (await readJson(request)) as PlatformSettingsInput,
+      session.user.id,
     );
     return NextResponse.json({ settings });
   } catch (error) {

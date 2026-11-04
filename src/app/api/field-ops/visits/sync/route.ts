@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   const actor = actorFromSession(session);
   const canManageTasks = session.permissions.includes("assign_tasks");
   const canManageState = session.permissions.includes("edit_contract");
-  const cityScope = new Set(effectiveCityIds(session));
+  const cityScope = new Set(await effectiveCityIds(session));
 
   const results: SyncResult[] = [];
 
@@ -134,7 +134,14 @@ export async function POST(request: Request) {
         canManageState,
       });
       if (!created.duplicate) {
-        await persistVisitReport(created.report, actor.id);
+        const persisted = await persistVisitReport(created.report, actor.id);
+        if (persisted === "unavailable") {
+          throw new FieldOpsError(
+            "REPORTS_UNAVAILABLE",
+            "تعذر حفظ تقرير الزيارة في قاعدة البيانات.",
+            503,
+          );
+        }
       }
       results.push({
         clientVisitId,

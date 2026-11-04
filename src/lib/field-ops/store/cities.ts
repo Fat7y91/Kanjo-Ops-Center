@@ -1,8 +1,6 @@
 import { normalizeSearchText } from "@/lib/search/normalize";
 import type { City } from "@/lib/field-ops/types";
-import {
-  zoneToBoundary,
-} from "@/lib/field-ops/types";
+import { zoneToBoundary } from "@/lib/field-ops/types";
 import type { AppUser } from "@/lib/rbac/types";
 import {
   addUserCityScope,
@@ -15,50 +13,74 @@ import type { CityCreateInput } from "@/lib/schemas/field-ops";
 
 import {
   FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
   type Actor,
 } from "./core";
+import {
+  findCityByName,
+  getCityRow,
+  insertCity,
+  isCitiesDatabaseConfigured,
+  listCityRows,
+  updateCityRow,
+} from "../city-repository";
 
-export function listCities(): City[] {
-  return clone(getStore().cities).sort((left, right) =>
-    left.name.localeCompare(right.name),
-  );
+/**
+ * City catalogue, backed by `app.cities`.
+ *
+ * The catalogue used to be a process-local global, so a city created in one
+ * Worker isolate disappeared on the next request and two workers disagreed
+ * about the same city. `20261110000000_field_ops_catalogue.sql` makes the table
+ * the single source of truth; this module keeps the domain rules (unique name,
+ * manager scope) and the repository owns the columns.
+ *
+ * City managers are `app.user_city_scope` grants, not a column on the city, so
+ * assigning a manager is the same write the RBAC layer performs.
+ */
+
+function requireDatabase(): void {
+  if (!isCitiesDatabaseConfigured()) {
+    throw new FieldOpsError(
+      "CITIES_UNAVAILABLE",
+      "قاعدة بيانات المدن غير متصلة.",
+      503,
+    );
+  }
 }
 
-export function getCityById(cityId: string): City | null {
-  const city = getStore().cities.find((candidate) => candidate.id === cityId);
-  return city ? clone(city) : null;
+export const listCities = memoizeRead(async (): Promise<City[]> => {
+  const rows = await listCityRows();
+  if (!rows) return [];
+  return rows.cities.sort((left, right) =>
+    left.name.localeCompare(right.name, "ar"),
+  );
+});
+
+export async function getCityById(cityId: string): Promise<City | null> {
+  return getCityRow(cityId);
+}
+
+function buildZone(input: CityCreateInput): City["zone"] {
+  return input.zone.map((point) => ({
+    lat: Number(point.lat.toFixed(6)),
+    lng: Number(point.lng.toFixed(6)),
+  }));
 }
 
 export async function createCity(
   input: CityCreateInput,
   actor: Actor,
 ): Promise<City> {
-  const store = getStore();
+  requireDatabase();
   const normalized = normalizeSearchText(input.name);
-  if (
-    store.cities.some(
-      (city) => normalizeSearchText(city.name) === normalized,
-    )
-  ) {
-    throw new FieldOpsError(
-      "CITY_EXISTS",
-      "توجد مدينة بهذا الاسم بالفعل.",
-      409,
-    );
+  const existing = await findCityByName(input.name);
+  if (existing || (await listCities()).some((city) => normalizeSearchText(city.name) === normalized)) {
+    throw new FieldOpsError("CITY_EXISTS", "توجد مدينة بهذا الاسم بالفعل.", 409);
   }
 
-  const zone = input.zone.map((point) => ({
-    lat: Number(point.lat.toFixed(6)),
-    lng: Number(point.lng.toFixed(6)),
-  }));
-
+  const zone = buildZone(input);
+  const now = new Date().toISOString();
   const city: City = {
-    id: id("city"),
+    id: `city-${crypto.randomUUID().slice(0, 8)}`,
     name: input.name.trim(),
     country: input.country.trim(),
     governorate: input.governorate.trim(),
@@ -73,64 +95,69 @@ export async function createCity(
     zone,
     boundary: zoneToBoundary(zone),
     opsManagers: [],
-    createdAt: isoNow(),
+    createdAt: now,
     createdBy: actor.id,
     createdByName: actor.name,
   };
 
-  store.cities.push(city);
-  await addUserCityScope(actor.id, city.id);
-  bump();
-  return clone(city);
+  const saved = await insertCity(city);
+  await addUserCityScope(actor.id, saved.id);
+  return { ...saved, opsManagers: [actor.id] };
 }
 
-export function updateCity(cityId: string, input: CityCreateInput): City {
-  const store = getStore();
-  const city = store.cities.find((candidate) => candidate.id === cityId);
+export async function updateCity(
+  cityId: string,
+  input: CityCreateInput,
+): Promise<City> {
+  requireDatabase();
+  const city = await getCityRow(cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
 
   const normalized = normalizeSearchText(input.name);
+  const conflict = await findCityByName(input.name);
+  if (conflict && conflict !== cityId) {
+    throw new FieldOpsError("CITY_EXISTS", "توجد مدينة أخرى بهذا الاسم.", 409);
+  }
   if (
-    store.cities.some(
+    !conflict &&
+    (await listCities()).some(
       (candidate) =>
         candidate.id !== cityId &&
         normalizeSearchText(candidate.name) === normalized,
     )
   ) {
-    throw new FieldOpsError(
-      "CITY_EXISTS",
-      "توجد مدينة أخرى بهذا الاسم.",
-      409,
-    );
+    throw new FieldOpsError("CITY_EXISTS", "توجد مدينة أخرى بهذا الاسم.", 409);
   }
 
-  const zone = input.zone.map((point) => ({
-    lat: Number(point.lat.toFixed(6)),
-    lng: Number(point.lng.toFixed(6)),
-  }));
+  const zone = buildZone(input);
+  const next: City = {
+    ...city,
+    name: input.name.trim(),
+    country: input.country.trim(),
+    governorate: input.governorate.trim(),
+    population: input.population,
+    stage: input.stage,
+    competitors: input.competitors.map((competitor) => ({
+      name: competitor.name.trim(),
+      page: competitor.page.trim(),
+      marketStrength: competitor.marketStrength,
+    })),
+    strategicNotes: input.strategicNotes.trim(),
+    zone,
+    boundary: zoneToBoundary(zone),
+  };
 
-  city.name = input.name.trim();
-  city.country = input.country.trim();
-  city.governorate = input.governorate.trim();
-  city.population = input.population;
-  city.stage = input.stage;
-  city.competitors = input.competitors.map((competitor) => ({
-    name: competitor.name.trim(),
-    page: competitor.page.trim(),
-    marketStrength: competitor.marketStrength,
-  }));
-  city.strategicNotes = input.strategicNotes.trim();
-  city.zone = zone;
-  city.boundary = zoneToBoundary(zone);
-
-  bump();
-  return clone(city);
+  const saved = await updateCityRow(cityId, next);
+  if (!saved) {
+    throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+  }
+  return { ...saved, opsManagers: city.opsManagers };
 }
 
 export async function listCityManagers(cityId: string): Promise<AppUser[]> {
-  const city = getStore().cities.find((candidate) => candidate.id === cityId);
+  const city = await getCityRow(cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
@@ -156,8 +183,8 @@ export async function assignCityManagers(
   cityId: string,
   userIds: readonly string[],
 ): Promise<City> {
-  const store = getStore();
-  const city = store.cities.find((candidate) => candidate.id === cityId);
+  requireDatabase();
+  const city = await getCityRow(cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
@@ -192,17 +219,16 @@ export async function assignCityManagers(
     next.add(user.id);
     await addUserCityScope(user.id, cityId);
   }
-  city.opsManagers = Array.from(next);
 
-  bump();
-  return clone(city);
+  return { ...city, opsManagers: Array.from(next) };
 }
 
 export async function revokeCityManager(
   cityId: string,
   userId: string,
 ): Promise<City> {
-  const city = getStore().cities.find((candidate) => candidate.id === cityId);
+  requireDatabase();
+  const city = await getCityRow(cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
@@ -215,10 +241,9 @@ export async function revokeCityManager(
     );
   }
 
-  city.opsManagers = city.opsManagers.filter(
-    (managerId) => managerId !== userId,
-  );
   await removeUserCityScope(userId, cityId);
-  bump();
-  return clone(city);
+  return {
+    ...city,
+    opsManagers: city.opsManagers.filter((managerId) => managerId !== userId),
+  };
 }

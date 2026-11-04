@@ -12,19 +12,17 @@ import {
 import type { VisitReportInput } from "@/lib/schemas/visit";
 
 import { loadMerchantState } from "../state-source";
-import {
-  FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
-  type Actor,
-} from "./core";
+import { clone, FieldOpsError, id, isoNow, type Actor } from "./core";
 import { mergeOpinions } from "./crm";
 import { loadVisitReports } from "./report-source";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
+import {
+  completeTaskRow,
+  insertFollowUp,
+  insertTask,
+  listFollowUpRows,
+} from "../task-repository";
 
 export async function listVisitReports(
   merchantId?: string,
@@ -49,13 +47,10 @@ export async function visitCountFor(merchantId: string): Promise<number> {
   return reports.filter((report) => report.merchantId === merchantId).length;
 }
 
-export function listFollowUpTasks(merchantId?: string): FollowUpTask[] {
-  const tasks = clone(getStore().followUps ?? []).sort((left, right) =>
-    right.dueAt.localeCompare(left.dueAt),
-  );
-  return merchantId
-    ? tasks.filter((task) => task.merchantId === merchantId)
-    : tasks;
+export async function listFollowUpTasks(
+  merchantId?: string,
+): Promise<FollowUpTask[]> {
+  return listFollowUpRows(merchantId);
 }
 
 export async function createVisitReport(
@@ -69,12 +64,11 @@ export async function createVisitReport(
   followUp: FollowUpTask | null;
   duplicate: boolean;
 }> {
-  const store = getStore();
   const merchant = await requireMerchant(merchantId);
 
   // Offline flush is idempotent: a retried clientVisitId must not duplicate.
-  // The durable table is checked as well as the local store, so a replay in a
-  // different isolate is recognised before the merchant state is touched.
+  // The check reads the durable table, so a replay served by a different
+  // isolate is recognised before the merchant state is touched.
   if (input.clientVisitId) {
     const known = await loadVisitReports(merchantId);
     const existing = known.find(
@@ -162,17 +156,7 @@ export async function createVisitReport(
   const recordsAgreedCommission = COMMISSION_OUTCOMES.includes(outcome);
 
   if (input.taskId) {
-    const task = store.tasks.find((candidate) => candidate.id === input.taskId);
-    if (task) {
-      if (task.merchantId !== merchant.id) {
-        throw new FieldOpsError(
-          "TASK_MISMATCH",
-          "هذه المهمة لا تتبع هذا التاجر.",
-          400,
-        );
-      }
-      task.status = "completed";
-    }
+    await completeTaskRow(input.taskId);
   }
 
   // CRM roll-up: the newest contact block wins, while opinions merge per trait
@@ -279,11 +263,12 @@ export async function createVisitReport(
       sourceReportId: report.id,
     };
     report.followUpTaskId = followUp.id;
-    store.followUps = [...(store.followUps ?? []), followUp];
+    const storedFollowUp = await insertFollowUp(followUp);
+    followUp = storedFollowUp;
 
     // A follow-up is a real board task for the whole team, not a private note.
     if (saved.team) {
-      store.tasks.push({
+      await insertTask({
         id: id("task"),
         merchantId: saved.id,
         merchantName: saved.name,
@@ -308,13 +293,10 @@ export async function createVisitReport(
     }
   }
 
-  store.reports.push(report);
-  bump();
-
   return {
-    report: clone(report),
-    merchant: clone(saved),
-    followUp: followUp ? clone(followUp) : null,
+    report,
+    merchant: saved,
+    followUp,
     duplicate: false,
   };
 }

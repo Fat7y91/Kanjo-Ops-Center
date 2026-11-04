@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   try {
     const input = (await readJson(request)) as LedgerEntryInput;
     const access = resolveTreasuryAccess(session);
-    const account = findBankAccount(input.accountId);
+    const account = await findBankAccount(input.accountId);
     if (!account) {
       return NextResponse.json(
         { error: "الحساب البنكي غير موجود." },
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: denied }, { status: 403 });
     }
 
-    const entry = appendLedgerEntry(input, session.user.id);
+    const entry = await appendLedgerEntry(input, session.user.id);
     return NextResponse.json({ entry }, { status: 201 });
   } catch (error) {
     return apiError(error);

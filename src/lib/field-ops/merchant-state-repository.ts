@@ -95,9 +95,9 @@ export function isMerchantStateDatabaseConfigured(): boolean {
  * The pre-computed state of every merchant the database knows about.
  *
  * Returns `null` when the database is not configured or the migration is not
- * deployed yet, which tells the caller to keep serving the in-memory catalogue
- * (demo deployments). A busy or failing database throws: silently substituting
- * seed data would show fabricated merchant state in production.
+ * deployed yet, which tells the caller to derive the same ranking from the live
+ * report/override tables. A busy or failing database throws: silently
+ * substituting a cached or fabricated state would misrepresent a merchant.
  */
 export async function listMerchantStateRollups(
   merchantIds?: readonly string[],
@@ -141,12 +141,69 @@ function loggedByValue(actorId: string | null): string | null {
   return actorId && UUID.test(actorId) ? actorId : null;
 }
 
+/** Columns needed to rebuild the audit record a manager wrote. */
+const OVERRIDE_COLUMNS =
+  "id,merchant_id,merchant_name,from_state,to_state,actor_id,actor_name,note,created_at";
+
+type OverrideRow = {
+  id: string;
+  merchant_id: string;
+  merchant_name: string;
+  from_state: ContractState;
+  to_state: ContractState;
+  actor_id: string;
+  actor_name: string;
+  note: string;
+  created_at: string;
+};
+
+function toOverride(row: OverrideRow): StateOverride {
+  return {
+    id: row.id,
+    merchantId: row.merchant_id,
+    merchantName: row.merchant_name,
+    fromState: row.from_state,
+    toState: row.to_state,
+    actorId: row.actor_id,
+    actorName: row.actor_name,
+    note: row.note,
+    createdAt: iso(row.created_at) ?? row.created_at,
+  };
+}
+
+/**
+ * Manager state decisions, newest first, optionally narrowed to one merchant.
+ *
+ * An empty list is the honest answer when the migration is not deployed: the
+ * profile timeline shows only real visits rather than fabricated history.
+ */
+export async function listStateOverrideRows(
+  merchantId?: string,
+): Promise<StateOverride[]> {
+  if (!isMerchantStateDatabaseConfigured()) return [];
+
+  const client = getSupabaseServerClient();
+  let query = client
+    .schema("app")
+    .from("merchant_state_overrides")
+    .select(OVERRIDE_COLUMNS)
+    .order("created_at", { ascending: false });
+  if (merchantId) query = query.eq("merchant_id", merchantId);
+
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingSchemaObject(error)) return [];
+    throw error;
+  }
+  return ((data ?? []) as OverrideRow[]).map(toOverride);
+}
+
 /**
  * Records one manager state decision.
  *
- * `unavailable` means the migration is not deployed yet, so the in-memory store
- * remains the only copy. Every other error is thrown: a governance decision is
- * never silently dropped.
+ * `unavailable` means the migration is not deployed yet; the caller turns that
+ * into a named 503 instead of acknowledging a decision it could not store.
+ * Every other error is thrown: a governance decision is never silently dropped.
  */
 export async function persistStateOverride(
   override: StateOverride,

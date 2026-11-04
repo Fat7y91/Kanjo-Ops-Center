@@ -116,49 +116,10 @@ function seedStore(): TaxonomyStore {
     ]),
   );
 
-  const now = isoNow();
-  const requests: TaxonomyRequest[] = [
-    {
-      id: "taxreq-seed-pharmacy-lab",
-      kind: "category",
-      name_ar: "تحاليل منزلية",
-      name_en: "Home Lab Tests",
-      justification:
-        "طلبات متزايدة من صيدليات القاهرة على تسجيل خدمات التحاليل المنزلية كتصنيف مستقل.",
-      vendorTypeId: 3,
-      parentId: null,
-      status: "pending",
-      requestedBy: "u-sales",
-      requestedByName: "Omar Khaled",
-      requestedAt: now,
-      decidedBy: null,
-      decidedByName: null,
-      decidedAt: null,
-      dashboardId: null,
-      rejectionReason: "",
-      createdEntityKey: null,
-    },
-    {
-      id: "taxreq-seed-vet-grooming",
-      kind: "vendor_type",
-      name_ar: "خدمات بيطرية",
-      name_en: "Veterinary Services",
-      justification:
-        "عيادات بيطرية تطلب الانضمام كقطاع منفصل عن أدوية بيطرية.",
-      vendorTypeId: null,
-      parentId: null,
-      status: "pending",
-      requestedBy: "u-ops",
-      requestedByName: "Mariam Adel",
-      requestedAt: now,
-      decidedBy: null,
-      decidedByName: null,
-      decidedAt: null,
-      dashboardId: null,
-      rejectionReason: "",
-      createdEntityKey: null,
-    },
-  ];
+  // The review queue starts empty: a pending request is a real operator
+  // submission, not demo content. The vendor-type/category/variant catalogue
+  // above is generated reference data (`data.generated.ts`).
+  const requests: TaxonomyRequest[] = [];
 
   return { vendorTypes, categories, variants, requests, revision: 1 };
 }

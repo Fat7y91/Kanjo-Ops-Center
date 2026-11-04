@@ -97,7 +97,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (patch.accessibleCities !== undefined) {
-      const knownCities = new Set(listCities().map((city) => city.id));
+      const knownCities = new Set(
+        (await listCities()).map((city) => city.id),
+      );
       const unknownCity = patch.accessibleCities.find(
         (cityId) => !knownCities.has(cityId),
       );
@@ -156,7 +158,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
   try {
     assertCanManage(session, target);
 
-    for (const city of listCities()) {
+    for (const city of await listCities()) {
       if (city.opsManagers.includes(id)) {
         revokeCityManager(city.id, id);
       }

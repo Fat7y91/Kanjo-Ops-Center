@@ -18,7 +18,7 @@ export const runtime = "edge";
 export default async function CatalogQaPage() {
   const session = await requireModuleAccess("/catalog/qa");
 
-  const cityScope = effectiveCityIds(session);
+  const cityScope = await effectiveCityIds(session);
   const pending = getPendingReviewProducts(await listCatalogRecords(), cityScope);
   const withImage = pending.filter((product) => product.imageDataUrl).length;
 

@@ -22,7 +22,7 @@ export async function DELETE(
 
   try {
     const { id, userId } = await context.params;
-    if (!getCityById(id)) {
+    if (!(await getCityById(id))) {
       return NextResponse.json({ error: "City not found" }, { status: 404 });
     }
     if (!isGlobalSession(session) && !session.accessibleCities.includes(id)) {

@@ -2,6 +2,17 @@ import { BI_MARKETING_PLATFORMS } from "@/lib/bi/types";
 
 import { verifyPlatformCredentials } from "./platforms";
 import {
+  insertCampaignRow,
+  insertMarketingEntryRow,
+  isMarketingDatabaseConfigured,
+  listCampaignRows,
+  listMarketingEntryRows,
+  listPlatformSettingsRows,
+  readPlatformCredentials,
+  updateCampaignStatusRow,
+  upsertPlatformSettingsRow,
+} from "./repository";
+import {
   CAMPAIGN_INPUT,
   CAMPAIGN_STATUS_INPUT,
   MARKETING_ENTRY_INPUT,
@@ -27,45 +38,18 @@ export class MarketingError extends Error {
   }
 }
 
-type MarketingStore = {
-  campaigns: MarketingCampaign[];
-  entries: MarketingEntry[];
-  settings: Map<string, PlatformSettings>;
-  /** Encrypted-at-rest in Postgres; process-local here, never serialized. */
-  secrets: Map<string, Record<string, string>>;
-  revision: number;
-};
+/**
+ * Tier 3 marketing rules over the Tier 4 repository.
+ *
+ * Campaigns and daily results are durable rows, so two workers can no longer
+ * disagree about a budget or lose a day's spend when an isolate restarts. The
+ * rules that used to guard the in-memory maps (window order, click/lead
+ * invariants, terminal closed state) are still enforced here even though SQL
+ * repeats them, because a client must receive a named error, not a 500.
+ */
 
-const globalStore = globalThis as typeof globalThis & {
-  __kanjoV2MarketingStore?: MarketingStore;
-};
-
-function seedSettings(): Map<string, PlatformSettings> {
-  return new Map(
-    BI_MARKETING_PLATFORMS.map((platform) => [
-      platform,
-      {
-        platform,
-        enabled: false,
-        apiKeyConfigured: false,
-        webhookUrl: "",
-        updatedAt: new Date(0).toISOString(),
-      } satisfies PlatformSettings,
-    ]),
-  );
-}
-
-function getStore(): MarketingStore {
-  if (!globalStore.__kanjoV2MarketingStore) {
-    globalStore.__kanjoV2MarketingStore = {
-      campaigns: [],
-      entries: [],
-      settings: seedSettings(),
-      secrets: new Map(),
-      revision: 1,
-    };
-  }
-  return globalStore.__kanjoV2MarketingStore;
+export function isMarketingConfigured(): boolean {
+  return isMarketingDatabaseConfigured();
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -77,53 +61,66 @@ function daysBetween(fromIso: string, toIso: string): number {
   return Math.max(0, Math.round((to - from) / DAY_MS));
 }
 
-export function listCampaigns(): MarketingCampaign[] {
-  return structuredClone(getStore().campaigns);
+export async function listCampaigns(): Promise<MarketingCampaign[]> {
+  return listCampaignRows();
 }
 
-export function listMarketingEntries(campaignId?: string): MarketingEntry[] {
-  const entries = structuredClone(getStore().entries);
-  return campaignId
-    ? entries.filter((entry) => entry.campaignId === campaignId)
-    : entries;
+export async function listMarketingEntries(
+  campaignId?: string,
+): Promise<MarketingEntry[]> {
+  return listMarketingEntryRows(campaignId);
 }
 
-export function listPlatformSettings(): PlatformSettings[] {
-  return Array.from(getStore().settings.values()).map((settings) => ({
-    ...settings,
-  }));
+export async function listPlatformSettings(): Promise<PlatformSettings[]> {
+  const stored = await listPlatformSettingsRows();
+
+  // Every platform must have a row so the settings panel can render an
+  // unconfigured network without the operator first creating it.
+  const byPlatform = new Map(stored.map((item) => [item.platform, item]));
+  return BI_MARKETING_PLATFORMS.map(
+    (platform) =>
+      byPlatform.get(platform) ?? {
+        platform,
+        enabled: false,
+        apiKeyConfigured: false,
+        webhookUrl: "",
+        updatedAt: new Date(0).toISOString(),
+      },
+  );
 }
 
-export function campaignProgress(): CampaignProgress[] {
-  const store = getStore();
+export async function campaignProgress(): Promise<CampaignProgress[]> {
+  const [campaigns, entries] = await Promise.all([
+    listCampaignRows(),
+    listMarketingEntryRows(),
+  ]);
   const today = new Date().toISOString();
-  return store.campaigns.map((campaign) => {
-    const expenses = store.entries.filter(
+
+  return campaigns.map((campaign) => {
+    const spendEntries = entries.filter(
       (entry) => entry.campaignId === campaign.id,
     );
-    const spend = expenses.reduce((total, entry) => total + entry.spend, 0);
+    const spend = spendEntries.reduce((total, entry) => total + entry.spend, 0);
     return {
       campaign,
       spend,
       spentShare: campaign.budget === 0 ? 0 : spend / campaign.budget,
-      leads: expenses.reduce((total, entry) => total + entry.leads, 0),
-      conversions: expenses.reduce(
+      leads: spendEntries.reduce((total, entry) => total + entry.leads, 0),
+      conversions: spendEntries.reduce(
         (total, entry) => total + entry.conversions,
         0,
       ),
       daysRun: daysBetween(campaign.startsOn, today),
       daysLeft:
-        campaign.status === "closed"
-          ? 0
-          : daysBetween(today, campaign.endsOn),
+        campaign.status === "closed" ? 0 : daysBetween(today, campaign.endsOn),
     };
   });
 }
 
-export function createCampaign(
+export async function createCampaign(
   input: CampaignInput,
   createdBy: string,
-): MarketingCampaign {
+): Promise<MarketingCampaign> {
   const parsed = CAMPAIGN_INPUT.safeParse(input);
   if (!parsed.success) {
     throw new MarketingError(
@@ -131,59 +128,60 @@ export function createCampaign(
       parsed.error.errors[0]?.message ?? "بيانات الحملة غير مكتملة.",
     );
   }
-  const store = getStore();
-  const campaign: MarketingCampaign = {
-    id: `cmp-${crypto.randomUUID().slice(0, 8)}`,
-    name: parsed.data.name,
-    platform: parsed.data.platform,
-    channel: parsed.data.channel,
-    cityId: parsed.data.cityId,
-    budget: parsed.data.budget,
-    targetLeads: parsed.data.targetLeads,
-    targetConversions: parsed.data.targetConversions,
-    startsOn: parsed.data.startsOn,
-    endsOn: parsed.data.endsOn,
-    status: "active",
-    createdBy,
-    createdAt: new Date().toISOString(),
-    closedAt: null,
-  };
-  store.campaigns = [campaign, ...store.campaigns];
-  store.revision += 1;
-  return structuredClone(campaign);
+  if (!isMarketingConfigured()) {
+    throw new MarketingError(
+      "STORE_UNAVAILABLE",
+      "بيانات الحملات غير مُفعّلة على هذا النشر بعد.",
+      503,
+    );
+  }
+  return insertCampaignRow(parsed.data, createdBy);
 }
 
-export function setCampaignStatus(
+export async function setCampaignStatus(
   campaignId: string,
   rawStatus: unknown,
-): MarketingCampaign {
+): Promise<MarketingCampaign> {
   const parsed = CAMPAIGN_STATUS_INPUT.safeParse(rawStatus);
   if (!parsed.success) {
     throw new MarketingError("INVALID_STATUS", "حالة الحملة غير صالحة.");
   }
-  const store = getStore();
-  const campaign = store.campaigns.find((item) => item.id === campaignId);
-  if (!campaign) {
+  if (!isMarketingConfigured()) {
+    throw new MarketingError(
+      "STORE_UNAVAILABLE",
+      "بيانات الحملات غير مُفعّلة على هذا النشر بعد.",
+      503,
+    );
+  }
+
+  const current = (await listCampaignRows()).find(
+    (campaign) => campaign.id === campaignId,
+  );
+  if (!current) {
     throw new MarketingError("CAMPAIGN_NOT_FOUND", "الحملة غير موجودة.", 404);
   }
-  if (campaign.status === "closed") {
+  if (current.status === "closed") {
     throw new MarketingError(
       "CAMPAIGN_CLOSED",
       "الحملة منتهية ولا يمكن تغيير حالتها.",
       409,
     );
   }
-  campaign.status = parsed.data.status;
-  campaign.closedAt =
-    parsed.data.status === "closed" ? new Date().toISOString() : null;
-  store.revision += 1;
-  return structuredClone(campaign);
+
+  const updated = await updateCampaignStatusRow(
+    campaignId,
+    parsed.data.status,
+  );
+  if (!updated) {
+    throw new MarketingError("CAMPAIGN_NOT_FOUND", "الحملة غير موجودة.", 404);
+  }
+  return updated;
 }
 
-export function recordMarketingEntry(
+export async function recordMarketingEntry(
   input: MarketingEntryInput,
   recordedBy: string,
-): MarketingEntry {
+): Promise<MarketingEntry> {
   const parsed = MARKETING_ENTRY_INPUT.safeParse(input);
   if (!parsed.success) {
     throw new MarketingError(
@@ -192,8 +190,15 @@ export function recordMarketingEntry(
         "بيانات الإدخال التسويقي غير مكتملة أو غير صالحة.",
     );
   }
-  const store = getStore();
-  const campaign = store.campaigns.find(
+  if (!isMarketingConfigured()) {
+    throw new MarketingError(
+      "STORE_UNAVAILABLE",
+      "بيانات الحملات غير مُفعّلة على هذا النشر بعد.",
+      503,
+    );
+  }
+
+  const campaign = (await listCampaignRows()).find(
     (item) => item.id === parsed.data.campaignId,
   );
   if (!campaign) {
@@ -225,34 +230,21 @@ export function recordMarketingEntry(
     );
   }
 
-  const entry: MarketingEntry = {
-    id: `mkt-day-${crypto.randomUUID().slice(0, 8)}`,
-    campaignId: campaign.id,
-    spend: parsed.data.spend,
-    impressions: parsed.data.impressions,
-    clicks: parsed.data.clicks,
-    leads: parsed.data.leads,
-    conversions: parsed.data.conversions,
-    occurredAt: parsed.data.occurredAt,
-    note: parsed.data.note ?? "",
-    recordedBy,
-    recordedAt: new Date().toISOString(),
-  };
-  store.entries = [...store.entries, entry];
-  store.revision += 1;
-  return structuredClone(entry);
+  return insertMarketingEntryRow(campaign, parsed.data, recordedBy);
 }
 
 /**
  * Updates a platform's integration settings.
  *
- * Switching sync on runs the credential verifier first; a rejected key never
- * reaches a stored row, so `enabled` always means "verified and connected".
- * Credential values are write-only and surfaced only as `apiKeyConfigured`.
+ * Switching sync on runs the credential verifier over the merged credential set
+ * — the sealed values already on the row plus whatever the operator supplied —
+ * so re-saving an already-connected platform does not demand the secret again.
+ * A rejected key never reaches a stored row.
  */
-export function updatePlatformSettings(
+export async function updatePlatformSettings(
   input: PlatformSettingsInput,
-): PlatformSettings {
+  updatedBy: string | null,
+): Promise<PlatformSettings> {
   const parsed = PLATFORM_SETTINGS_INPUT.safeParse(input);
   if (!parsed.success) {
     throw new MarketingError(
@@ -260,16 +252,20 @@ export function updatePlatformSettings(
       "بيانات إعدادات المنصة غير صالحة.",
     );
   }
-  const store = getStore();
-  const previous = store.secrets.get(parsed.data.platform) ?? {};
-  const merged = { ...previous };
+  if (!isMarketingConfigured()) {
+    throw new MarketingError(
+      "STORE_UNAVAILABLE",
+      "إعدادات المنصات غير مُفعّلة على هذا النشر بعد.",
+      503,
+    );
+  }
 
+  const previous = await readPlatformCredentials(parsed.data.platform);
+  const merged = { ...previous };
   for (const [key, value] of Object.entries(parsed.data.credentials)) {
     const trimmed = value.trim();
     if (trimmed !== "") merged[key] = trimmed;
   }
-
-  const configured = Object.keys(merged).length > 0;
 
   if (parsed.data.enabled) {
     const verification = verifyPlatformCredentials(
@@ -281,16 +277,5 @@ export function updatePlatformSettings(
     }
   }
 
-  const next: PlatformSettings = {
-    platform: parsed.data.platform,
-    enabled: parsed.data.enabled,
-    apiKeyConfigured: configured,
-    webhookUrl: parsed.data.webhookUrl,
-    updatedAt: new Date().toISOString(),
-  };
-
-  store.secrets.set(parsed.data.platform, merged);
-  store.settings.set(parsed.data.platform, next);
-  store.revision += 1;
-  return { ...next };
+  return upsertPlatformSettingsRow(parsed.data, merged, updatedBy);
 }

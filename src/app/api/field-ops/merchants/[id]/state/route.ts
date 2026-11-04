@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { apiError, actorFromSession, authorize, readJson } from "@/lib/auth/api";
-import { persistStateOverride } from "@/lib/field-ops/merchant-state-repository";
 import { loadMerchantState } from "@/lib/field-ops/state-source";
 import { merchantStateSchema } from "@/lib/schemas/field-ops";
 import { getMerchantById, setMerchantState } from "@/lib/field-ops/store";
@@ -25,6 +24,8 @@ export async function PATCH(
     const previousState = merchant
       ? await loadMerchantState(merchant)
       : undefined;
+    // `setMerchantState` writes the append-only override and the audit report
+    // before it returns, and fails the request if either write is rejected.
     const result = await setMerchantState(
       id,
       input.state,
@@ -34,19 +35,7 @@ export async function PATCH(
       previousState,
     );
 
-    // The decision is recorded in `app.merchant_state_overrides` before the
-    // route acknowledges it. Without this the manager's decision lived only in
-    // the isolate that served the request and vanished with it, while every
-    // other worker kept showing the previous state.
-    const persisted = await persistStateOverride(
-      result.override,
-      session.user.id,
-    );
-
-    return NextResponse.json({
-      ...result,
-      durable: persisted === "stored",
-    });
+    return NextResponse.json(result);
   } catch (error) {
     return apiError(error);
   }

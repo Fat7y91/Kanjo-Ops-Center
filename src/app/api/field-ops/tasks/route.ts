@@ -27,14 +27,14 @@ export async function GET() {
   const { session, response } = await authorizeAny(FIELD_OPS_MODULE);
   if (!session) return response;
 
+  const tasks = await tasksForViewer({
+    team: session.user.team,
+    canManageTasks: session.permissions.includes("assign_tasks"),
+    date: today(),
+  });
+
   return NextResponse.json(
-    {
-      tasks: tasksForViewer({
-        team: session.user.team,
-        canManageTasks: session.permissions.includes("assign_tasks"),
-        date: today(),
-      }),
-    },
+    { tasks },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const merchant = await getMerchantById(input.merchantId);
     if (
       merchant &&
-      !effectiveCityIds(session).includes(merchant.cityId)
+      !(await effectiveCityIds(session)).includes(merchant.cityId)
     ) {
       return NextResponse.json(
         { error: "هذا التاجر خارج نطاق مدنك.", code: "CITY_OUT_OF_SCOPE" },

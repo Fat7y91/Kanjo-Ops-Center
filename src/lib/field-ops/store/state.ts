@@ -5,26 +5,34 @@ import type {
   VisitReport,
 } from "@/lib/field-ops/types";
 
-import {
-  FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
-  type Actor,
-} from "./core";
+import { FieldOpsError, isoNow, type Actor } from "./core";
 import { calculateCommission } from "./crm";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
+import {
+  isMerchantStateDatabaseConfigured,
+  listStateOverrideRows,
+  persistStateOverride,
+} from "../merchant-state-repository";
+import {
+  isVisitReportsDatabaseConfigured,
+  persistVisitReport,
+} from "../reports-repository";
 
-export function listStateOverrides(merchantId?: string): StateOverride[] {
-  const overrides = clone(getStore().overrides).sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt),
-  );
-  return merchantId
-    ? overrides.filter((entry) => entry.merchantId === merchantId)
-    : overrides;
+/**
+ * Manager agreement-state decisions.
+ *
+ * The decision itself is append-only governance history in
+ * `app.merchant_state_overrides`, and it also writes a visit-shaped audit row so
+ * the merchant timeline reads as one chronological story. Neither write is
+ * accepted when the database is missing: a state change that only lives in the
+ * isolate that served it is worse than a visible error.
+ */
+
+export async function listStateOverrides(
+  merchantId?: string,
+): Promise<StateOverride[]> {
+  return listStateOverrideRows(merchantId);
 }
 
 export async function setMerchantState(
@@ -40,7 +48,18 @@ export async function setMerchantState(
    */
   previousState?: ContractState,
 ): Promise<{ merchant: Merchant; override: StateOverride }> {
-  const store = getStore();
+  // Check before touching the merchant row: a state change whose audit trail
+  // cannot be written must not half-apply.
+  if (
+    !isMerchantStateDatabaseConfigured() ||
+    !isVisitReportsDatabaseConfigured()
+  ) {
+    throw new FieldOpsError(
+      "STATE_AUDIT_UNAVAILABLE",
+      "قاعدة بيانات قرارات الحالة غير متصلة.",
+      503,
+    );
+  }
   const merchant = await requireMerchant(merchantId);
 
   const previous = previousState ?? merchant.contractState;
@@ -86,7 +105,7 @@ export async function setMerchantState(
   };
 
   const override: StateOverride = {
-    id: id("override"),
+    id: crypto.randomUUID(),
     merchantId: saved.id,
     merchantName: saved.name,
     fromState: previous,
@@ -96,10 +115,17 @@ export async function setMerchantState(
     note: note.trim(),
     createdAt: isoNow(),
   };
-  store.overrides.push(override);
+  const overrideResult = await persistStateOverride(override, actor.id);
+  if (overrideResult === "unavailable") {
+    throw new FieldOpsError(
+      "STATE_AUDIT_UNAVAILABLE",
+      "تعذر تسجيل قرار الحالة في قاعدة البيانات.",
+      503,
+    );
+  }
 
   const report: VisitReport = {
-    id: id("report"),
+    id: crypto.randomUUID(),
     merchantId: saved.id,
     merchantName: saved.name,
     taskId: null,
@@ -113,9 +139,16 @@ export async function setMerchantState(
     agreedCommission:
       state === "signed_contract" ? (lockedCommission ?? null) : null,
     createdAt: isoNow(),
+    source: "override",
   };
-  store.reports.push(report);
-  bump();
+  const reportResult = await persistVisitReport(report, actor.id);
+  if (reportResult !== "stored" && reportResult !== "duplicate") {
+    throw new FieldOpsError(
+      "STATE_AUDIT_UNAVAILABLE",
+      "تعذر تسجيل قرار الحالة في قاعدة البيانات.",
+      503,
+    );
+  }
 
-  return { merchant: clone(saved), override: clone(override) };
+  return { merchant: saved, override };
 }

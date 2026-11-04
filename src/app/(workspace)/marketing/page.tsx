@@ -24,14 +24,14 @@ export default async function MarketingPage() {
 
   // A settings-only operator never receives campaign or log data, and a
   // campaigns-only operator never receives platform credentials.
-  const campaigns = canViewCampaigns ? listCampaigns() : [];
-  const progress = canViewCampaigns ? campaignProgress() : [];
+  const campaigns = canViewCampaigns ? await listCampaigns() : [];
+  const progress = canViewCampaigns ? await campaignProgress() : [];
   const entries =
-    canViewCampaigns || canViewLogs ? listMarketingEntries() : [];
-  const settings = canManageSettings ? listPlatformSettings() : [];
+    canViewCampaigns || canViewLogs ? await listMarketingEntries() : [];
+  const settings = canManageSettings ? await listPlatformSettings() : [];
   const cities =
     canCreate || canRecord
-      ? listCities().map((city) => ({ id: city.id, name: city.name }))
+      ? (await listCities()).map((city) => ({ id: city.id, name: city.name }))
       : [];
 
   return (

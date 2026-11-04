@@ -13,11 +13,11 @@ import { loadMerchantStates } from "./state-source";
 
 export type FieldOpsBoard = {
   today: string;
-  tasks: ReturnType<typeof tasksForViewer>;
-  cities: ReturnType<typeof listCities>;
+  tasks: Awaited<ReturnType<typeof tasksForViewer>>;
+  cities: Awaited<ReturnType<typeof listCities>>;
   merchants: Awaited<ReturnType<typeof listMerchants>>;
-  transferRequests: ReturnType<typeof listTransferRequests>;
-  editRequests: ReturnType<typeof listEditRequests>;
+  transferRequests: Awaited<ReturnType<typeof listTransferRequests>>;
+  editRequests: Awaited<ReturnType<typeof listEditRequests>>;
   reports: Awaited<ReturnType<typeof listVisitReports>>;
 };
 
@@ -30,23 +30,30 @@ export async function buildBoard(
   const canApproveEdits =
     session.permissions.includes("approve_report_edits");
 
-  const transferRequests = listTransferRequests().filter(
+  const [allTransfers, allEdits, allReports, allCities] = await Promise.all([
+    listTransferRequests(),
+    listEditRequests(),
+    listVisitReports(),
+    listCities(),
+  ]);
+
+  const transferRequests = allTransfers.filter(
     (request) =>
       canApproveTransfers || request.requestedBy === session.user.id,
   );
-  const editRequests = listEditRequests().filter(
+  const editRequests = allEdits.filter(
     (request) => canApproveEdits || request.requestedBy === session.user.id,
   );
-  const reports = (await listVisitReports()).filter(
+  const reports = allReports.filter(
     (report) => canManageTasks || report.team === session.user.team,
   );
 
   const canSeeAllCities =
     session.globalScope || session.clearanceLevel >= 4;
   const scopedCityIds = canSeeAllCities
-    ? new Set(listCities().map((city) => city.id))
+    ? new Set(allCities.map((city) => city.id))
     : new Set(session.accessibleCities);
-  const cities = listCities().filter((city) => scopedCityIds.has(city.id));
+  const cities = allCities.filter((city) => scopedCityIds.has(city.id));
   const scopedMerchants = (await listMerchants()).filter((merchant) =>
     scopedCityIds.has(merchant.cityId),
   );
@@ -61,11 +68,13 @@ export async function buildBoard(
 
   return {
     today: today(),
-    tasks: tasksForViewer({
-      team: session.user.team,
-      canManageTasks,
-      date: today(),
-    }).filter((task) => scopedCityIds.has(task.cityId)),
+    tasks: (
+      await tasksForViewer({
+        team: session.user.team,
+        canManageTasks,
+        date: today(),
+      })
+    ).filter((task) => scopedCityIds.has(task.cityId)),
     cities,
     merchants,
     transferRequests,

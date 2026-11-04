@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     query,
     session.user.team,
     20,
-    effectiveCityIds(session),
+    await effectiveCityIds(session),
   );
   // Visit counts come pre-aggregated from the rollup. The report scan below is
   // the demo-mode fallback, where the store only holds a handful of rows.

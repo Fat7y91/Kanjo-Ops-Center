@@ -17,7 +17,7 @@ export async function PATCH(
 
   try {
     const input = cityCreateSchema.parse(await readJson(request));
-    const city = updateCity(id, input);
+    const city = await updateCity(id, input);
     return NextResponse.json({ city });
   } catch (error) {
     return apiError(error);

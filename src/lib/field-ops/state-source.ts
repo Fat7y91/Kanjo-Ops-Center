@@ -23,9 +23,9 @@ import type { ContractState } from "./types";
  * reduce it per merchant" on the Edge runtime, which is what pushed `/merchants`
  * past the Cloudflare Worker CPU limit.
  *
- * The in-memory derivation below is kept for deployments whose migration has not
- * been applied yet: it reproduces the same ranking over the demo store so the
- * screens stay truthful instead of blank.
+ * When the rollup view is not deployed, the same ranking is derived from the
+ * live visit-report and override tables, so the screens stay truthful instead
+ * of blank.
  */
 
 export type StateSourceMerchant = {
@@ -62,10 +62,11 @@ export async function loadMerchantStates(
     return states;
   }
 
-  const events = stateEventsByMerchant(
-    await loadVisitReports(),
+  const [reports, overrides] = await Promise.all([
+    loadVisitReports(),
     listStateOverrides(),
-  );
+  ]);
+  const events = stateEventsByMerchant(reports, overrides);
   for (const merchant of merchants) {
     states.set(merchant.id, resolveMerchantState(merchant, events.get(merchant.id)));
   }

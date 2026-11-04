@@ -26,8 +26,8 @@ export default async function CityDetailsPage({
 }: CityDetailsPageProps) {
   const session = await requireModuleAccess("/cities");
   const { id } = await params;
-  const city = getCityById(id);
-  if (!city || !canAccessCity(session, city.id)) notFound();
+  const city = await getCityById(id);
+  if (!city || !(await canAccessCity(session, city.id))) notFound();
 
   const actor = toClearanceActor(session);
 

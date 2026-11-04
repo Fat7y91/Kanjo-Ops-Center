@@ -27,8 +27,8 @@ export default async function MerchantsPage({
   const { q } = await searchParams;
   const query = (q ?? "").trim();
 
-  const allowedCities = new Set(effectiveCityIds(session));
-  const availableCities = listCities()
+  const allowedCities = new Set(await effectiveCityIds(session));
+  const availableCities = (await listCities())
     .filter((city) => allowedCities.has(city.id))
     .map((city) => ({ id: city.id, name: city.name, stage: city.stage }));
 

@@ -21,7 +21,7 @@ export async function PATCH(request: Request, { params }: CampaignRouteProps) {
   const { id } = await params;
 
   try {
-    const campaign = setCampaignStatus(id, await readJson(request));
+    const campaign = await setCampaignStatus(id, await readJson(request));
     return NextResponse.json({ campaign });
   } catch (error) {
     return apiError(error);

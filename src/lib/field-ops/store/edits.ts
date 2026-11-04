@@ -1,21 +1,36 @@
 import type { EditRequest } from "@/lib/field-ops/types";
 
-import {
-  FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
-  type Actor,
-} from "./core";
+import { FieldOpsError, id, isoNow, type Actor } from "./core";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
+import {
+  decideEditRow,
+  getEditRow,
+  insertEdit,
+  isRequestsDatabaseConfigured,
+  listEditRows,
+} from "../request-repository";
 
-export function listEditRequests(): EditRequest[] {
-  return clone(getStore().editRequests).sort((left, right) =>
-    right.createdAt.localeCompare(left.createdAt),
-  );
+/**
+ * Report-edit requests, backed by `app.edit_requests`.
+ *
+ * A rep cannot unlock a final agreement alone; they ask, a manager decides, and
+ * the decision is durable. Keeping the request in a process-local array meant
+ * the proof could vanish while the merchant stayed unlocked.
+ */
+
+function requireDatabase(): void {
+  if (!isRequestsDatabaseConfigured()) {
+    throw new FieldOpsError(
+      "REQUESTS_UNAVAILABLE",
+      "قاعدة بيانات الطلبات غير متصلة.",
+      503,
+    );
+  }
+}
+
+export async function listEditRequests(): Promise<EditRequest[]> {
+  return listEditRows();
 }
 
 export async function createEditRequest(
@@ -23,7 +38,7 @@ export async function createEditRequest(
   reason: string,
   actor: Actor,
 ): Promise<EditRequest> {
-  const store = getStore();
+  requireDatabase();
   const merchant = await requireMerchant(merchantId);
 
   if (merchant.contractState === "signed_contract") {
@@ -47,14 +62,14 @@ export async function createEditRequest(
       409,
     );
   }
-  if (
-    store.editRequests.some(
-      (request) =>
-        request.merchantId === merchantId &&
-        request.requestedBy === actor.id &&
-        request.status === "pending",
-    )
-  ) {
+
+  const open = (await listEditRows()).find(
+    (request) =>
+      request.merchantId === merchantId &&
+      request.requestedBy === actor.id &&
+      request.status === "pending",
+  );
+  if (open) {
     throw new FieldOpsError(
       "EDIT_PENDING",
       "يوجد طلب تعديل لهذا التاجر قيد المراجعة بالفعل.",
@@ -77,9 +92,7 @@ export async function createEditRequest(
     reviewNote: "",
   };
 
-  store.editRequests.push(request);
-  bump();
-  return clone(request);
+  return insertEdit(request);
 }
 
 export async function decideEditRequest(
@@ -88,10 +101,8 @@ export async function decideEditRequest(
   actor: Actor,
   note: string,
 ): Promise<EditRequest> {
-  const store = getStore();
-  const request = store.editRequests.find(
-    (candidate) => candidate.id === requestId,
-  );
+  requireDatabase();
+  const request = await getEditRow(requestId);
   if (!request) {
     throw new FieldOpsError("EDIT_NOT_FOUND", "الطلب غير موجود.", 404);
   }
@@ -103,16 +114,20 @@ export async function decideEditRequest(
     );
   }
 
-  request.status = decision === "approve" ? "approved" : "rejected";
-  request.reviewedBy = actor.id;
-  request.reviewedByName = actor.name;
-  request.reviewedAt = isoNow();
-  request.reviewNote = note.trim();
+  const saved = await decideEditRow(requestId, {
+    status: decision === "approve" ? "approved" : "rejected",
+    reviewedBy: actor.id,
+    reviewedByName: actor.name,
+    reviewedAt: isoNow(),
+    reviewNote: note.trim(),
+  });
+  if (!saved) {
+    throw new FieldOpsError("EDIT_NOT_FOUND", "الطلب غير موجود.", 404);
+  }
 
   if (decision === "approve") {
     await updateMerchantRow(request.merchantId, { editUnlocked: true });
   }
 
-  bump();
-  return clone(request);
+  return saved;
 }

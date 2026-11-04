@@ -31,7 +31,7 @@ export async function GET() {
   }
 
   const actor = toClearanceActor(session);
-  const cities = listCities();
+  const cities = await listCities();
   const scopedCityIds = isGlobalActor(actor)
     ? cities.map((city) => city.id)
     : actor.accessibleCities;
@@ -64,7 +64,9 @@ export async function POST(request: Request) {
   try {
     const input = userCreateSchema.parse(await request.json());
 
-    const knownCities = new Set(listCities().map((city) => city.id));
+    const knownCities = new Set(
+      (await listCities()).map((city) => city.id),
+    );
     const unknownCity = input.accessibleCities.find(
       (cityId) => !knownCities.has(cityId),
     );

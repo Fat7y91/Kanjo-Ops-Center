@@ -17,10 +17,8 @@ export const runtime = "edge";
  *
  * It answers with everything the screen draws — rows, visible movements, totals
  * per currency and the viewer's tier — because the tier is what decides which
- * of those the UI may show. The screen used to be rendered on the server with
- * this exact reduction, so the endpoint is the same projection moved one layer
- * out: the shell paints immediately and the numbers arrive with the access
- * flags that authorize them.
+ * of those the UI may show. The numbers come from `app.bank_accounts` and
+ * `app.ledger_entries`; a deployment without them reads empty, never seeded.
  */
 export async function GET() {
   const { session, response } = await authorizeAny([
@@ -31,23 +29,31 @@ export async function GET() {
   ]);
   if (!session) return response;
 
-  const access = resolveTreasuryAccess(session);
-  const accounts = visibleAccounts(listBankAccounts(), access);
-  const entries = visibleEntries(listLedgerEntries(), access);
+  try {
+    const access = resolveTreasuryAccess(session);
+    const [allAccounts, allEntries] = await Promise.all([
+      listBankAccounts(),
+      listLedgerEntries(),
+    ]);
+    const accounts = visibleAccounts(allAccounts, access);
+    const entries = visibleEntries(allEntries, access);
 
-  return NextResponse.json(
-    {
-      accounts: summarizeAll(accounts, entries),
-      entries,
-      totals: totalByCurrency(accounts, entries),
-      full: access.full,
-      canViewTransactions: access.canViewTransactions,
-      canRecordDeposits: access.canRecordDeposits,
-      canRecordExpenses: access.canRecordExpenses,
-      canAddAccount: session.permissions.includes("add_bank_account"),
-    },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+    return NextResponse.json(
+      {
+        accounts: summarizeAll(accounts, entries),
+        entries,
+        totals: totalByCurrency(accounts, entries),
+        full: access.full,
+        canViewTransactions: access.canViewTransactions,
+        canRecordDeposits: access.canRecordDeposits,
+        canRecordExpenses: access.canRecordExpenses,
+        canAddAccount: session.permissions.includes("add_bank_account"),
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
 }
 
 export async function POST(request: Request) {
@@ -57,8 +63,9 @@ export async function POST(request: Request) {
   if (!session) return response;
 
   try {
-    const account = createBankAccount(
+    const account = await createBankAccount(
       (await readJson(request)) as Parameters<typeof createBankAccount>[0],
+      session.user.id,
     );
     return NextResponse.json({ account }, { status: 201 });
   } catch (error) {

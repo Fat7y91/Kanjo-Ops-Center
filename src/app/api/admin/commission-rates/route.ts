@@ -36,7 +36,7 @@ export async function GET(request: Request) {
         cityId,
         active,
         rows,
-        cities: listCities().map((city) => ({
+        cities: (await listCities()).map((city) => ({
           id: city.id,
           name: city.name,
           governorate: city.governorate,
@@ -63,7 +63,7 @@ export async function PUT(request: Request) {
     const body = (await readJson(request)) as { cityId?: unknown };
     if (typeof body.cityId === "string" && body.cityId.trim() !== "") {
       const cityId = body.cityId.trim();
-      if (!listCities().some((city) => city.id === cityId)) {
+      if (!(await listCities()).some((city) => city.id === cityId)) {
         return NextResponse.json(
           { error: "مدينة غير معروفة.", code: "UNKNOWN_CITY" },
           { status: 422 },

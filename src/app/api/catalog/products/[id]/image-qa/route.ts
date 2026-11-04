@@ -63,7 +63,7 @@ export async function POST(
     }
 
     const record = await findCatalogRecord(id);
-    const cityScope = effectiveCityIds(session);
+    const cityScope = await effectiveCityIds(session);
     if (
       !record ||
       record.cityId === null ||

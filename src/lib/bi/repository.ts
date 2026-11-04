@@ -14,8 +14,8 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
  * `find` (O(products × merchants)) — one of the P0 Edge CPU 1102 offenders.
  *
  * Returns `null` when Supabase is not configured or the view is not deployed;
- * `dataset.ts` then falls back to the in-memory seed derivation that local dev
- * and CI rely on.
+ * `dataset.ts` then derives the same facts with a single pass over the live
+ * visit reports.
  */
 
 export type BiMerchantFact = {

@@ -15,7 +15,7 @@ export default async function WorkspaceLayout({
   const session = await requireSession();
   return (
     <AppShell
-      cityOptions={scopedCities(session)}
+      cityOptions={await scopedCities(session)}
     >
       {children}
     </AppShell>

@@ -37,7 +37,7 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
 
   const filters = normalizeFilters(parseKpiFilters(params));
   const dataset = await loadKpiDataset(filters.month);
-  const allowedCityIds = effectiveCityIds(session);
+  const allowedCityIds = await effectiveCityIds(session);
 
   const { scope, lockedToSelf, selfAgent, cityId } = resolveKpiScope({
     viewer: {
