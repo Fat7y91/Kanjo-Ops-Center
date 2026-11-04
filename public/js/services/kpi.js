@@ -143,29 +143,60 @@ const KPI_TEXT_MAX = 35;     // valid-description ratio
 const KPI_MEDIA_MAX = 35;    // products-with-images COUNT, normalized against the top rep's count
 const KPI_DESC_TARGET_LENGTH = 50; // healthy average description length (chars)
 
+/* Hard safety net for every arithmetic term that leaves the scorecard. A NaN /
+   Infinity can appear whenever a denominator collapses to 0 (e.g. a rep with
+   zero products this month), and an unbounded ratio can push a single weight
+   past its budget. Every score value therefore passes through this clamp. */
+const kpiClamp = (value, min, max) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return min;
+    return n < min ? min : (n > max ? max : n);
+};
+window.kpiClamp = kpiClamp;
+
 /* Media points use an ABSOLUTE-max comparison, exactly like the volume block: a
    rep is measured against the rep with the most image-bearing products, not
    against their own product count. This stops high-volume reps from being
    penalized for products intentionally handed off to the studio team (e.g. Sara
-   with 665/1321 images must out-score a low-volume rep with 602/806). */
-const kpiMediaWeight = (withImage, maxImages) => (
-    maxImages > 0 ? (Math.max(0, Number(withImage) || 0) / maxImages) * KPI_MEDIA_MAX : 0
-);
+   with 665/1321 images must out-score a low-volume rep with 602/806).
+   The result is HARD-CAPPED at KPI_MEDIA_MAX: action-dated media credit can
+   legitimately exceed the rep's created-product count, and without the cap a
+   single term could exceed the whole 100-point budget (the 202.82 incident). */
+const kpiMediaWeight = (withImage, maxImages) => {
+    const max = Math.max(0, Number(maxImages) || 0);
+    if (!(max > 0)) return 0;
+    const raw = (Math.max(0, Number(withImage) || 0) / max) * KPI_MEDIA_MAX;
+    return kpiClamp(raw, 0, KPI_MEDIA_MAX);
+};
 window.kpiMediaWeight = kpiMediaWeight;
 
 /* Single source of truth for the Kanjo weighted score. The manager board and
    the rep's own live screen MUST both call this with the SAME team baselines,
    otherwise a rep normalized only against themselves always reads ~100% while
-   the manager sees the true competitive score. */
+   the manager sees the true competitive score.
+   Each category is clamped to its own budget and the total to [0, 100], so no
+   combination of edge-case inputs (0 products, x/0, NaN) can escape the scale. */
 const kpiKanjoBreakdown = (r, baselines) => {
     const b = baselines || {};
     const maxProducts = Math.max(0, Number(b.maxProducts) || 0);
     const maxTime = Math.max(0, Number(b.maxTime) || 0);
     const maxImages = Math.max(0, Number(b.maxImages) || 0);
-    const volumeWeight = maxProducts > 0 ? (Math.max(0, Number(r.totalProducts) || 0) / maxProducts) * KPI_VOLUME_MAX : 0;
-    const lengthWeight = Math.min(1, (Number(r.avgDescriptionLength) || 0) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX;
-    const effortWeight = maxTime > 0 ? (Math.max(0, Number(r.totalSeconds) || 0) / maxTime) * KPI_EFFORT_MAX : 0;
-    const textWeight = Math.max(0, Number(r.validRatio != null ? r.validRatio : r.validRatioRaw) || 0) * KPI_TEXT_MAX;
+    const volumeWeight = kpiClamp(
+        maxProducts > 0 ? (Math.max(0, Number(r.totalProducts) || 0) / maxProducts) * KPI_VOLUME_MAX : 0,
+        0, KPI_VOLUME_MAX
+    );
+    const lengthWeight = kpiClamp(
+        Math.min(1, (Math.max(0, Number(r.avgDescriptionLength) || 0)) / KPI_DESC_TARGET_LENGTH) * KPI_LENGTH_MAX,
+        0, KPI_LENGTH_MAX
+    );
+    const effortWeight = kpiClamp(
+        maxTime > 0 ? (Math.max(0, Number(r.totalSeconds) || 0) / maxTime) * KPI_EFFORT_MAX : 0,
+        0, KPI_EFFORT_MAX
+    );
+    const textWeight = kpiClamp(
+        Math.max(0, Number(r.validRatio != null ? r.validRatio : r.validRatioRaw) || 0) * KPI_TEXT_MAX,
+        0, KPI_TEXT_MAX
+    );
     const mediaWeight = kpiMediaWeight(r.withImage, maxImages);
     return {
         volumeWeight,
@@ -173,22 +204,39 @@ const kpiKanjoBreakdown = (r, baselines) => {
         effortWeight,
         textWeight,
         mediaWeight,
-        score: volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight
+        score: kpiClamp(volumeWeight + lengthWeight + effortWeight + textWeight + mediaWeight, 0, 100)
     };
 };
 
 /* Team-wide normalization baselines derived from the published, non-sensitive
    rep summaries (`totalProducts`/`totalSeconds`/`withImage` already mapped by
    the leaderboard reader) — never from merchant_products. This lets a rep
-   compute the exact same maxima as the manager with zero extra product reads. */
+   compute the exact same maxima as the manager with zero extra product reads.
+   NOTE: media credit is ACTION-dated, so a rep can carry images while creating
+   zero products this month. Filtering those rows out (the old behaviour) hid
+   their 226 images from `maxImages`, so the 226 numerator was divided by a
+   different rep's 39 and exploded to 202.82/35. The image baseline must
+   therefore consider every non-editor row; the volume/time maxima are unaffected
+   by zero-product rows since their values are zero anyway. */
 const kpiTeamBaselines = (list) => {
-    const field = (list || []).filter((r) => r && !r.isEditor && (Number(r.totalProducts) || 0) > 0);
+    const field = (list || []).filter((r) => r && !r.isEditor);
     let maxProducts = 0;
     let maxTime = 0;
     let maxImages = 0;
     field.forEach((r) => {
-        maxProducts = Math.max(maxProducts, Number(r.totalProducts) || 0);
-        maxTime = Math.max(maxTime, Number(r.totalSeconds) || 0);
+        const products = Number(r.totalProducts) || 0;
+        /* Volume/time maxima keep the original "active rep only" scope: a row
+           with zero products must not raise the effort baseline merely because
+           it carries tracked seconds. */
+        if (products > 0) {
+            maxProducts = Math.max(maxProducts, products);
+            maxTime = Math.max(maxTime, Number(r.totalSeconds) || 0);
+        }
+        /* Image baseline is intentionally computed over EVERY non-editor row:
+           media credit is action-dated, so a rep can legitimately hold images
+           for the month while creating zero products. Excluding them here made
+           their own image count the numerator against another rep's smaller max
+           (226 / 39 → 202.82 / 35). */
         maxImages = Math.max(maxImages, Number(r.withImage) || 0);
     });
     return { maxProducts, maxTime, maxImages };
@@ -525,6 +573,7 @@ const kpiBuildLockedSnapshotReport = (monthKey, snapshot) => {
             snapshotVendors: vendors,
             snapshotPhotos: photos,
             withImage: photos,
+            createdWithImage: photos,
             withoutImage: 0,
             editedImagesCount: photos,
             importImagesUploaded: 0,
@@ -1106,11 +1155,15 @@ const kpiClaimImportedImageLock = async (productId, repName, pin) => {
     }
 };
 
-/* Image completion ratio, hard-capped at 100% so a rep who uploads extra
-   imported images (numerator-only bonus) never exceeds a full score. */
+/* Image completion ratio for the coverage bar, hard-capped at 100% so a rep who
+   uploads extra imported images (numerator-only bonus) never exceeds a full
+   score. With ZERO products entered this month there is no coverage to measure:
+   returning 1 here painted a misleading "100%" bar on a 0-product rep (the same
+   edge case that produced the 202.82 media anomaly). Return 0 instead. */
 const kpiImageRatioCapped = (withImage, totalProducts) => {
-    if (totalProducts > 0) return Math.max(0, Math.min(1, withImage / totalProducts));
-    return withImage > 0 ? 1 : 0;
+    const products = Math.max(0, Number(totalProducts) || 0);
+    if (products > 0) return kpiClamp((Math.max(0, Number(withImage) || 0)) / products, 0, 1);
+    return 0;
 };
 
 window.calculateHistoricalTime = async () => {
@@ -1530,7 +1583,11 @@ const kpiSummaryPayload = (row) => {
 
 const kpiPublishSummary = async (row) => {
     const payload = kpiSummaryPayload(row);
-    if (!payload || !(Number(payload.publicTotalProducts) > 0)) return;
+    /* Publish a row that has EITHER created products OR action-dated media:
+       a rep who only edited/uploaded images this month still contributes an
+       image baseline, and dropping them made every peer's personal standing
+       normalize against a smaller max than the manager board uses. */
+    if (!payload || !((Number(payload.publicTotalProducts) > 0) || (Number(payload.publicWithImage) > 0))) return;
     const period = kpiNormalizeMonthKey(payload.publicPeriod);
     if (!KPI_MONTH_RE.test(period)) return;
     try {
@@ -1695,9 +1752,9 @@ const kpiFetchLeaderboardSummaries = (monthKey) => {
 const kpiComputeBenchmark = (summaries, ownRow) => {
     const field = (summaries || []).filter((r) => r && !r.isEditor && !kpiIsExcludedRepName(r.name));
     const own = {
-        score: ownRow && !ownRow.isEditor ? (Number(ownRow.kanjoScore) || 0) : 0,
-        validRatio: ownRow ? (Number(ownRow.validRatioRaw) || 0) : 0,
-        imageRatio: ownRow ? (Number(ownRow.imageRatioRaw) || 0) : 0,
+        score: ownRow && !ownRow.isEditor ? kpiClamp(Number(ownRow.kanjoScore) || 0, 0, 100) : 0,
+        validRatio: ownRow ? kpiClamp(Number(ownRow.validRatioRaw) || 0, 0, 1) : 0,
+        imageRatio: ownRow ? kpiClamp(Number(ownRow.imageRatioRaw) || 0, 0, 1) : 0,
         withImage: ownRow ? (Number(ownRow.withImage) || 0) : 0,
         speedSeconds: ownRow && (Number(ownRow.totalProducts) || 0) > 0
             ? (Number(ownRow.avgSecondsPerProduct) || 0)
@@ -1712,16 +1769,19 @@ const kpiComputeBenchmark = (summaries, ownRow) => {
     let hasBenchmark = false;
     field.forEach((r) => {
         const products = Number(r.totalProducts) || 0;
-        if (products <= 0) return;
+        const rowImages = Math.max(0, Number(r.withImage) || 0);
+        /* Action-dated media can give a rep images with zero created products;
+           such a row still counts toward the image/media benchmark. */
+        if (products <= 0 && rowImages <= 0) return;
         hasBenchmark = true;
         const seconds = Number(r.totalSeconds) || 0;
         const valid = Number(r.validRatio) || 0;
         const image = Number(r.imageRatio) || 0;
         best.score = Math.max(best.score, kpiKanjoBreakdown(r, baselines).score);
-        best.validRatio = Math.max(best.validRatio, valid);
-        best.imageRatio = Math.max(best.imageRatio, image);
-        best.withImage = Math.max(best.withImage, Number(r.withImage) || 0);
-        if (seconds > 0) {
+        best.validRatio = Math.max(best.validRatio, kpiClamp(valid, 0, 1));
+        best.imageRatio = Math.max(best.imageRatio, kpiClamp(image, 0, 1));
+        best.withImage = Math.max(best.withImage, rowImages);
+        if (products > 0 && seconds > 0) {
             const sp = seconds / products;
             if (!hasSpeed || sp < best.speedSeconds) { best.speedSeconds = sp; hasSpeed = true; }
         }
@@ -1883,6 +1943,15 @@ const kpiBuildReport = async (monthKey) => {
                 totalProducts: 0,
                 merchants: new Set(),
                 withImage: 0,
+                /* Creation-scoped image presence. `withImage` is ACTION-dated
+                   (media credit follows the upload month) and can legitimately
+                   exceed the created-product count, so it must never be used as
+                   the denominator of the same-month coverage display: that
+                   subtraction is what surfaced "226 products without images" for
+                   a rep who created 0 products this month. These two counters
+                   measure exactly the rows created in this period. */
+                createdWithImage: 0,
+                createdWithoutImage: 0,
                 variationCount: 0,
                 variableProducts: 0,
                 validDescriptions: 0,
@@ -1936,6 +2005,12 @@ const kpiBuildReport = async (monthKey) => {
             rep.totalProducts += 1;
             const merchant = kpiProductMerchantName(p);
             if (merchant) rep.merchants.add(merchant);
+
+            /* Same-month coverage counters: exactly the rows CREATED in this
+               period, classified by whether that row carries an image NOW.
+               Never derived from the action-dated `withImage` numerator. */
+            if (kpiProductHasImage(p)) rep.createdWithImage += 1;
+            else rep.createdWithoutImage += 1;
 
             const variations = kpiProductVariations(p);
             if (variations.length > 0) {
@@ -2019,9 +2094,10 @@ const kpiBuildReport = async (monthKey) => {
         const stats = await kpiFetchDailyStats(rep.repId, period);
         const totalSeconds = stats.activeSeconds + stats.imageEditSeconds + (rep.historicalSeconds || 0);
         const totalProducts = rep.totalProducts;
-        // RAW ratios (0..1) — never pre-rounded. Image ratio is HARD-CAPPED at 1
-        // because imported uploads credit the numerator without the denominator.
-        const imageRatioRaw = kpiImageRatioCapped(rep.withImage, totalProducts);
+        /* Coverage ratio compares LIKE with LIKE: images on rows CREATED this
+           month vs those rows. `rep.withImage` is action-dated and belongs to
+           the scoring numerator, not this bar. */
+        const imageRatioRaw = kpiImageRatioCapped(rep.createdWithImage, totalProducts);
         const descBase = rep.nonEmptyDescriptions || totalProducts;
         const validRatioRaw = descBase ? (rep.validDescriptions / descBase) : 0;
         const junkRatioRaw = descBase ? (rep.junkDescriptions / descBase) : 0;
@@ -2042,7 +2118,10 @@ const kpiBuildReport = async (monthKey) => {
             importImagesUploaded: rep.importImagesUploaded || 0,
             merchantsCount: rep.merchants.size,
             withImage: rep.withImage,
-            withoutImage: Math.max(0, totalProducts - rep.withImage),
+            /* Same-month coverage split (creation-dated, sums to totalProducts).
+               `withImage` above stays as the action-dated scoring numerator. */
+            createdWithImage: rep.createdWithImage,
+            withoutImage: rep.createdWithoutImage,
             variableProducts: rep.variableProducts,
             variationCount: rep.variationCount,
             validDescriptions: rep.validDescriptions,
@@ -2145,25 +2224,26 @@ const kpiBuildReport = async (monthKey) => {
         acc.empty += r.emptyDescriptions;
         acc.nonEmpty += r.nonEmptyDescriptions;
         acc.withImage += r.withImage;
+        acc.createdWithImage += Number(r.createdWithImage) || 0;
         acc.withoutImage += r.withoutImage;
         return acc;
     }, {
         products: 0, editedImages: 0, merchants: 0, seconds: 0, activeSeconds: 0, imageEditSeconds: 0,
-        historicalSeconds: 0, junk: 0, valid: 0, empty: 0, nonEmpty: 0, withImage: 0, withoutImage: 0
+        historicalSeconds: 0, junk: 0, valid: 0, empty: 0, nonEmpty: 0, withImage: 0,
+        createdWithImage: 0, withoutImage: 0
     });
     totals.reps = fieldRows.length;
     totals.editors = rows.length - fieldRows.length;
     totals.topScorerName = topScorer ? topScorer.name : null;
-    totals.topScorerScore = topScorer ? topScorer.kanjoScore : 0;
-    /* Media credit is action-dated, so `withImage` can legitimately exceed the
-       creation-dated product count (work on older rows). Keep the team ratio a
-       percentage by capping it, exactly like the per-rep ratio. */
+    totals.topScorerScore = topScorer ? kpiClamp(topScorer.kanjoScore, 0, 100) : 0;
+    /* Team coverage is creation-dated on BOTH sides of the fraction so it can
+       never exceed 100% (action-dated media credit legitimately can). */
     totals.imageRatioRaw = totals.products
-        ? Math.max(0, Math.min(1, totals.withImage / totals.products))
+        ? kpiClamp(totals.createdWithImage / totals.products, 0, 1)
         : 0;
     const globalDescBase = totals.nonEmpty || totals.products;
-    totals.validRatioRaw = globalDescBase ? (totals.valid / globalDescBase) : 0;
-    totals.junkRatioRaw = globalDescBase ? (totals.junk / globalDescBase) : 0;
+    totals.validRatioRaw = globalDescBase ? kpiClamp(totals.valid / globalDescBase, 0, 1) : 0;
+    totals.junkRatioRaw = globalDescBase ? kpiClamp(totals.junk / globalDescBase, 0, 1) : 0;
     totals.minutesPerProductRaw = kpiMinutesPerProductRaw(totals.seconds, totals.products);
 
     /* Fire-and-forget so ranking never waits on the network. Reps publish only
@@ -2278,8 +2358,8 @@ const kpiRenderQualityChart = (row) => {
 const kpiRenderMediaChart = (row) => {
     const canvas = document.getElementById('kpiChartMedia');
     if (!canvas || !kpiCanChart()) return;
-    const withImg = row.withImage;
-    const withoutImg = row.withoutImage;
+    const withImg = Number(row.createdWithImage) || 0;
+    const withoutImg = Number(row.withoutImage) || 0;
     const hasData = (withImg + withoutImg) > 0;
     window._kpiCharts.media = new window.Chart(canvas.getContext('2d'), {
         type: 'doughnut',
@@ -2478,7 +2558,7 @@ const kpiRepCardHtml = (row, selected, locked) => {
     const editedPart = row.editedImagesCount ? ' • ' + row.editedImagesCount + ' صورة مُحررة' : '';
     const scoreHtml = row.isEditor
         ? `<div class="kpi-rep-score-editor"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</div>`
-        : `<div class="kpi-rep-score"><i class="fa-solid fa-award"></i> التقييم الشامل: ${Number(row.kanjoScore || 0).toFixed(1)}%</div>`;
+        : `<div class="kpi-rep-score"><i class="fa-solid fa-award"></i> التقييم الشامل: ${kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(1)}%</div>`;
     const rankPill = (!row.isEditor && row.rank)
         ? `<span class="kpi-rank-pill kpi-rank-pill-${row.rank <= 3 ? row.rank : 'x'}">${row.rank === 1 ? '<i class="fa-solid fa-crown"></i> ' : ''}#${row.rank}</span>`
         : '';
@@ -2543,7 +2623,7 @@ const kpiDeepDiveHtml = (row) => {
             <div class="flex flex-wrap gap-2">
                 ${row.isEditor
                     ? '<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> محرر الوسائط - خارج التقييم التنافسي</span>'
-                    : `<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-award"></i> التقييم الشامل: ${Number(row.kanjoScore || 0).toFixed(1)}%</span>
+                    : `<span class="kpi-chip kpi-chip-gold"><i class="fa-solid fa-award"></i> التقييم الشامل: ${kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(1)}%</span>
                        ${row.rank ? `<span class="kpi-chip kpi-chip-dark"><i class="fa-solid fa-ranking-star"></i> المركز #${row.rank}</span>` : ''}`}
                 <span class="kpi-chip kpi-chip-dark">الوقت الصافي: ${kpiFormatDurationExact(row.totalSeconds)}</span>
                 <span class="kpi-chip">${(row.minutesPerProductRaw).toFixed(2)} دقيقة / منتج</span>
@@ -2557,7 +2637,7 @@ const kpiDeepDiveHtml = (row) => {
             <div class="kpi-col-metrics space-y-3">
                 ${row.isEditor ? '' : `
                 <button type="button" class="kpi-kanjo-score-banner kpi-kanjo-score-clickable" onclick="openKpiScoreBreakdown('${kpiEscape(row.repId)}')">
-                    <div class="kpi-kanjo-score-value">${Number(row.kanjoScore || 0).toFixed(1)}</div>
+                    <div class="kpi-kanjo-score-value">${kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(1)}</div>
                     <div class="kpi-kanjo-score-meta">
                         <span class="font-black text-[#FFD700]">التقييم الشامل (Kanjo Score)</span>
                         <span class="text-slate-400">من 100 نقطة${row.rank ? ' • المركز #' + row.rank : ''}</span>
@@ -2588,7 +2668,7 @@ const kpiDeepDiveHtml = (row) => {
                     <div class="kpi-fin-row"><span>أوصاف وهمية</span><span class="kpi-fin-val text-red-600">${row.junkDescriptions} (${junkPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>بدون وصف</span><span class="kpi-fin-val text-slate-500">${row.emptyDescriptions} (${emptyPct.toFixed(1)}%)</span></div>
                     <div class="kpi-fin-row"><span>متوسط طول الوصف</span><span class="kpi-fin-val">${Math.round(Number(row.avgDescriptionLength) || 0)} حرف</span></div>
-                    <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${row.withImage} / ${row.withoutImage}</span></div>
+                    <div class="kpi-fin-row"><span>منتجات بصور / بدون صور</span><span class="kpi-fin-val">${Number(row.createdWithImage) || 0} / ${row.withoutImage}</span></div>
                     <div class="kpi-fin-row"><span>متوسط الخيارات لكل منتج</span><span class="kpi-fin-val">${(row.avgVariablesRaw).toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>منتجات بخيارات (Variable)</span><span class="kpi-fin-val">${row.variableProducts}</span></div>
                     ${row.kanjoBreakdown ? `
@@ -2597,7 +2677,7 @@ const kpiDeepDiveHtml = (row) => {
                     <div class="kpi-fin-row"><span>وزن الجهد / الوقت (10 نقاط)</span><span class="kpi-fin-val">${row.kanjoBreakdown.effortWeight.toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>وزن جودة النص (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.textWeight.toFixed(2)}</span></div>
                     <div class="kpi-fin-row"><span>وزن جودة الوسائط (35 نقطة)</span><span class="kpi-fin-val">${row.kanjoBreakdown.mediaWeight.toFixed(2)}</span></div>
-                    <div class="kpi-fin-row"><span class="text-[#230535]">إجمالي التقييم الشامل (100)</span><span class="kpi-fin-val text-[#230535]">${row.kanjoScore.toFixed(2)}</span></div>
+                    <div class="kpi-fin-row"><span class="text-[#230535]">إجمالي التقييم الشامل (100)</span><span class="kpi-fin-val text-[#230535]">${kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(2)}</span></div>
                     ` : ''}
                 </div>
 
@@ -2677,6 +2757,11 @@ const kpiPersonalRank = (row, report) => {
    Editors are never ranked. */
 const kpiComputePersonalStanding = (summaries, ownRow) => {
     if (!ownRow || ownRow.isEditor) return { rank: null, total: 0, score: 0, breakdown: null, baselines: null };
+    /* Keep every non-editor peer, including zero-product reps who still carry
+       action-dated images this month — otherwise the image baseline a rep is
+       normalized against differs from the manager board's and the two screens
+       disagree again. Rows with no products AND no images are dropped because
+       they cannot influence any maximum. */
     const peers = (summaries || [])
         .filter((r) => r && !r.isEditor && r.repId !== ownRow.repId && !kpiIsExcludedRepName(r.name))
         .map((r) => ({
@@ -2688,7 +2773,7 @@ const kpiComputePersonalStanding = (summaries, ownRow) => {
             imageRatio: Math.max(0, Number(r.imageRatio) || 0),
             withImage: Math.max(0, Number(r.withImage) || 0)
         }))
-        .filter((r) => r.totalProducts > 0);
+        .filter((r) => r.totalProducts > 0 || r.withImage > 0);
     const own = {
         repId: ownRow.repId,
         totalProducts: Math.max(0, Number(ownRow.totalProducts) || 0),
@@ -2698,10 +2783,15 @@ const kpiComputePersonalStanding = (summaries, ownRow) => {
         imageRatio: Math.max(0, Number(ownRow.imageRatioRaw) || 0),
         withImage: Math.max(0, Number(ownRow.withImage) || 0)
     };
-    const active = own.totalProducts > 0 ? peers.concat([own]) : peers;
+    const active = (own.totalProducts > 0 || own.withImage > 0) ? peers.concat([own]) : peers;
     if (!active.length) return { rank: null, total: 0, score: 0, breakdown: null, baselines: null };
     const baselines = kpiTeamBaselines(active);
-    if (own.totalProducts <= 0) return { rank: null, total: active.length, score: 0, breakdown: null, baselines };
+    /* A rep with no credited activity at all scores zero, but one who only has
+       action-dated media this month (0 created products) is scored on that media
+       exactly as the manager board does — same baselines, same formula, same cap. */
+    if (!(own.totalProducts > 0 || own.withImage > 0)) {
+        return { rank: null, total: active.length, score: 0, breakdown: null, baselines };
+    }
     const ownBreakdown = kpiKanjoBreakdown(own, baselines);
     const rank = 1 + peers.filter((r) => kpiKanjoBreakdown(r, baselines).score > ownBreakdown.score).length;
     return { rank, total: active.length, score: ownBreakdown.score, breakdown: ownBreakdown, baselines };
@@ -2727,7 +2817,7 @@ const kpiPersonalSmartTips = (row, report) => {
     if (row.totalProducts > 0 && (Number(row.avgDescriptionLength) || 0) < KPI_DESC_TARGET_LENGTH) {
         tips.push({ tone: 'info', icon: 'fa-text-width', text: 'نصيحة: متوسط طول وصفك ' + Math.round(Number(row.avgDescriptionLength) || 0) + ' حرف — اكتب أوصافاً أطول (' + KPI_DESC_TARGET_LENGTH + '+ حرفاً) لرفع نقاط جودة الوصف.' });
     }
-    if (row.imageRatioRaw < 0.8) {
+    if (row.totalProducts > 0 && row.imageRatioRaw < 0.8) {
         tips.push({ tone: 'info', icon: 'fa-image', text: 'نصيحة: أضف صوراً لمنتجاتك لرفع نسبة الجاهزية والترتيب.' });
     }
     if (row.totalProducts > 0 && t.minutesPerProductRaw > 0 && row.minutesPerProductRaw > t.minutesPerProductRaw * 1.5) {
@@ -2776,7 +2866,7 @@ const kpiScoreCriterionHtml = (crit, earned, basis) => {
 
 const kpiScoreBreakdownHtml = (row) => {
     const b = row.kanjoBreakdown || {};
-    const score = Number(row.kanjoScore || 0);
+    const score = kpiClamp(Number(row.kanjoScore) || 0, 0, 100);
     const validPct = (row.validRatioRaw * 100);
     const maxProducts = Number(row.kanjoMaxProducts || row.totalProducts || 0);
     const maxTime = Number(row.kanjoMaxTime || row.totalSeconds || 0);
@@ -2955,7 +3045,7 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                     ? `<div class="text-[10px] font-black text-white/60">إجمالي الصور المُعالجة</div>
                        <div class="font-black text-base text-white">${row.editedImagesCount || 0}</div>`
                     : `<div class="text-[10px] font-black text-white/60">التقييم الشامل</div>
-                       <div class="font-black text-xl text-[#FFD700]">${Number(row.kanjoScore || 0).toFixed(1)}%</div>`}
+                       <div class="font-black text-xl text-[#FFD700]">${kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(1)}%</div>`}
                 <div class="text-[10px] font-black text-white/60 mt-1">الوقت الصافي</div>
                 <div class="font-black text-xs text-white">${kpiFormatDurationShort(row.totalSeconds)}</div>
             </div>
@@ -2966,11 +3056,11 @@ const kpiPersonalPanelHtml = (report, row, opts) => {
                 /* A single, stress-free counter — the detailed breakdown is an
                    admin-only view (see kpiDeepDiveHtml). */
                 ? kpiPersonalCard({ tone: 'indigo', icon: 'fa-wand-magic-sparkles', value: row.editedImagesCount || 0, label: 'إجمالي الصور المُعالجة', foot: 'إجمالي الصور المكتملة والمعتمدة' })
-                : `${kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: Number(row.kanjoScore || 0).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: breakdownCall })}
+                : `${kpiPersonalCard({ tone: 'purple', icon: 'fa-award', value: kpiClamp(Number(row.kanjoScore) || 0, 0, 100).toFixed(1) + '%', label: 'التقييم الشامل (Kanjo Score)', foot: (rankInfo.rank ? 'المركز #' + rankInfo.rank + ' من ' + rankInfo.total : diffFoot), onclick: breakdownCall })}
             ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-box-open', value: Number(breakdown.volumeWeight || 0).toFixed(1) + ' / ' + KPI_VOLUME_MAX, label: 'حجم المنتجات', foot: row.totalProducts + ' منتج مسجل', onclick: breakdownCall })}
             ${kpiPersonalCard({ tone: 'purple', icon: 'fa-text-width', value: Number(breakdown.lengthWeight || 0).toFixed(1) + ' / ' + KPI_LENGTH_MAX, label: 'متوسط طول الوصف', foot: 'متوسط ' + avgDescLength + ' حرف/منتج', onclick: breakdownCall })}
             ${kpiPersonalCard({ tone: 'green', icon: 'fa-star', value: Number(breakdown.textWeight || 0).toFixed(1) + ' / ' + KPI_TEXT_MAX, label: 'جودة الأوصاف', foot: validPct.toFixed(1) + '% وصف صحيح' + (junk > 0 ? ' • ' + junk + ' وهمي' : ''), onclick: breakdownCall })}
-            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: Number(breakdown.mediaWeight || 0).toFixed(1) + ' / ' + KPI_MEDIA_MAX, label: 'جودة الوسائط (الصور)', foot: row.withImage + ' بصور • ' + row.withoutImage + ' بدون صور', onclick: breakdownCall })}
+            ${kpiPersonalCard({ tone: 'indigo', icon: 'fa-image', value: Number(breakdown.mediaWeight || 0).toFixed(1) + ' / ' + KPI_MEDIA_MAX, label: 'جودة الوسائط (الصور)', foot: (Number(row.withImage) || 0) + ' صورة مُحتسبة هذا الشهر', onclick: breakdownCall })}
             ${kpiPersonalCard({ tone: 'gold', icon: 'fa-stopwatch', value: row.minutesPerProductRaw.toFixed(2) + ' د', label: KPI_SPEED_LABEL, foot: 'لا تُخصم من وقتك أو مكافآتك' })}`}
         </div>
 
@@ -3857,9 +3947,9 @@ window.exportKpiLeaderboardCsv = () => {
                 Number(r.avgDescriptionLength || 0).toFixed(1),
                 Math.round(Number(r.validRatioRaw || 0) * 100) + '%',
                 Math.round(Number(r.imageRatioRaw || 0) * 100) + '%',
-                r.withImage,
+                Number(r.createdWithImage) || 0,
                 Number(r.editedImagesCount || 0),
-                r.isEditor ? '' : Number(r.kanjoScore || 0).toFixed(1),
+                r.isEditor ? '' : kpiClamp(Number(r.kanjoScore) || 0, 0, 100).toFixed(1),
                 r.isEditor ? '' : (r.rank || '')
             ]);
         });
