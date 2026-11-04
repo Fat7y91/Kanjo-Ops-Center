@@ -280,6 +280,43 @@ With rendering off Edge, caching becomes possible again:
   responses.
 * Put data reads behind `unstable_cache`, keyed by user scope.
 
+#### Proof of concept — `/overview` (shipped)
+
+`/overview` is the heaviest route in the bundle (301 kB first load) and the only
+render that joins four stores. Its render no longer builds the dataset:
+
+* `src/app/api/bi/overview/route.ts` answers with the payload, gated by
+  `permissionsForModule("/overview")` — the same set the page guard and the
+  sidebar accept, so a client that may open the screen may also load its data.
+* `src/components/bi/use-overview-dataset.ts` fetches it after the shell paints
+  and validates the body with `biDatasetSchema` instead of casting it, so a field
+  renamed on one side of the wire fails with a retry instead of rendering
+  `undefined` inside a chart.
+* `src/components/bi/overview-dashboard.tsx` renders the title block plus a
+  skeleton, the payload, or a retry panel. The page render is now the session
+  read and a React tree with no data in it.
+
+| | Before | After |
+|---|---|---|
+| Page render | session + full BI join | session only |
+| HTML response | dataset inlined in the RSC payload | shell + skeleton |
+| HTML bytes (`/overview`) | 146,160 | **47,572** |
+| Dataset cost | paid on every visit, before the first byte | paid once, after first paint |
+| Empty/failed data | whole page in the error boundary | header stays, panel retries |
+| Client JS (`/overview`) | 125 kB (301 kB first load) | 126 kB (302 kB first load) |
+
+The 1 kB of extra client code is the hook and the island; the 98 kB of HTML the
+dataset used to occupy only ever had to be parsed by the browser, never shipped
+to a Worker. Both numbers are from the production build.
+
+Still `no-store`: the body is identical for every operator holding the grant (the
+join is not user-scoped and the dashboard narrows it per capability in the
+browser), but the request is authorized per user, so caching it belongs with the
+`s-maxage` work above rather than ahead of it. The rest of Phase 3 — dropping
+`force-dynamic`, adding `s-maxage`, and moving the other surfaces onto this
+pattern — still needs Phase 2: a Worker that cannot cache its own HTML cannot
+serve a cached one either.
+
 ### Phase 4 — Bundle and data diet
 
 Hoist `Intl` formatters to module scope; validate BI payloads once at the data

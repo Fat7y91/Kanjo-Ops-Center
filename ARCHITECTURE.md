@@ -561,6 +561,17 @@ tolerates a browser that forbids `BroadcastChannel`.
   with `/accounts`. The payslips are built once and the same array is passed to
   `buildFounderFinancials()` for the treasury obligation, so the two widgets
   cannot read two different rollup snapshots.
+- The route is a shell, not a join. `overview/page.tsx` resolves the session and
+  renders `OverviewDashboard`, which fetches `GET /api/bi/overview` through
+  `src/components/bi/use-overview-dataset.ts` and validates the body with
+  `biDatasetSchema` instead of casting it. The handler is gated by
+  `permissionsForModule("/overview")` — the set the page guard and the sidebar
+  accept — so a client that may open the screen may also load its data. Building
+  the dataset inside the render made every visit pay for the join before the
+  first byte went out; now the title block and the skeleton paint immediately
+  and the widgets fill in. The endpoint answers `no-store` because the request
+  is authorized per user, even though the payload itself is identical for
+  everyone holding the grant.
 - Report-derived facts (newest visit, latest negotiated commission) come from
   `app.bi_merchant_rollup` (migration `20261105000000`) via
   `bi/repository.ts` + `bi/merchant-facts.ts`. It replaces the old Worker-side
