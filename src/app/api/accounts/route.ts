@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveTreasuryAccess, visibleAccounts, visibleEntries } from "@/lib/accounts/access";
-import { summarizeAll } from "@/lib/accounts/ledger";
+import { summarizeAll, totalByCurrency } from "@/lib/accounts/ledger";
 import {
   createBankAccount,
   listBankAccounts,
@@ -12,6 +12,16 @@ import { apiError, authorizeAny, readJson } from "@/lib/auth/api";
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+/**
+ * The treasury screen's single read.
+ *
+ * It answers with everything the screen draws — rows, visible movements, totals
+ * per currency and the viewer's tier — because the tier is what decides which
+ * of those the UI may show. The screen used to be rendered on the server with
+ * this exact reduction, so the endpoint is the same projection moved one layer
+ * out: the shell paints immediately and the numbers arrive with the access
+ * flags that authorize them.
+ */
 export async function GET() {
   const { session, response } = await authorizeAny([
     "view_bank_balances",
@@ -29,8 +39,12 @@ export async function GET() {
     {
       accounts: summarizeAll(accounts, entries),
       entries,
+      totals: totalByCurrency(accounts, entries),
       full: access.full,
       canViewTransactions: access.canViewTransactions,
+      canRecordDeposits: access.canRecordDeposits,
+      canRecordExpenses: access.canRecordExpenses,
+      canAddAccount: session.permissions.includes("add_bank_account"),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

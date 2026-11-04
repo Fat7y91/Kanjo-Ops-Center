@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { CatalogClient } from "@/components/catalog/catalog-client";
+import { CatalogProductsIsland } from "@/components/catalog/catalog-products-island";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
+import { ClientErrorBoundary } from "@/components/errors/client-error-boundary";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireModuleAccess } from "@/lib/auth/guard";
 import { isCatalogEligibleContract } from "@/lib/catalog/types";
-import { listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { loadMerchantStates } from "@/lib/field-ops/state-source";
 import { getCityById, getMerchantById } from "@/lib/field-ops/store";
@@ -24,6 +24,15 @@ type MerchantCatalogPageProps = {
   params: Promise<{ merchantId: string }>;
 };
 
+/**
+ * Merchant catalog shell.
+ *
+ * The header is a fact about the merchant — name, vendor type, city, resolved
+ * contract state — resolved here because an unknown or out-of-scope id must
+ * answer 404 before any client code runs. The product list is the part that
+ * varies with the catalog, so the island fetches it, and the taxonomy ships with
+ * the shell so the entry form opens without waiting.
+ */
 export default async function MerchantCatalogPage({
   params,
 }: MerchantCatalogPageProps) {
@@ -39,6 +48,7 @@ export default async function MerchantCatalogPage({
     states.get(merchant.id)?.state ?? merchant.contractState;
   const meta = CONTRACT_STATE_META[contractState];
   const city = getCityById(merchant.cityId);
+  const eligible = isCatalogEligibleContract(contractState);
 
   // The picker stays in the form, so the merchant must be listed even when its
   // contract is not eligible yet — the submit guard explains the block.
@@ -52,10 +62,6 @@ export default async function MerchantCatalogPage({
       cityName: city?.name ?? "—",
     },
   ];
-
-  const products = (await listProducts()).filter(
-    (product) => product.merchantId === merchant.id,
-  );
 
   return (
     <>
@@ -76,23 +82,26 @@ export default async function MerchantCatalogPage({
         }
       />
 
-      {isCatalogEligibleContract(contractState) ? null : (
+      {eligible ? null : (
         <p className="inline-note cat-eligibility-note">
           لا يمكن إضافة منتجات قبل اعتماد اتفاق نهائي أو توقيع العقد. الحالة
           الحالية: {meta.label}.
         </p>
       )}
 
-      <CatalogClient
-        initialProducts={products}
-        merchants={
-          isCatalogEligibleContract(contractState) ? merchantOptions : []
-        }
-        vendorTypes={listVendorTypes()}
-        categories={listCategories()}
-        variants={listVariants()}
-        defaultMerchantId={merchant.id}
-      />
+      <ClientErrorBoundary
+        title="تعذر عرض كتالوج التاجر"
+        description="لم تكتمل قراءة منتجات هذا التاجر. أعد المحاولة دون مغادرة الصفحة."
+        connectionTitle="انقطع الاتصال أثناء تحميل كتالوج التاجر"
+      >
+        <CatalogProductsIsland
+          merchantId={merchant.id}
+          merchants={eligible ? merchantOptions : []}
+          vendorTypes={listVendorTypes()}
+          categories={listCategories()}
+          variants={listVariants()}
+        />
+      </ClientErrorBoundary>
     </>
   );
 }

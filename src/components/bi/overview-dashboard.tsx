@@ -16,7 +16,7 @@ import { Skeleton, StatGridSkeleton } from "@/components/ui/skeletons";
  * fill in — instead of a blank route that resolves all at once.
  */
 export function OverviewDashboard({ header }: { header: ReactNode }) {
-  const { status, dataset, error, reload } = useOverviewDataset();
+  const { status, data: dataset, error, reload } = useOverviewDataset();
 
   if (status === "loading") {
     return (

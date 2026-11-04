@@ -3,19 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import type { MerchantRow } from "@/lib/field-ops/payload";
 import { smartTextScore } from "@/lib/search/normalize";
 
-export type MerchantRow = {
-  id: string;
-  name: string;
-  vendorType: string;
-  vendorTypeId: number;
-  cityName: string;
-  teamLabel: string;
-  stateLabel: string;
-  stateTone: string;
-  commissionLabel: string;
-};
+export type { MerchantRow };
 
 type MerchantsDirectoryProps = {
   rows: MerchantRow[];
