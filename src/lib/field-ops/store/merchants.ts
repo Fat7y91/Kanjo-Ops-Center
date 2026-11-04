@@ -5,33 +5,54 @@ import { assertVendorTypeExists } from "@/lib/taxonomy/store";
 
 import {
   FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
   isoNow,
   type Actor,
 } from "./core";
+import {
+  findMerchantByNormalizedName,
+  getMerchantRow,
+  insertMerchant,
+  listMerchantRows,
+} from "../merchant-repository";
+import { getCityById } from "./cities";
 
-export function listMerchants(): Merchant[] {
-  return clone(getStore().merchants).sort((left, right) =>
+/**
+ * Merchant reads and creation, backed by `app.merchants`.
+ *
+ * The directory used to be a process-local seed. That meant two workers could
+ * disagree about the network, a restart lost every merchant, and payroll (which
+ * already read SQL) saw a different list than `/merchants`. The table is now the
+ * single source of truth; this module owns the domain rules and the repository
+ * owns the columns.
+ */
+
+export async function listMerchants(): Promise<Merchant[]> {
+  const merchants = await listMerchantRows();
+  return merchants.sort((left, right) =>
     left.name.localeCompare(right.name, "ar"),
   );
 }
 
-export function getMerchantById(merchantId: string): Merchant | null {
-  const merchant = getStore().merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  return merchant ? clone(merchant) : null;
+export async function getMerchantById(
+  merchantId: string,
+): Promise<Merchant | null> {
+  return getMerchantRow(merchantId);
 }
 
-export function createMerchant(
+/** Merchant or a typed 404, for the write paths that require one. */
+export async function requireMerchant(merchantId: string): Promise<Merchant> {
+  const merchant = await getMerchantRow(merchantId);
+  if (!merchant) {
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
+  }
+  return merchant;
+}
+
+export async function createMerchant(
   input: MerchantCreateInput,
-  _actor: Actor,
-): Merchant {
-  const store = getStore();
-  const city = store.cities.find((candidate) => candidate.id === input.cityId);
+  actor: Actor,
+): Promise<Merchant> {
+  const city = await getCityById(input.cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
   }
@@ -39,9 +60,7 @@ export function createMerchant(
   const vendorType = assertVendorTypeExists(input.vendorTypeId);
 
   const normalizedName = merchantSearchKey(input.name);
-  const existing = store.merchants.find(
-    (candidate) => candidate.normalizedName === normalizedName,
-  );
+  const existing = await findMerchantByNormalizedName(normalizedName);
   if (existing) {
     throw new FieldOpsError(
       "MERCHANT_EXISTS",
@@ -52,8 +71,9 @@ export function createMerchant(
     );
   }
 
+  const now = isoNow();
   const merchant: Merchant = {
-    id: id("m"),
+    id: `m-${crypto.randomUUID().slice(0, 8)}`,
     name: input.name.trim(),
     normalizedName,
     vendorTypeId: input.vendorTypeId,
@@ -67,12 +87,10 @@ export function createMerchant(
     commissionAmount: 0,
     editUnlocked: false,
     documents: [],
-    createdAt: isoNow(),
-    updatedAt: isoNow(),
+    createdAt: now,
+    updatedAt: now,
     lastVisitAt: null,
   };
 
-  store.merchants.push(merchant);
-  bump();
-  return clone(merchant);
+  return insertMerchant({ merchant, createdBy: actor.id });
 }

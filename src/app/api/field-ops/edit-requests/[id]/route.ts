@@ -17,7 +17,7 @@ export async function POST(
 
   try {
     const input = decisionSchema.parse(await readJson(request));
-    const editRequest = decideEditRequest(
+    const editRequest = await decideEditRequest(
       id,
       input.decision,
       actorFromSession(session),

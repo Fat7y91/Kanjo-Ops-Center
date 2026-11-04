@@ -10,6 +10,9 @@ import {
   isoNow,
   type Actor,
 } from "./core";
+import { getCityById } from "./cities";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
 export function listTasks(): FieldTask[] {
   return clone(getStore().tasks).sort((left, right) =>
@@ -38,23 +41,14 @@ export function tasksForViewer(input: {
   );
 }
 
-export function assignMerchantTask(
+export async function assignMerchantTask(
   input: TaskAssignInput,
   actor: Actor,
-): { task: FieldTask; merchant: Merchant } {
+): Promise<{ task: FieldTask; merchant: Merchant }> {
   const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === input.merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError(
-      "MERCHANT_NOT_FOUND",
-      "التاجر المستهدف غير موجود.",
-      404,
-    );
-  }
+  const merchant = await requireMerchant(input.merchantId);
 
-  const city = store.cities.find((candidate) => candidate.id === merchant.cityId);
+  const city = await getCityById(merchant.cityId);
   if (!city) {
     throw new FieldOpsError("CITY_NOT_FOUND", "مدينة التاجر غير موجودة.", 404);
   }
@@ -74,20 +68,21 @@ export function assignMerchantTask(
     );
   }
 
+  let assigned = merchant;
   if (!merchant.team) {
-    merchant.team = input.team;
+    const updated = await updateMerchantRow(merchant.id, { team: input.team });
+    if (updated) assigned = updated;
   }
-  merchant.updatedAt = isoNow();
 
   const task: FieldTask = {
     id: id("task"),
-    merchantId: merchant.id,
-    merchantName: merchant.name,
+    merchantId: assigned.id,
+    merchantName: assigned.name,
     team: input.team,
-    cityId: merchant.cityId,
+    cityId: assigned.cityId,
     visitDate: input.visitDate,
-    targetCommission: merchant.targetCommission,
-    strategicNotes: merchant.strategicNotes,
+    targetCommission: assigned.targetCommission,
+    strategicNotes: assigned.strategicNotes,
     instructions: input.instructions.trim(),
     status: "scheduled",
     createdBy: actor.id,
@@ -98,5 +93,5 @@ export function assignMerchantTask(
   store.tasks.push(task);
   bump();
 
-  return { task: clone(task), merchant: clone(merchant) };
+  return { task: clone(task), merchant: clone(assigned) };
 }

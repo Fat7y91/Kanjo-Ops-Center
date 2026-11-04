@@ -3,6 +3,7 @@ import type {
   KpiCity,
   KpiDataset,
   KpiRank,
+  KpiRankFact,
   KpiScope,
   KpiSnapshot,
   KpiVaultFacts,
@@ -17,6 +18,12 @@ import { buildInsights } from "@/lib/kpi/insights";
  * Pure domain layer: receives a fully-hydrated `KpiDataset` from the Tier 4
  * repository and returns presentation-ready snapshots. Ranking is strictly
  * city-scoped by design — never compare reps across cities or teams.
+ *
+ * The city peer table is built once per report. The previous version rebuilt
+ * and re-sorted it for every snapshot, making a report O(agents² × city). The
+ * live-month rank also comes pre-computed from `app.agent_kpi_rank_rollup` when
+ * the view is deployed; the local sort remains the fallback for snapshots and
+ * local dev.
  */
 
 const byScoreDesc = (
@@ -24,31 +31,51 @@ const byScoreDesc = (
   right: { score: number; name: string },
 ) => right.score - left.score || left.name.localeCompare(right.name, "ar");
 
-function cityPeers(
-  dataset: KpiDataset,
-  agent: KpiAgent,
-  factsFor: (candidate: KpiAgent) => KpiVaultFacts,
-  scoreFor: (facts: KpiVaultFacts) => number,
-): Array<{ agent: KpiAgent; facts: KpiVaultFacts; score: number }> {
-  return dataset.agents
-    .filter((candidate) => candidate.cityId === agent.cityId)
-    .map((candidate) => {
-      const facts = factsFor(candidate);
-      return { agent: candidate, facts, score: scoreFor(facts) };
-    })
-    .sort((left, right) =>
+type CityPeer = { agent: KpiAgent; facts: KpiVaultFacts; score: number };
+
+type CityIndex = Map<string, CityPeer[]>;
+
+function buildCityIndex(dataset: KpiDataset): CityIndex {
+  const index: CityIndex = new Map();
+  for (const agent of dataset.agents) {
+    const facts = factsFor(dataset, agent);
+    const peer: CityPeer = {
+      agent,
+      facts,
+      score: scoreVaultFacts(facts),
+    };
+    const bucket = index.get(agent.cityId);
+    if (bucket) bucket.push(peer);
+    else index.set(agent.cityId, [peer]);
+  }
+  for (const bucket of index.values()) {
+    bucket.sort((left, right) =>
       byScoreDesc(
         { score: left.score, name: left.agent.name },
         { score: right.score, name: right.agent.name },
       ),
     );
+  }
+  return index;
 }
 
 function rankFor(
-  peers: Array<{ agent: KpiAgent; score: number }>,
+  peers: CityPeer[],
   agentId: string,
   city: KpiCity,
+  rollup: KpiRankFact | undefined,
 ): KpiRank {
+  // The rollup ranks by the rep's first `user_city_scope` row. If the roster
+  // resolved a different city for this rep, the pre-computed rank describes a
+  // different peer set, so fall back to the local sort instead of mixing them.
+  if (rollup && rollup.cityId === city.id) {
+    return {
+      position: rollup.position,
+      total: rollup.total,
+      cityId: city.id,
+      cityName: city.name,
+    };
+  }
   const position = peers.findIndex((peer) => peer.agent.id === agentId) + 1;
   return {
     position: position > 0 ? position : peers.length,
@@ -62,17 +89,12 @@ function snapshotFor(
   dataset: KpiDataset,
   agent: KpiAgent,
   city: KpiCity,
+  peers: CityPeer[],
 ): KpiSnapshot {
-  const facts = factsFor(dataset, agent);
+  const self = peers.find((peer) => peer.agent.id === agent.id);
+  const facts = self?.facts ?? factsFor(dataset, agent);
   const score = Math.round(scoreVaultFacts(facts) * 10) / 10;
-
-  const peers = cityPeers(
-    dataset,
-    agent,
-    (candidate) => factsFor(dataset, candidate),
-    (candidateFacts) => scoreVaultFacts(candidateFacts),
-  );
-  const rank = rankFor(peers, agent.id, city);
+  const rank = rankFor(peers, agent.id, city, dataset.ranksByRep.get(agent.id));
 
   const top = peers[0] ?? null;
   const insights = buildInsights({
@@ -150,13 +172,14 @@ export function buildKpiReport(
 ): { snapshots: KpiSnapshot[]; generatedFor: string; cityCount: number } {
   const agents = selectAgents(dataset, scope);
   const cities = new Map(dataset.cities.map((city) => [city.id, city]));
+  const index = buildCityIndex(dataset);
 
   const snapshots = agents.map((agent) => {
     const city = cities.get(agent.cityId);
     if (!city) {
       throw new KpiError("CITY_NOT_FOUND", "مدينة المندوب غير موجودة.", 404);
     }
-    return snapshotFor(dataset, agent, city);
+    return snapshotFor(dataset, agent, city, index.get(agent.cityId) ?? []);
   });
 
   const ordered = [
@@ -187,7 +210,8 @@ export function getAgentSnapshot(
   if (!city) {
     throw new KpiError("CITY_NOT_FOUND", "مدينة المندوب غير موجودة.", 404);
   }
-  return snapshotFor(dataset, agent, city);
+  const peers = buildCityIndex(dataset).get(agent.cityId) ?? [];
+  return snapshotFor(dataset, agent, city, peers);
 }
 
 export { KPI_STAGE_META };

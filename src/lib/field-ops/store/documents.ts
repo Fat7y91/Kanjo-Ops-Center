@@ -1,28 +1,17 @@
 import type { Merchant, MerchantDocument } from "@/lib/field-ops/types";
 import type { MerchantDocumentInput } from "@/lib/schemas/field-ops";
 
-import {
-  FieldOpsError,
-  bump,
-  clone,
-  getStore,
-  id,
-  isoNow,
-  type Actor,
-} from "./core";
+import { isoNow, FieldOpsError } from "./core";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
-export function addMerchantDocument(
+export async function addMerchantDocument(
   merchantId: string,
   input: MerchantDocumentInput,
-  actor: Actor,
-): Merchant {
-  const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
-  }
+  actor: { id: string },
+): Promise<Merchant> {
+  const merchant = await requireMerchant(merchantId);
+
   if (
     merchant.contractState !== "final_contract" &&
     merchant.contractState !== "signed_contract"
@@ -35,15 +24,16 @@ export function addMerchantDocument(
   }
 
   const document: MerchantDocument = {
-    id: id("doc"),
+    id: `doc-${crypto.randomUUID().slice(0, 8)}`,
     name: input.name.trim(),
     type: input.type,
     url: input.url.trim(),
     uploadedAt: isoNow(),
     uploadedBy: actor.id,
   };
-  merchant.documents.push(document);
-  merchant.updatedAt = isoNow();
-  bump();
-  return clone(merchant);
+
+  const updated = await updateMerchantRow(merchantId, {
+    documents: [...merchant.documents, document],
+  });
+  return updated ?? merchant;
 }

@@ -23,6 +23,8 @@ import {
 } from "./core";
 import { mergeOpinions } from "./crm";
 import { loadVisitReports } from "./report-source";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
 export async function listVisitReports(
   merchantId?: string,
@@ -68,12 +70,7 @@ export async function createVisitReport(
   duplicate: boolean;
 }> {
   const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
-  }
+  const merchant = await requireMerchant(merchantId);
 
   // Offline flush is idempotent: a retried clientVisitId must not duplicate.
   // The durable table is checked as well as the local store, so a replay in a
@@ -160,18 +157,9 @@ export async function createVisitReport(
 
   // Commission is only *earned* at signature; agreedCommission records the
   // negotiated percentage at every stage so the CRM card has the full picture.
-  let commissionAmount = 0;
-  if (COMMISSION_OUTCOMES.includes(outcome)) {
-    merchant.agreedCommission = input.agreedCommission ?? null;
-  }
-
+  const commissionAmount = 0;
   const agreedCommission = input.agreedCommission ?? null;
-
-  merchant.contractState = outcome;
-  merchant.commissionAmount = commissionAmount;
-  merchant.editUnlocked = false;
-  merchant.lastVisitAt = isoNow();
-  merchant.updatedAt = isoNow();
+  const recordsAgreedCommission = COMMISSION_OUTCOMES.includes(outcome);
 
   if (input.taskId) {
     const task = store.tasks.find((candidate) => candidate.id === input.taskId);
@@ -191,16 +179,48 @@ export async function createVisitReport(
   // keeping the strongest weight, so the card shows the most recent intensity
   // each rep has expressed without letting a weak signal overwrite a strong one.
   const contact = input.contact ?? null;
-  if (contact && (contact.name || contact.role || contact.mobile)) {
-    merchant.contact = {
-      name: contact.name.trim(),
-      role: contact.role.trim(),
-      mobile: contact.mobile.trim(),
-    };
-    merchant.contactUpdatedAt = isoNow();
-  }
+  const nextContact =
+    contact && (contact.name || contact.role || contact.mobile)
+      ? {
+          name: contact.name.trim(),
+          role: contact.role.trim(),
+          mobile: contact.mobile.trim(),
+        }
+      : (merchant.contact ?? null);
+  const nextOpinions = mergeOpinions(
+    merchant.opinions ?? [],
+    input.opinions ?? [],
+  );
+  const visitedAt = isoNow();
 
-  merchant.opinions = mergeOpinions(merchant.opinions ?? [], input.opinions ?? []);
+  const persisted = await updateMerchantRow(merchant.id, {
+    contractState: outcome,
+    commissionAmount,
+    agreedCommission: recordsAgreedCommission
+      ? agreedCommission
+      : (merchant.agreedCommission ?? null),
+    editUnlocked: false,
+    lastVisitAt: visitedAt,
+    contact: nextContact,
+    contactUpdatedAt:
+      contact && (contact.name || contact.role || contact.mobile)
+        ? visitedAt
+        : (merchant.contactUpdatedAt ?? null),
+    opinions: nextOpinions,
+  });
+  const saved: Merchant = persisted ?? {
+    ...merchant,
+    contractState: outcome,
+    commissionAmount,
+    agreedCommission: recordsAgreedCommission
+      ? agreedCommission
+      : (merchant.agreedCommission ?? null),
+    editUnlocked: false,
+    lastVisitAt: visitedAt,
+    contact: nextContact,
+    contactUpdatedAt: merchant.contactUpdatedAt ?? null,
+    opinions: nextOpinions,
+  };
 
   // Normalise once: the form sends "" when no follow-up is selected, and a
   // blank string would otherwise be persisted and later treated as a number.
@@ -210,8 +230,8 @@ export async function createVisitReport(
   // be a real UUID rather than the readable `report-xxxxxxxx` store prefix.
   const report: VisitReport = {
     id: crypto.randomUUID(),
-    merchantId: merchant.id,
-    merchantName: merchant.name,
+    merchantId: saved.id,
+    merchantName: saved.name,
     taskId: input.taskId ?? null,
     repId: actor.id,
     repName: actor.name,
@@ -227,7 +247,7 @@ export async function createVisitReport(
     durationSeconds: input.durationSeconds ?? null,
     startLocation: input.startLocation ?? null,
     endLocation: input.endLocation ?? null,
-    contact: merchant.contact ?? null,
+    contact: saved.contact ?? null,
     opinions: input.opinions ?? [],
     followUpAt: input.followUpAt ?? null,
     followUpTaskId: null,
@@ -243,10 +263,10 @@ export async function createVisitReport(
     const followUpDate = input.followUpAt.slice(0, 10);
     followUp = {
       id: id("followup"),
-      merchantId: merchant.id,
-      merchantName: merchant.name,
-      team: merchant.team ?? actor.team,
-      cityId: merchant.cityId,
+      merchantId: saved.id,
+      merchantName: saved.name,
+      team: saved.team ?? actor.team,
+      cityId: saved.cityId,
       visitDate: followUpDate,
       dueAt: input.followUpAt,
       kind: input.followUpKind ?? "visit",
@@ -262,16 +282,16 @@ export async function createVisitReport(
     store.followUps = [...(store.followUps ?? []), followUp];
 
     // A follow-up is a real board task for the whole team, not a private note.
-    if (merchant.team) {
+    if (saved.team) {
       store.tasks.push({
         id: id("task"),
-        merchantId: merchant.id,
-        merchantName: merchant.name,
-        team: merchant.team,
-        cityId: merchant.cityId,
+        merchantId: saved.id,
+        merchantName: saved.name,
+        team: saved.team,
+        cityId: saved.cityId,
         visitDate: followUpDate,
-        targetCommission: merchant.targetCommission,
-        strategicNotes: merchant.strategicNotes,
+        targetCommission: saved.targetCommission,
+        strategicNotes: saved.strategicNotes,
         instructions:
           followUp.kind === "call"
             ? `متابعة هاتفية مجدولة من زيارة ${report.repName}.`
@@ -293,7 +313,7 @@ export async function createVisitReport(
 
   return {
     report: clone(report),
-    merchant: clone(merchant),
+    merchant: clone(saved),
     followUp: followUp ? clone(followUp) : null,
     duplicate: false,
   };

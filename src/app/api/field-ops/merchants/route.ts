@@ -28,7 +28,7 @@ export async function GET() {
   const allowed = new Set(effectiveCityIds(session));
   const cityMap = new Map(listCities().map((city) => [city.id, city]));
 
-  const scoped = listMerchants().filter((merchant) =>
+  const scoped = (await listMerchants()).filter((merchant) =>
     allowed.has(merchant.cityId),
   );
   // The picker badge must show the resolved agreement state, which is what the
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const merchant = createMerchant(input, actorFromSession(session));
+    const merchant = await createMerchant(input, actorFromSession(session));
     return NextResponse.json({ merchant }, { status: 201 });
   } catch (error) {
     return apiError(error);

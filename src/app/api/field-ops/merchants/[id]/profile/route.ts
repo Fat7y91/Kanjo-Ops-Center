@@ -39,7 +39,7 @@ export async function GET(
   const { id } = await context.params;
 
   try {
-    if (!getMerchantById(id)) {
+    if (!(await getMerchantById(id))) {
       throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
     }
     const profile = await getMerchantV1Profile(id);
@@ -61,7 +61,7 @@ export async function PATCH(
   const { id } = await context.params;
 
   try {
-    if (!getMerchantById(id)) {
+    if (!(await getMerchantById(id))) {
       throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
     }
     if (!isMerchantProfilesDatabaseConfigured()) {

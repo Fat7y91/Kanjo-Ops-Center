@@ -6,12 +6,13 @@
  * answers "what exists" and performs the write.
  */
 
-import { getMerchantById } from "@/lib/field-ops/store";
+import { getMerchantById, listMerchants } from "@/lib/field-ops/store";
 import {
   catalogRevision,
   completeImageQa,
   listProducts,
 } from "@/lib/catalog/store";
+import { getProductRow } from "@/lib/catalog/product-repository";
 import type { CatalogProduct } from "@/lib/catalog/types";
 
 export type CatalogRecord = {
@@ -21,23 +22,27 @@ export type CatalogRecord = {
 };
 
 /** Every product with its resolved merchant city. */
-export function listCatalogRecords(): CatalogRecord[] {
-  return listProducts().map((product) => ({
+export async function listCatalogRecords(): Promise<CatalogRecord[]> {
+  const [products, merchants] = await Promise.all([
+    listProducts(),
+    listMerchants(),
+  ]);
+  const cityOf = new Map(merchants.map((merchant) => [merchant.id, merchant.cityId]));
+  return products.map((product) => ({
     product,
-    cityId: getMerchantById(product.merchantId)?.cityId ?? null,
+    cityId: cityOf.get(product.merchantId) ?? null,
   }));
 }
 
-export function findCatalogRecord(
+export async function findCatalogRecord(
   productId: string,
-): CatalogRecord | undefined {
-  const product = listProducts().find((item) => item.id === productId);
+): Promise<CatalogRecord | undefined> {
+  const product = await getProductRow(productId);
   if (!product) return undefined;
-  return {
-    product,
-    cityId: getMerchantById(product.merchantId)?.cityId ?? null,
-  };
+  const merchant = await getMerchantById(product.merchantId);
+  return { product, cityId: merchant?.cityId ?? null };
 }
+
 
 export type ImageQaCommitPatch = {
   imageDataUrl?: string | null;
@@ -53,11 +58,11 @@ export type ImageQaCommit = {
  * Persists an image-QA transition. The store owns the pure state machine and
  * the revision bump; this wrapper only shapes the result for controllers.
  */
-export function commitImageQa(
+export async function commitImageQa(
   productId: string,
   patch: ImageQaCommitPatch,
-): ImageQaCommit {
-  const product = completeImageQa(productId, patch);
+): Promise<ImageQaCommit> {
+  const product = await completeImageQa(productId, patch);
   return { product, revision: catalogRevision() };
 }
 

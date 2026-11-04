@@ -29,7 +29,7 @@ export default async function MerchantCatalogPage({
 }: MerchantCatalogPageProps) {
   const session = await requirePermission("view_catalog");
   const { merchantId } = await params;
-  const merchant = getMerchantById(merchantId);
+  const merchant = await getMerchantById(merchantId);
   if (!merchant || !effectiveCityIds(session).includes(merchant.cityId)) {
     notFound();
   }
@@ -53,7 +53,7 @@ export default async function MerchantCatalogPage({
     },
   ];
 
-  const products = listProducts().filter(
+  const products = (await listProducts()).filter(
     (product) => product.merchantId === merchant.id,
   );
 

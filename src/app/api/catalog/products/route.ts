@@ -7,7 +7,7 @@ import {
 } from "@/lib/auth/api";
 import { catalogRevision, createProduct, listProducts } from "@/lib/catalog/store";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { getMerchantById } from "@/lib/field-ops/store";
+import { listMerchants } from "@/lib/field-ops/store";
 import { productCreateSchema } from "@/lib/schemas/catalog";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +24,12 @@ export async function GET() {
 
   // Same city scope as the page: the client reload must never widen visibility.
   const allowed = new Set(effectiveCityIds(session));
-  const products = listProducts().filter((product) => {
-    const merchant = getMerchantById(product.merchantId);
-    return merchant ? allowed.has(merchant.cityId) : false;
+  const merchantCity = new Map(
+    (await listMerchants()).map((merchant) => [merchant.id, merchant.cityId]),
+  );
+  const products = (await listProducts()).filter((product) => {
+    const merchant = merchantCity.get(product.merchantId);
+    return merchant ? allowed.has(merchant) : false;
   });
 
   return NextResponse.json(
@@ -43,7 +46,7 @@ export async function POST(request: Request) {
 
   try {
     const input = productCreateSchema.parse(await readJson(request));
-    const product = createProduct(input, {
+    const product = await createProduct(input, {
       id: session.user.id,
       name: session.user.name,
     });

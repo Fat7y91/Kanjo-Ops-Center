@@ -17,6 +17,7 @@ import {
 } from "@/lib/field-ops/merchant-state";
 
 import { clone, getStore } from "./core";
+import { getMerchantById } from "./merchants";
 import { loadVisitReports } from "./report-source";
 
 export function calculateCommission(
@@ -78,6 +79,7 @@ export async function merchantTimeline(
   preloaded?: VisitReport[],
 ): Promise<MerchantTimelineEntry[]> {
   const store = getStore();
+  const merchant = await getMerchantById(merchantId);
   const entries: MerchantTimelineEntry[] = [];
   const reports = preloaded ?? (await loadVisitReports());
 
@@ -99,7 +101,7 @@ export async function merchantTimeline(
       });
     }
   }
-  for (const document of store.merchants.find((m) => m.id === merchantId)?.documents ?? []) {
+  for (const document of merchant?.documents ?? []) {
     entries.push({
       kind: "document",
       at: document.uploadedAt,
@@ -143,7 +145,7 @@ export async function merchantCrmSummary(
   rollup?: MerchantStateRollup | null,
 ): Promise<MerchantCrmSummary> {
   const store = getStore();
-  const merchant = store.merchants.find((m) => m.id === merchantId);
+  const merchant = await getMerchantById(merchantId);
   const visits = (preloaded ?? (await loadVisitReports())).filter(
     (report) => report.merchantId === merchantId,
   );

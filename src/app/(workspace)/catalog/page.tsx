@@ -21,14 +21,14 @@ export default async function CatalogPage() {
   const session = await requirePermission("view_catalog");
   const allowed = new Set(effectiveCityIds(session));
 
-  const merchants = listMerchants().filter((merchant) =>
+  const merchants = (await listMerchants()).filter((merchant) =>
     allowed.has(merchant.cityId),
   );
   const merchantIds = new Set(merchants.map((merchant) => merchant.id));
 
   // City scope applies to the catalog too: a reviewer only sees products whose
   // merchant sits inside their effective cities.
-  const products = listProducts().filter((product) =>
+  const products = (await listProducts()).filter((product) =>
     merchantIds.has(product.merchantId),
   );
 

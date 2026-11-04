@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       continue;
     }
 
-    const merchant = getMerchantById(merchantId);
+    const merchant = await getMerchantById(merchantId);
     if (!merchant) {
       results.push({
         clientVisitId,

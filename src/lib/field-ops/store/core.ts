@@ -3,7 +3,6 @@ import type {
   EditRequest,
   FieldTask,
   FollowUpTask,
-  Merchant,
   StateOverride,
   TransferRequest,
   VisitReport,
@@ -26,7 +25,6 @@ export class FieldOpsError extends Error {
 
 export type FieldOpsStore = {
   cities: City[];
-  merchants: Merchant[];
   tasks: FieldTask[];
   reports: VisitReport[];
   followUps: FollowUpTask[];

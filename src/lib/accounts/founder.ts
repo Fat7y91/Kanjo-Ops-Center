@@ -1,6 +1,6 @@
 import { listBankAccounts, listLedgerEntries } from "@/lib/accounts/store";
 import { totalByCurrency } from "@/lib/accounts/ledger";
-import { buildPayslips } from "@/lib/payroll/store";
+import { buildPayslips, type Payslip } from "@/lib/payroll/store";
 
 export type AccountsSnapshot = {
   currency: "EGP" | "SAR";
@@ -32,12 +32,17 @@ export type FounderFinancials = {
  * a different balance than the accounts page: both read the same ledger. Each
  * currency is reported separately because riyals and pounds must never be
  * summed together.
+ *
+ * Callers that already built the payslips (the overview does, for its payroll
+ * widget) pass them in so the rollup is not read twice.
  */
-export async function buildFounderFinancials(): Promise<FounderFinancials> {
+export async function buildFounderFinancials(
+  payslips?: Payslip[],
+): Promise<FounderFinancials> {
   const totals = totalByCurrency(listBankAccounts(), listLedgerEntries());
 
   const pending: Record<"EGP" | "SAR", number> = { EGP: 0, SAR: 0 };
-  for (const slip of await buildPayslips()) {
+  for (const slip of payslips ?? (await buildPayslips())) {
     pending[slip.profile.currency] += slip.result.net;
   }
 

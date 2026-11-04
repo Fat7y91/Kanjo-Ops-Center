@@ -9,6 +9,8 @@ import {
   isoNow,
   type Actor,
 } from "./core";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
 export function listTransferRequests(): TransferRequest[] {
   return clone(getStore().transferRequests).sort((left, right) =>
@@ -16,18 +18,14 @@ export function listTransferRequests(): TransferRequest[] {
   );
 }
 
-export function createTransferRequest(
+export async function createTransferRequest(
   merchantId: string,
   justification: string,
   actor: Actor,
-): TransferRequest {
+): Promise<TransferRequest> {
   const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
-  }
+  const merchant = await requireMerchant(merchantId);
+
   if (!merchant.team) {
     throw new FieldOpsError(
       "MERCHANT_UNASSIGNED",
@@ -79,12 +77,12 @@ export function createTransferRequest(
   return clone(request);
 }
 
-export function decideTransferRequest(
+export async function decideTransferRequest(
   requestId: string,
   decision: "approve" | "reject",
   actor: Actor,
   note: string,
-): TransferRequest {
+): Promise<TransferRequest> {
   const store = getStore();
   const request = store.transferRequests.find(
     (candidate) => candidate.id === requestId,
@@ -107,21 +105,12 @@ export function decideTransferRequest(
   request.reviewNote = note.trim();
 
   if (decision === "approve") {
-    const merchant = store.merchants.find(
-      (candidate) => candidate.id === request.merchantId,
-    );
-    if (merchant) {
-      merchant.team = request.toTeam;
-      merchant.updatedAt = isoNow();
-      store.tasks.forEach((task) => {
-        if (
-          task.merchantId === merchant.id &&
-          task.status === "scheduled"
-        ) {
-          task.team = request.toTeam;
-        }
-      });
-    }
+    await updateMerchantRow(request.merchantId, { team: request.toTeam });
+    store.tasks.forEach((task) => {
+      if (task.merchantId === request.merchantId && task.status === "scheduled") {
+        task.team = request.toTeam;
+      }
+    });
   }
 
   bump();

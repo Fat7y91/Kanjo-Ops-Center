@@ -38,7 +38,7 @@ export async function POST(
     const { id } = await context.params;
     const patch = imageQaSchema.parse(await readJson(request));
 
-    const record = findCatalogRecord(id);
+    const record = await findCatalogRecord(id);
     const cityScope = effectiveCityIds(session);
     if (
       !record ||
@@ -48,7 +48,7 @@ export async function POST(
       throw new ImageQaError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
     }
 
-    const { product, revision } = commitImageQa(id, patch);
+    const { product, revision } = await commitImageQa(id, patch);
 
     return NextResponse.json(
       { product, revision },

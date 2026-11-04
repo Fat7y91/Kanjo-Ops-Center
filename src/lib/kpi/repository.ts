@@ -1,6 +1,7 @@
 import { listCities } from "@/lib/field-ops/store";
 import { currentMonthKey, isCurrentMonth } from "@/lib/kpi/calendar";
-import type { KpiAgent, KpiCity, KpiDataset, KpiVaultRaw } from "@/lib/kpi/types";
+import type { KpiAgent, KpiCity, KpiDataset, KpiRankFact, KpiVaultRaw } from "@/lib/kpi/types";
+import { loadAgentKpiRanks } from "@/lib/kpi/rank-repository";
 import {
   isKpiVaultConfigured,
   loadLiveMonthVault,
@@ -65,8 +66,11 @@ export async function loadKpiDataset(month: string): Promise<KpiDataset> {
   );
 
   const vault = await loadVault(month);
+  const ranksByRep: Map<string, KpiRankFact> = isCurrentMonth(month)
+    ? ((await loadAgentKpiRanks()) ?? new Map())
+    : new Map();
 
-  return { cities: kpiCities, agents, vault, month };
+  return { cities: kpiCities, agents, vault, ranksByRep, month };
 }
 
 async function loadVault(month: string): Promise<KpiVaultRaw> {

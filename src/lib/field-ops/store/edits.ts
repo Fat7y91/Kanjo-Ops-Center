@@ -9,6 +9,8 @@ import {
   isoNow,
   type Actor,
 } from "./core";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
 export function listEditRequests(): EditRequest[] {
   return clone(getStore().editRequests).sort((left, right) =>
@@ -16,18 +18,14 @@ export function listEditRequests(): EditRequest[] {
   );
 }
 
-export function createEditRequest(
+export async function createEditRequest(
   merchantId: string,
   reason: string,
   actor: Actor,
-): EditRequest {
+): Promise<EditRequest> {
   const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
-  }
+  const merchant = await requireMerchant(merchantId);
+
   if (merchant.contractState === "signed_contract") {
     throw new FieldOpsError(
       "SIGNED_LOCKED",
@@ -84,12 +82,12 @@ export function createEditRequest(
   return clone(request);
 }
 
-export function decideEditRequest(
+export async function decideEditRequest(
   requestId: string,
   decision: "approve" | "reject",
   actor: Actor,
   note: string,
-): EditRequest {
+): Promise<EditRequest> {
   const store = getStore();
   const request = store.editRequests.find(
     (candidate) => candidate.id === requestId,
@@ -112,13 +110,7 @@ export function decideEditRequest(
   request.reviewNote = note.trim();
 
   if (decision === "approve") {
-    const merchant = store.merchants.find(
-      (candidate) => candidate.id === request.merchantId,
-    );
-    if (merchant) {
-      merchant.editUnlocked = true;
-      merchant.updatedAt = isoNow();
-    }
+    await updateMerchantRow(request.merchantId, { editUnlocked: true });
   }
 
   bump();

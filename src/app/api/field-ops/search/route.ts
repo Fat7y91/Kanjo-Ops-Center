@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   if (!session) return response;
 
   const query = new URL(request.url).searchParams.get("q") ?? "";
-  const matches = searchMerchants(
+  const matches = await searchMerchants(
     query,
     session.user.team,
     20,

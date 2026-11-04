@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   try {
     const input = taskAssignSchema.parse(await readJson(request));
-    const merchant = getMerchantById(input.merchantId);
+    const merchant = await getMerchantById(input.merchantId);
     if (
       merchant &&
       !effectiveCityIds(session).includes(merchant.cityId)
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         { status: 403 },
       );
     }
-    const result = assignMerchantTask(input, actorFromSession(session));
+    const result = await assignMerchantTask(input, actorFromSession(session));
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return apiError(error);

@@ -13,12 +13,12 @@ export function merchantSearchKey(name: string): string {
   return normalizeSearchText(name);
 }
 
-export function searchMerchants(
+export async function searchMerchants(
   query: string,
   viewerTeam: string,
   limit = 20,
   accessibleCityIds: readonly string[] = [],
-): MerchantSearchResult[] {
+): Promise<MerchantSearchResult[]> {
   const trimmed = query.trim();
   if (trimmed.length < 1) return [];
 
@@ -27,12 +27,11 @@ export function searchMerchants(
   );
 
   const allowedCities = new Set(accessibleCityIds);
+  const allMerchants = await listMerchants();
   const scopedMerchants =
     allowedCities.size > 0
-      ? listMerchants().filter((merchant) =>
-          allowedCities.has(merchant.cityId),
-        )
-      : listMerchants();
+      ? allMerchants.filter((merchant) => allowedCities.has(merchant.cityId))
+      : allMerchants;
 
   const results = scopedMerchants
     .map((merchant) => {

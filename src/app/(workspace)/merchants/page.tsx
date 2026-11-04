@@ -33,7 +33,7 @@ export default async function MerchantsPage({
   const allCities = listCities();
   const cityMap = new Map(allCities.map((city) => [city.id, city]));
   const allowedCities = new Set(effectiveCityIds(session));
-  const scoped = listMerchants().filter((merchant) =>
+  const scoped = (await listMerchants()).filter((merchant) =>
     allowedCities.has(merchant.cityId),
   );
   const canCreate = session.permissions.includes("add_merchant");

@@ -63,11 +63,11 @@ const repository: ImageQaRepository = {
     commitImageQa(productId, patch),
 };
 
-function toResult(
-  resolve: () => { product: CatalogProduct },
-): ImageQaActionResult {
+async function toResult(
+  resolve: () => Promise<{ product: CatalogProduct }>,
+): Promise<ImageQaActionResult> {
   try {
-    const { product } = resolve();
+    const { product } = await resolve();
     revalidatePath("/catalog");
     revalidatePath("/catalog/qa");
     return { ok: true, product };
@@ -90,11 +90,7 @@ export async function approveProductImage(
   if (!session) return { ok: false, error: error ?? undefined };
 
   return toResult(() =>
-    approveImage(
-      repository,
-      productId,
-      effectiveCityIds(session),
-    ),
+    approveImage(repository, productId, effectiveCityIds(session)),
   );
 }
 

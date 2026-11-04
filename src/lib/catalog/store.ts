@@ -1,4 +1,3 @@
-import { getMerchantById } from "@/lib/field-ops/store";
 import { normalizeSearchText } from "@/lib/search/normalize";
 import {
   assertCategoryInVendor,
@@ -13,11 +12,21 @@ import {
   type CatalogVariantSelection,
 } from "@/lib/catalog/types";
 import { generateSku, normalizeCode } from "@/lib/catalog/sku";
-import { buildCatalogSeed } from "@/lib/catalog/data/seed";
 import {
   applyImageQa,
   type ImageQaPatch,
 } from "@/lib/catalog/services/image-qa-service";
+import { getMerchantById } from "@/lib/field-ops/store";
+import {
+  findProductByBarcode,
+  findProductByClientId,
+  findProductByMerchantName,
+  findProductBySku,
+  getProductRow,
+  insertProduct,
+  listProductRows,
+  updateProductRow,
+} from "./product-repository";
 
 export { ImageQaError } from "@/lib/catalog/services/image-qa-service";
 
@@ -33,50 +42,39 @@ export class CatalogError extends Error {
   }
 }
 
-type CatalogStore = {
-  products: CatalogProduct[];
-  revision: number;
-};
+/**
+ * Monotonic write counter, per isolate.
+ *
+ * The API echoes it so a client can tell two responses apart, but it is not an
+ * authority: the database is. It replaced the old in-memory store revision.
+ */
+let revision = 1;
 
-const globalStore = globalThis as typeof globalThis & {
-  __kanjoV2CatalogStore?: CatalogStore;
-};
+export function catalogRevision(): number {
+  return revision;
+}
+
+function bumpRevision(): void {
+  revision += 1;
+}
 
 function isoNow(): string {
   return new Date().toISOString();
 }
 
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
-
-function seedStore(): CatalogStore {
-  return { products: buildCatalogSeed(isoNow()), revision: 1 };
-}
-
-function getStore(): CatalogStore {
-  if (!globalStore.__kanjoV2CatalogStore) {
-    globalStore.__kanjoV2CatalogStore = seedStore();
-  }
-  return globalStore.__kanjoV2CatalogStore;
-}
-
-export function catalogRevision(): number {
-  return getStore().revision;
-}
-
-export function listProducts(): CatalogProduct[] {
-  return clone(getStore().products).sort((left, right) =>
+export async function listProducts(): Promise<CatalogProduct[]> {
+  const products = await listProductRows();
+  return products.sort((left, right) =>
     left.name.localeCompare(right.name, "ar"),
   );
 }
 
 /** Ensures a generated SKU never collides with an existing one. */
-function uniqueSku(vendorTypeId: number | null): string {
-  const existing = new Set(getStore().products.map((product) => product.sku));
+async function uniqueSku(vendorTypeId: number | null): Promise<string> {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const candidate = generateSku(vendorTypeId);
-    if (!existing.has(candidate)) return candidate;
+    const existing = await findProductBySku(candidate);
+    if (!existing) return candidate;
   }
   throw new CatalogError(
     "SKU_GENERATION_FAILED",
@@ -85,12 +83,11 @@ function uniqueSku(vendorTypeId: number | null): string {
   );
 }
 
-export function createProduct(
+export async function createProduct(
   input: CatalogProductInput,
   author: CatalogAuthor | null = null,
-): CatalogProduct {
-  const store = getStore();
-  const merchant = getMerchantById(input.merchantId);
+): Promise<CatalogProduct> {
+  const merchant = await getMerchantById(input.merchantId);
   if (!merchant) {
     throw new CatalogError(
       "MERCHANT_NOT_FOUND",
@@ -109,24 +106,21 @@ export function createProduct(
 
   // Replay guard: an identical client id means this exact draft was already
   // accepted, so the queue can safely drop it without double-creating.
-  if (
-    input.clientProductId &&
-    store.products.some(
-      (product) => product.clientProductId === input.clientProductId,
-    )
-  ) {
-    throw new CatalogError(
-      "PRODUCT_ALREADY_SYNCED",
-      "تمت مزامنة هذه المسودة بالفعل.",
-      409,
-    );
+  if (input.clientProductId) {
+    const synced = await findProductByClientId(input.clientProductId);
+    if (synced) {
+      throw new CatalogError(
+        "PRODUCT_ALREADY_SYNCED",
+        "تمت مزامنة هذه المسودة بالفعل.",
+        409,
+      );
+    }
   }
 
   const name = input.name.trim();
-  const duplicate = store.products.some(
-    (product) =>
-      product.merchantId === merchant.id &&
-      normalizeSearchText(product.name) === normalizeSearchText(name),
+  const duplicate = await findProductByMerchantName(
+    merchant.id,
+    normalizeSearchText(name),
   );
   if (duplicate) {
     throw new CatalogError(
@@ -159,10 +153,7 @@ export function createProduct(
   const categoryKey = category.key;
 
   const barcode = normalizeCode(input.barcode ?? "");
-  if (
-    barcode &&
-    store.products.some((product) => product.barcode === barcode)
-  ) {
+  if (barcode && (await findProductByBarcode(barcode))) {
     throw new CatalogError(
       "BARCODE_EXISTS",
       "الباركود مستخدم لمنتج آخر بالفعل.",
@@ -170,8 +161,8 @@ export function createProduct(
     );
   }
 
-  const sku = normalizeCode(input.sku ?? "") || uniqueSku(vendorTypeId);
-  if (store.products.some((product) => product.sku === sku)) {
+  const sku = normalizeCode(input.sku ?? "") || (await uniqueSku(vendorTypeId));
+  if (await findProductBySku(sku)) {
     throw new CatalogError("SKU_EXISTS", "رمز SKU مستخدم بالفعل.", 409);
   }
 
@@ -199,9 +190,9 @@ export function createProduct(
     updatedAt: now,
   };
 
-  store.products.push(product);
-  store.revision += 1;
-  return clone(product);
+  const stored = await insertProduct(product);
+  bumpRevision();
+  return stored;
 }
 
 /**
@@ -210,15 +201,19 @@ export function createProduct(
  * Delegates the state machine to `applyImageQa` so the rules stay pure and
  * testable; this function only owns persistence and revision bumping.
  */
-export function completeImageQa(
+export async function completeImageQa(
   productId: string,
   patch: ImageQaPatch,
-): CatalogProduct {
-  const store = getStore();
-  const product = store.products.find((item) => item.id === productId);
-  const updated = applyImageQa(product, patch, isoNow());
-  store.revision += 1;
-  return clone(updated);
+): Promise<CatalogProduct> {
+  const product = await getProductRow(productId);
+  const updated = applyImageQa(product ?? undefined, patch, isoNow());
+  const stored = await updateProductRow(productId, {
+    imageDataUrl: updated.imageDataUrl,
+    state: updated.state,
+    reviewNote: updated.reviewNote,
+  });
+  bumpRevision();
+  return stored ?? updated;
 }
 
 export type SyncProductResult = {
@@ -239,17 +234,17 @@ export type SyncProductInput = CatalogProductInput & {
  * rest of the batch, and anything that fails is reported back so the client can
  * keep it queued for a later retry.
  */
-export function syncProducts(
+export async function syncProducts(
   inputs: SyncProductInput[],
   author: CatalogAuthor | null = null,
-): { results: SyncProductResult[]; synced: number; failed: number } {
+): Promise<{ results: SyncProductResult[]; synced: number; failed: number }> {
   const results: SyncProductResult[] = [];
   let synced = 0;
   let failed = 0;
 
   for (const input of inputs) {
     try {
-      const product = createProduct(input, author);
+      const product = await createProduct(input, author);
       results.push({
         clientProductId: input.clientProductId ?? null,
         status: "synced",
@@ -286,4 +281,4 @@ export function syncProducts(
   return { results, synced, failed };
 }
 
-export type { CatalogProductState };
+export type { CatalogProductState, CatalogVariantSelection };

@@ -19,7 +19,7 @@ export default async function CatalogQaPage() {
   const session = await requirePermission("review_image_quality");
 
   const cityScope = effectiveCityIds(session);
-  const pending = getPendingReviewProducts(listCatalogRecords(), cityScope);
+  const pending = getPendingReviewProducts(await listCatalogRecords(), cityScope);
   const withImage = pending.filter((product) => product.imageDataUrl).length;
 
   return (

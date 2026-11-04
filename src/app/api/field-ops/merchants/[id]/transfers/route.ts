@@ -17,7 +17,7 @@ export async function POST(
 
   try {
     const input = transferRequestSchema.parse(await readJson(request));
-    const transfer = createTransferRequest(
+    const transfer = await createTransferRequest(
       id,
       input.justification,
       actorFromSession(session),

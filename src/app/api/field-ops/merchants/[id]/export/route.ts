@@ -36,7 +36,7 @@ export async function GET(
   if (!session) return response;
   const { id } = await context.params;
 
-  const merchant = getMerchantById(id);
+  const merchant = await getMerchantById(id);
   if (!merchant) {
     return NextResponse.json(
       { error: "التاجر غير موجود.", code: "MERCHANT_NOT_FOUND" },

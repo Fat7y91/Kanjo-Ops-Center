@@ -79,10 +79,24 @@ export type KpiVaultRaw = {
   snapshotsByRep: Map<string, VaultSnapshotFact>;
 };
 
+/**
+ * Pre-computed live-month city rank for one rep, read from
+ * `app.agent_kpi_rank_rollup`. Present only for the live month when the view is
+ * deployed; the service otherwise ranks facts locally.
+ */
+export type KpiRankFact = {
+  cityId: string;
+  score: number;
+  position: number;
+  total: number;
+};
+
 export type KpiDataset = {
   cities: KpiCity[];
   agents: KpiAgent[];
   vault: KpiVaultRaw;
+  /** Live-month scores and city ranks, keyed by rep id. */
+  ranksByRep: Map<string, KpiRankFact>;
   /** The month the dataset is computed for (`YYYY-MM`). */
   month: string;
 };

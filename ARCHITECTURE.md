@@ -261,8 +261,11 @@ crashing route happens to contain charts. Rules:
   `app` schema (RBAC tables, triggers, RLS). See Section 7.
 
 Status: RBAC (`rbac/repository.ts`, `rbac/team-repository.ts`) and commission
-rates (`commissions/repository.ts`) are live consumers. Every other domain still
-runs on the in-memory stores below until it is migrated one at a time.
+rates (`commissions/repository.ts`) are live consumers. Merchants
+(`app.merchants`), catalog products (`app.catalog_products`) and visit reports
+(`app.visit_reports`) are SQL-backed single sources of truth. Cities, tasks,
+transfers and edit requests are still process-local until they are migrated one
+at a time.
 
 ### Auth & RBAC (T1→T5)
 - `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `authorizeMinClearance`, `apiError`, `readJson` (Controller helpers).
@@ -317,14 +320,21 @@ logout therefore POST to plain route handlers. Rules locked in:
   `image-qa.ts` are deprecated shims over the services.
 - Data access: `src/lib/catalog/offline-queue.ts` (draft queue) over
   `draft-storage.ts` (IndexedDB/localStorage); `draft-queue.ts` is a shim.
-- Repository: `src/lib/catalog/store.ts` (279) — in-memory store + CRUD/sync;
-  `src/lib/catalog/repository.ts` — merchant-city resolution + QA commits.
-- Data: `src/lib/catalog/data/seed.ts` (85).
+- Repository: `src/lib/catalog/store.ts` — domain rules + CRUD/sync over
+  `product-repository.ts`, which is the only module that knows
+  `app.catalog_products`; `src/lib/catalog/repository.ts` — merchant-city
+  resolution + QA commits.
 - Schema: `src/lib/schemas/catalog.ts`.
-- State enum: `draft → pending_review → completed → published`.
+- State enum: `pending_review → completed → published`.
 - Image QA gated by `manage_catalog | review_catalog_images`; drafts edit gated
   by `manage_catalog | create_products`.
 - QA workspace lives at `/catalog/qa` (nav module `review_catalog_images`).
+- Storage is `app.catalog_products` (migration `20261106000000`), the single
+  source of truth; there is no seed fallback. The migration adds the columns the
+  domain model carries (vendor type, category, product type, variants, review
+  note, authorship, offline client id) and enforces uniqueness for the client
+  draft id, the merchant+normalised name pair, SKU and barcode, so a concurrent
+  pair of requests cannot double-create.
 
 ### Field Ops (Tier 1–5)
 - UI: `src/components/field-ops/` (client shells, modals, visit engine, geo
@@ -338,7 +348,17 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Repository: `src/lib/field-ops/store.ts` is a barrel over
   `store/core.ts` (store accessor, ids, clock) and `store/operations.ts`.
   The concrete repositories are `store/{cities,merchants,tasks,visits,transfers,
-  edits,documents,state,crm,dates}.ts`; `store/seed.ts` (565) is seed data.
+  edits,documents,state,crm,dates}.ts`; `store/seed.ts` seeds the domains that
+  are still process-local (cities, tasks, reports).
+- Merchant directory (SSOT): `src/lib/field-ops/merchant-repository.ts` is the
+  only module that knows `app.merchants` (migration `20261106000000`).
+  `store/merchants.ts` is the async domain facade (`listMerchants`,
+  `getMerchantById`, `requireMerchant`, `createMerchant`) and `store/merchants`
+  no longer keeps rows in the global store — the merchant sub-data (documents,
+  contact, opinions) lives in the `documents`/`contact`/`opinions` jsonb columns
+  on the same row, so the profile is always one authoritative read. There is no
+  seed fallback: an unconfigured database yields an empty directory and writes
+  fail with `MERCHANTS_UNAVAILABLE` (503).
 - Durable reports: `src/lib/field-ops/reports-repository.ts` is the only module
   that knows `app.visit_reports` (migration `20261102000005`). Writes go there
   before the route acknowledges; reads go through
@@ -380,7 +400,9 @@ logout therefore POST to plain route handlers. Rules locked in:
   `.../profile` route authorises each supplied field against its own capability
   (`edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`,
   `export_merchant_data`), and `.../export` streams a SpreadsheetML `.xls`.
-- Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`.
+- Legacy in-memory global store guarded by `__kanjoV2FieldOpsStore`, now holding
+  only the domains that have not been migrated (cities, tasks, transfers, edit
+  requests). Merchants and catalog products live in Postgres.
 - Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
   is authoritative; `components/field-ops/visit/validate-visit-form.ts`
   mirrors it client-side and must return the failing field key.
@@ -470,7 +492,19 @@ logout therefore POST to plain route handlers. Rules locked in:
   the accounts and payroll stores and travel inside `BiDataset`, so browser
   components never import a server store. Importing a store client-side would
   bundle a second, divergent ledger into the JS and let the dashboard disagree
-  with `/accounts`.
+  with `/accounts`. The payslips are built once and the same array is passed to
+  `buildFounderFinancials()` for the treasury obligation, so the two widgets
+  cannot read two different rollup snapshots.
+- Report-derived facts (newest visit, latest negotiated commission) come from
+  `app.bi_merchant_rollup` (migration `20261105000000`) via
+  `bi/repository.ts` + `bi/merchant-facts.ts`. It replaces the old Worker-side
+  reduction over the whole report table. The view reads only
+  `app.visit_reports` — the durable fact table both screens already use — so it
+  is complete whether or not `app.merchants` has been backfilled. Published
+  product counts come from `app.catalog_products`, the same table the catalog
+  screens write, so the compliance document check and the catalog health widget
+  never disagree. When the view is not deployed, `merchant-facts.ts` falls back
+  to a single pass over the reports.
 - `tables.ts` builders are pure: they accept dataset slices (`accountsTable`,
   `ledgerTable`, `payrollTable`) rather than reading stores themselves. Drills
   receive the same slices through `BiScopedData`. Treasury rows are
@@ -502,10 +536,16 @@ logout therefore POST to plain route handlers. Rules locked in:
   scoring), `insights.ts` (gap heuristics), `scope.ts`, `calendar.ts` (month
   arithmetic). All pure.
 - Repository: `src/lib/kpi/vault.ts` reads the SQL Vault (live month queries
-  and `app.kpi_snapshots`); `src/lib/kpi/repository.ts` composes the RBAC
-  roster + city catalogue with the vault into a `KpiDataset`. No mock seeds.
+  and `app.kpi_snapshots`); `src/lib/kpi/rank-repository.ts` reads the
+  live-month `app.agent_kpi_rank_rollup`; `src/lib/kpi/repository.ts` composes
+  the RBAC roster + city catalogue with the vault and ranks into a `KpiDataset`.
+  No mock seeds.
 - Ranking is **strictly city-scoped**; scores from different cities are never
-  compared. Metrics come from the city stage:
+  compared. `buildKpiReport` builds the city peer table once and reuses it for
+  every snapshot (the old code rebuilt and re-sorted it per snapshot,
+  O(agents² × city)); the live-month rank also comes pre-computed from
+  `app.agent_kpi_rank_rollup`. Snapshot months and local dev still rank the
+  in-memory facts. Metrics come from the city stage:
   `preparation → contracting → data_entry → live_operations`.
 - CSS: `src/styles/kpi.css` manifest over `src/styles/kpi/{layout,metrics,ranking,insights,responsive}.css`.
 - Empty scope is a **rendered state, not an error**. When no rep matches the
@@ -596,6 +636,13 @@ logout therefore POST to plain route handlers. Rules locked in:
 - Data: `src/lib/payroll/{store,seed,types}.ts`. Contribution is derived from
   live visit reports, not stored on the payroll profile, so payroll can never
   disagree with the commission dashboard.
+- Contributions: `src/lib/payroll/repository.ts` reads
+  `app.payroll_contributions_rollup` (migration `20261105000000`) — one grouped
+  row per rep. `buildPayslips()` reads it once; the old path called
+  `contributionFor()` inside the profile loop and re-read the whole report table
+  per profile (O(profiles × reports)), a P0 Edge CPU 1102 offender. When the
+  view is not deployed, a single-pass fallback keeps local dev and CI truthful
+  without reintroducing the per-profile scan.
 - SQL: `20261030000200_payroll.sql` — `payroll_profiles`,
   `payroll_commission_tiers` (cumulative bands), `payroll_kpi_links`,
   `payroll_runs`, `payroll_lines`, and the `payroll_run_totals` view.
@@ -699,20 +746,22 @@ logout therefore POST to plain route handlers. Rules locked in:
 
 The tiers exist conceptually; these are the concrete gaps to close.
 
-1. **In-memory stores are still the live Tier 5.** Every domain
-   (`rbac/users.ts`, `catalog/store.ts`, `field-ops/store/`, `taxonomy/store.ts`,
-   `kpi/repository.ts`) reads a process-local global. On Cloudflare these are
+1. **Some domains are still process-local.** `rbac/users.ts`, `field-ops/store/`
+   (cities, tasks, transfers, edit requests), `taxonomy/store.ts` and
+   `lib/marketing` read a process-local global. On Cloudflare these are
    per-isolate, so data is neither durable nor consistent across requests. The
-   connection clients now exist in `src/lib/db/`; the remaining work is to move
-   each domain behind a `repository.ts` that uses them, one domain per commit:
-   - Financial/ERP → Supabase: RBAC users, ledgers, wallets, commissions.
-     **Progress:** the accounts ledger, payroll, marketing and commission-rate
-     tables now exist in SQL (§8.7), and the commission schedule is fully wired
-     (`errors.ts`, `modules.ts`, `guard.ts`, `api.ts`).
-     The remaining stores (`lib/accounts`, `lib/payroll`,
-     `lib/marketing`) still read a process-local global. The schemas are the
+   connection clients exist in `src/lib/db/`; the remaining work is to move each
+   domain behind a `repository.ts` that uses them, one domain per commit:
+   - **Done:** RBAC users/teams/grants, commission rates, the accounts ledger,
+     payroll, visit reports, merchant state, KPI snapshots, and — as of
+     `20261106000000` — the merchant directory (`app.merchants`) and catalog
+     (`app.catalog_products`). These are SQL single sources of truth with no
+     seed fallback.
+   - Financial/ERP → Supabase: remaining stores `lib/accounts`, `lib/payroll`,
+     `lib/marketing` still read a process-local global. The schemas are the
      contract; wiring the repositories is the remaining step.
-   - Operations → Firebase: catalog, field ops, live orders.
+   - Operations → Firebase: live orders; field-ops cities/tasks/transfers and
+     taxonomy still run in-memory.
 2. **RBAC reads and writes are now Supabase-backed.** `rbac/repository.ts`
    implements the Tier 4 seam and `rbac/users.ts` is an async facade over it.
    The seed roster is consulted only when Supabase is not configured; once it
@@ -733,8 +782,9 @@ The tiers exist conceptually; these are the concrete gaps to close.
    reserved Tier 4 seam. Other domains still mix business and persistence in
    `src/lib/<domain>/store.ts`; extract pure rules into
    `src/lib/<domain>/services/` and leave only queries in `store/`.
-6. **`catalog/store.ts` mixes validation (T3) with mutation (T4).** Split into
-   `catalog/rules.ts` and `catalog/repository.ts`.
+6. **`catalog/store.ts` is the async domain facade over `product-repository.ts`.**
+   Validation lives in `schemas/catalog.ts` and `services/`; persistence is in
+   `product-repository.ts`. `store.ts` stays under the 300-line limit.
 7. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
    persistence together. Split and drop below 300.
 8. **Page components are still clients.** Move view state into `use-*.ts` so
@@ -1291,6 +1341,7 @@ commission fee schedule: a rate is a price list in EGP, stored as
 | `20261102000002_capital_treasury_gate.sql` | `app.can_manage_treasury()`, rewritten payout/capital policies | The first migration gated decisions on the legacy `manage_accounts` key, which the 49-key catalogue no longer contains — the policies would have been unreachable. Decisions now follow the full-book treasury capabilities, the same rule `resolveTreasuryAccess()` applies. |
 | `20261102000003_operations_clearinghouse.sql` | `app.couriers`, `app.operation_logs`, `app.financial_ledgers`; enums `payment_method` / `clearing_entity_type` / `clearing_ledger_status` | Operations are append-only (`OPERATION_IMMUTABLE`). `operation_freeze_amounts()` derives and freezes commission and courier cut before insert. `operation_route_ledgers()` writes exactly one merchant row and one courier row per order: **COD** → merchant `-(commission)`, courier `-(delivery_fee − courier_cut)`; **ONLINE** → merchant `+(order_value − commission)`, courier `+(courier_cut)`. A unique `(operation_id, entity_type)` index makes a retry unable to double-route. `clearing_ledger_guard()` forbids changing money terms or reopening a settled row. |
 | `20261102000004_fix_l4_missing_grants.sql` | re-grants `log_operations` / `view_clearinghouse` / `settle_clearinghouse` to active L3+ operators; bumps `auth_revision` | Repair for `49 / 52`: replaying `20261101000000_seed_l4_new_permissions.sql` after Pillar 2 deletes every L4 grant absent from its hardcoded 49-key snapshot, including the three new keys. The patch re-grants them and asserts every active L3+ operator holds all three before committing. |
+| `20261105000000_edge_rollups.sql` | views `app.payroll_contributions_rollup`, `app.bi_merchant_rollup`, `app.agent_kpi_rank_rollup` (all `security_invoker = true`) | Moves the remaining P0 Edge CPU 1102 work into SQL. Each view is one indexed read that replaces a Worker-side scan: payroll contributions (was O(profiles × reports)), overview merchant facts (was a report-table reduction plus a nested product join), and live-month KPI city rank (was O(agents² × city)). Re-runnable via guarded `drop ... if exists`; grants are idempotent. |
 
 Commission rates are **numeric EGP, not minor units**: the schedule is a price
 list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres
@@ -1375,7 +1426,7 @@ The QA workspace proves the 5-tier model end-to-end with server actions.
 | 2 — Controller | `src/app/api/catalog/products/[id]/image-qa/route.ts` | Legacy REST entry point; same service + repository, same guards. |
 | 3 — Business | `src/lib/catalog/services/image-qa-service.ts` | `ImageQaError`, `getPendingReviewProducts`, `approveImage`, `uploadEnhancedImage`, plus pure `assertImageQaTransition` / `applyImageQa`. Repository is injected — zero Tier 4 imports. |
 | 4 — Repository | `src/lib/catalog/repository.ts` | `listCatalogRecords` / `findCatalogRecord` (merchant→city) and `commitImageQa`. Only layer that touches `catalog/store.ts`. |
-| 5 — Database | `src/lib/catalog/store.ts` + `data/seed.ts` | In-memory global store and seed fixtures. **Target:** Firebase Firestore via `src/lib/db/firebase/` (catalog is an Operations domain). |
+| 5 — Database | `src/lib/catalog/product-repository.ts` | Only module that knows `app.catalog_products` (migration `20261106000000`): async CRUD, minor-unit price mapping, unique-violation → typed domain codes. `store.ts` keeps the domain rules over it. |
 
 Data flow:
 
@@ -1463,6 +1514,7 @@ graph TD
     A["agent-kpi/page.tsx (T1)"] --> B["scope.ts (T2)"]
     A --> C["repository.ts (T4)"]
     C --> D["vault.ts (T4) -> app schema: products, merchants, commission_rates, kpi_snapshots"]
+    C --> R["rank-repository.ts (T4) -> app.agent_kpi_rank_rollup"]
     C --> G["rbac users + field-ops cities"]
     B --> E["agent-kpi-service.ts (T3)"]
     E --> F["metrics.ts + insights.ts + calendar.ts (T3)"]

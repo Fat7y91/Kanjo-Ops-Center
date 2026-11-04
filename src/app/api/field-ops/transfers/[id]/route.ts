@@ -17,7 +17,7 @@ export async function POST(
 
   try {
     const input = decisionSchema.parse(await readJson(request));
-    const transfer = decideTransferRequest(
+    const transfer = await decideTransferRequest(
       id,
       input.decision,
       actorFromSession(session),

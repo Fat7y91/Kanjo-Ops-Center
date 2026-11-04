@@ -15,6 +15,8 @@ import {
   type Actor,
 } from "./core";
 import { calculateCommission } from "./crm";
+import { requireMerchant } from "./merchants";
+import { updateMerchantRow } from "../merchant-repository";
 
 export function listStateOverrides(merchantId?: string): StateOverride[] {
   const overrides = clone(getStore().overrides).sort((left, right) =>
@@ -25,7 +27,7 @@ export function listStateOverrides(merchantId?: string): StateOverride[] {
     : overrides;
 }
 
-export function setMerchantState(
+export async function setMerchantState(
   merchantId: string,
   state: ContractState,
   note: string,
@@ -37,14 +39,9 @@ export function setMerchantState(
    * column only knows what this isolate last wrote.
    */
   previousState?: ContractState,
-): { merchant: Merchant; override: StateOverride } {
+): Promise<{ merchant: Merchant; override: StateOverride }> {
   const store = getStore();
-  const merchant = store.merchants.find(
-    (candidate) => candidate.id === merchantId,
-  );
-  if (!merchant) {
-    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
-  }
+  const merchant = await requireMerchant(merchantId);
 
   const previous = previousState ?? merchant.contractState;
 
@@ -59,23 +56,39 @@ export function setMerchantState(
         422,
       );
     }
-    merchant.agreedCommission = agreedCommission;
   }
+
+  const lockedCommission =
+    state === "signed_contract"
+      ? (agreedCommission ?? merchant.agreedCommission ?? null)
+      : (merchant.agreedCommission ?? null);
 
   const commissionAmount =
     state === "signed_contract"
-      ? calculateCommission(merchant.monthlyValue, merchant.agreedCommission ?? merchant.targetCommission)
+      ? calculateCommission(
+          merchant.monthlyValue,
+          lockedCommission ?? merchant.targetCommission,
+        )
       : 0;
 
-  merchant.contractState = state;
-  merchant.commissionAmount = commissionAmount;
-  merchant.editUnlocked = false;
-  merchant.updatedAt = isoNow();
+  const updated = await updateMerchantRow(merchantId, {
+    contractState: state,
+    commissionAmount,
+    agreedCommission: lockedCommission,
+    editUnlocked: false,
+  });
+  const saved = updated ?? {
+    ...merchant,
+    contractState: state,
+    commissionAmount,
+    agreedCommission: lockedCommission,
+    editUnlocked: false,
+  };
 
   const override: StateOverride = {
     id: id("override"),
-    merchantId: merchant.id,
-    merchantName: merchant.name,
+    merchantId: saved.id,
+    merchantName: saved.name,
     fromState: previous,
     toState: state,
     actorId: actor.id,
@@ -87,8 +100,8 @@ export function setMerchantState(
 
   const report: VisitReport = {
     id: id("report"),
-    merchantId: merchant.id,
-    merchantName: merchant.name,
+    merchantId: saved.id,
+    merchantName: saved.name,
     taskId: null,
     repId: actor.id,
     repName: actor.name,
@@ -98,11 +111,11 @@ export function setMerchantState(
     notes: `Manager state override: ${note.trim()}`,
     commissionAmount,
     agreedCommission:
-      state === "signed_contract" ? (merchant.agreedCommission ?? null) : null,
+      state === "signed_contract" ? (lockedCommission ?? null) : null,
     createdAt: isoNow(),
   };
   store.reports.push(report);
   bump();
 
-  return { merchant: clone(merchant), override: clone(override) };
+  return { merchant: clone(saved), override: clone(override) };
 }

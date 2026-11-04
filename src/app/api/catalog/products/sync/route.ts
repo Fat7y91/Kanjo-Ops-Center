@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const { drafts } = catalogSyncSchema.parse(await readJson(request));
-    const outcome = syncProducts(drafts, {
+    const outcome = await syncProducts(drafts, {
       id: session.user.id,
       name: session.user.name,
     });

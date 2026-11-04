@@ -149,12 +149,12 @@ export type ImageQaRecord = {
 };
 
 export type ImageQaRepository = {
-  listRecords(): ImageQaRecord[];
-  findRecord(productId: string): ImageQaRecord | undefined;
+  listRecords(): Promise<ImageQaRecord[]>;
+  findRecord(productId: string): Promise<ImageQaRecord | undefined>;
   commit(
     productId: string,
     patch: ImageQaPatch,
-  ): { product: CatalogProduct; revision: number };
+  ): Promise<{ product: CatalogProduct; revision: number }>;
 };
 
 function assertInScope(record: ImageQaRecord | undefined, cityIds: readonly string[]): ImageQaRecord {
@@ -188,22 +188,28 @@ export function getPendingReviewProducts(
 }
 
 /** Provides the QA queue for a repository without leaking it into the UI. */
-export function pendingProductsFor(
+export async function pendingProductsFor(
   repository: ImageQaRepository,
   effectiveCityIds: readonly string[],
-): CatalogProduct[] {
-  return getPendingReviewProducts(repository.listRecords(), effectiveCityIds);
+): Promise<CatalogProduct[]> {
+  return getPendingReviewProducts(
+    await repository.listRecords(),
+    effectiveCityIds,
+  );
 }
 
 /**
  * `pending_review → completed`, approving the current image untouched.
  */
-export function approveImage(
+export async function approveImage(
   repository: ImageQaRepository,
   productId: string,
   effectiveCityIds: readonly string[],
-): { product: CatalogProduct; revision: number } {
-  const record = assertInScope(repository.findRecord(productId), effectiveCityIds);
+): Promise<{ product: CatalogProduct; revision: number }> {
+  const record = assertInScope(
+    await repository.findRecord(productId),
+    effectiveCityIds,
+  );
   assertImageQaTransition(record.product, {});
   return repository.commit(productId, {});
 }
@@ -211,13 +217,16 @@ export function approveImage(
 /**
  * Replaces the product image and completes the review in one transition.
  */
-export function uploadEnhancedImage(
+export async function uploadEnhancedImage(
   repository: ImageQaRepository,
   productId: string,
   newImage: string,
   effectiveCityIds: readonly string[],
-): { product: CatalogProduct; revision: number } {
-  const record = assertInScope(repository.findRecord(productId), effectiveCityIds);
+): Promise<{ product: CatalogProduct; revision: number }> {
+  const record = assertInScope(
+    await repository.findRecord(productId),
+    effectiveCityIds,
+  );
   assertImageQaTransition(record.product, { imageDataUrl: newImage });
   return repository.commit(productId, { imageDataUrl: newImage });
 }

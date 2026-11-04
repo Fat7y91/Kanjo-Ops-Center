@@ -21,11 +21,11 @@ export async function PATCH(
     const input = merchantStateSchema.parse(await readJson(request));
     // The `fromState` recorded on the decision is the resolved state, not the
     // column this isolate happens to hold.
-    const merchant = getMerchantById(id);
+    const merchant = await getMerchantById(id);
     const previousState = merchant
       ? await loadMerchantState(merchant)
       : undefined;
-    const result = setMerchantState(
+    const result = await setMerchantState(
       id,
       input.state,
       input.note,

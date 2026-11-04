@@ -17,7 +17,7 @@ export async function POST(
 
   try {
     const input = merchantDocumentSchema.parse(await readJson(request));
-    const merchant = addMerchantDocument(
+    const merchant = await addMerchantDocument(
       id,
       input,
       actorFromSession(session),

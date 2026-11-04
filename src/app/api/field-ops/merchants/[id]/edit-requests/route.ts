@@ -20,7 +20,7 @@ export async function POST(
   const { id } = await context.params;
 
   try {
-    const merchant = getMerchantById(id);
+    const merchant = await getMerchantById(id);
     if (!merchant) {
       throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
     }
@@ -36,7 +36,7 @@ export async function POST(
     }
 
     const input = editRequestSchema.parse(await readJson(request));
-    const editRequest = createEditRequest(
+    const editRequest = await createEditRequest(
       id,
       input.reason,
       actorFromSession(session),

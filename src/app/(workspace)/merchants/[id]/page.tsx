@@ -30,7 +30,7 @@ export default async function MerchantProfilePage({
 }: MerchantPageProps) {
   const session = await requirePermission("view_merchants");
   const { id } = await params;
-  const merchant = getMerchantById(id);
+  const merchant = await getMerchantById(id);
   // Merchant profiles follow the merchant directory's scope: any city the
   // viewer can operate in, not just cities they have the `view_active_cities`
   // dashboard permission for.

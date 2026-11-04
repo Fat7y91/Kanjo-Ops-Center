@@ -1,7 +1,8 @@
-import { listMerchants } from "@/lib/field-ops/store";
-import { listVisitReports } from "@/lib/field-ops/store";
-
 import { computePayroll, type PayrollResult } from "./engine";
+import {
+  fallbackContributions,
+  listContributionRollup,
+} from "./repository";
 import { seedPayrollProfiles } from "./seed";
 import type { PayrollProfile } from "./types";
 
@@ -16,43 +17,32 @@ export function listPayrollProfiles(): PayrollProfile[] {
   return structuredClone(globalStore.__kanjoV2PayrollProfiles);
 }
 
-/**
- * Contracted contribution attributed to a rep.
- *
- * Derived from the live visit reports, so payroll never carries its own copy of
- * performance data and cannot disagree with the commission dashboard.
- */
-export async function contributionFor(repId: string): Promise<number> {
-  const reports = await listVisitReports();
-  const merchants = new Map(
-    listMerchants().map((merchant) => [merchant.id, merchant]),
-  );
-  let total = 0;
-  for (const report of reports) {
-    if (report.repId !== repId) continue;
-    if (report.outcome !== "signed_contract") continue;
-    const merchant = merchants.get(report.merchantId);
-    total += merchant?.commissionAmount ?? report.commissionAmount;
-  }
-  return total;
-}
-
 export type Payslip = {
   profile: PayrollProfile;
   contribution: number;
   result: PayrollResult;
 };
 
+/**
+ * Builds one payslip per profile.
+ *
+ * Contributions come from `app.payroll_contributions_rollup` in a single
+ * grouped read. The old implementation called `contributionFor()` inside the
+ * profile loop and re-read the whole visit-report table per profile, which is
+ * what pushed `/payroll` past the Edge CPU limit. The in-memory fallback still
+ * does one pass over the reports, never one pass per profile.
+ */
 export async function buildPayslips(): Promise<Payslip[]> {
   const profiles = listPayrollProfiles();
-  return Promise.all(
-    profiles.map(async (profile) => {
-      const contribution = await contributionFor(profile.userId);
-      return {
-        profile,
-        contribution,
-        result: computePayroll(profile, contribution),
-      };
-    }),
-  );
+  const contributions =
+    (await listContributionRollup()) ?? (await fallbackContributions());
+
+  return profiles.map((profile) => {
+    const contribution = contributions.get(profile.userId)?.contribution ?? 0;
+    return {
+      profile,
+      contribution,
+      result: computePayroll(profile, contribution),
+    };
+  });
 }
