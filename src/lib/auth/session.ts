@@ -70,7 +70,18 @@ function toBase64Url(bytes: Uint8Array): string {
     .replace(/=+$/, "");
 }
 
-function fromBase64Url(value: string): Uint8Array {
+/**
+ * Decodes base64url into bytes that Web Crypto accepts as a `BufferSource`.
+ *
+ * The return type is pinned to `Uint8Array<ArrayBuffer>` rather than the default
+ * `Uint8Array<ArrayBufferLike>`: a `Uint8Array` may be backed by a
+ * `SharedArrayBuffer`, and `crypto.subtle.verify()` requires a view it can
+ * address synchronously. `new Uint8Array(length)` allocates an `ArrayBuffer`
+ * here, so the narrow type is what the code actually produces — and it keeps
+ * the value assignable to `BufferSource` on the library versions where the
+ * default widened.
+ */
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const padded = value
     .replace(/-/g, "+")
     .replace(/_/g, "/")
