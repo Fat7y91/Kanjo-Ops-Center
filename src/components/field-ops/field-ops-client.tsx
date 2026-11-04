@@ -311,7 +311,6 @@ export function FieldOpsClient({
                 <Link
                   href={`/merchants/${merchant.id}`}
                   className="button button-small button-quiet"
-                  prefetch
                 >
                   ملف التاجر
                 </Link>
@@ -557,7 +556,6 @@ export function FieldOpsClient({
                         <Link
                           href={`/merchants/${result.merchant.id}`}
                           className="button button-small button-quiet"
-                          prefetch
                         >
                           فتح
                         </Link>

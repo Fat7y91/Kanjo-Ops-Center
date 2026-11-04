@@ -56,6 +56,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </button>
       </div>
 
+      {/*
+        No `prefetch` on these links. Every module route is dynamic, so an
+        explicit prefetch flag makes the sidebar render and stream all 19 module
+        pages on mount — 19 Worker invocations per session for pages the user
+        may never open. Default navigation is on-demand.
+      */}
       <nav className="nav" aria-label="وحدات مساحة العمل">
         <p className="nav-section">مساحة العمل</p>
         {visibleModules.map((module) => {
@@ -67,7 +73,6 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <Link
               key={module.href}
               href={module.href}
-              prefetch
               className={`nav-link${active ? " is-active" : ""}`}
               aria-current={active ? "page" : undefined}
               onClick={onClose}

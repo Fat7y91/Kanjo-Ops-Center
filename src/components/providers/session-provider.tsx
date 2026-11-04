@@ -16,7 +16,15 @@ import type { Permission } from "@/lib/rbac/permissions";
 import type { ActiveSession } from "@/lib/rbac/types";
 
 const PERMISSION_CHANNEL = "kanjo-v2-permissions";
-const REFRESH_INTERVAL_MS = 5_000;
+
+/**
+ * Minimum gap between *automatic* capability refreshes (window focus, tab
+ * becoming visible). The provider used to revalidate every 5 s per tab, which
+ * cost a full session + RBAC read twelve times a minute to detect a signal that
+ * changes a few times a day. Explicit `refresh()` calls and cross-tab
+ * permission-change broadcasts bypass this floor.
+ */
+const MIN_AUTO_REFRESH_MS = 5 * 60 * 1_000;
 
 type SessionContextValue = {
   user: ActiveSession["user"] | null;
@@ -47,6 +55,7 @@ export function SessionProvider({
 
   const sessionRef = useRef<ActiveSession | null>(initialSession);
   const inFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
 
   const permissions = useMemo(
     () =>
@@ -59,6 +68,7 @@ export function SessionProvider({
   const refresh = useCallback(async () => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
+    lastRefreshAtRef.current = Date.now();
     setPending(true);
 
     try {
@@ -87,27 +97,30 @@ export function SessionProvider({
         router.refresh();
       }
     } catch {
-      // Keep the last known capability set; the next poll will retry.
+      // Keep the last known capability set; the next refresh will retry.
     } finally {
       inFlightRef.current = false;
       setPending(false);
     }
   }, [router]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refresh();
-    }, REFRESH_INTERVAL_MS);
+  const refreshIfStale = useCallback(() => {
+    if (Date.now() - lastRefreshAtRef.current < MIN_AUTO_REFRESH_MS) return;
+    void refresh();
+  }, [refresh]);
 
-    const onFocus = () => void refresh();
+  useEffect(() => {
+    const onFocus = () => refreshIfStale();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") refreshIfStale();
     };
 
     let channel: BroadcastChannel | null = null;
     if (typeof BroadcastChannel !== "undefined") {
       try {
         channel = new BroadcastChannel(PERMISSION_CHANNEL);
+        // A message here means another tab changed a grant, so it is a
+        // deliberate signal rather than a heartbeat: it bypasses the floor.
         channel.onmessage = () => void refresh();
       } catch {
         // Some hardened browsers expose the constructor but forbid channels.
@@ -120,12 +133,11 @@ export function SessionProvider({
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibility);
       channel?.close();
     };
-  }, [refresh]);
+  }, [refresh, refreshIfStale]);
 
   const hasPermission = useCallback(
     (permission: Permission) => permissions.has(permission),

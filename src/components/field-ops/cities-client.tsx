@@ -368,7 +368,7 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                       : city.country}
                   </p>
                   <h2>
-                    <Link className="city-title-link" href={`/cities/${city.id}`} prefetch>
+                    <Link className="city-title-link" href={`/cities/${city.id}`}>
                       {city.name}
                     </Link>
                   </h2>
@@ -416,7 +416,6 @@ export function CitiesClient({ initialCities, viewerName }: CitiesClientProps) {
                   <Link
                     className="button button-small button-quiet"
                     href={`/cities/${city.id}`}
-                    prefetch
                   >
                     تفاصيل المدينة
                   </Link>

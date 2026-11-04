@@ -1,11 +1,34 @@
+import {
+  encodePermissionMask,
+  isPermissionMask,
+  maskHasAnyPermission,
+  PERMISSION_MASK_VERSION,
+} from "@/lib/rbac/permission-bits";
 import { isPermission, type Permission } from "@/lib/rbac/permissions";
 
 export const SESSION_COOKIE = "kanjo_v2_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
 
+/**
+ * Decoded session.
+ *
+ * `mask` is the base64url permission bitset from
+ * `@/lib/rbac/permission-bits`, not the 97-key array it replaced. Callers must
+ * not decode it themselves — use `sessionHasAny`.
+ */
 export type SessionPayload = {
   sub: string;
-  perms: Permission[];
+  mask: string;
+  rev: number;
+  iat: number;
+  exp: number;
+};
+
+/** Wire body: `p` is the mask, `pv` the permission-catalogue fingerprint. */
+type SessionTokenBody = {
+  sub: string;
+  p: string;
+  pv: number;
   rev: number;
   iat: number;
   exp: number;
@@ -91,9 +114,10 @@ export async function createSessionToken(
   revision: number,
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: SessionPayload = {
+  const payload: SessionTokenBody = {
     sub: userId,
-    perms: [...permissions],
+    p: toBase64Url(encodePermissionMask(permissions)),
+    pv: PERMISSION_MASK_VERSION,
     rev: revision,
     iat: now,
     exp: now + SESSION_MAX_AGE_SECONDS,
@@ -132,27 +156,65 @@ export async function verifySessionToken(
     );
     if (!parsed || typeof parsed !== "object") return null;
 
-    const candidate = parsed as Partial<SessionPayload>;
+    const candidate = parsed as Partial<SessionTokenBody> & { perms?: unknown };
     if (
       typeof candidate.sub !== "string" ||
       typeof candidate.rev !== "number" ||
-      typeof candidate.exp !== "number" ||
-      !Array.isArray(candidate.perms) ||
-      !candidate.perms.every(isPermission)
+      typeof candidate.exp !== "number"
     ) {
       return null;
     }
 
     if (candidate.exp <= Math.floor(Date.now() / 1000)) return null;
 
+    const mask = readMask(candidate);
+    if (!mask) return null;
+
     return {
       sub: candidate.sub,
-      perms: candidate.perms,
+      mask,
       rev: candidate.rev,
       iat: typeof candidate.iat === "number" ? candidate.iat : 0,
       exp: candidate.exp,
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Reads the permission mask off a decoded body.
+ *
+ * Returns `null` when the mask was produced by a different permission
+ * catalogue: bits are positional, so replaying a stale mask would grant a
+ * capability the user was never given. Rejecting the token forces a re-login,
+ * which is the only safe outcome.
+ */
+function readMask(
+  candidate: Partial<SessionTokenBody> & { perms?: unknown },
+): string | null {
+  if (typeof candidate.p === "string") {
+    if (candidate.pv !== PERMISSION_MASK_VERSION) return null;
+    return isPermissionMask(fromBase64Url(candidate.p)) ? candidate.p : null;
+  }
+
+  // Tokens minted before the mask migration carried the full key array.
+  // Accepted only until the last of them ages out (SESSION_MAX_AGE_SECONDS).
+  if (Array.isArray(candidate.perms) && candidate.perms.every(isPermission)) {
+    return toBase64Url(encodePermissionMask(candidate.perms));
+  }
+
+  return null;
+}
+
+/** Permission check for the request hot path. Allocates no key array. */
+export function sessionHasAny(
+  payload: SessionPayload,
+  permissions: readonly Permission[],
+): boolean {
+  try {
+    return maskHasAnyPermission(fromBase64Url(payload.mask), permissions);
+  } catch {
+    return false;
   }
 }

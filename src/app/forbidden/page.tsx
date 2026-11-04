@@ -57,7 +57,7 @@ export default async function ForbiddenPage({
         )}
 
         <div className="forbidden-actions">
-          <Link className="button button-primary" href={destination} prefetch>
+          <Link className="button button-primary" href={destination}>
             {session ? "الانتقال إلى وحدة مسموحة" : "تسجيل الدخول"}
           </Link>
           <Link className="button button-quiet" href="/login">

@@ -118,7 +118,7 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
             {visibleRows.map((row) => (
               <tr key={row.id}>
                 <td>
-                  <Link href={`/merchants/${row.id}`} prefetch>
+                  <Link href={`/merchants/${row.id}`}>
                     <strong>{row.name}</strong>
                   </Link>
                   <span className="muted merchant-category">
@@ -139,7 +139,6 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
                   <div className="row-actions">
                     <Link
                       href={`/merchants/${row.id}`}
-                      prefetch
                       className="button button-small button-quiet"
                     >
                       فتح الملف

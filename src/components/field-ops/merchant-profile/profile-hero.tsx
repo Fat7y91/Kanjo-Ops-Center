@@ -76,7 +76,7 @@ export function ProfileHero({
           </button>
         ) : null}
         {canViewFieldOpsPage ? (
-          <Link href="/field-ops" className="button button-quiet" prefetch>
+          <Link href="/field-ops" className="button button-quiet">
             العودة إلى اللوحة
           </Link>
         ) : null}

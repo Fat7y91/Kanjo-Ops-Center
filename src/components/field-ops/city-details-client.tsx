@@ -64,11 +64,11 @@ export function CityDetailsClient({
           </div>
         </div>
         <div className="profile-actions">
-          <Link className="button button-quiet" href="/cities" prefetch>
+          <Link className="button button-quiet" href="/cities">
             العودة إلى المدن
           </Link>
           {canEdit ? (
-            <Link className="button button-primary" href="/cities" prefetch>
+            <Link className="button button-primary" href="/cities">
               تعديل المدينة
             </Link>
           ) : null}
