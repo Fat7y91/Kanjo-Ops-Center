@@ -32,7 +32,16 @@ export async function GET(request: Request) {
   try {
     const { active, rows } = await loadActiveCommissionRate(cityId);
     return NextResponse.json(
-      { cityId, active, rows },
+      {
+        cityId,
+        active,
+        rows,
+        cities: listCities().map((city) => ({
+          id: city.id,
+          name: city.name,
+          governorate: city.governorate,
+        })),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

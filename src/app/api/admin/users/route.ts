@@ -13,6 +13,7 @@ import {
   assertCanCreate,
   RbacDeniedError,
 } from "@/lib/rbac/management";
+import { listTeams } from "@/lib/rbac/teams";
 import {
   createUser,
   getRbacRevision,
@@ -48,6 +49,7 @@ export async function GET() {
       assignableCities: cities.filter((city) =>
         scopedCityIds.includes(city.id),
       ),
+      teams: await listTeams(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

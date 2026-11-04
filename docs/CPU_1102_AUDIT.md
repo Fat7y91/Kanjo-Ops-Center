@@ -325,9 +325,9 @@ browser), but the request is authorized per user, so caching it belongs with the
 pattern — still needs Phase 2: a Worker that cannot cache its own HTML cannot
 serve a cached one either.
 
-#### Rollout — `/field-ops`, `/catalog/[merchantId]`, `/accounts`, `/merchants` (shipped)
+#### Rollout — `/field-ops`, `/catalog/[merchantId]`, `/accounts`, `/merchants`, `/admin/*` (shipped)
 
-The four remaining server-rendered data screens use the same pattern. Each render
+The remaining server-rendered data screens use the same pattern. Each render
 is now the session read plus a header and a skeleton; the facts come from an
 endpoint that already existed or was extended in place:
 
@@ -337,13 +337,17 @@ endpoint that already existed or was extended in place:
 | `/catalog/[merchantId]` | merchant, resolved contract state, taxonomy | `GET /api/catalog/products?merchantId=…` (narrowed) |
 | `/accounts` | session, treasury tier | `GET /api/accounts` (extended: totals + tier flags) |
 | `/merchants` | city scope, add-form taxonomy | `GET /api/merchants` (new; the projection the page used to build) |
+| `/admin/permissions` | session, clearance label | `GET /api/admin/users` (extended: `teams`) |
+| `/admin/finance/reviews` | session, treasury capabilities | `GET /api/admin/finance/reviews` (new) |
+| `/admin/finance/rates` | rank + capability gates | `GET /api/admin/commission-rates` (extended: `cities`) |
 
 * `src/components/data/use-endpoint-data.ts` is the one fetch / validate / abort /
-  retry hook. The four islands and the overview hook are thin wrappers over it, so
+  retry hook. The islands and the overview hook are thin wrappers over it, so
   abort-on-unmount and payload validation cannot drift between screens.
 * Each payload is validated at the boundary (`src/lib/accounts/payload.ts`,
-  `src/lib/catalog/payload.ts`, `src/lib/field-ops/merchant-rows.ts`) — except the
-  board. Its six collections already have one definition in `board.ts`, shared by
+  `src/lib/catalog/payload.ts`, `src/lib/field-ops/merchant-rows.ts`,
+  `src/lib/rbac/payload.ts`, `src/lib/profile/reviews-payload.ts`,
+  `src/lib/commissions/payload.ts`) — except the board. Its six collections already have one definition in `board.ts`, shared by
   the route that builds them and the island that renders them, so re-declaring
   them as Zod objects would duplicate the definition the schema exists to
   protect. The board check is on the envelope (six arrays and a `today`), which
