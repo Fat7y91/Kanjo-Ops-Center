@@ -1,6 +1,6 @@
 # Kanjo V2.0 — Database Schema
 
-Source of truth: `supabase/migrations/*.sql` (33 migrations, applied in filename
+Source of truth: `supabase/migrations/*.sql` (36 migrations, applied in filename
 order). Everything below describes the **final** shape after all migrations, not
 the incremental state. It is written so a V1 → V2 data migration can be authored
 without re-reading the SQL.
@@ -26,7 +26,7 @@ without re-reading the SQL.
 |---|---|---|
 | `app.kpi_snapshot_status` | `pending`, `paid` | `kpi_snapshots.status` |
 | `app.bank_info_status` | `pending`, `approved`, `rejected` | `users.bank_info_status`, `user_payout_methods.status` |
-| `app.payout_method_kind` | `bank_account`, `e_wallet`, `instapay` | `user_payout_methods.method` |
+| `app.payout_method_kind` | `bank_account`, `e_wallet`, `instapay`, `egypt_post` | `user_payout_methods.method` |
 | `app.capital_deposit_status` | `pending`, `approved`, `rejected` | `capital_deposits.status` |
 | `app.payment_method` | `COD`, `ONLINE` | `operation_logs.payment_method` |
 | `app.clearing_entity_type` | `merchant`, `courier` | `financial_ledgers.entity_type` |
@@ -258,6 +258,83 @@ A `closed` campaign is frozen: `app.marketing_campaign_terminal()` blocks update
 `app.marketing_reject_mutation()` blocks UPDATE/DELETE on `marketing_entries`
 (append-only spend record).
 
+### `app.marketing_leads`
+Inbound campaign / Spinwheel people, distinct from ad spend. Triage queue.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `legacy_id` | `text` | yes | Firestore doc id; unique when present |
+| `campaign_id` | `uuid` | yes | FK → `marketing_campaigns` SET NULL |
+| `city_id` | `text` | yes | Firestore id |
+| `phone_number` | `text` | no | Digits only, 8–15 |
+| `promo_code` / `user_guess` / `prize_details` | `text` | no | `''` |
+| `source` | `text` | no | `spinwheel` \| `landing` \| `referral` \| `import` |
+| `status` | `text` | no | `new` \| `contacted` \| `qualified` \| `converted` \| `rejected` |
+| `notes` | `text` | no | `''` |
+| `occurred_at` / `created_at` | `timestamptz` | no | |
+
+---
+
+## 5b. Governance — audit, notifications, archives
+
+### `app.audit_logs`
+Append-only Black Box. `app.audit_log_immutable()` rejects every UPDATE; a
+correction is a new row.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `legacy_id` | `text` | yes | Firestore doc id; unique when present |
+| `occurred_at` | `timestamptz` | no | When the action happened |
+| `actor_id` | `uuid` | yes | FK → `users` SET NULL |
+| `actor_name` / `actor_role` | `text` | no | `''` |
+| `action_type` / `target_entity` / `target_id` / `target_name` / `entity_kind` | `text` | no | `''` |
+| `description` / `collection` / `source` | `text` | no | `source` default `migration` |
+| `previous_data` / `new_data` / `changes` | `jsonb` | yes | Before/after + diff |
+| `created_at` | `timestamptz` | no | `now()` |
+
+Read is gated by `view_audit_logs`.
+
+### `app.notifications`
+Operator inbox. `user_id IS NULL` is a broadcast to every active operator.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `legacy_id` | `text` | yes | Firestore doc id; unique when present |
+| `user_id` | `uuid` | yes | NULL = broadcast; FK → `users` CASCADE |
+| `title` / `body` / `icon` / `color` / `kind` / `link` | `text` | no | `kind` default `system` |
+| `task_id` | `text` | yes | |
+| `is_read` / `read_at` | `boolean` / `timestamptz` | no / yes | `(is_read) = (read_at is not null)` |
+| `occurred_at` / `created_at` | `timestamptz` | no | |
+
+### `app.notification_reads`
+Per-viewer acknowledgement of a broadcast, so one operator clearing it does not
+clear it for the company.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `notification_id` | `uuid` | no | PK part, FK → `notifications` CASCADE |
+| `user_id` | `uuid` | no | PK part, FK → `users` CASCADE |
+| `read_at` | `timestamptz` | no | `now()` |
+
+### `app.archived_reports`
+Visit reports pulled out of the live timeline; restoring deletes only this row.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `legacy_id` | `text` | yes | Firestore doc id; unique when present |
+| `task_id` | `text` | yes | |
+| `merchant_id` | `text` | no | `''` |
+| `task_name` / `reason` / `archived_by_name` | `text` | no | `''` |
+| `report` | `jsonb` | no | `{}` |
+| `archived_by` | `uuid` | yes | FK → `users` SET NULL |
+| `occurred_at` / `created_at` | `timestamptz` | no | |
+
+Read gated by `view_archived_reports`; write by `manage_archived_reports`.
+
 ---
 
 ## 6. Merchant & catalog
@@ -311,6 +388,7 @@ Intentionally `text` PK: merchant ids originate in the V1 Firestore catalogue.
 | `entered_by_name` | `text` | yes | |
 | `client_product_id` | `text` | yes | Offline draft id; unique when present |
 | `normalized_name` | `text` | no | `''` |
+| `qa_metadata` | `jsonb` | no | `{}`. V1 image QA / lock / delete-request provenance |
 | `created_by` | `uuid` | yes | FK → `users` SET NULL |
 | `created_at` / `updated_at` | `timestamptz` | no | |
 
@@ -385,6 +463,7 @@ columns after INSERT; status may move `pending → paid` only.
 | `applied_merchant_rate` | `numeric(12,2)` | yes | Frozen rate at calculation |
 | `applied_item_rate` | `numeric(12,2)` | yes | Frozen rate |
 | `applied_contract_fee` | `numeric(12,2)` | yes | Frozen tier fee |
+| `legacy_metrics` | `jsonb` | no | `{}`. V1 snapshot metrics + time tracking, outside the immutability guard |
 | `status` | `app.kpi_snapshot_status` | no | `pending` \| `paid` |
 | `locked_at` | `timestamptz` | no | `now()` |
 | `created_at` | `timestamptz` | no | `now()` |
@@ -664,6 +743,7 @@ deposit; `app.capital_deposit_no_delete()` blocks deletion of a decided row.
 | `bank_name` / `account_holder` / `account_number` / `iban` | `text` | yes | Bank only |
 | `wallet_provider` / `wallet_phone` | `text` | yes | Wallet only; phone `^01[0125][0-9]{8}$` |
 | `instapay_type` / `instapay_value` | `text` | yes | Instapay only; type `ipa` \| `phone` |
+| `post_national_id` | `text` | yes | Egypt Post only; `^[0-9]{14}$` |
 | `status` | `app.bank_info_status` | no | `pending` |
 | `reviewed_by` | `uuid` | yes | FK → `users` SET NULL |
 | `reviewed_at` | `timestamptz` | yes | `(status='pending') = (reviewed_at is null)` |
@@ -746,6 +826,8 @@ Columns: `merchant_id`, `current_state`, `current_state_at`, `current_state_sour
 | `app.rbac_session(uuid)` | sql | Session payload: user, permissions, cities, revision (service role only) |
 | `app.rbac_user_directory()` | sql | Full operator directory (service role only) |
 | `app.contract_terminal_guard()` | trigger fn | Freeze signed/cancelled contracts |
+| `app.audit_log_immutable()` | trigger fn | Audit log append-only |
+| `app.payout_methods_reset_decision()` | trigger fn | (now fingerprints `post_national_id`) |
 
 ---
 
@@ -779,6 +861,11 @@ Summary of the model:
   self-scoped or treasury-scoped.
 - **Operations**: clearing transitions follow `pending → cleared`; amounts are
   frozen at insert.
+- **Governance**: `audit_logs` read by `view_audit_logs` (and append-only at the
+  trigger level); `notifications` read by owner or any active operator for a
+  broadcast, with per-viewer ack in `notification_reads`; `archived_reports` read
+  by `view_archived_reports` and written by `manage_archived_reports`;
+  `marketing_leads` read/written by the marketing lead capabilities.
 
 Exact policies live in each migration; they are the only authority if this table
 and the SQL ever disagree.
@@ -799,11 +886,17 @@ is null)) [partial]`, `merchants(normalized_name) [partial]`,
 `visit_reports(client_visit_id) [partial]`, `contracts(reference)`,
 `cities(lower(btrim(name)))`, `transfer_requests(merchant_id, requested_by)
 [partial, status='pending']`, `edit_requests(merchant_id, requested_by)
-[partial, status='pending']`.
+[partial, status='pending']`, `audit_logs(legacy_id) [partial]`,
+`notifications(legacy_id) [partial]`, `archived_reports(legacy_id) [partial]`,
+`marketing_leads(legacy_id) [partial]`, `notification_reads(notification_id,
+user_id)`.
 
 Lookup indexes exist on all foreign keys and on the columns used by the rollup
 views (`visit_reports(merchant_id, coalesce(ended_at, started_at, created_at)
-desc)`, `marketing_entries(campaign_id, occurred_at desc)`, etc.).
+desc)`, `marketing_entries(campaign_id, occurred_at desc)`,
+`audit_logs(occurred_at desc)`, `notifications(user_id, occurred_at desc)`,
+`archived_reports(occurred_at desc)`, `marketing_leads(status, occurred_at
+desc)`, etc.).
 
 ---
 
@@ -847,6 +940,8 @@ guarded `add column`, `drop ... if exists` before `create`).
 20261108000000  rbac_user_directory
 20261109000000  contracts
 20261110000000  field_ops_catalogue
+20261111000000  payout_egypt_post_enum
+20261112000000  legacy_gap_resolutions
 ```
 
 ---
@@ -878,6 +973,20 @@ Points a data migration prompt must honour:
 8. **KPI snapshots are frozen.** Recalculate V2 slips; do not copy V1 salary
    numbers into the frozen columns without recomputing the applied rates.
 9. **Payout methods**: exactly one row per user; a migrated destination starts at
-   `pending` and requires review (`bank_info_status` mirrors it).
+   `pending` and requires review (`bank_info_status` mirrors it). V1 `post`
+   imports as `egypt_post` with `post_national_id` (14 digits).
 10. **Permissions**: seed `app.permissions` from the V1 capability list first,
     then grant. A grant referencing a missing key fails the FK.
+11. **Legacy payloads keep a `legacy_id`.** Audit logs, notifications, archived
+    reports and marketing leads carry the Firestore doc id in a partial unique
+    `legacy_id` index so the ETL can be re-run without duplicating history.
+12. **Legacy KPI metrics live in `kpi_snapshots.legacy_metrics`.** Products,
+    vendors, photos, the V1 baseline and `rep_kpis` time tracking are preserved
+    verbatim there; they never feed the frozen financial columns.
+13. **The ETL maps onto the existing taxonomy.** `src/lib/taxonomy/data.generated.ts`
+    is the authority; V1 free-text categories/vendor types are resolved to its
+    ids (plus `system_config/dynamic_taxonomy` aliases). Nothing is recreated,
+    and unmapped labels stay null.
+14. **Single city.** The ETL fetches the one live city from `app.cities` at run
+    time; the env values only bootstrap an empty database. A multi-city database
+    is a hard error.

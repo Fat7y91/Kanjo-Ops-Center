@@ -72,6 +72,7 @@ export function factsFor(dataset: KpiDataset, agent: KpiAgent): KpiVaultFacts {
         salary: snapshot.salary,
         source: "snapshot",
         status: snapshot.status,
+        legacyMetrics: snapshot.legacyMetrics,
       };
     }
     return emptyVaultFacts();

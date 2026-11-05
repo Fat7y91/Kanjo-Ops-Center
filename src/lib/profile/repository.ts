@@ -29,6 +29,7 @@ type PayoutRow = {
   wallet_phone: string | null;
   instapay_type: string | null;
   instapay_value: string | null;
+  post_national_id: string | null;
   status: ReviewStatus;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -36,7 +37,7 @@ type PayoutRow = {
 };
 
 const PAYOUT_COLUMNS =
-  "id,user_id,method,bank_name,account_holder,account_number,iban,wallet_provider,wallet_phone,instapay_type,instapay_value,status,reviewed_by,reviewed_at,updated_at";
+  "id,user_id,method,bank_name,account_holder,account_number,iban,wallet_provider,wallet_phone,instapay_type,instapay_value,post_national_id,status,reviewed_by,reviewed_at,updated_at";
 
 export function isProfileDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
@@ -57,6 +58,7 @@ export function toPayoutRecord(row: PayoutRow): PayoutMethodRecord {
     walletPhone: row.wallet_phone,
     instapayType: row.instapay_type,
     instapayValue: row.instapay_value,
+    postNationalId: row.post_national_id,
     status: row.status,
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,
@@ -188,6 +190,7 @@ type PayoutWrite = {
   walletPhone: string | null;
   instapayType: string | null;
   instapayValue: string | null;
+  postNationalId: string | null;
 };
 
 /**

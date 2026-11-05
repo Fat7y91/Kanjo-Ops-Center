@@ -169,6 +169,7 @@ function payoutWrite(input: PayoutMethodInput) {
         walletPhone: null,
         instapayType: null,
         instapayValue: null,
+        postNationalId: null,
       };
     case "e_wallet":
       return {
@@ -180,6 +181,7 @@ function payoutWrite(input: PayoutMethodInput) {
         walletPhone: input.walletPhone,
         instapayType: null,
         instapayValue: null,
+        postNationalId: null,
       };
     case "instapay":
       return {
@@ -191,6 +193,19 @@ function payoutWrite(input: PayoutMethodInput) {
         walletPhone: null,
         instapayType: input.instapayType,
         instapayValue: input.instapayValue,
+        postNationalId: null,
+      };
+    case "egypt_post":
+      return {
+        bankName: null,
+        accountHolder: null,
+        accountNumber: null,
+        iban: null,
+        walletProvider: null,
+        walletPhone: null,
+        instapayType: null,
+        instapayValue: null,
+        postNationalId: input.postNationalId,
       };
   }
 }

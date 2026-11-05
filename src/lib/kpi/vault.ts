@@ -45,6 +45,12 @@ export type VaultSnapshotFact = {
   marginRatio: number;
   salary: number;
   status: "pending" | "paid";
+  /**
+   * V1 payroll-snapshot metrics that have no dedicated V2 column (products,
+   * vendors, photos, time tracking). Preserved verbatim and shown as a separate
+   * provenance strip; they never feed the salary formula.
+   */
+  legacyMetrics: Record<string, unknown> | null;
 };
 
 export type LiveVault = {
@@ -205,7 +211,7 @@ export async function loadSnapshotMonthVault(
       .schema("app")
       .from("kpi_snapshots")
       .select(
-        "rep_id,month_year,new_merchants_activated,items_added,contracts_closed,avg_achievement_ratio,calculated_salary,status",
+        "rep_id,month_year,new_merchants_activated,items_added,contracts_closed,avg_achievement_ratio,calculated_salary,status,legacy_metrics",
       )
       .eq("month_year", `${month}-01`);
 
@@ -220,6 +226,7 @@ export async function loadSnapshotMonthVault(
       avg_achievement_ratio: number;
       calculated_salary: number;
       status: "pending" | "paid";
+      legacy_metrics: Record<string, unknown> | null;
     }>) {
       byRep.set(row.rep_id, {
         activations: Number(row.new_merchants_activated),
@@ -228,6 +235,7 @@ export async function loadSnapshotMonthVault(
         marginRatio: Number(row.avg_achievement_ratio ?? 0),
         salary: Number(row.calculated_salary),
         status: row.status,
+        legacyMetrics: row.legacy_metrics ?? null,
       });
     }
     return byRep;

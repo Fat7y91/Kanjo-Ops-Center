@@ -18,6 +18,7 @@
 @import "../styles/payroll.css";
 @import "../styles/commissions.css";
 @import "../styles/marketing.css";
+@import "../styles/governance.css";
 @import "../styles/login.css";
 
 /* Resilience: in-shell reconnecting / error fallbacks */

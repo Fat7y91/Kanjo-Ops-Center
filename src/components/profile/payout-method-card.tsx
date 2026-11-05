@@ -42,6 +42,7 @@ type Draft = {
   walletPhone: string;
   instapayType: string;
   instapayValue: string;
+  postNationalId: string;
 };
 
 function draftFrom(record: PayoutMethodRecord | null): Draft {
@@ -54,6 +55,7 @@ function draftFrom(record: PayoutMethodRecord | null): Draft {
     walletPhone: record?.walletPhone ?? "",
     instapayType: record?.instapayType ?? "ipa",
     instapayValue: record?.instapayValue ?? "",
+    postNationalId: record?.postNationalId ?? "",
   };
 }
 
@@ -98,6 +100,11 @@ export function PayoutMethodCard({
           method: nextMethod,
           instapayType: draft.instapayType,
           instapayValue: draft.instapayValue,
+        };
+      case "egypt_post":
+        return {
+          method: nextMethod,
+          postNationalId: draft.postNationalId,
         };
     }
   }
@@ -229,6 +236,21 @@ export function PayoutMethodCard({
               dir="ltr"
               value={draft.instapayValue}
               onChange={(event) => patch("instapayValue", event.target.value)}
+            />
+          </>
+        ) : null}
+
+        {method === "egypt_post" ? (
+          <>
+            <TextField
+              label="الرقم القومي"
+              dir="ltr"
+              inputMode="numeric"
+              hint="14 رقماً كما هو مسجّل في بطاقة بريد مصر."
+              value={draft.postNationalId}
+              onChange={(event) =>
+                patch("postNationalId", event.target.value)
+              }
             />
           </>
         ) : null}

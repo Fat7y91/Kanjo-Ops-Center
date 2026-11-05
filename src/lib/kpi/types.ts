@@ -113,6 +113,11 @@ export type KpiVaultFacts = {
   source: "live" | "snapshot" | "unavailable";
   /** Snapshot payroll state; null for live months. */
   status: "pending" | "paid" | null;
+  /**
+   * V1 payroll-snapshot metrics with no V2 column, preserved verbatim on
+   * historical months. Null for live months and for V2-native snapshots.
+   */
+  legacyMetrics?: Record<string, unknown> | null;
 };
 
 /* ── Presentation contract ─────────────────────────────────────────────── */

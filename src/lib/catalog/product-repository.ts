@@ -10,6 +10,7 @@ import { normalizeSearchText } from "@/lib/search/normalize";
 
 import type {
   CatalogProduct,
+  CatalogProductQaMetadata,
   CatalogProductState,
   CatalogProductType,
   CatalogVariantSelection,
@@ -44,6 +45,7 @@ const COLUMNS = [
   "review_note",
   "entered_by_name",
   "client_product_id",
+  "qa_metadata",
   "created_by",
   "created_at",
   "updated_at",
@@ -67,6 +69,7 @@ type ProductRow = {
   review_note: string;
   entered_by_name: string | null;
   client_product_id: string | null;
+  qa_metadata: CatalogProductQaMetadata | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -116,6 +119,10 @@ function toProduct(row: ProductRow, merchantName: string): CatalogProduct {
     enteredById: row.created_by,
     enteredByName: row.entered_by_name,
     clientProductId: row.client_product_id,
+    qaMetadata:
+      row.qa_metadata && typeof row.qa_metadata === "object"
+        ? row.qa_metadata
+        : {},
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -295,6 +302,7 @@ export async function insertProduct(
       review_note: product.reviewNote,
       entered_by_name: product.enteredByName,
       client_product_id: product.clientProductId,
+      qa_metadata: product.qaMetadata,
       created_by: loggedByValue(product.enteredById),
       created_at: product.createdAt,
       updated_at: product.updatedAt,

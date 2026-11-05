@@ -28,6 +28,7 @@ export const catalogProductSchema = z.object({
   enteredById: z.string().nullable(),
   enteredByName: z.string().nullable(),
   clientProductId: z.string().nullable(),
+  qaMetadata: z.record(z.string(), z.unknown()).default({}),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

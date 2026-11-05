@@ -1,6 +1,11 @@
 import { KpiInsightsPanel } from "@/app/(workspace)/agent-kpi/components/kpi-insights-panel";
 import { KpiMetricGrid } from "@/app/(workspace)/agent-kpi/components/kpi-metric-grid";
 import { KpiRankCard } from "@/app/(workspace)/agent-kpi/components/kpi-rank-card";
+import {
+  LEGACY_METRIC_LABELS,
+  formatLegacySeconds,
+  formatLegacyValue,
+} from "@/lib/kpi/format";
 import { KPI_STAGE_META, type KpiSnapshot } from "@/lib/kpi/types";
 
 const ALL_STAGES = ["preparation", "contracting", "data_entry", "live_operations"] as const;
@@ -61,6 +66,8 @@ export function KpiAgentCard({ snapshot }: { snapshot: KpiSnapshot }) {
 
       <KpiMetricGrid metrics={snapshot.metrics} />
 
+      <LegacyMetrics facts={snapshot.facts} />
+
       <div className="kpi-split">
         <div className="kpi-insight-block">
           <KpiInsightsPanel
@@ -75,5 +82,47 @@ export function KpiAgentCard({ snapshot }: { snapshot: KpiSnapshot }) {
         <KpiRankCard snapshot={snapshot} />
       </div>
     </article>
+  );
+}
+
+/**
+ * V1 imported-metrics provenance strip.
+ *
+ * Only historical snapshots imported from the V1 payroll book carry
+ * `legacyMetrics`; a V2-native month renders nothing here. These values are
+ * shown for reconciliation and never change the salary above.
+ */
+function LegacyMetrics({
+  facts,
+}: {
+  facts: KpiSnapshot["facts"];
+}) {
+  const legacy = facts.legacyMetrics;
+  if (!legacy || Object.keys(legacy).length === 0) return null;
+
+  const rows = LEGACY_METRIC_LABELS.filter(
+    (item) => legacy[item.key] !== undefined && legacy[item.key] !== null,
+  );
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="kpi-legacy-metrics" aria-label="مؤشرات V1 المستوردة">
+      <span className="kpi-legacy-title">مؤشرات V1 المستوردة</span>
+      <ul>
+        {rows.map((item) => {
+          const value =
+            item.key.endsWith("Seconds")
+              ? formatLegacySeconds(legacy[item.key])
+              : formatLegacyValue(legacy[item.key]);
+          return (
+            <li key={item.key}>
+              <span>{item.label}</span>
+              <strong>{value}</strong>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

@@ -126,6 +126,66 @@ export function ProductDetailsModal({
           </ul>
         )}
       </section>
+
+      <QaMetadataPanel metadata={product.qaMetadata} />
     </Modal>
+  );
+}
+
+/** Readable provenance rows for the known V1 image-QA keys. */
+const QA_FIELDS: readonly { key: string; label: string }[] = [
+  { key: "image_uploaded_by", label: "رفع الصورة" },
+  { key: "image_uploaded_at", label: "وقت الرفع" },
+  { key: "image_locked_by", label: "قفل الصورة" },
+  { key: "image_locked_at", label: "وقت القفل" },
+  { key: "edit_type", label: "نوع التعديل" },
+  { key: "edited_by", label: "عدّلها" },
+  { key: "edited_at", label: "وقت التعديل" },
+];
+
+function renderQaValue(value: unknown): string {
+  if (value == null || value === "") return "—";
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    // Timestamps (ISO strings) render in the workspace locale; anything else
+    // is shown verbatim.
+    if (!Number.isNaN(parsed) && /\d{4}-\d{2}-\d{2}T/.test(value)) {
+      return new Date(value).toLocaleString("ar-EG-u-nu-latn");
+    }
+    return value;
+  }
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+/**
+ * V1 image-provenance panel.
+ *
+ * Renders the known V1 keys in a fixed order and hides the panel entirely for a
+ * V2-native product (empty metadata). Unknown keys are preserved in the stored
+ * JSON but not surfaced here, so the panel stays readable.
+ */
+function QaMetadataPanel({
+  metadata,
+}: {
+  metadata: Record<string, unknown>;
+}) {
+  const rows = QA_FIELDS.filter(
+    (field) => metadata[field.key] !== undefined && metadata[field.key] !== null,
+  );
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="prod-detail-variants">
+      <h3>سجل صور المنتج (V1)</h3>
+      <dl className="prod-detail-grid">
+        {rows.map((field) => (
+          <div key={field.key}>
+            <dt>{field.label}</dt>
+            <dd>{renderQaValue(metadata[field.key])}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

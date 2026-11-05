@@ -1,0 +1,127 @@
+/* Governance surfaces: audit trail, notifications inbox, archived reports and
+ * campaign leads. Shared by four route segments, so the table and empty-state
+ * rules live here rather than in each domain stylesheet. */
+
+/* ── Generic feed list ────────────────────────────────────────────────── */
+
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feed-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--kanjo-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.feed-item.is-unread {
+  border-color: var(--kanjo-purple-interactive);
+  background: var(--kanjo-pastel);
+}
+
+.feed-item-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feed-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feed-item-head strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.feed-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.feed-item-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.feed-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* ── Audit diff ───────────────────────────────────────────────────────── */
+
+.audit-diff {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.audit-diff pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.72rem;
+  direction: ltr;
+  text-align: left;
+}
+
+.audit-diff-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* ── Filter bar ───────────────────────────────────────────────────────── */
+
+.governance-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.governance-filters .field {
+  min-width: 180px;
+}
+
+/* ── Lead triage ──────────────────────────────────────────────────────── */
+
+.lead-notes {
+  width: 100%;
+  min-width: 180px;
+}
+
+@media (max-width: 720px) {
+  .feed-item {
+    flex-direction: column;
+  }
+}

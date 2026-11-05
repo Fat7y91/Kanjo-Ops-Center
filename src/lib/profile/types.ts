@@ -10,13 +10,19 @@ import { z } from "zod";
 
 /* ── Payout methods ─────────────────────────────────────────────────────── */
 
-export const PAYOUT_METHODS = ["bank_account", "e_wallet", "instapay"] as const;
+export const PAYOUT_METHODS = [
+  "bank_account",
+  "e_wallet",
+  "instapay",
+  "egypt_post",
+] as const;
 export type PayoutMethod = (typeof PAYOUT_METHODS)[number];
 
 export const PAYOUT_METHOD_LABEL: Record<PayoutMethod, string> = {
   bank_account: "تحويل بنكي",
   e_wallet: "محفظة إلكترونية",
   instapay: "إنستاباي",
+  egypt_post: "بريد مصر",
 };
 
 /** Egyptian wallet providers, matching the legacy financial profile vocabulary. */
@@ -96,6 +102,14 @@ export const payoutMethodInputSchema = z
       }),
       instapayValue: z.string().trim().min(3, "أدخل قيمة إنستاباي.").max(80),
     }),
+    z.object({
+      method: z.literal("egypt_post"),
+      // Egypt Post pays out against the national id, not a bank or wallet.
+      postNationalId: z
+        .string()
+        .trim()
+        .regex(/^[0-9]{14}$/, "الرقم القومي يجب أن يتكون من 14 رقماً."),
+    }),
   ])
   .superRefine((value, ctx) => {
     // A phone-based InstaPay address carries the same shape a wallet phone
@@ -127,6 +141,7 @@ export type PayoutMethodRecord = {
   walletPhone: string | null;
   instapayType: string | null;
   instapayValue: string | null;
+  postNationalId: string | null;
   status: ReviewStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
@@ -152,6 +167,8 @@ export function payoutDestinationLabel(
       return [record.instapayType === "phone" ? "هاتف" : "IPA", record.instapayValue]
         .filter(Boolean)
         .join(" · ");
+    case "egypt_post":
+      return ["بريد مصر", record.postNationalId].filter(Boolean).join(" · ");
   }
 }
 

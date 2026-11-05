@@ -24,6 +24,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "overview",
   },
   {
+    // The inbox is a personal operating surface: a broadcast (owner-less)
+    // notification reaches every active operator, a targeted one only its
+    // recipient. The page narrows to the signed-in account's own rows.
+    href: "/notifications",
+    label: "الإشعارات",
+    shortLabel: "الإشعارات",
+    description: "التنبيهات الموجهة إليك وإعلانات الإدارة العامة.",
+    permission: "view_notifications",
+    icon: "notifications",
+  },
+  {
     href: "/cities",
     label: "المدن",
     shortLabel: "المدن",
@@ -112,6 +123,19 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "field-ops",
   },
   {
+    // Removed visit reports leave the field-ops queue but are not destroyed:
+    // they move here with the reason and the operator who archived them. The
+    // capability is separate so a reviewer can read the archive without the
+    // power to remove or restore anything.
+    href: "/field-ops/archived",
+    label: "التقارير المؤرشفة",
+    shortLabel: "الأرشيف",
+    description: "تقارير الزيارات المُزالة من مسار المهمة وسبب الأرشفة.",
+    permission: "view_archived_reports",
+    alsoGrantedBy: ["manage_archived_reports"],
+    icon: "archive",
+  },
+  {
     href: "/contracts",
     label: "العقود",
     shortLabel: "العقود",
@@ -154,6 +178,19 @@ export const MODULES: readonly ModuleDefinition[] = [
       "view_marketing_logs",
       "manage_platform_settings",
     ],
+    icon: "marketing",
+  },
+  {
+    // Inbound leads arrive from the public spinwheel/landing surface. They are
+    // not campaign performance numbers: the marketing desk triages them into
+    // follow-ups, so they get their own capability and their own queue.
+    href: "/marketing/leads",
+    label: "عملاء الحملات",
+    shortLabel: "العملاء",
+    description:
+      "العملاء المحتملون الواردون من الحملات وصفحة الانضمام وربطهم بالمتابعة.",
+    permission: "view_marketing_leads",
+    alsoGrantedBy: ["manage_marketing_leads", "view_campaigns"],
     icon: "marketing",
   },
   {
@@ -200,6 +237,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "إنشاء المستخدمين وإدارة رتبهم وصلاحياتهم ونطاق مدنهم.",
     permission: "manage_system_users",
     icon: "permissions",
+  },
+  {
+    // The append-only black box: every write to a governed table leaves an
+    // immutable row here. Read-only by construction — the database rejects any
+    // update or delete — so one capability is the whole surface.
+    href: "/admin/audit",
+    label: "سجل التدقيق",
+    shortLabel: "التدقيق",
+    description: "سجل التغييرات غير القابل للتعديل: من عدّل أي سجل ومتى ولماذا.",
+    permission: "view_audit_logs",
+    icon: "audit",
   },
   {
     // Last on purpose: `firstPermittedPath` lands a fresh session on the first

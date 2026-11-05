@@ -186,6 +186,7 @@ export async function createProduct(
     enteredById: author?.id ?? null,
     enteredByName: author?.name.trim() || null,
     clientProductId: input.clientProductId ?? null,
+    qaMetadata: {},
     createdAt: now,
     updatedAt: now,
   };

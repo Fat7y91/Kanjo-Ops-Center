@@ -8,6 +8,7 @@ import { ImageQaError } from "@/lib/catalog/image-qa";
 import { MarketingError } from "@/lib/marketing/store";
 import { MissingEnvError } from "@/lib/db/env";
 import { OperationsError } from "@/lib/operations/errors";
+import { GovernanceError } from "@/lib/governance/errors";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
@@ -148,6 +149,12 @@ export function apiError(error: unknown): NextResponse {
     );
   }
   if (error instanceof OperationsError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof GovernanceError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },
