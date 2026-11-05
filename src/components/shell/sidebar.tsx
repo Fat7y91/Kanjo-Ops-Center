@@ -9,6 +9,7 @@ import { NavLinkStatus } from "@/components/shell/nav-link-status";
 import {
   firstPermittedPath,
   moduleAllows,
+  moduleInSidebar,
   MODULES,
 } from "@/lib/rbac/modules";
 import { PERMISSION_KEYS } from "@/lib/rbac/permissions";
@@ -22,8 +23,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname() ?? "";
   const { permissions, clearanceLevel, revision } = usePermission();
 
-  const visibleModules = MODULES.filter((module) =>
-    moduleAllows(module, Array.from(permissions), clearanceLevel),
+  const visibleModules = MODULES.filter(
+    (module) =>
+      moduleInSidebar(module) &&
+      moduleAllows(module, Array.from(permissions), clearanceLevel),
   );
   const homeHref = firstPermittedPath(
     Array.from(permissions),

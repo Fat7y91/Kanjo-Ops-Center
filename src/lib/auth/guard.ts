@@ -77,8 +77,24 @@ export async function requireModuleAccess(
   if (module?.minClearance !== undefined) {
     await requireMinClearance(module.minClearance);
   }
+
+  const session = await requireSession();
+  // A module may also open by rank (the notification inbox does). The bypass is
+  // checked after the capability set, so a held grant is never overridden.
+  if (
+    module?.clearanceBypass !== undefined &&
+    session.clearanceLevel >= module.clearanceBypass
+  ) {
+    return session;
+  }
+
   const accepted = permissionsForPath(pathname);
   // Empty means unmapped or session-only (`/profile`): signed in is enough.
-  if (accepted.length === 0) return requireSession();
-  return requireAnyPermission(accepted);
+  if (accepted.length === 0) return session;
+  if (
+    !accepted.some((permission) => session.permissions.includes(permission))
+  ) {
+    redirect(`/forbidden?permission=${encodeURIComponent(accepted[0])}`);
+  }
+  return session;
 }

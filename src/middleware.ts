@@ -5,7 +5,7 @@ import {
   sessionHasAny,
   verifySessionToken,
 } from "@/lib/auth/session";
-import { isPublicPath, permissionsForPath } from "@/lib/rbac/modules";
+import { isPublicPath, moduleForPath, permissionsForPath } from "@/lib/rbac/modules";
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -26,7 +26,15 @@ export async function middleware(request: NextRequest) {
   }
 
   const accepted = permissionsForPath(pathname);
+  const bypass = moduleForPath(pathname)?.clearanceBypass;
+
   if (accepted.length > 0 && !sessionHasAny(payload, accepted)) {
+    // A module that also admits by rank (the inbox) is left to the page guard:
+    // `requireModuleAccess` reads the authoritative clearance from the database,
+    // whereas the token carries the rank only from the login that minted it, so
+    // an older cookie would otherwise be bounced here despite qualifying.
+    if (bypass !== undefined) return NextResponse.next();
+
     const forbiddenUrl = request.nextUrl.clone();
     forbiddenUrl.pathname = "/forbidden";
     forbiddenUrl.search = "";

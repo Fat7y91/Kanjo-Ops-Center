@@ -75,6 +75,44 @@ export async function authorizeMinClearance(
 }
 
 /**
+ * Capability check that also honours a rank-based escape hatch.
+ *
+ * The notification inbox is granted to every operator through
+ * `view_notifications`, but a deployment whose grant table runs behind the code
+ * must not lock the executive tier out of its own inbox. The capability is
+ * checked first, so an explicit grant always works even below the rank; the
+ * rank only widens access, never narrows or replaces it.
+ */
+export async function authorizePermissionOrClearance(
+  permission: Permission,
+  minClearance: number,
+): Promise<Authorization> {
+  const session = await getServerSession();
+  if (!session) {
+    return {
+      session: null,
+      response: NextResponse.json(
+        { error: "يلزم تسجيل الدخول." },
+        { status: 401 },
+      ),
+    };
+  }
+  if (
+    session.permissions.includes(permission) ||
+    session.clearanceLevel >= minClearance
+  ) {
+    return { session, response: null };
+  }
+  return {
+    session: null,
+    response: NextResponse.json(
+      { error: "لا تملك هذه الصلاحية." },
+      { status: 403 },
+    ),
+  };
+}
+
+/**
  * Capability check for routes that accept any one of several equivalent grants
  * (for example `add_catalog` or the broader `edit_catalog`).
  */

@@ -1,20 +1,40 @@
 import { NextResponse } from "next/server";
 
-import { apiError, authorize, readJson } from "@/lib/auth/api";
+import {
+  apiError,
+  authorizePermissionOrClearance,
+  readJson,
+} from "@/lib/auth/api";
 import {
   insertNotification,
   markAllRead,
   markNotificationRead,
 } from "@/lib/notifications/mutations";
 import { countUnread, listInbox } from "@/lib/notifications/repository";
-import { notificationInputSchema } from "@/lib/notifications/types";
+import {
+  notificationInputSchema,
+  NOTIFICATIONS_CLEARANCE,
+} from "@/lib/notifications/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+/**
+ * The inbox is a workspace surface. `view_notifications` is the capability, and
+ * the executive tier (L3+) reaches it by rank as well: a deployment whose grant
+ * table runs behind the code must not 403 an owner out of their own inbox. The
+ * grant is checked first, so an explicit permission is never dropped.
+ */
+function authorizeInbox() {
+  return authorizePermissionOrClearance(
+    "view_notifications",
+    NOTIFICATIONS_CLEARANCE,
+  );
+}
+
 /** The signed-in operator's inbox: own notifications plus every broadcast. */
 export async function GET() {
-  const { session, response } = await authorize("view_notifications");
+  const { session, response } = await authorizeInbox();
   if (!session) return response;
 
   try {
@@ -36,7 +56,7 @@ export async function GET() {
  * notification read.
  */
 export async function PATCH(request: Request) {
-  const { session, response } = await authorize("view_notifications");
+  const { session, response } = await authorizeInbox();
   if (!session) return response;
 
   const body = (await readJson(request)) as { id?: unknown; all?: unknown };
@@ -67,7 +87,7 @@ export async function PATCH(request: Request) {
  * active account sees it. A targeted notification names a recipient.
  */
 export async function POST(request: Request) {
-  const { session, response } = await authorize("view_notifications");
+  const { session, response } = await authorizeInbox();
   if (!session) return response;
 
   try {

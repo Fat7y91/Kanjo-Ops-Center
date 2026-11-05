@@ -313,15 +313,22 @@ logout therefore POST to plain route handlers. Rules locked in:
 `src/lib/rbac/module-catalog.ts` is the single source of truth for which
 capabilities open a module. Three layers read it and must never drift:
 
-- **Sidebar** filters entries with `permissionsForPath(pathname)`.
+- **Sidebar** filters entries with `moduleInSidebar(module)` then
+  `permissionsForPath(pathname)`. `hiddenFromSidebar` removes a module from the
+  primary navigation without removing the route.
 - **Middleware** admits a request when `permissionsForPath(pathname)` matches.
+  For a module with a `clearanceBypass` rank the middleware defers the decision
+  to the page guard instead of redirecting, because the page reads the
+  authoritative clearance from the database while the cookie may predate it.
 - **Pages** call `requireModuleAccess(pathname)` (`src/lib/auth/guard.ts`),
-  which applies `minClearance` first, then `requireAnyPermission(permissionsForPath(pathname))`.
+  which applies `minClearance` first, then the `clearanceBypass` rank, then
+  `requireAnyPermission(permissionsForPath(pathname))`.
   An empty list (unmapped or `sessionOnly`, e.g. `/profile`) means "signed in is
   enough".
 - **Route Handlers** call `authorizeAny(permissionsForModule(href))`
   (`src/lib/rbac/modules.ts`, exact-href lookup) so a screen that opens can load
-  its data.
+  its data. Routes with a rank bypass (the inbox) use
+  `authorizePermissionOrClearance(permission, rank)` instead.
 
 The rule this enforces: **if an operator can see a nav item, they must never hit
 `/forbidden`.** That bug came from pages hard-coding a narrower key than the nav
@@ -329,6 +336,12 @@ advertised (e.g. `/cities` gated on `view_active_cities` while the nav also
 opened on `manage_cities` / `add_city`). Sub-sections stay strictly hidden: each
 restricted block still unmounts itself via `Protect` / `usePermission`, so
 parity widens *access to the module*, never *visibility of a guarded control*.
+A capability is always checked before a rank bypass, so an explicit grant is
+never dropped.
+
+`/notifications` is the one module with `hiddenFromSidebar: true`: notifications
+never occupy a primary sidebar item. The topbar bell is the entry point, and its
+`عرض كل الإشعارات` footer link opens the full inbox.
 
 
 ### Resilience — no white screens (T1)
@@ -860,7 +873,13 @@ tolerates a browser that forbids `BroadcastChannel`.
 ### Notifications — inbox + topbar bell (Tier 1→3)
 - Data: `src/lib/notifications/{repository,mutations,rows,store,types}.ts` —
   reads, writes, row normalisation, shared plumbing, contracts. API is
-  `GET|PATCH /api/notifications` behind `view_notifications`.
+  `GET|PATCH /api/notifications` behind `view_notifications`, with the executive
+  tier (L3+) admitted by rank as well so a lagging grant table cannot 403 an
+  owner out of their own inbox. The capability is checked first.
+- The inbox is **not a sidebar item** (`hiddenFromSidebar: true` in
+  `rbac/module-catalog.ts`), matching the Facebook pattern: the header bell is
+  the access point. The module stays routable at `/notifications` and is linked
+  from the bell's `عرض كل الإشعارات` footer.
 - Two row shapes share `app.notifications`: a targeted row (`user_id` set) and a
   broadcast (`user_id IS NULL`). A broadcast's read state is **per viewer** and
   lives in `app.notification_reads`, so one operator marking it read never
@@ -876,8 +895,10 @@ tolerates a browser that forbids `BroadcastChannel`.
 - The bell (`src/components/shell/notification-bell.tsx`,
   `use-notification-feed.ts`, `notification-panel.tsx`) polls
   `GET /api/notifications` every 60s while the tab is visible, refetches on
-  focus/visibility change, and mounts only for a session holding
-  `view_notifications`. The panel is the shared `PopoverMenu` primitive
+  focus/visibility change, and mounts for a session holding
+  `view_notifications` or at the executive rank — the same rule as the API and
+  page guards (`NOTIFICATIONS_CLEARANCE` in `notifications/types.ts`). The panel
+  is the shared `PopoverMenu` primitive
   (`src/components/ui/popover-menu.tsx`); a row marks itself read and then
   follows its `link`, and the footer leads to the full inbox.
 - Hand-made table drifted? `supabase/snippets/notifications_schema_repair.sql` is

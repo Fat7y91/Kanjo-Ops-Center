@@ -27,11 +27,19 @@ export const MODULES: readonly ModuleDefinition[] = [
     // The inbox is a personal operating surface: a broadcast (owner-less)
     // notification reaches every active operator, a targeted one only its
     // recipient. The page narrows to the signed-in account's own rows.
+    //
+    // It is deliberately not a sidebar row: notifications never occupy a
+    // primary navigation item. The topbar bell is the entry point, and its
+    // "عرض كل الإشعارات" footer links here. The executive tier also reaches it
+    // by rank, so a deployment whose grants run behind the code cannot lock an
+    // L3+ operator out of their own inbox.
     href: "/notifications",
     label: "الإشعارات",
     shortLabel: "الإشعارات",
     description: "التنبيهات الموجهة إليك وإعلانات الإدارة العامة.",
     permission: "view_notifications",
+    clearanceBypass: 3,
+    hiddenFromSidebar: true,
     icon: "notifications",
   },
   {

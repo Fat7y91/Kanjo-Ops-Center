@@ -9,6 +9,16 @@ import { z } from "zod";
  * belongs to exactly one operator.
  */
 
+/**
+ * Executive rank that also opens the inbox.
+ *
+ * The capability (`view_notifications`) is checked first and is the primary
+ * gate; this rank only widens access so a deployment whose grant table runs
+ * behind the code cannot lock an owner out of their own notifications. Shared
+ * by the API guard, the page guard and the topbar bell so they cannot disagree.
+ */
+export const NOTIFICATIONS_CLEARANCE = 3;
+
 export type Notification = {
   id: string;
   userId: string | null;

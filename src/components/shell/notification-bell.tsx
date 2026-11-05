@@ -4,18 +4,22 @@ import { usePermission } from "@/components/auth/use-permission";
 import { NotificationPanel } from "@/components/shell/notification-panel";
 import { useNotificationFeed } from "@/components/shell/use-notification-feed";
 import { PopoverMenu } from "@/components/ui/popover-menu";
+import { NOTIFICATIONS_CLEARANCE } from "@/lib/notifications/types";
 
 /**
  * Topbar bell.
  *
  * The badge is the caller's unread count across their own notifications and
- * every broadcast. It only renders for an operator holding
- * `view_notifications`, which is the same capability the API enforces, so the
- * bell never advertises a surface the session cannot open.
+ * every broadcast. It renders for an operator holding `view_notifications` or
+ * for the executive tier (L3+), which mirrors the API guard exactly: a grant is
+ * checked first, and rank only widens access for a deployment whose grant table
+ * runs behind the code.
  */
 export function NotificationBell() {
-  const { hasPermission } = usePermission();
-  const enabled = hasPermission("view_notifications");
+  const { hasPermission, clearanceLevel } = usePermission();
+  const enabled =
+    hasPermission("view_notifications") ||
+    clearanceLevel >= NOTIFICATIONS_CLEARANCE;
   const { items, unread, busy, markOne, markAll } = useNotificationFeed(enabled);
 
   if (!enabled) return null;

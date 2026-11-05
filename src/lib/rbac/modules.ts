@@ -46,6 +46,21 @@ export type ModuleDefinition = {
    */
   minClearance?: number;
   /**
+   * Clearance rank that also opens the module, alongside the capability. The
+   * notification inbox is the first case: every operator is granted
+   * `view_notifications`, but a deployment whose grant table runs behind the
+   * code must not lock the executive tier out of its own inbox. The grant is
+   * always checked first, so an explicit permission is never dropped.
+   */
+  clearanceBypass?: number;
+  /**
+   * Hides the module from the sidebar. The route, its guard and its API stay
+   * reachable; the surface simply is not a primary navigation item. The inbox
+   * follows the Facebook pattern — the topbar bell is the entry point, and the
+   * module is reached from the bell's "عرض كل الإشعارات" footer link.
+   */
+  hiddenFromSidebar?: boolean;
+  /**
    * Personal surfaces (the operator's own profile) are open to every signed-in
    * account. They carry no capability because nobody can be *granted* access
    * to their own record: the guard is the session itself.
@@ -76,9 +91,26 @@ export function moduleAllows(
     return false;
   }
   if (permissions.includes(module.permission)) return true;
+  if (
+    module.clearanceBypass !== undefined &&
+    clearanceLevel >= module.clearanceBypass
+  ) {
+    return true;
+  }
   return (module.alsoGrantedBy ?? []).some((permission) =>
     permissions.includes(permission),
   );
+}
+
+/**
+ * Whether a module belongs in the sidebar.
+ *
+ * A hidden module is still routable and still guarded; it is simply not a
+ * primary navigation item. The notification inbox uses this: the topbar bell is
+ * its entry point, never a sidebar row.
+ */
+export function moduleInSidebar(module: ModuleDefinition): boolean {
+  return module.hiddenFromSidebar !== true;
 }
 
 export function isPublicPath(pathname: string): boolean {
@@ -130,7 +162,10 @@ export function firstPermittedPath(
   permissions: readonly Permission[],
   clearanceLevel = 0,
 ): string {
-  const first = MODULES.find((module) =>
+  // Hidden modules (the inbox) are never a landing page: the first permitted
+  // *navigation* item wins, otherwise a fresh executive session would land on a
+  // surface the sidebar does not even list.
+  const first = MODULES.filter(moduleInSidebar).find((module) =>
     moduleAllows(module, permissions, clearanceLevel),
   );
   return first?.href ?? "/forbidden";
