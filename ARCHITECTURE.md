@@ -193,6 +193,7 @@ states; call sites never hand-roll purple/gold classes.
 |---|---|---|---|
 | `button.tsx` | 57 | `Button` | Every action / submit |
 | `dropdown-menu.tsx` | 99 | `DropdownMenu` | Row and context actions |
+| `popover-menu.tsx` | 71 | `PopoverMenu` | Trigger-anchored panels (inbox previews, filters) |
 | `tabs.tsx` | 97 | `Tabs` | Section / filter switchers |
 | `form-inputs.tsx` | 234 | `Field`, `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField`, `InputControl` | Form controls |
 | `select-menus.tsx` | 237 | `SelectMenu`, `ComboField` | Selects and searchable pickers |
@@ -856,9 +857,36 @@ tolerates a browser that forbids `BroadcastChannel`.
   constrained: `clicks ≤ impressions`, `conversions ≤ clicks` and
   `leads ≤ clicks`.
 
+### Notifications — inbox + topbar bell (Tier 1→3)
+- Data: `src/lib/notifications/{repository,mutations,rows,store,types}.ts` —
+  reads, writes, row normalisation, shared plumbing, contracts. API is
+  `GET|PATCH /api/notifications` behind `view_notifications`.
+- Two row shapes share `app.notifications`: a targeted row (`user_id` set) and a
+  broadcast (`user_id IS NULL`). A broadcast's read state is **per viewer** and
+  lives in `app.notification_reads`, so one operator marking it read never
+  clears another operator's badge.
+- Reads select `*` and normalise in `rows.ts` (`toNotification`). A table created
+  by hand with a subset of the canonical columns still renders: `kind` falls back
+  to `system`, text columns to `''`, `occurred_at` to `created_at`, and a missing
+  `read_at` degrades the update to `{ is_read: true }`. The ORDER BY retries
+  `occurred_at → created_at → natural`, so a narrowed table still returns rows.
+- Only an absent table degrades the surface, and it degrades honestly: the page
+  renders an error with a retry, never an "inbox not enabled" placeholder.
+  `countUnread()` swallows the failure so the shell badge can never 500 a route.
+- The bell (`src/components/shell/notification-bell.tsx`,
+  `use-notification-feed.ts`, `notification-panel.tsx`) polls
+  `GET /api/notifications` every 60s while the tab is visible, refetches on
+  focus/visibility change, and mounts only for a session holding
+  `view_notifications`. The panel is the shared `PopoverMenu` primitive
+  (`src/components/ui/popover-menu.tsx`); a row marks itself read and then
+  follows its `link`, and the footer leads to the full inbox.
+- Hand-made table drifted? `supabase/snippets/notifications_schema_repair.sql` is
+  the idempotent repair: additive columns, RLS/grants parity with the migration,
+  and `notify pgrst, 'reload schema'` — the PGRST205 case from §8.5.1.
+
 ### CSS
 - Manifest: `src/app/globals.css` (4807 lines — still over limit, extraction backlog).
-- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing}.css` plus
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing,governance,notifications}.css` plus
   `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
   (charts, layout, negotiation, overlay, responsive, stats).
 

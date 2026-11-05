@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { NotificationBell } from "@/components/shell/notification-bell";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
 import type { City } from "@/lib/field-ops/types";
 import { readActiveCityId } from "@/lib/city-scope";
@@ -100,6 +101,7 @@ export function Topbar({ navOpen, onOpenNav, cityOptions }: TopbarProps) {
             </select>
           </label>
         ) : null}
+        <NotificationBell />
         <ThemeToggle />
         {user && (
           <Link className="user-copy" href="/profile" title="ملفي الشخصي">

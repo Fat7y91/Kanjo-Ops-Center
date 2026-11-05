@@ -2,12 +2,11 @@ import { NextResponse } from "next/server";
 
 import { apiError, authorize, readJson } from "@/lib/auth/api";
 import {
-  countUnread,
   insertNotification,
-  listInbox,
   markAllRead,
   markNotificationRead,
-} from "@/lib/notifications/repository";
+} from "@/lib/notifications/mutations";
+import { countUnread, listInbox } from "@/lib/notifications/repository";
 import { notificationInputSchema } from "@/lib/notifications/types";
 
 export const dynamic = "force-dynamic";

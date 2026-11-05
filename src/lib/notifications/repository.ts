@@ -1,244 +1,143 @@
 import "server-only";
 
-import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import {
   isMissingSchemaObject,
   isQueryTimeout,
 } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
-import { GovernanceError, fromDatabaseError } from "@/lib/governance/errors";
 
+import {
+  mapNotificationRows,
+  sortByRecency,
+  type NotificationRow,
+} from "./rows";
+import {
+  READ_TIMEOUT_MS,
+  isNotificationsDatabaseConfigured,
+  rethrow,
+  storeUnavailable,
+} from "./store";
 import type { Notification } from "./types";
 
 /**
- * Tier 4 repository for `app.notifications` and `app.notification_reads`.
+ * Tier 4 reads over `app.notifications`.
  *
  * A targeted row (`user_id` set) carries its own read state. A broadcast
  * (`user_id IS NULL`) is visible to every active operator and its read state is
  * per viewer: acknowledgement lives in `app.notification_reads`, so one
  * operator dismissing it cannot clear it for everyone.
  *
- * Reads degrade to `null` when the migration is not deployed. Writes keep
- * strict errors.
+ * Rows are selected with `*` and normalised in `./rows`, so a table created by
+ * hand with fewer columns still renders. Only an absent table degrades the
+ * surface, and it degrades with a real error the page can surface — never a
+ * silent "feature not deployed" panel.
  */
 
-const READ_TIMEOUT_MS = 6_000;
 const INBOX_LIMIT = 200;
-
-const COLUMNS =
-  "id,user_id,title,body,icon,color,kind,task_id,link,is_read,read_at,occurred_at,created_at";
-
-type NotificationRow = {
-  id: string;
-  user_id: string | null;
-  title: string;
-  body: string;
-  icon: string;
-  color: string;
-  kind: string;
-  task_id: string | null;
-  link: string;
-  is_read: boolean;
-  read_at: string | null;
-  occurred_at: string;
-  created_at: string;
-};
-
-export function isNotificationsDatabaseConfigured(): boolean {
-  return hasSupabaseConfig();
-}
-
-function toNotification(
-  row: NotificationRow,
-  readAck: Map<string, string>,
-): Notification {
-  const broadcast = row.user_id === null;
-  const ackAt = readAck.get(row.id) ?? null;
-  const isRead = broadcast ? ackAt !== null : row.is_read;
-  const readAt = broadcast ? ackAt : row.read_at;
-  return {
-    id: row.id,
-    userId: row.user_id,
-    title: row.title,
-    body: row.body,
-    icon: row.icon,
-    color: row.color,
-    kind: row.kind,
-    taskId: row.task_id,
-    link: row.link,
-    isRead,
-    readAt,
-    occurredAt: row.occurred_at,
-    createdAt: row.created_at,
-  };
-}
+const ACK_CHUNK = 50;
 
 /**
- * The viewer's inbox: their own notifications plus every broadcast.
- *
- * `null` means the table is not deployed. The read-acknowledgement lookup is
- * best-effort: if `notification_reads` is missing (older deployment) broadcasts
- * simply render unread.
+ * Ordering candidates, tried in turn. `occurred_at` is canonical; a hand-made
+ * table may only have `created_at`, and a table without either still renders
+ * because `sortByRecency` orders in memory.
  */
-export async function listInbox(userId: string): Promise<Notification[] | null> {
-  if (!isNotificationsDatabaseConfigured()) return null;
+const ORDER_COLUMNS: ReadonlyArray<string | null> = [
+  "occurred_at",
+  "created_at",
+  null,
+];
 
+/**
+ * The viewer's inbox rows (`*`), retried with a narrower ORDER BY when the
+ * table lacks the canonical timestamp column.
+ */
+async function readRows(userId: string): Promise<NotificationRow[]> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("notifications")
-    .select(COLUMNS)
-    .or(`user_id.eq.${userId},user_id.is.null`)
-    .order("occurred_at", { ascending: false })
-    .limit(INBOX_LIMIT)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
-  if (error) {
-    if (isMissingSchemaObject(error)) return null;
+  for (const column of ORDER_COLUMNS) {
+    const scoped = client
+      .schema("app")
+      .from("notifications")
+      .select("*")
+      .or(`user_id.eq.${userId},user_id.is.null`)
+      .limit(INBOX_LIMIT)
+      .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+
+    const { data, error } = await (column
+      ? scoped.order(column, { ascending: false })
+      : scoped);
+
+    if (!error) return (data ?? []) as NotificationRow[];
+
     if (isQueryTimeout(error)) {
       throw new Error(
         "NOTIFICATIONS_TIMEOUT: the inbox read exceeded its deadline",
       );
     }
-    throw error;
+    if (!isMissingSchemaObject(error)) rethrow(error);
   }
 
-  const rows = (data ?? []) as NotificationRow[];
-  const broadcastIds = rows.filter((row) => row.user_id === null).map((row) => row.id);
+  throw storeUnavailable();
+}
 
-  const readAck = new Map<string, string>();
-  if (broadcastIds.length > 0) {
-    const { data: acks, error: ackError } = await client
+/**
+ * Per-viewer acknowledgement for broadcasts. Best effort: if
+ * `app.notification_reads` is absent (older deployment) broadcasts simply
+ * render unread instead of failing the inbox.
+ */
+async function readAcks(
+  userId: string,
+  broadcastIds: string[],
+): Promise<Map<string, string>> {
+  const acks = new Map<string, string>();
+  if (broadcastIds.length === 0) return acks;
+
+  const client = getSupabaseServerClient();
+
+  // Chunked so a full inbox never builds a `?notification_id=in.(…)` URL long
+  // enough to be rejected.
+  for (let index = 0; index < broadcastIds.length; index += ACK_CHUNK) {
+    const chunk = broadcastIds.slice(index, index + ACK_CHUNK);
+    const { data, error } = await client
       .schema("app")
       .from("notification_reads")
       .select("notification_id,read_at")
       .eq("user_id", userId)
-      .in("notification_id", broadcastIds)
-      .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+      .in("notification_id", chunk);
 
-    if (!ackError) {
-      for (const ack of (acks ?? []) as Array<{
-        notification_id: string;
-        read_at: string;
-      }>) {
-        readAck.set(ack.notification_id, ack.read_at);
+    if (error || !data) continue;
+    for (const row of data as { notification_id: string; read_at: string }[]) {
+      if (row?.notification_id) {
+        acks.set(row.notification_id, row.read_at ?? new Date().toISOString());
       }
     }
   }
 
-  return rows.map((row) => toNotification(row, readAck));
-}
-
-/** Unread count for the topbar badge. Degrades to 0, never throws a page. */
-export async function countUnread(userId: string): Promise<number> {
-  const inbox = await listInbox(userId).catch(() => null);
-  if (!inbox) return 0;
-  return inbox.filter((item) => !item.isRead).length;
+  return acks;
 }
 
 /**
- * Marks one notification read for this viewer.
+ * The viewer's inbox: their own notifications plus every broadcast.
  *
- * A targeted row flips its own `is_read`; a broadcast records an ack row. The
- * caller passes the viewer id, never the row owner, so a broadcast can only be
- * marked read by the operator doing the marking.
+ * Returns `[]` when Supabase is not configured at all; throws
+ * `STORE_UNAVAILABLE` when the table itself is absent so the page can offer a
+ * retry instead of claiming the feature is switched off.
  */
-export async function markNotificationRead(
-  id: string,
-  userId: string,
-): Promise<void> {
-  const client = getSupabaseServerClient();
+export async function listInbox(userId: string): Promise<Notification[]> {
+  if (!isNotificationsDatabaseConfigured()) return [];
 
-  const { data, error } = await client
-    .schema("app")
-    .from("notifications")
-    .select("user_id")
-    .eq("id", id)
-    .maybeSingle();
+  const rows = await readRows(userId);
+  const broadcastIds = rows
+    .filter((row) => row.user_id === null || row.user_id === undefined)
+    .map((row) => String(row.id ?? ""))
+    .filter((id) => id.length > 0);
 
-  if (error) throw error;
-  if (!data) return;
-
-  const owner = (data as { user_id: string | null }).user_id;
-  if (owner === userId) {
-    const { error: updateError } = await client
-      .schema("app")
-      .from("notifications")
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("user_id", userId);
-    if (updateError) throw updateError;
-    return;
-  }
-
-  if (owner === null) {
-    // Broadcast: record the acknowledgement for this viewer only.
-    const { error: ackError } = await client
-      .schema("app")
-      .from("notification_reads")
-      .upsert(
-        { notification_id: id, user_id: userId, read_at: new Date().toISOString() },
-        { onConflict: "notification_id,user_id" },
-      );
-    if (ackError && !isMissingSchemaObject(ackError)) throw ackError;
-  }
+  const acks = await readAcks(userId, broadcastIds);
+  return sortByRecency(mapNotificationRows(rows, acks));
 }
 
-/** Marks every unread row visible to this viewer as read. */
-export async function markAllRead(userId: string): Promise<void> {
-  const inbox = await listInbox(userId);
-  if (!inbox) return;
-  await Promise.all(
-    inbox
-      .filter((item) => !item.isRead)
-      .map((item) => markNotificationRead(item.id, userId)),
-  );
-}
-
-/** Appends one notification (targeted or broadcast). */
-export async function insertNotification(row: {
-  userId: string | null;
-  title: string;
-  body: string;
-  icon: string;
-  color: string;
-  kind: string;
-  taskId: string | null;
-  link: string;
-  occurredAt?: string;
-}): Promise<Notification> {
-  const client = getSupabaseServerClient();
-  const insert: Record<string, unknown> = {
-    user_id: row.userId,
-    title: row.title,
-    body: row.body,
-    icon: row.icon,
-    color: row.color,
-    kind: row.kind,
-    task_id: row.taskId,
-    link: row.link,
-  };
-  if (row.occurredAt) insert.occurred_at = row.occurredAt;
-
-  const { data, error } = await client
-    .schema("app")
-    .from("notifications")
-    .insert(insert)
-    .select(COLUMNS)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
-    .single();
-
-  if (error) {
-    if (isMissingSchemaObject(error)) {
-      throw new GovernanceError(
-        "STORE_UNAVAILABLE",
-        "صندوق الإشعارات غير مُفعّل على هذا النشر بعد.",
-        503,
-      );
-    }
-    const mapped = fromDatabaseError(error);
-    if (mapped) throw mapped;
-    throw error;
-  }
-  return toNotification(data as NotificationRow, new Map());
+/** Unread count for the topbar bell. Degrades to 0, never throws a page. */
+export async function countUnread(userId: string): Promise<number> {
+  const inbox = await listInbox(userId).catch(() => []);
+  return inbox.filter((item) => !item.isRead).length;
 }

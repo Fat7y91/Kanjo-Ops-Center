@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
 
 type InboxViewProps = {
   initialItems: Notification[];
-  unavailable: boolean;
+  errorMessage?: string;
   currentUserId: string;
 };
 
@@ -25,9 +26,10 @@ type InboxViewProps = {
  */
 export function InboxView({
   initialItems,
-  unavailable,
+  errorMessage = "",
   currentUserId,
 }: InboxViewProps) {
+  const router = useRouter();
   const [items, setItems] = useState<Notification[]>(initialItems);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -85,15 +87,18 @@ export function InboxView({
     }
   }
 
-  if (unavailable) {
+  if (errorMessage) {
     return (
       <section className="panel">
         <div className="panel-head">
-          <h2>الصندوق غير مفعّل</h2>
+          <h2>تعذر تحميل الإشعارات</h2>
         </div>
-        <p className="muted">
-          لم يُطبَّق ترحيل الإشعارات على هذه البيئة بعد.
-        </p>
+        <p className="muted">{errorMessage}</p>
+        <div className="row-actions">
+          <Button size="sm" variant="quiet" onClick={() => router.refresh()}>
+            إعادة المحاولة
+          </Button>
+        </div>
       </section>
     );
   }
