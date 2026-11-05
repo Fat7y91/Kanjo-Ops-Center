@@ -149,7 +149,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         !target.permissions.includes(permission) &&
         PERMISSION_SET.has(permission),
     );
-    assertCanGrant(session, target, granted);
+    assertCanGrant(session, granted);
 
     assertCanPatch(session, target, {
       clearanceLevel: patch.clearanceLevel,

@@ -225,18 +225,37 @@ export function permissionsAreWithinActor(
 }
 
 /**
- * Whether the actor may add the given capabilities to their own account.
+ * Whether the actor may hand the given capabilities out at all.
  *
- * The top rank is defined to hold the whole catalogue (`app.permissions`), so
- * an L4 self-grant cannot exceed anything they are not already entitled to; it
- * only fills in keys seeded after their last backfill. Every other rank stays
- * inside the subset they were granted, so a lower admin still cannot mint a
- * capability they were never given.
+ * The grant rule is bounded by **rank**, never by the grantor's own grant rows
+ * alone. The top rank is defined to hold the whole catalogue
+ * (`app.permissions`), so an L4 may grant — to its own account and to every
+ * account below it — a capability that a later migration seeded, or one it has
+ * not backfilled onto itself yet. Every lower rank stays inside the subset it
+ * was granted, so a lower admin still cannot mint a capability it never held.
+ *
+ * Keying the grant check on `app.user_permissions` alone would deadlock the
+ * catalogue: a capability added by a later migration could never be handed out,
+ * because the only operator entitled to grant it does not hold it yet.
  */
-export function maySelfGrant(
+export function mayGrantPermissions(
   actor: ClearanceActor,
   permissions: readonly Permission[],
 ): boolean {
   if (actor.clearanceLevel >= MAX_CLEARANCE_LEVEL) return true;
   return permissionsAreWithinActor(actor, permissions);
+}
+
+/**
+ * Whether the actor may add the given capabilities to their own account.
+ *
+ * Same rule as `mayGrantPermissions` — the target of a self-grant is the actor,
+ * so there is nothing extra to bound. Kept as a named export because the client
+ * and the server both read it as "self-grant" at the call site.
+ */
+export function maySelfGrant(
+  actor: ClearanceActor,
+  permissions: readonly Permission[],
+): boolean {
+  return mayGrantPermissions(actor, permissions);
 }

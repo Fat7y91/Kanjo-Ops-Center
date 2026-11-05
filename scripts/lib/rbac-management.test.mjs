@@ -130,9 +130,19 @@ test("assertCanPatch refuses dropping your own governorship", () => {
   );
 });
 
-test("assertCanGrant treats a top-rank self-grant as always allowed", () => {
+test("assertCanGrant treats a top-rank grant as always allowed", () => {
   assert.doesNotThrow(() =>
-    management.assertCanGrant(session(), self, ["export_merchant_data"]),
+    management.assertCanGrant(session(), ["export_merchant_data"]),
+  );
+});
+
+test("assertCanGrant lets the top rank hand out a capability it does not hold", () => {
+  // `view_notifications` arrives with a migration that backfills the rank, but
+  // until that backfill (or the seeding SQL) lands, the L4 holds no grant row
+  // for it. The rule is about rank, so granting it to a lower account must not
+  // be refused on that ground.
+  assert.doesNotThrow(() =>
+    management.assertCanGrant(session(), ["view_notifications"]),
   );
 });
 
@@ -142,7 +152,41 @@ test("assertCanGrant keeps the subset rule for a lower admin", () => {
     permissions: ["manage_system_users", "view_overview"],
   });
   denies(
-    () => management.assertCanGrant(admin, user(), ["export_merchant_data"]),
+    () => management.assertCanGrant(admin, ["export_merchant_data"]),
+    "PERMISSION_ESCALATION",
+  );
+});
+
+test("assertCanPatch lets the top rank patch a lower account beyond its own grants", () => {
+  assert.doesNotThrow(() =>
+    management.assertCanPatch(session(), user({ clearanceLevel: 3 }), {
+      permissions: ["view_overview", "view_notifications", "view_audit_logs"],
+    }),
+  );
+});
+
+test("assertCanCreate lets the top rank provision a newly catalogued capability", () => {
+  assert.doesNotThrow(() =>
+    management.assertCanCreate(session(), {
+      clearanceLevel: 3,
+      accessibleCities: [],
+      permissions: ["manage_system_users", "view_notifications"],
+    }),
+  );
+});
+
+test("assertCanCreate keeps the subset rule for a lower admin", () => {
+  const admin = session({
+    clearanceLevel: 3,
+    permissions: ["manage_system_users", "view_overview"],
+  });
+  denies(
+    () =>
+      management.assertCanCreate(admin, {
+        clearanceLevel: 2,
+        accessibleCities: [],
+        permissions: ["view_notifications"],
+      }),
     "PERMISSION_ESCALATION",
   );
 });

@@ -1175,7 +1175,7 @@ render at all.
 
 | Actor | Level | Creates | Scope it may grant |
 |---|---|---|---|
-| System Admin | 4 | Levels 1–3 (strictly lower) | Any city, any permission it holds |
+| System Admin | 4 | Levels 1–3 (strictly lower) | Any city, any catalogued permission |
 | Founder | 3 | Levels 1–2 (strictly lower) | Any city, any permission it holds |
 | City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
 | Field Rep | 1 | Nobody | — |
@@ -1188,12 +1188,16 @@ escape hatch.
 **Self-access is the one exception, and it is about the actor's own row, not
 about rank.** `canManageUser()` returns true for `target.id === actor.id` once
 the actor holds `manage_system_users`, so their account always appears in the
-roster and its detail page. This is what lets an L4 grant themselves a
-capability seeded by a later migration: migrations backfill the top rank, but a
-capability added without a matching backfill would otherwise be unreachable from
-the UI. Self-grants are bounded by `maySelfGrant()`: the L4 rank is defined to
-hold the whole catalogue, so any single key is permitted; every lower rank stays
-inside `permissionsAreWithinActor()`, unchanged. Self-editing never relaxes
+roster and its detail page. Granting itself is bounded by
+`mayGrantPermissions()`, which is **rank-based**: the L4 rank is defined to hold
+the whole catalogue (`app.permissions`), so it may hand any catalogued key to
+itself **or to any account below it** — including a key a later migration seeded
+that it has not backfilled onto its own account yet. Every lower rank stays
+inside `permissionsAreWithinActor()`, unchanged, so a lower admin still cannot
+mint a capability it was never given. The same helper gates
+`assertCanPatch()`, `assertCanGrant()` and `assertCanCreate()`, and the client
+`canGrant()` in `use-user-capabilities.ts` reads it too, so a checkbox can never
+promise a grant the route would refuse. Self-editing never relaxes
 rank: `assertCanPatch()` rejects a self `clearance_level` change,
 self-deactivation, and dropping one's own `manage_system_users`; and
 `assertCanGovern()` (city-manager assignment) still excludes self. Deletion
@@ -1223,6 +1227,16 @@ reverts on the next read is explained rather than mistaken for a lost write.
 Unexpected write failures are logged field by field (SQLSTATE, detail, hint)
 instead of being handed to `console.error` as an opaque object.
 
+A reported key means the table is behind the code, not that the operator lacks
+the right to grant it: the grant rule is rank-based (see above), so an L4 is
+never the obstacle. Repair the table with
+`supabase/snippets/rbac_capability_gap_repair.sql`, which seeds the six
+legacy-gap keys from `20261112000000_legacy_gap_resolutions.sql`, backfills them
+onto the ranks that own them, bumps `auth_revision` and asserts the result. It is
+idempotent and safe to re-run; it lives outside `supabase/migrations/` because
+the migration chain already carries the same statements and must not be
+replayed.
+
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual
 capability grants, grouped by the 20 `PERMISSION_GROUPS`. The client never
@@ -1250,8 +1264,11 @@ Rules enforced for every creation:
    actor identity, so a database trigger could not tell who is granting. The
    other three rules below are enforced in both tiers.
 2. **Permission subset.** The grantor can only hand out permissions they
-   themselves hold (`permissionsAreWithinActor`). No capability can be
-   invented during provisioning.
+   themselves hold (`permissionsAreWithinActor`), with one rank-based exemption:
+   the top rank (L4) is defined to hold the whole catalogue, so it may grant any
+   key `app.permissions` carries — including one seeded by a migration that has
+   not backfilled it yet. No capability can be invented during provisioning
+   (`PERMISSION_KEYS` bounds the request, the foreign key bounds the table).
 3. **City subset.** A non-global actor can only assign cities from their own
    `accessibleCities`. Global actors (level ≥ 3) may assign any city.
 4. **Global ranks are executive-only.** Levels 3–4 require a global actor.

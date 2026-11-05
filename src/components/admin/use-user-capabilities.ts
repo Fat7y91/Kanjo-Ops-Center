@@ -13,7 +13,7 @@ import type {
 import {
   canManageUser,
   clearanceLabel,
-  maySelfGrant,
+  mayGrantPermissions,
   type ClearanceActor,
 } from "@/lib/rbac/hierarchy";
 import type { Permission } from "@/lib/rbac/permissions";
@@ -85,9 +85,9 @@ export function useUserCapabilities({
   }, [assignableCities]);
 
   // The same hierarchy helpers the server guard uses, so the client cannot
-  // disagree with `canManageUser` / `maySelfGrant` about who is reachable. The
-  // actor is rebuilt from the live session, not the initial props, so a revoke
-  // broadcast re-filters the roster immediately.
+  // disagree with `canManageUser` / `mayGrantPermissions` about who is
+  // reachable. The actor is rebuilt from the live session, not the initial
+  // props, so a revoke broadcast re-filters the roster immediately.
   const actor = useMemo<ClearanceActor>(
     () => ({
       id: viewerId,
@@ -174,15 +174,15 @@ export function useUserCapabilities({
   /**
    * Whether the viewer may hand `permission` to `user`.
    *
-   * Uses the same self-grant rule as the server, so the checkbox and the PATCH
-   * guard cannot disagree about what an L4 may add to its own account.
+   * Same `mayGrantPermissions` rule the PATCH guard applies: the top rank may
+   * grant any catalogued capability (including one seeded after its own
+   * backfill, and including to a lower account), every other rank stays inside
+   * the subset it holds. The checkbox therefore cannot over-promise.
    */
   const canGrant = useCallback(
-    (user: AppUser, permission: Permission): boolean => {
-      if (user.id === viewerId) return maySelfGrant(actor, [permission]);
-      return permissions.has(permission);
-    },
-    [actor, permissions, viewerId],
+    (user: AppUser, permission: Permission): boolean =>
+      withinViewer(user) && mayGrantPermissions(actor, [permission]),
+    [actor, withinViewer],
   );
 
   return {

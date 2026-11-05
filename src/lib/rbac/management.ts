@@ -4,8 +4,7 @@ import {
   canManageUser,
   isGlobalActor,
   isSelf,
-  maySelfGrant,
-  permissionsAreWithinActor,
+  mayGrantPermissions,
   scopeIsWithinActor,
   toClearanceActor,
   type ClearanceActor,
@@ -93,7 +92,7 @@ export function assertCanCreate(
     );
   }
 
-  if (!permissionsAreWithinActor(actor, input.permissions)) {
+  if (!mayGrantPermissions(actor, input.permissions)) {
     throw new RbacDeniedError(
       "PERMISSION_ESCALATION",
       "لا يمكنك منح صلاحيات لا تملكها.",
@@ -191,37 +190,27 @@ export function assertCanPatch(
     );
   }
 
-  if (
-    patch.permissions !== undefined &&
-    !(self
-      ? maySelfGrant(actor, patch.permissions)
-      : permissionsAreWithinActor(actor, patch.permissions))
-  ) {
-    throw new RbacDeniedError(
-      "PERMISSION_ESCALATION",
-      "لا يمكنك منح صلاحيات لا تملكها.",
-    );
+  if (patch.permissions !== undefined) {
+    // Delegated, so the per-key check in the route and the full-set check here
+    // cannot answer differently for the same set.
+    assertCanGrant(session, patch.permissions);
   }
 }
 
 /**
- * Capabilities the actor is about to add to the target.
+ * Capabilities the actor is about to add to an operator.
  *
  * Shared by the PATCH route and `assertCanPatch` so the per-key check and the
- * full-set check cannot drift. A self-grant is compared against `maySelfGrant`
- * rather than the strict subset rule.
+ * full-set check cannot drift. The rule is rank-based (`mayGrantPermissions`),
+ * so the target is deliberately not an input: a top-rank actor may hand out any
+ * catalogued key to anybody below it, whatever grant rows it holds right now.
  */
 export function assertCanGrant(
   session: ActiveSession,
-  target: Pick<AppUser, "id" | "permissions">,
   additions: readonly Permission[],
 ): void {
   if (additions.length === 0) return;
-  const actor = actorFor(session);
-  const allowed = isSelf(actor, target)
-    ? maySelfGrant(actor, additions)
-    : permissionsAreWithinActor(actor, additions);
-  if (!allowed) {
+  if (!mayGrantPermissions(actorFor(session), additions)) {
     throw new RbacDeniedError(
       "PERMISSION_ESCALATION",
       "لا يمكنك منح صلاحيات لا تملكها.",

@@ -78,6 +78,35 @@ test("a lower rank cannot self-grant a capability it does not hold", () => {
   assert.equal(hierarchy.maySelfGrant(admin, ["view_overview"]), true);
 });
 
+test("the top rank may grant a capability it does not hold yet", () => {
+  // Rank, not the grantor's own rows, bounds the grant: otherwise a capability
+  // seeded after the actor's last backfill could never be handed out.
+  assert.equal(
+    hierarchy.mayGrantPermissions(actor(), ["view_notifications"]),
+    true,
+  );
+  assert.equal(
+    hierarchy.mayGrantPermissions(actor(), [
+      "view_notifications",
+      "view_audit_logs",
+    ]),
+    true,
+  );
+});
+
+test("a lower rank may only grant what it already holds", () => {
+  const admin = actor({
+    id: "admin-l3",
+    clearanceLevel: 3,
+    permissions: ["manage_system_users", "view_overview"],
+  });
+  assert.equal(
+    hierarchy.mayGrantPermissions(admin, ["view_notifications"]),
+    false,
+  );
+  assert.equal(hierarchy.mayGrantPermissions(admin, ["view_overview"]), true);
+});
+
 test("governing a city manager never includes the actor", () => {
   assert.equal(hierarchy.canGovernUser(actor(), target({ id: FOUNDER_ID })), false);
 });
