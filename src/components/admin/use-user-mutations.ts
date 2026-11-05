@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 
 import type { Permission } from "@/lib/rbac/permissions";
+import { describeSkippedPermissions } from "@/lib/rbac/format";
 import type { AppUser } from "@/lib/rbac/types";
 
 type Args = {
@@ -49,12 +50,20 @@ export function useUserMutations({
           user?: AppUser;
           revision?: number;
           error?: string;
+          skippedPermissions?: string[];
         };
         if (!response.ok || !payload.user) {
           setError(payload.error ?? "تم رفض تحديث المشغّل.");
           return false;
         }
         upsertUser(payload.user, payload.revision);
+        // A capability this deployment cannot store is reported by the write
+        // itself. Say so, otherwise a checkbox that reverts on the next read
+        // looks like a lost update.
+        const notice = describeSkippedPermissions(
+          payload.skippedPermissions ?? [],
+        );
+        if (notice) setError(notice);
         return true;
       } catch {
         setError("تعذر وصول التحديث إلى الخادم.");

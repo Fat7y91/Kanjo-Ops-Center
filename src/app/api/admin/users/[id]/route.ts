@@ -31,6 +31,38 @@ type RouteContext = {
 
 const PERMISSION_SET = new Set<Permission>(PERMISSION_KEYS);
 
+/**
+ * Structured server-side detail for an unexpected write failure.
+ *
+ * The operator only ever sees one Arabic sentence, so this record is the whole
+ * diagnosis. `console.error(error)` on its own loses what PostgREST attaches to
+ * a database failure — the Postgres SQLSTATE, the constraint detail and the hint
+ * — which is how a foreign-key violation on a capability the catalogue did not
+ * hold reached the log as an anonymous 500. PostgREST errors are plain objects,
+ * not `Error` instances, so both shapes are read field by field.
+ */
+function failureDetails(error: unknown): Record<string, unknown> {
+  if (typeof error !== "object" || error === null) {
+    return { message: String(error) };
+  }
+
+  const record = error as {
+    name?: unknown;
+    message?: unknown;
+    code?: unknown;
+    details?: unknown;
+    hint?: unknown;
+  };
+
+  return {
+    name: record.name ?? null,
+    message: record.message ?? null,
+    code: record.code ?? null,
+    details: record.details ?? null,
+    hint: record.hint ?? null,
+  };
+}
+
 function respondToError(error: unknown) {
   if (error instanceof RbacDeniedError) {
     return NextResponse.json(
@@ -56,7 +88,7 @@ function respondToError(error: unknown) {
       { status: 422 },
     );
   }
-  console.error(error);
+  console.error("admin users write failed", failureDetails(error));
   return NextResponse.json(
     { error: "تعذر تحديث المشغّل." },
     { status: 500 },
@@ -133,10 +165,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       accessibleCities: patch.accessibleCities,
       active: patch.active,
     });
+    const { skippedPermissions, ...user } = updated;
 
     return NextResponse.json({
-      user: updated,
+      user,
       revision: await getRbacRevision(),
+      // Reported so the caller can tell the operator which capability this
+      // deployment cannot store yet, instead of failing the whole patch.
+      ...(skippedPermissions?.length ? { skippedPermissions } : {}),
     });
   } catch (error) {
     return respondToError(error);

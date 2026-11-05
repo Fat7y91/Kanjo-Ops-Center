@@ -163,10 +163,20 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
 
 export type UserPatch = UserPatchInput;
 
+/**
+ * A written profile.
+ *
+ * `skippedPermissions` carries the requested capabilities this deployment could
+ * not store, so the API can report them instead of failing the whole patch.
+ */
+export type UserWriteResult = AppUser & {
+  skippedPermissions?: readonly string[];
+};
+
 export async function updateUser(
   id: string,
   patch: UserPatch,
-): Promise<AppUser> {
+): Promise<UserWriteResult> {
   const current = await getUserById(id);
   if (!current) throw new Error("User not found");
 
@@ -195,13 +205,16 @@ export async function updateUser(
     assertActiveGovernor(await listUsers(), id);
   }
 
+  let skippedPermissions: readonly string[] = [];
+
   if (isRbacDatabaseConfigured()) {
-    await updateUserProfile(id, {
+    const written = await updateUserProfile(id, {
       permissions: nextPermissions,
       clearanceLevel: nextLevel,
       accessibleCities: nextCities,
       active: nextActive,
     });
+    skippedPermissions = written.skippedPermissions;
   } else {
     const store = getSeedStore();
     store.users.set(id, {
@@ -216,17 +229,33 @@ export async function updateUser(
     store.revision += 1;
   }
 
+  // A capability the catalogue does not hold could not be stored, so the row
+  // this request returns must not claim it. Every caller renders the response
+  // as the new state, and reporting a grant the database rejected would show a
+  // checkbox that silently reverts on the next read.
+  const storedPermissions =
+    skippedPermissions.length > 0
+      ? nextPermissions.filter((key) => !skippedPermissions.includes(key))
+      : nextPermissions;
+
   // Demoting below L3 drops the global bypass but keeps the explicit city
   // list, so the operator retains only the geography they can still see.
-  return {
+  const written: UserWriteResult = {
     ...current,
-    permissions: nextPermissions,
+    permissions: storedPermissions,
     accessibleCities: nextCities,
     clearanceLevel: nextLevel,
     globalScope: nextLevel >= 3,
     active: nextActive,
     updatedAt: new Date().toISOString(),
   };
+
+  // The seed store has no catalogue table, so every known key is grantable and
+  // the list stays empty; a partial database write reports what it could not
+  // store.
+  return skippedPermissions.length > 0
+    ? { ...written, skippedPermissions }
+    : written;
 }
 
 export async function deleteUser(id: string): Promise<AppUser> {

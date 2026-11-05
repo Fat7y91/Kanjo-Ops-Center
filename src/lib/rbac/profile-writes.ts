@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
+import { resolveAgainstCatalogue } from "./permission-catalogue";
 import type { Permission } from "./permissions";
 
 /**
@@ -18,12 +19,24 @@ export type UserPatchInput = {
   active?: boolean;
 };
 
+/**
+ * What a write could not store.
+ *
+ * `skippedPermissions` lists requested capabilities that this deployment's
+ * `app.permissions` catalogue does not hold yet, so no grant row could be
+ * created for them. Empty when everything landed.
+ */
+export type ProfileWriteResult = {
+  skippedPermissions: string[];
+};
+
 /** Rewrites the profile row, then the grant and scope membership. */
 export async function updateUserProfile(
   id: string,
   patch: UserPatchInput,
-): Promise<void> {
+): Promise<ProfileWriteResult> {
   const client = getSupabaseServerClient();
+  let skippedPermissions: string[] = [];
 
   if (patch.clearanceLevel !== undefined || patch.active !== undefined) {
     const profile: Record<string, unknown> = {};
@@ -63,16 +76,35 @@ export async function updateUserProfile(
     const removed = [...held].filter((key) => !next.has(key));
 
     if (added.length > 0) {
-      const { error } = await client
+      // `permission_key` is a foreign key into `app.permissions`: a capability
+      // this deployment has not seeded yet cannot be stored at all. Resolving
+      // first keeps the rest of the patch (every other grant, the profile row,
+      // the city scope) from failing with it, and turns the remainder into an
+      // explicit report instead of a bare 500.
+      const { data: catalogue, error: catalogueError } = await client
         .schema("app")
-        .from("user_permissions")
-        .insert(
-          added.map((permissionKey) => ({
-            user_id: id,
-            permission_key: permissionKey,
-          })),
-        );
-      if (error) throw error;
+        .from("permissions")
+        .select("key");
+      if (catalogueError) throw catalogueError;
+
+      const resolution = resolveAgainstCatalogue(
+        added,
+        (catalogue ?? []).map((row) => (row as { key: string }).key),
+      );
+      skippedPermissions = resolution.missing;
+
+      if (resolution.granted.length > 0) {
+        const { error } = await client
+          .schema("app")
+          .from("user_permissions")
+          .insert(
+            resolution.granted.map((permissionKey) => ({
+              user_id: id,
+              permission_key: permissionKey,
+            })),
+          );
+        if (error) throw error;
+      }
     }
 
     if (removed.length > 0) {
@@ -107,6 +139,8 @@ export async function updateUserProfile(
       if (error) throw error;
     }
   }
+
+  return { skippedPermissions };
 }
 
 export async function deleteUserProfile(id: string): Promise<void> {

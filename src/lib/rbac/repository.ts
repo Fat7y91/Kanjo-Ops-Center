@@ -192,5 +192,6 @@ export async function getRbacRevision(): Promise<number> {
 export {
   deleteUserProfile,
   updateUserProfile,
+  type ProfileWriteResult,
   type UserPatchInput,
 } from "./profile-writes";

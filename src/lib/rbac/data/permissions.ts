@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (97 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (103 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:

@@ -277,7 +277,7 @@ at a time.
 - `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
 - `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance`, `requireAnyPermission` (server components), and `requireModuleAccess(pathname)` — the nav-derived page guard (§8.7).
 - `src/lib/auth/session.ts` — HMAC token encode/verify.
-- `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (97 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (103 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
 - `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
 - `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
 - `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
@@ -952,7 +952,7 @@ NoSQL. A document never spans both stores.
 
 The capability catalogue has one direction of truth: `app.permissions` is the
 database record, and `src/lib/rbac/data/permissions.ts` is generated from it so
-the two can never drift (97 keys, verified key-for-key). `src/lib/rbac/`
+the two can never drift (103 keys, verified key-for-key). `src/lib/rbac/`
 `permissions.ts` adds the derived `Permission` union, the `isPermission` guard
 and the grouping on top. `app.users.clearance_level` follows `hierarchy.ts`
 (1–4).
@@ -972,7 +972,7 @@ policies. It is validated end-to-end against PostgreSQL 15.
 Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
 `app.field_teams` must exist before `app.users.team_id` can reference it.
 
-The capability catalogue is 97 keys. The rows (Arabic labels included) are
+The capability catalogue is 103 keys. The rows (Arabic labels included) are
 generated data in `src/lib/rbac/data/permissions.ts`, derived from
 `app.permissions`; `src/lib/rbac/permissions.ts` only adds the derived types,
 the `isPermission` guard and the grouping. Regenerate the data file after any
@@ -989,20 +989,20 @@ against a live `app.permissions` when `DATABASE_URL` is set. Both run in
 
 | Group (as seeded) | Keys | Count |
 |---|---|---|
-| مساحة العمل | `view_overview`, `view_finance` | 2 |
+| مساحة العمل | `view_overview`, `view_finance`, `view_notifications` | 3 |
 | نظرة عامة | `view_overview_contracts`, `view_overview_negotiation`, `view_overview_finance`, `view_overview_catalog`, `view_overview_compliance`, `view_overview_marketing` | 6 |
 | المدن | `view_cities`, `create_city`, `update_city_zone`, `view_city_analytics`, `assign_city_managers`, `manage_cities`, `view_active_cities`, `view_geo_operations`, `add_city` | 9 |
 | التجار | `create_merchants`, `edit_merchants`, `delete_merchants`, `view_merchants`, `transfer_merchants`, `view_merchant_profile`, `add_merchant`, `edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`, `export_merchant_data` | 11 |
 | الكتالوج | `manage_catalog`, `view_catalog`, `create_products`, `edit_catalog`, `add_catalog`, `review_catalog_images`, `delete_products`, `view_taxonomy`, `request_taxonomy` | 9 |
 | مراجعة الصور | `edit_product_images`, `review_image_quality` | 2 |
 | التصنيفات | `review_add_requests`, `manage_merchant_types`, `manage_categories`, `manage_variables` | 4 |
-| الحوكمة | `manage_taxonomy`, `manage_permissions` | 2 |
-| العمليات الميدانية | `view_field_ops`, `view_agent_kpi`, `manage_tasks`, `approve_tasks`, `assign_tasks`, `request_transfers`, `view_all_teams_visits`, `approve_transfers`, `start_end_visit`, `approve_edit_requests`, `write_report`, `manage_merchant_state`, `request_ownership_transfer`, `approve_ownership_transfer`, `approve_report_edits` | 15 |
+| الحوكمة | `manage_taxonomy`, `manage_permissions`, `view_audit_logs` | 3 |
+| العمليات الميدانية | `view_field_ops`, `view_agent_kpi`, `manage_tasks`, `approve_tasks`, `assign_tasks`, `request_transfers`, `view_all_teams_visits`, `approve_transfers`, `start_end_visit`, `approve_edit_requests`, `write_report`, `manage_merchant_state`, `request_ownership_transfer`, `approve_ownership_transfer`, `approve_report_edits`, `view_archived_reports`, `manage_archived_reports` | 17 |
 | مؤشرات المناديب | `view_global_kpi`, `view_rep_kpi` | 2 |
 | العقود | `view_contracts`, `create_contracts`, `draft_contract`, `edit_contracts`, `edit_contract`, `sign_contracts`, `delete_contracts`, `sign_contract`, `cancel_contract` | 9 |
 | الحسابات البنكية | `view_bank_balances`, `add_bank_account`, `view_bank_transactions`, `record_bank_transaction` | 4 |
 | المالية | `view_financials`, `manage_expenses`, `view_accounts`, `manage_accounts`, `record_deposits`, `view_payroll`, `manage_payroll` | 7 |
-| التسويق | `manage_marketing_metrics`, `view_campaigns`, `create_campaign`, `record_campaign_results`, `view_marketing_logs`, `manage_platform_settings` | 6 |
+| التسويق | `manage_marketing_metrics`, `view_campaigns`, `create_campaign`, `record_campaign_results`, `view_marketing_logs`, `manage_platform_settings`, `view_marketing_leads`, `manage_marketing_leads` | 8 |
 | الرواتب | `view_payroll_sheets`, `view_employee_payslip` | 2 |
 | إدخال البيانات | `view_pricing_and_status` | 1 |
 | أسعار العمولات | `manage_commission_rates` | 1 |
@@ -1209,6 +1209,19 @@ would still fail at commit for a sole governor. Additions are written before
 removals, so the invariant is only ever observed on the full set; revocation of
 `manage_system_users` from a sole governor still fails loudly in the database,
 as intended.
+
+`permission_key` is also a foreign key into `app.permissions`, and the TypeScript
+catalogue ships in a different deploy from the migration that seeds the table.
+Before inserting, `updateUserProfile()` resolves the additions against the keys
+the database actually holds (`src/lib/rbac/permission-catalogue.ts`): the ones it
+carries are granted and the rest are returned as `skippedPermissions`. Without
+that step a single unseeded capability would abort the whole statement with
+`23503` and surface as a bare 500 — every other grant, the level change and the
+city scope in the same patch would be lost with it. The API reports the skipped
+keys, and the roster dialog shows them by catalogue label, so a checkbox that
+reverts on the next read is explained rather than mistaken for a lost write.
+Unexpected write failures are logged field by field (SQLSTATE, detail, hint)
+instead of being handed to `console.error` as an opaque object.
 
 The add-user dialog (`CreateUserModal`) collects phone, password, full name,
 optional email, job title, team (when level 1), city scope and the individual

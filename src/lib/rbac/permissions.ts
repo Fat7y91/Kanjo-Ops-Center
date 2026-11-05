@@ -8,7 +8,7 @@ export { PERMISSIONS, type PermissionDefinition };
 /**
  * The single source of truth for every capability in V2.
  *
- * The catalogue itself is generated data in `./data/permissions.ts` (97 rows,
+ * The catalogue itself is generated data in `./data/permissions.ts` (103 rows,
  * mirroring `app.permissions`). This module adds the derived types and lookups
  * that UI components, route middleware, server guards and API handlers consume.
  * No surface should ever branch on a job title or role name.
