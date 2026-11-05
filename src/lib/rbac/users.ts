@@ -248,36 +248,6 @@ export async function deleteUser(id: string): Promise<AppUser> {
   return cloneUser(current);
 }
 
-export async function addUserCityScope(
-  id: string,
-  cityId: string,
-): Promise<AppUser> {
-  const current = await getUserById(id);
-  if (!current) throw new Error("User not found");
-
-  if (current.accessibleCities.includes(cityId)) return current;
-
-  return updateUser(id, {
-    accessibleCities: [...current.accessibleCities, cityId],
-  });
-}
-
-export async function removeUserCityScope(
-  id: string,
-  cityId: string,
-): Promise<AppUser> {
-  const current = await getUserById(id);
-  if (!current) throw new Error("User not found");
-
-  if (!current.accessibleCities.includes(cityId)) return current;
-
-  return updateUser(id, {
-    accessibleCities: current.accessibleCities.filter(
-      (candidate) => candidate !== cityId,
-    ),
-  });
-}
-
 export function normalizePermissions(values: readonly unknown[]): Permission[] {
   return Array.from(
     new Set(values.filter((value): value is Permission => isPermission(value))),

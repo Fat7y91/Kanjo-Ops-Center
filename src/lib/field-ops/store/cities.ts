@@ -2,12 +2,11 @@ import { normalizeSearchText } from "@/lib/search/normalize";
 import type { City } from "@/lib/field-ops/types";
 import { zoneToBoundary } from "@/lib/field-ops/types";
 import type { AppUser } from "@/lib/rbac/types";
+import { getUserById, listUsers } from "@/lib/rbac/users";
 import {
   addUserCityScope,
-  getUserById,
-  listUsers,
   removeUserCityScope,
-} from "@/lib/rbac/users";
+} from "@/lib/rbac/user-city-scope";
 import { memoizeRead } from "@/lib/rbac/snapshot-cache";
 import type { CityCreateInput } from "@/lib/schemas/field-ops";
 
