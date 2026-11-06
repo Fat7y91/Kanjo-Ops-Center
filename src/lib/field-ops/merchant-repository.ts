@@ -200,33 +200,46 @@ export async function insertMerchant(
   const attributedBy = createdBy && UUID.test(createdBy) ? createdBy : null;
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
+  const values = {
+    id: merchant.id,
+    name: merchant.name,
+    normalized_name: merchant.normalizedName,
+    vendor_type_id: merchant.vendorTypeId,
+    vendor_type: merchant.vendorType,
+    team: merchant.team,
+    city_id: merchant.cityId,
+    target_commission: merchant.targetCommission,
+    monthly_value_minor: Math.round(merchant.monthlyValue * 100),
+    strategic_notes: merchant.strategicNotes,
+    contract_state: merchant.contractState,
+    commission_amount: merchant.commissionAmount,
+    agreed_commission: merchant.agreedCommission ?? null,
+    edit_unlocked: merchant.editUnlocked,
+    documents: merchant.documents,
+    opinions: merchant.opinions ?? [],
+    first_entry_by: attributedBy,
+    first_entry_at: attributedBy ? merchant.createdAt : null,
+    created_at: merchant.createdAt,
+    updated_at: merchant.updatedAt,
+  };
+
+  let { data, error } = await client
     .schema("app")
     .from("merchants")
-    .insert({
-      id: merchant.id,
-      name: merchant.name,
-      normalized_name: merchant.normalizedName,
-      vendor_type_id: merchant.vendorTypeId,
-      vendor_type: merchant.vendorType,
-      team: merchant.team,
-      city_id: merchant.cityId,
-      target_commission: merchant.targetCommission,
-      monthly_value_minor: Math.round(merchant.monthlyValue * 100),
-      strategic_notes: merchant.strategicNotes,
-      contract_state: merchant.contractState,
-      commission_amount: merchant.commissionAmount,
-      agreed_commission: merchant.agreedCommission ?? null,
-      edit_unlocked: merchant.editUnlocked,
-      documents: merchant.documents,
-      opinions: merchant.opinions ?? [],
-      first_entry_by: attributedBy,
-      first_entry_at: attributedBy ? merchant.createdAt : null,
-      created_at: merchant.createdAt,
-      updated_at: merchant.updatedAt,
-    })
+    .insert(values)
     .select(COLUMNS)
     .single();
+
+  /* The row is inserted and returned in one statement, so an undefined-column
+   * parse error leaves nothing behind; retrying without the logo is safe. */
+  if (isUndefinedColumn(error)) {
+    ({ data, error } = await client
+      .schema("app")
+      .from("merchants")
+      .insert(values)
+      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
+      .single());
+  }
 
   if (error) {
     if (isUniqueViolation(error)) {
@@ -255,13 +268,27 @@ export async function updateMerchantRow(
   }
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
+  const patchColumns = toPatchColumns(patch);
+  let { data, error } = await client
     .schema("app")
     .from("merchants")
-    .update(toPatchColumns(patch))
+    .update(patchColumns)
     .eq("id", id)
     .select(COLUMNS)
     .maybeSingle();
+
+  /* Update and read are a single statement, so the retry cannot apply the patch
+   * twice. This keeps edits working on a deployment whose migration has not
+   * landed yet. */
+  if (isUndefinedColumn(error)) {
+    ({ data, error } = await client
+      .schema("app")
+      .from("merchants")
+      .update(patchColumns)
+      .eq("id", id)
+      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
+      .maybeSingle());
+  }
 
   if (error) throw error;
   return data ? toMerchant(data as unknown as MerchantRow) : null;
