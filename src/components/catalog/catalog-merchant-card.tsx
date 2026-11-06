@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CatalogImage } from "@/components/catalog/catalog-image";
+import { MerchantAvatar } from "@/components/merchants/merchant-avatar";
 import type { CatalogMerchantCard as CatalogMerchantCardData } from "@/lib/catalog/merchants";
 import { resolveDisplayImageUrl } from "@/lib/catalog/format";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
@@ -41,7 +42,14 @@ export function CatalogMerchantCard({
 
       <div className="cat-merchant-body">
         <div className="cat-merchant-head">
-          <strong>{card.name}</strong>
+          <div className="merchant-identity">
+            <MerchantAvatar
+              name={card.name}
+              logoUrl={card.logoUrl}
+              size="md"
+            />
+            <strong>{card.name}</strong>
+          </div>
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
         </div>
         <span className="cat-merchant-meta">

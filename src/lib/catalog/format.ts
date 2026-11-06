@@ -14,6 +14,9 @@ const DRIVE_HOSTS = new Set([
   "docs.google.com",
 ]);
 
+/** Firebase Storage hosts serve V1 merchant logos as public objects. */
+const STORAGE_HOSTS = new Set(["firebasestorage.googleapis.com"]);
+
 /**
  * Returns the Google Drive file id held by a V1/V2 image reference.
  *
@@ -47,6 +50,7 @@ export function resolveDisplayImageUrl(
 
   const host = hostOf(raw);
   if (host === "lh3.googleusercontent.com") return raw;
+  if (STORAGE_HOSTS.has(host)) return raw;
   if (host && !DRIVE_HOSTS.has(host)) return raw;
 
   const id = driveFileId(raw);
@@ -62,8 +66,8 @@ function hostOf(value: string): string {
   }
 }
 
-const DRIVE_IMAGE_URL =
-  /^https:\/\/(?:lh3\.googleusercontent\.com|drive\.google\.com|drive\.usercontent\.google\.com)\//i;
+const PROXYABLE_IMAGE_URL =
+  /^https:\/\/(?:lh3\.googleusercontent\.com|drive\.google\.com|drive\.usercontent\.google\.com|firebasestorage\.googleapis\.com)\//i;
 
 /**
  * Same-origin proxy path for a Drive image, or null when proxying does not
@@ -76,6 +80,6 @@ const DRIVE_IMAGE_URL =
  */
 export function proxyImageUrl(value: string | null | undefined): string | null {
   const direct = resolveDisplayImageUrl(value);
-  if (!direct || !DRIVE_IMAGE_URL.test(direct)) return null;
+  if (!direct || !PROXYABLE_IMAGE_URL.test(direct)) return null;
   return `/api/image?url=${encodeURIComponent(direct)}`;
 }

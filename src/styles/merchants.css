@@ -1,0 +1,81 @@
+/* Merchant identity mark.
+ *
+ * One shared primitive used by the catalog tiles, the merchant directory table
+ * and the execution board, so the sizes stay consistent across contexts. The
+ * monogram background is the brand purple; a real logo covers it edge to edge.
+ */
+
+.merchant-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--kanjo-purple-base);
+  color: var(--gold);
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+}
+
+.merchant-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.merchant-avatar-initial {
+  font-size: 0.9em;
+  letter-spacing: 0;
+}
+
+/* Sizes: table rows stay compact, cards breathe a little more. */
+.merchant-avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.merchant-avatar-md {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.merchant-avatar-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  font-size: 1.3rem;
+}
+
+/* Name + avatar pair used in table cells and card headers. */
+.merchant-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.merchant-identity-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.merchant-identity-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dark theme: the purple base is too close to the dark surface, so lift the
+ * monogram onto the gold-on-deep-violet tile gradient instead. */
+[data-theme="dark"] .merchant-avatar {
+  background: var(--gradient-tile);
+  color: var(--gold);
+}

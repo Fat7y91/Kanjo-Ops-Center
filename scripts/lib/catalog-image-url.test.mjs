@@ -73,3 +73,10 @@ test("does not proxy non-Drive references", () => {
   assert.equal(proxyImageUrl("data:image/jpeg;base64,AAAA"), null);
   assert.equal(proxyImageUrl(null), null);
 });
+
+test("keeps Firebase Storage logo URLs intact and proxies them", () => {
+  const logo =
+    "https://firebasestorage.googleapis.com/v0/b/kanjo-desouk.firebasestorage.app/o/merchant-logos%2Ff0e3.jpg?alt=media&token=f5827";
+  assert.equal(resolveDisplayImageUrl(logo), logo);
+  assert.equal(proxyImageUrl(logo), `/api/image?url=${encodeURIComponent(logo)}`);
+});

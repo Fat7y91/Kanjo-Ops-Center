@@ -60,6 +60,7 @@ export const boardPayloadSchema = z.custom<BoardPayload>(isBoardPayload, {
 export const merchantRowSchema = z.object({
   id: z.string(),
   name: z.string(),
+  logoUrl: z.string().nullable().default(null),
   vendorType: z.string(),
   vendorTypeId: z.number(),
   cityName: z.string(),

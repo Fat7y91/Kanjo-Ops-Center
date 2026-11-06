@@ -16,6 +16,8 @@ export type CatalogMerchantSource = {
   cityName: string;
   vendorType: string;
   contractState: ContractState;
+  /** Merchant logo URL, when one was uploaded in V1. */
+  logoUrl: string | null;
   /** Manager-controlled VIP flag from the merchant's V1 working fields. */
   vipMenu: boolean;
   /** Merchant is published on the customer app. */

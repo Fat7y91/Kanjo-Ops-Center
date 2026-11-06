@@ -10,7 +10,11 @@ const ALLOWED_HOSTS = new Set([
   "lh3.googleusercontent.com",
   "drive.google.com",
   "drive.usercontent.google.com",
+  "firebasestorage.googleapis.com",
 ]);
+
+/** Hosts whose URL is already the direct object and needs no rebuilding. */
+const PASSTHROUGH_HOSTS = new Set(["firebasestorage.googleapis.com"]);
 
 /** Rewrites an embeddable Drive reference into the direct image endpoint. */
 function upstreamUrl(raw: string): string | null {
@@ -20,7 +24,11 @@ function upstreamUrl(raw: string): string | null {
   } catch {
     return null;
   }
-  if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+  const host = parsed.hostname.toLowerCase();
+  if (!ALLOWED_HOSTS.has(host)) return null;
+
+  // Firebase Storage object URLs already point at the bytes; keep them intact.
+  if (PASSTHROUGH_HOSTS.has(host)) return parsed.toString();
 
   const id =
     parsed.searchParams.get("id") ??

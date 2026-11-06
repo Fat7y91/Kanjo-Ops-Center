@@ -20,6 +20,7 @@
 @import "../styles/marketing.css";
 @import "../styles/governance.css";
 @import "../styles/notifications.css";
+@import "../styles/merchants.css";
 @import "../styles/login.css";
 
 /* Resilience: in-shell reconnecting / error fallbacks */

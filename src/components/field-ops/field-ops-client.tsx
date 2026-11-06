@@ -13,6 +13,7 @@ import {
   JustificationModal,
 } from "@/components/field-ops/request-modals";
 import { FollowUpActions } from "@/components/field-ops/follow-up-actions";
+import { MerchantAvatar } from "@/components/merchants/merchant-avatar";
 import type { FieldOpsBoard } from "@/lib/field-ops/board";
 import { useVisitQueue } from "@/lib/field-ops/offline-queue";
 import {
@@ -267,7 +268,14 @@ export function FieldOpsClient({
             </span>
           ) : null}
         </div>
-        <h3>{task.merchantName}</h3>
+        <div className="merchant-identity task-merchant-identity">
+          <MerchantAvatar
+            name={task.merchantName}
+            logoUrl={merchant?.logoUrl ?? null}
+            size="md"
+          />
+          <h3>{task.merchantName}</h3>
+        </div>
         <p className="task-meta">
           {city?.name ?? "مدينة غير محددة"} · {formatDate(task.visitDate)} ·{" "}
           هدف {task.targetCommission}%

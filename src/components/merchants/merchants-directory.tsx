@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { MerchantAvatar } from "@/components/merchants/merchant-avatar";
 import type { MerchantRow } from "@/lib/field-ops/payload";
 import { smartTextScore } from "@/lib/search/normalize";
 
@@ -109,12 +110,21 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
             {visibleRows.map((row) => (
               <tr key={row.id}>
                 <td>
-                  <Link href={`/merchants/${row.id}`}>
-                    <strong>{row.name}</strong>
-                  </Link>
-                  <span className="muted merchant-category">
-                    {row.vendorType} · ID {row.vendorTypeId}
-                  </span>
+                  <div className="merchant-identity">
+                    <MerchantAvatar
+                      name={row.name}
+                      logoUrl={row.logoUrl}
+                      size="sm"
+                    />
+                    <div className="merchant-identity-text">
+                      <Link href={`/merchants/${row.id}`}>
+                        <strong>{row.name}</strong>
+                      </Link>
+                      <span className="muted merchant-category">
+                        {row.vendorType} · ID {row.vendorTypeId}
+                      </span>
+                    </div>
+                  </div>
                 </td>
                 <td>{row.cityName}</td>
                 <td>

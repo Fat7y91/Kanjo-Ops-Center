@@ -48,6 +48,7 @@ export async function buildMerchantRows(
     return {
       id: merchant.id,
       name: merchant.name,
+      logoUrl: merchant.logoUrl,
       vendorType: merchant.vendorType,
       vendorTypeId: merchant.vendorTypeId,
       cityName: cityMap.get(merchant.cityId)?.name ?? "—",

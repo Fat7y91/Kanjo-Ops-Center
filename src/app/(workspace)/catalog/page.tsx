@@ -46,6 +46,7 @@ export default async function CatalogPage() {
     cityName: cityName.get(merchant.cityId) ?? "—",
     vendorType: merchant.vendorType,
     contractState: states.get(merchant.id)?.state ?? merchant.contractState,
+    logoUrl: merchant.logoUrl,
     vipMenu: flags.get(merchant.id)?.vipMenu ?? false,
     appPublished: flags.get(merchant.id)?.appPublished ?? false,
   }));

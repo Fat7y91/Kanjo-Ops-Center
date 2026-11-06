@@ -167,6 +167,8 @@ export type Merchant = {
   vendorType: string;
   team: string | null;
   cityId: string;
+  /** Logo image URL (V1 Firebase Storage object or Drive link). */
+  logoUrl: string | null;
   targetCommission: number;
   monthlyValue: number;
   strategicNotes: string;
