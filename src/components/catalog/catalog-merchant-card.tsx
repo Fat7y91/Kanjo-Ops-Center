@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import type { CatalogMerchantCard as CatalogMerchantCardData } from "@/lib/catalog/merchants";
+import { resolveDisplayImageUrl } from "@/lib/catalog/format";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
 
 function initials(name: string): string {
@@ -22,12 +24,13 @@ export function CatalogMerchantCard({
   card: CatalogMerchantCardData;
 }) {
   const meta = CONTRACT_STATE_META[card.contractState];
+  const coverImage = resolveDisplayImageUrl(card.coverImage);
 
   return (
     <Link href={`/catalog/${card.id}`} className="cat-merchant-card">
       <div className="cat-merchant-cover">
-        {card.coverImage ? (
-          <img src={card.coverImage} alt="" />
+        {coverImage ? (
+          <CatalogImage src={card.coverImage} alt="" />
         ) : (
           <span className="cat-merchant-initials">{initials(card.name)}</span>
         )}

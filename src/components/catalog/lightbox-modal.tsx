@@ -3,6 +3,9 @@
 import { createPortal } from "react-dom";
 import { useEffect } from "react";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
+import { resolveDisplayImageUrl } from "@/lib/catalog/format";
+
 type LightboxModalProps = {
   src: string | null;
   alt: string;
@@ -27,6 +30,9 @@ export function LightboxModal({ src, alt, onClose }: LightboxModalProps) {
 
   if (!src || typeof document === "undefined") return null;
 
+  const resolvedSrc = resolveDisplayImageUrl(src);
+  if (!resolvedSrc) return null;
+
   return createPortal(
     <div
       className="lightbox"
@@ -43,8 +49,7 @@ export function LightboxModal({ src, alt, onClose }: LightboxModalProps) {
       >
         ×
       </button>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <CatalogImage
         className="lightbox-image"
         src={src}
         alt={alt}

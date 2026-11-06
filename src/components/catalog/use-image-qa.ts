@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 
+import { resolveDisplayImageUrl } from "@/lib/catalog/format";
 import type { CatalogProduct } from "@/lib/catalog/types";
 
 type UseImageQaArgs = {
@@ -65,12 +66,13 @@ export function useImageQa({ onUpdated }: UseImageQaArgs) {
   );
 
   const downloadOriginal = useCallback((product: CatalogProduct) => {
-    if (!product.imageDataUrl) {
+    const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
+    if (!imageUrl) {
       setError("لا توجد صورة أصلية لهذا المنتج.");
       return;
     }
     const link = document.createElement("a");
-    link.href = product.imageDataUrl;
+    link.href = imageUrl;
     link.download = `${product.sku || product.id}-original`;
     document.body.appendChild(link);
     link.click();

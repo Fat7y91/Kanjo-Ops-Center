@@ -1,7 +1,8 @@
 "use client";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { Modal } from "@/components/field-ops/modal";
-import { formatPrice } from "@/lib/catalog/format";
+import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
 import {
   PRODUCT_STATE_META,
   PRODUCT_TYPE_META,
@@ -27,6 +28,7 @@ export function ProductDetailsModal({
 }: ProductDetailsModalProps) {
   if (!product) return null;
   const meta = PRODUCT_STATE_META[product.state];
+  const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
 
   const variantRows = product.attributes
     .map((selection) => {
@@ -62,12 +64,11 @@ export function ProductDetailsModal({
             type="button"
             className="prod-detail-thumb"
             onClick={onOpenImage}
-            disabled={!product.imageDataUrl}
+            disabled={!imageUrl}
             aria-label="عرض الصورة بالحجم الكامل"
           >
-            {product.imageDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={product.imageDataUrl} alt={product.name} />
+            {imageUrl ? (
+              <CatalogImage src={product.imageDataUrl} alt={product.name} />
             ) : (
               <span>لا توجد صورة</span>
             )}

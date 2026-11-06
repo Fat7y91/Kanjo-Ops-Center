@@ -2,9 +2,10 @@
 
 import { useRef } from "react";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { formatPrice } from "@/lib/catalog/format";
+import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
 import type { CatalogProduct } from "@/lib/catalog/types";
 
 type ImageQaCardProps = {
@@ -40,7 +41,8 @@ export function ImageQaCard({
 }: ImageQaCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const locked = busy || preparing;
-  const hasImage = Boolean(product.imageDataUrl);
+  const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
+  const hasImage = Boolean(imageUrl);
 
   return (
     <article className="img-qa-card">
@@ -68,8 +70,7 @@ export function ImageQaCard({
         }
       >
         {hasImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.imageDataUrl ?? ""} alt="" />
+          <CatalogImage src={product.imageDataUrl} alt="" />
         ) : (
           <span aria-hidden="true">{product.name.slice(0, 2)}</span>
         )}

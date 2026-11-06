@@ -2,10 +2,11 @@
 
 import type { MouseEvent } from "react";
 
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { ImageQaActions } from "@/components/catalog/image-qa-actions";
 import { Protect } from "@/components/auth/protect";
 import { Button } from "@/components/ui/button";
-import { formatPrice } from "@/lib/catalog/format";
+import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
 import {
   PRODUCT_STATE_META,
   needsImageQa,
@@ -36,6 +37,7 @@ export function ProductCard({
   onUploadEnhanced,
 }: ProductCardProps) {
   const meta = PRODUCT_STATE_META[product.state];
+  const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
 
   function stop(event: MouseEvent) {
     event.stopPropagation();
@@ -60,9 +62,8 @@ export function ProductCard({
             : `تفاصيل ${product.name}`
         }
       >
-        {product.imageDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.imageDataUrl} alt="" />
+        {imageUrl ? (
+          <CatalogImage src={product.imageDataUrl} alt="" />
         ) : (
           <span>{product.name.slice(0, 2)}</span>
         )}

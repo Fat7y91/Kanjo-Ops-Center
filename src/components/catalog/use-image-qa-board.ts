@@ -8,6 +8,7 @@ import {
   type ImageQaActionResult,
 } from "@/app/(workspace)/catalog/qa/actions";
 import { prepareImage } from "@/lib/catalog/image";
+import { resolveDisplayImageUrl } from "@/lib/catalog/format";
 import type { CatalogProduct } from "@/lib/catalog/types";
 
 type UseImageQaBoardArgs = {
@@ -87,12 +88,13 @@ export function useImageQaBoard({ initialProducts }: UseImageQaBoardArgs) {
   );
 
   const downloadOriginal = useCallback((product: CatalogProduct) => {
-    if (!product.imageDataUrl) {
+    const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
+    if (!imageUrl) {
       setError("لا توجد صورة أصلية لهذا المنتج.");
       return;
     }
     const link = document.createElement("a");
-    link.href = product.imageDataUrl;
+    link.href = imageUrl;
     link.download = `${product.sku || product.id}-original`;
     document.body.appendChild(link);
     link.click();
