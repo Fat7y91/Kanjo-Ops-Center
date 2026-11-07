@@ -63,11 +63,38 @@
  *   MIGRATION_DRY_RUN=1                        (same as --dry-run)
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import { initializeApp, cert, applicationDefault } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+/* tsx does not load Next.js env files, so hydrate `.env.local` before any
+ * config constant reads `process.env`. Existing values always win. */
+(function loadEnvLocal() {
+  for (const file of [".env.local", ".env"]) {
+    const path = resolve(process.cwd(), file);
+    if (!existsSync(path)) continue;
+    for (const raw of readFileSync(path, "utf8").split("\n")) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      const key = line.slice(0, eq).trim();
+      if (!key || process.env[key] !== undefined) continue;
+      let value = line.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      process.env[key] = value;
+    }
+  }
+})();
 
 /* V2 taxonomy is already seeded from the dashboard contract; the ETL only maps
  * V1 free-text labels onto it. It never recreates vendor types or categories. */
@@ -81,7 +108,10 @@ import {
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
+/** Reads `--flag value` and `--flag=value`; the inline form wins. */
 const valueOf = (name: string): string => {
+  const inline = args.find((a) => a.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1);
   const i = args.indexOf(name);
   return i !== -1 && args[i + 1] ? args[i + 1] : "";
 };
@@ -92,6 +122,18 @@ const only = new Set(
     .filter(Boolean),
 );
 const dryRun = flag("--dry-run") || process.env.MIGRATION_DRY_RUN === "1";
+
+/**
+ * Optional per-collection read cap for sample rehearsals. Firestore `limit()`
+ * is applied on the query so only N documents per collection are fetched.
+ * Referential steps (catalog, visits) still filter against what actually
+ * migrated, so a capped run may warn-and-skip orphans — that is expected.
+ */
+const sampleLimit = (() => {
+  const raw = valueOf("--limit") || process.env.MIGRATION_SAMPLE_LIMIT || "";
+  const n = Number.parseInt(String(raw).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+})();
 
 const PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || "kanjo-desouk").trim();
 /**
@@ -109,18 +151,59 @@ function requireEnv(key: string): string {
   return value.trim();
 }
 
-const adminApp = process.env.FIREBASE_SERVICE_ACCOUNT
-  ? initializeApp(
-      { credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)), projectId: PROJECT_ID },
+/**
+ * Resolves the Firebase Admin credential from, in order:
+ *   1. FIREBASE_SERVICE_ACCOUNT      inline JSON blob
+ *   2. FIREBASE_SERVICE_ACCOUNT_KEY  path to a JSON key file
+ *   3. GOOGLE_APPLICATION_CREDENTIALS path to a JSON key file
+ *   4. firebase-service-account.json in the project root
+ *   5. Application Default Credentials (gcloud auth)
+ */
+function resolveAdminApp() {
+  const inline = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (inline && inline.trim()) {
+    return initializeApp(
+      { credential: cert(JSON.parse(inline)), projectId: PROJECT_ID },
       "migrate-v1-to-v2",
-    )
-  : initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID }, "migrate-v1-to-v2");
+    );
+  }
+  const keyPath =
+    process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    (existsSync(resolve(process.cwd(), "firebase-service-account.json"))
+      ? "firebase-service-account.json"
+      : "");
+  if (keyPath) {
+    const abs = resolve(process.cwd(), keyPath);
+    if (!existsSync(abs)) {
+      throw new Error(`Firebase service account file not found: ${abs}`);
+    }
+    const json = JSON.parse(readFileSync(abs, "utf8"));
+    return initializeApp({ credential: cert(json), projectId: PROJECT_ID }, "migrate-v1-to-v2");
+  }
+  return initializeApp({ credential: applicationDefault(), projectId: PROJECT_ID }, "migrate-v1-to-v2");
+}
+
+const adminApp = resolveAdminApp();
 
 const db = getFirestore(adminApp);
 
-const sb: SupabaseClient = createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+/**
+ * Accepted lazily: a `--dry-run` reads V1 and never touches Supabase, so it must
+ * not require Supabase credentials up front. Live runs resolve them on first use.
+ * Accepts the public Next.js alias when only it is configured.
+ */
+let _sb: SupabaseClient | null = null;
+function getSb(): SupabaseClient {
+  if (_sb) return _sb;
+  if (!process.env.SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    process.env.SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  }
+  _sb = createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _sb;
+}
 
 /* ──────────────────────────── primitives ───────────────────────────── */
 
@@ -159,21 +242,81 @@ const toMinor = (v: unknown): number => Math.round(num(v) * 100);
 /** percent field, DB checks 0–100 */
 const pct = (v: unknown): number => Math.min(100, Math.max(0, num(v)));
 
+/**
+ * STRICT date parsing — the single source of truth for every timestamp the
+ * migration writes.
+ *
+ * Returns a canonical ISO-8601 string, or `null` when the input is absent or
+ * cannot be parsed with certainty. It NEVER falls back to "now": an invented
+ * date is worse than a missing one, because the UI renders it as fact and the
+ * card is then wrong forever. The dashboards crashed on
+ * `RangeError: Invalid time value` precisely because an unparseable value
+ * reached `new Date(value).toLocaleString()`.
+ *
+ * Accepted shapes (all produced by V1 or by Firestore's SDK):
+ *   - Firestore Timestamp objects: { _seconds, _nanoseconds } or { seconds, nanoseconds }
+ *   - Firestore Timestamp instances: have a callable `.toDate()`
+ *   - epoch numbers in seconds (Firestore) or milliseconds (JS Date.now())
+ *   - ISO-8601 strings, `YYYY-MM-DD`, and `DD/MM/YYYY`
+ *   - Arabic 12-hour clock strings like `2026-08-02 ٠٨:١٥:٤٩ م`
+ */
 function toIso(v: unknown): string | null {
-  if (v == null) return null;
-  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v.toISOString();
-  if (typeof v === "object" && typeof (v as any).toDate === "function") {
-    const d = (v as any).toDate() as Date;
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  if (v == null || v === "") return null;
+
+  const valid = (d: Date): string | null =>
+    Number.isNaN(d.getTime()) ? null : d.toISOString();
+
+  if (v instanceof Date) return valid(v);
+
+  if (typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    const toDate = obj.toDate;
+    if (typeof toDate === "function") {
+      try {
+        return valid((toDate as () => Date).call(v));
+      } catch {
+        return null;
+      }
+    }
+    const seconds = obj._seconds ?? obj.seconds;
+    if (typeof seconds === "number" && Number.isFinite(seconds)) {
+      const nanos = Number(obj._nanoseconds ?? obj.nanoseconds ?? 0);
+      return valid(new Date(seconds * 1000 + Math.floor(nanos / 1e6)));
+    }
+    return null;
   }
+
   if (typeof v === "number") {
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    if (!Number.isFinite(v)) return null;
+    // Firestore stores epoch seconds; JS Date.now() is ms. Anything below
+    // 1e12 is unambiguously seconds.
+    const ms = v < 1e12 ? v * 1000 : v;
+    return valid(new Date(ms));
   }
+
   if (typeof v === "string") {
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    const s = v.trim();
+    if (!s) return null;
+
+    // DD/MM/YYYY (day-first, as used in some V1 export sheets).
+    const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (dmy) {
+      const [, d, m, y] = dmy;
+      return valid(new Date(Date.UTC(Number(y), Number(m) - 1, Number(d))));
+    }
+
+    // Arabic-Indic digits + Arabic AM/PM.
+    const normalized = s
+      .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+      .replace(/[\u06F0-\u06F9]/g, (c) => String(c.charCodeAt(0) - 0x06f0))
+      .replace(/\s*([صم])\s*$/, (_m, ap) => (ap === "م" ? " PM" : " AM"));
+
+    const parsed = Date.parse(normalized);
+    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
+
+    return null;
   }
+
   return null;
 }
 
@@ -185,12 +328,19 @@ function toMonthStart(v: unknown): string | null {
   return null;
 }
 
-function toDateOnly(v: unknown): string {
+/**
+ * Date-only column. Returns `YYYY-MM-DD` or `null` — never "today".
+ * Prefers a plain `YYYY-MM-DD` string verbatim (no timezone shift).
+ */
+function toDateOnly(v: unknown): string | null {
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  }
   const iso = toIso(v);
-  if (iso) return iso.slice(0, 10);
-  const s = str(v);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
+  return iso ? iso.slice(0, 10) : null;
 }
+
 
 /** Mirrors public/js/utils/helpers.js getBaseName */
 function baseName(v: unknown): string {
@@ -451,7 +601,7 @@ function fakeUuid(seed: string): string {
 /* ───────────────────────── Supabase write helpers ───────────────────── */
 
 function table(name: string) {
-  return sb.schema("app").from(name);
+  return getSb().schema("app").from(name);
 }
 
 /** Strips synthetic bookkeeping keys (leading `_`) from a row payload. */
@@ -459,6 +609,25 @@ function payload(row: Doc): Doc {
   const out: Doc = {};
   for (const [k, v] of Object.entries(row)) if (!k.startsWith("_")) out[k] = v;
   return out;
+}
+
+/**
+ * Groups rows by their exact column signature.
+ *
+ * PostgREST serialises a multi-row write against the union of all keys, filling
+ * any key a row omits with NULL. That defeats DB defaults for optional columns
+ * (e.g. `created_at default now()`), so rows that intentionally omit a key must
+ * be written in their own batch.
+ */
+function groupBySignature(rows: Doc[]): Doc[][] {
+  const groups = new Map<string, Doc[]>();
+  for (const row of rows) {
+    const key = Object.keys(payload(row)).sort().join("\u0000");
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.values()];
 }
 
 async function pgUpsert(step: string, tableName: string, rows: Doc[], onConflict: string, size = 400): Promise<number> {
@@ -469,12 +638,14 @@ async function pgUpsert(step: string, tableName: string, rows: Doc[], onConflict
     return rows.length;
   }
   let written = 0;
-  for (const part of chunk(rows, size)) {
-    const { error } = await table(tableName).upsert(part.map(payload), { onConflict });
-    if (error) {
-      throw new Error(`upsert app.${tableName} (${step}) failed: ${error.message} | sample=${JSON.stringify(payload(part[0]))}`);
+  for (const group of groupBySignature(rows)) {
+    for (const part of chunk(group, size)) {
+      const { error } = await table(tableName).upsert(part.map(payload), { onConflict });
+      if (error) {
+        throw new Error(`upsert app.${tableName} (${step}) failed: ${error.message} | sample=${JSON.stringify(payload(part[0]))}`);
+      }
+      written += part.length;
     }
-    written += part.length;
   }
   count(step, written);
   return written;
@@ -498,21 +669,26 @@ async function pgInsertMissing(step: string, tableName: string, rows: Doc[], key
     return fresh.length;
   }
   let written = 0;
-  for (const part of chunk(fresh, 400)) {
-    const { error } = await table(tableName).insert(part.map(payload));
-    if (error) {
-      throw new Error(`insert app.${tableName} (${step}) failed: ${error.message} | sample=${JSON.stringify(payload(part[0]))}`);
+  for (const group of groupBySignature(fresh)) {
+    for (const part of chunk(group, 400)) {
+      const { error } = await table(tableName).insert(part.map(payload));
+      if (error) {
+        throw new Error(`insert app.${tableName} (${step}) failed: ${error.message} | sample=${JSON.stringify(payload(part[0]))}`);
+      }
+      written += part.length;
     }
-    written += part.length;
   }
   count(step, written);
   return written;
 }
 
 async function readAll(collectionName: string): Promise<V1Doc[]> {
+  const base = db.collection(collectionName);
+  const query = sampleLimit > 0 ? base.limit(sampleLimit) : base;
+  const snap = await query.get();
   const out: V1Doc[] = [];
-  const snap = await db.collection(collectionName).get();
   snap.forEach((doc: any) => out.push({ ...(doc.data() as Doc), _id: doc.id }));
+  if (sampleLimit > 0) log(`  · ${collectionName}: capped at ${out.length}/${sampleLimit}`);
   return out;
 }
 
@@ -533,11 +709,20 @@ const STATE_RANK: Record<ContractState, number> = {
   signed_contract: 3,
 };
 
+/**
+ * V1 lifecycle → V2 contract state.
+ *
+ * Mirrors public/js/utils/export.js:505-509 exactly:
+ *   isSigned && achieved > 0            ⇒ "تعاقد نهائي"  → final_contract
+ *   isProvisional || (isSigned && ===0)  ⇒ "اتفاق مبدئي"  → provisional
+ *   otherwise (visit / report only)      ⇒ "لا"           → no_agreement
+ *
+ * V1 has no distinct "signed" tier; do NOT promote to signed_contract.
+ */
 function contractStateOf(task: Doc): ContractState {
   const achieved = num(task.achieved);
-  if (task.isSigned === true && achieved > 0) return "signed_contract";
-  if (task.isProvisional === true) return "provisional";
-  if (task.isSigned === true) return "final_contract";
+  if (task.isSigned === true && achieved > 0) return "final_contract";
+  if (task.isProvisional === true || task.isSigned === true) return "provisional";
   return "no_agreement";
 }
 
@@ -552,22 +737,154 @@ function productStateOf(status: unknown): "pending_review" | "completed" | "publ
   return "pending_review";
 }
 
-function pickImage(p: Doc): string | null {
-  const enhanced = Array.isArray(p.enhancedImageUrls) ? p.enhancedImageUrls : [];
-  const raw = Array.isArray(p.rawImageUrls) ? p.rawImageUrls : [];
-  const value = firstStr(enhanced[0], p.enhancedImageUrl, raw[0], p.rawImageUrl, p.image_url, p.imageUrl);
-  return value || null;
+/**
+ * Extracts a Google Drive file id from any of the URL shapes V1 stored
+ * (`uc?export=view&id=`, `drive.google.com/file/d/<id>/view`, `open?id=`), or
+ * from a bare id. Mirrors public/js/agency.js:driveFileId.
+ */
+function driveFileId(value: unknown): string {
+  const s = str(value);
+  if (!s) return "";
+  const m1 = s.match(/[?&]id=([^&]+)/);
+  if (m1 && m1[1]) return decodeURIComponent(m1[1]);
+  const m2 = s.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m2 && m2[1]) return m2[1];
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(s)) return s;
+  return "";
 }
 
-function merchantDocuments(raw: unknown): Doc[] {
-  if (Array.isArray(raw)) return raw.filter(Boolean) as Doc[];
-  if (raw && typeof raw === "object") {
-    return Object.entries(raw as Doc).map(([kind, value]) => {
-      if (value && typeof value === "object") return { kind, ...(value as Doc) };
-      return { kind, url: str(value) };
+/**
+ * Preserves the exact Google Drive image URL stored in V1.
+ *
+ * The Ops Center is internal and keeps using Google Drive natively — nothing is
+ * uploaded to Supabase Storage. V1 product photos are already full Drive links
+ * (`uc?export=view&id=…`, `thumbnail?id=…`, etc.), which resolve to an image, so
+ * they are written to V2 verbatim. A bare Drive file id (no scheme) is the only
+ * case that needs a URL synthesized around it.
+ */
+function displayImageUrl(value: unknown): string | null {
+  const s = str(value);
+  if (!s) return null;
+  if (/^data:image\//i.test(s)) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  const id = driveFileId(s);
+  if (!id) return null;
+  return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
+}
+
+/** First non-empty URL from a value that may be a string, array, or nested array. */
+function firstImageRef(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = firstImageRef(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  return str(value);
+}
+
+function pickImage(p: Doc): string | null {
+  let enhanced: unknown = p.enhancedImageUrls;
+  if (!firstImageRef(enhanced)) enhanced = p.enhancedImageUrl;
+  let raw: unknown = p.rawImageUrls;
+  if (!firstImageRef(raw)) raw = p.rawImageUrl;
+  const value =
+    firstImageRef(enhanced) ||
+    firstImageRef(raw) ||
+    firstImageRef(p.image_url) ||
+    firstImageRef(p.imageUrl);
+  return displayImageUrl(value);
+}
+
+/**
+ * Merchant logo URL from V1, or `null` when the merchant has none.
+ *
+ * V1 is not consistent about the field name. Measured over the live collection:
+ *   logoUrl      → 99 docs, public Firebase Storage object URLs
+ *   merchantLogo → 13 docs, `data:image/...;base64` uploads (no overlap with the above)
+ * Older exports are also known to use `logo_url` / `image`, so every alias is
+ * consulted in turn. The value is copied verbatim — the Ops Center keeps using
+ * the original object and nothing is re-uploaded to Supabase Storage.
+ *
+ * Strict 1:1: only an existing image reference is written. A merchant with no
+ * logo gets `null` so the UI renders its brand monogram; this function never
+ * synthesises a URL, and never touches `logoUpdatedAt` (metadata, not a source).
+ *
+ * Order matters: hosted http(s) URLs are preferred over inline data URLs
+ * because `logo_url` is selected by the merchant list, so a base64 payload
+ * would be re-sent on every directory read.
+ */
+function mapMerchantLogoUrl(src: Doc): string | null {
+  const candidates = [
+    src.logoUrl,
+    src.logo_url,
+    src.image,
+    src.merchantLogo,
+  ];
+  for (const candidate of candidates) {
+    const s = str(candidate);
+    if (!s) continue;
+    if (/^https?:\/\//i.test(s) || /^data:image\//i.test(s)) return s;
+  }
+  return null;
+}
+
+/**
+ * V1 `documents` map → V2 `MerchantDocument[]`.
+ *
+ * V1 keys and their Arabic labels (public/js/ui/dashboard.js, merchantDocs.js):
+ *   commercial = السجل التجاري → V2 "license" (commercial register)
+ *   tax        = البطاقة الضريبية → V2 "tax"
+ *   menu       = المنيو           → V2 "other" (no dedicated V2 type)
+ *   contract   = عقد              → V2 "contract" (if present in future data)
+ *
+ * Each V2 document requires `uploadedAt` as an ISO string; V1 stores it as
+ * `lastUploadAt` in Firestore Timestamp form. Writing the raw V1 object here is
+ * what crashed the profile card (`formatDateTime(document.uploadedAt)` on
+ * undefined → RangeError). We emit the strict V2 shape and skip entries that
+ * were never actually uploaded.
+ */
+const V1_DOCUMENT_TYPES: Record<string, { type: "contract" | "tax" | "license" | "other"; name: string }> = {
+  commercial: { type: "license", name: "السجل التجاري" },
+  tax: { type: "tax", name: "البطاقة الضريبية" },
+  menu: { type: "other", name: "المنيو" },
+  contract: { type: "contract", name: "عقد" },
+};
+
+function mapV1Documents(raw: unknown, driveFolderUrl = ""): Doc[] {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+  const out: Doc[] = [];
+  for (const [key, value] of Object.entries(raw as Doc)) {
+    if (!value || typeof value !== "object") continue;
+    const entry = value as Doc;
+    if (entry.uploaded !== true) continue;
+    const meta = V1_DOCUMENT_TYPES[key];
+    if (!meta) {
+      warn(`merchants.documents: unknown V1 document key "${key}" — skipped`);
+      continue;
+    }
+    const uploadedAt = toIso(entry.lastUploadAt ?? entry.uploadedAt);
+    // V2 `MerchantDocument.uploadedAt` is a required display string; emitting
+    // null would render as the 1970 epoch. Skip rather than invent a date.
+    if (!uploadedAt) {
+      warn(`merchants.documents.${key}: uploaded with no parseable date — skipped`);
+      continue;
+    }
+    // V1 records only the uploaded file names and the merchant's Drive folder;
+    // the Ops Center keeps using Drive natively, so link the folder when no
+    // per-file URL was stored.
+    const url = str(entry.url) || str(entry.link) || str(driveFolderUrl);
+    out.push({
+      id: `v1-${key}`,
+      name: meta.name,
+      type: meta.type,
+      url,
+      uploadedAt,
+      uploadedBy: str(entry.lastUploadedBy),
     });
   }
-  return [];
+  return out;
 }
 
 /* V1 capability key → V2 `app.permissions.key` (one V1 key can grant several). */
@@ -625,13 +942,27 @@ const ROLE_BASELINE_V2: Record<string, string[]> = {
 
 /* ─────────────────────────── runtime state ──────────────────────────── */
 
+/**
+ * V1 operator name → E.164 phone. Accepts either an inline JSON object
+ * (`{"name":"+2010…"}`) or a path to a JSON file, so the mapping can live in
+ * `.env.local` without an extra file.
+ */
 const operatorPhones: Record<string, string> = (() => {
-  const path = String(process.env.MIGRATION_OPERATOR_PHONES || "").trim();
-  if (!path) return {};
+  const raw = String(process.env.MIGRATION_OPERATOR_PHONES || "").trim();
+  if (!raw) return {};
+  const parse = (text: string) => JSON.parse(text) as Record<string, string>;
+  if (raw.startsWith("{")) {
+    try {
+      return parse(raw);
+    } catch (err) {
+      warn(`MIGRATION_OPERATOR_PHONES inline JSON invalid: ${(err as Error).message}`);
+      return {};
+    }
+  }
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
+    return parse(readFileSync(raw, "utf8"));
   } catch (err) {
-    warn(`MIGRATION_OPERATOR_PHONES unreadable (${path}): ${(err as Error).message}`);
+    warn(`MIGRATION_OPERATOR_PHONES unreadable (${raw}): ${(err as Error).message}`);
     return {};
   }
 })();
@@ -662,6 +993,22 @@ function resolveUserId(name: unknown): string | null {
   const key = str(name);
   if (!key) return null;
   return userIdByName.get(key) || userIdByName.get(baseName(key)) || null;
+}
+
+/**
+ * Builds a Supabase-valid email local part from a V1 id/name.
+ *
+ * Supabase Auth rejects non-ASCII addresses, but V1 ids include Arabic names
+ * (e.g. `يوسف`). Keep an ASCII transliteration when possible and fall back to a
+ * stable hash so the derived address is valid and deterministic.
+ */
+function localPart(id: string, name: string): string {
+  const ascii = `${id}-${name}`
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+  if (ascii.length >= 3) return ascii.slice(0, 64);
+  return `v1-${createHash("sha1").update(`${id}:${name}`).digest("hex").slice(0, 16)}`;
 }
 
 async function permissionKeys(): Promise<string[]> {
@@ -780,7 +1127,7 @@ async function migrateTeams() {
 async function findAuthUserIdByEmail(email: string): Promise<string | null> {
   let page = 1;
   for (;;) {
-    const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 1000 });
+    const { data, error } = await getSb().auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error(`listUsers failed: ${error.message}`);
     const users = data.users as Array<{ id: string; email?: string | null }>;
     const hit = users.find((u) => (u.email || "").toLowerCase() === email.toLowerCase());
@@ -821,7 +1168,7 @@ async function migrateUsers() {
       continue;
     }
 
-    const email = str(doc.email) || `${doc._id}@kanjo.local`;
+    const email = str(doc.email) || `${localPart(doc._id, name)}@kanjo.local`;
     const role = str(doc.role) || "rep";
     const team = str(doc.team);
 
@@ -834,7 +1181,7 @@ async function migrateUsers() {
         authId = existing;
       } else {
         const password = `mig-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
-        const { data, error } = await sb.auth.admin.createUser({
+        const { data, error } = await getSb().auth.admin.createUser({
           email,
           phone,
           password,
@@ -851,7 +1198,6 @@ async function migrateUsers() {
 
     userIdByName.set(name, authId);
     userIdByName.set(baseName(name), authId);
-    count("users");
 
     rows.push({
       id: authId,
@@ -927,8 +1273,14 @@ type TaskGroup = {
   team: string;
   category: string;
   state: ContractState;
-  achieved: number;
+  /** V1 `task.target` — the target commission percentage for the deal. */
+  target: number | null;
+  /** V1 `task.achieved` — the agreed/earned commission percentage. */
+  achieved: number | null;
+  /** V1 `task.commission.baseCommission` when the rep recorded a rate. */
+  baseCommission: number | null;
   createdAt: string | null;
+  lastVisitAt: string | null;
 };
 
 function buildTaskIndex(): Map<string, TaskGroup> {
@@ -940,6 +1292,22 @@ function buildTaskIndex(): Map<string, TaskGroup> {
     if (!base) continue;
 
     const state = contractStateOf(task);
+    // Only treat `achieved` as a real commission percentage when the task is
+    // actually signed; otherwise it is just a progress counter (often 0).
+    const achieved =
+      task.achieved !== undefined && num(task.achieved) > 0 ? num(task.achieved) : null;
+    const target =
+      task.target !== undefined && num(task.target) > 0 ? num(task.target) : null;
+    const commission = task.commission && typeof task.commission === "object"
+      ? (task.commission as Doc)
+      : null;
+    const baseCommission =
+      commission && commission.baseCommission !== undefined
+        ? num(commission.baseCommission)
+        : null;
+    const created = toIso(task.createdAt);
+    const visitDate = toIso(task.time);
+
     const prev = byBase.get(base);
     if (!prev) {
       byBase.set(base, {
@@ -947,17 +1315,22 @@ function buildTaskIndex(): Map<string, TaskGroup> {
         team: str(task.team),
         category: str(task.cat),
         state,
-        achieved: num(task.achieved),
-        createdAt: toIso(task.createdAt),
+        target,
+        achieved,
+        baseCommission,
+        createdAt: created,
+        lastVisitAt: visitDate,
       });
       continue;
     }
     prev.state = mergeContractState(prev.state, state);
     if (!prev.team && task.team) prev.team = str(task.team);
     if (!prev.category && task.cat) prev.category = str(task.cat);
-    if (num(task.achieved) > prev.achieved) prev.achieved = num(task.achieved);
-    const created = toIso(task.createdAt);
+    if (target != null && (prev.target == null || target > prev.target)) prev.target = target;
+    if (achieved != null && (prev.achieved == null || achieved > prev.achieved)) prev.achieved = achieved;
+    if (baseCommission != null && prev.baseCommission == null) prev.baseCommission = baseCommission;
     if (created && (!prev.createdAt || created < prev.createdAt)) prev.createdAt = created;
+    if (visitDate && (!prev.lastVisitAt || visitDate > prev.lastVisitAt)) prev.lastVisitAt = visitDate;
   }
   return byBase;
 }
@@ -983,7 +1356,7 @@ async function migrateMerchants() {
     }
     if (normalizedName) usedNormalized.add(normalizedName);
 
-    const documents = merchantDocuments(src.documents);
+    const documents = mapV1Documents(src.documents, str(src.driveFolderLink));
     const contactName = firstStr(src.contactPerson, src.ownerName, src.owner, src.contactName);
     const contactPhone = firstStr(src.phone, src.phoneNumber, src.mobile);
     const contact =
@@ -992,13 +1365,20 @@ async function migrateMerchants() {
         : null;
 
     const contractStatus = str(src.contractStatus);
-    const state: ContractState = group
-      ? group.state
-      : contractStatus === "final"
-        ? "signed_contract"
+    // Merchant-level `contractStatus` is the denormalised directory state
+    // written by sync-merchant-status.mjs. `final` is a completed agreement →
+    // final_contract; `vip` is an under-contract pre-agreement → provisional.
+    // The task group is the primary evidence; the denormalised flag can only
+    // raise the state, never lower it, so neither signal is lost.
+    const statusState: ContractState =
+      contractStatus === "final"
+        ? "final_contract"
         : contractStatus === "vip"
           ? "provisional"
           : "no_agreement";
+    const state: ContractState = group
+      ? mergeContractState(statusState, group.state)
+      : statusState;
 
     const vendorTypeLabel = firstStr(group?.category, src.category, src.cat);
     const vendorTypeId = resolveVendorTypeId(vendorTypeLabel);
@@ -1007,27 +1387,57 @@ async function migrateMerchants() {
     }
     merchantVendorTypeId.set(id, vendorTypeId);
 
+    // Commission truth: V1 keeps the percentage on the task, not the merchant.
+    //   - `target`   → target_commission (%) — always present on V1 tasks
+    //   - `achieved` → agreed_commission (%) — the negotiated rate at signing
+    //   - `commission.baseCommission` (when recorded) overrides `achieved`
+    // V1 never stores an earned EGP amount, so commission_amount stays 0.
+    const targetCommission =
+      group?.target != null ? pct(group.target) : num(src.targetCommission) > 0 ? pct(src.targetCommission) : 0;
+    const agreedRate =
+      group?.baseCommission != null
+        ? pct(group.baseCommission)
+        : group?.achieved != null
+          ? pct(group.achieved)
+          : num(src.agreedCommission) > 0
+            ? pct(src.agreedCommission)
+            : null;
+
+    // Real assignment: the task's team is the source of truth; there is no
+    // per-merchant sales-rep field in V1, so no rep is ever fabricated.
+    const teamLabel = firstStr(group?.team, src.team) || null;
+
+    const createdAt = toIso(src.createdAt) ?? group?.createdAt ?? null;
+    const updatedAt = toIso(src.updatedAt);
+    const lastVisitAt = toIso(src.lastVisitAt) ?? group?.lastVisitAt ?? null;
+
     const merchant: Doc = {
       id,
       name,
       normalized_name: normalizedName,
       vendor_type_id: vendorTypeId,
       vendor_type: vendorTypeLabel,
-      team: firstStr(group?.team, src.team) || null,
+      team: teamLabel,
       city_id: cityId,
-      target_commission: pct(src.targetCommission),
+      target_commission: targetCommission,
       monthly_value_minor: toMinor(src.monthlyValue),
       strategic_notes: str(src.strategicNotes),
+      // Strict 1:1: the merchant's real V1 logo, or an explicit null. A
+      // task-only merchant (no V1 document behind it) has no image to copy.
+      logo_url: mapMerchantLogoUrl(src),
       contract_state: state,
-      agreed_commission: num(src.agreedCommission) > 0 ? pct(src.agreedCommission) : null,
-      commission_amount: num(src.commissionAmount),
+      agreed_commission: agreedRate,
+      commission_amount: 0,
       documents,
       contact,
-      contact_updated_at: toIso(src.contactUpdatedAt || src.docsUpdatedAt),
-      last_visit_at: toIso(src.lastVisitAt),
-      created_at: toIso(src.createdAt) || new Date().toISOString(),
-      updated_at: toIso(src.updatedAt) || new Date().toISOString(),
+      contact_updated_at: toIso(src.contactUpdatedAt) ?? toIso(src.docsUpdatedAt),
+      last_visit_at: lastVisitAt,
     };
+    // `created_at` / `updated_at` are NOT NULL with a DB `now()` default. When
+    // V1 has no timestamp, omit the key so Postgres fills it — we never invent
+    // a business date in the ETL.
+    if (createdAt) merchant.created_at = createdAt;
+    if (updatedAt ?? createdAt) merchant.updated_at = updatedAt ?? createdAt;
     const profile: Doc = {
       merchant_id: id,
       actual_address: str(src.address),
@@ -1037,8 +1447,8 @@ async function migrateMerchants() {
       // V1 `dashboardUploaded` is Laravel-sync state, not app publish state.
       app_published: false,
       vip_menu: src.vipPreContract === true,
-      updated_at: toIso(src.updatedAt) || new Date().toISOString(),
     };
+    if (updatedAt ?? createdAt) profile.updated_at = updatedAt ?? createdAt;
     byId.set(id, { merchant, profile });
     knownMerchantIds.add(id);
     merchantIdByBase.set(baseName(name), id);
@@ -1071,6 +1481,16 @@ async function migrateMerchants() {
 
   const merchants = [...byId.values()].map((e) => e.merchant);
   const profiles = [...byId.values()].map((e) => e.profile);
+
+  // A dry run never writes, so surface one fully mapped merchant payload so the
+  // fidelity of the transformation can be inspected directly.
+  if (dryRun && merchants.length) {
+    const sample = merchants.find((m) => Array.isArray(m.documents) && m.documents.length)
+      ?? merchants[0];
+    log("\n  sample merchant payload:");
+    log(JSON.stringify(sample, null, 2));
+  }
+
   await pgUpsert("merchants", "merchants", merchants, "id");
   await pgUpsert("merchant_v1_profiles", "merchant_v1_profiles", profiles, "merchant_id");
 }
@@ -1181,7 +1601,7 @@ async function migrateCatalog() {
       warn(`merchant_products/${p._id}: category "${str(p.category)}" not in the vendor scope — category_key left null`);
     }
 
-    rows.push({
+    const product: Doc = {
       id: p._id,
       merchant_id: merchantId,
       name,
@@ -1201,9 +1621,12 @@ async function migrateCatalog() {
       client_product_id: null,
       qa_metadata: qaMetadata,
       created_by: resolveUserId(firstStr(p.createdBy, p.added_by, p.addedBy, p.created_by)),
-      created_at: toIso(p.createdAt) || new Date().toISOString(),
-      updated_at: toIso(p.updatedAt) || new Date().toISOString(),
-    });
+    };
+    const createdAt = toIso(p.createdAt);
+    const updatedAt = toIso(p.updatedAt);
+    if (createdAt) product.created_at = createdAt;
+    if (updatedAt ?? createdAt) product.updated_at = updatedAt ?? createdAt;
+    rows.push(product);
   }
 
   await pgUpsert("catalog_products", "catalog_products", rows, "id");
@@ -1213,15 +1636,29 @@ async function migrateTasks() {
   log("\n[tasks → app.field_tasks]");
   if (!v1Tasks.length) v1Tasks = await readAll("tasks");
 
-  const rows: Doc[] = v1Tasks.map((t) => {
+  const rows: Doc[] = [];
+  for (const t of v1Tasks) {
     const merchantId = str(t.merchantId) || merchantIdByBase.get(baseName(t.name)) || "";
-    return {
+    if (!merchantId) {
+      warn(`tasks/${t._id}: unresolved merchant "${baseName(t.name)}" — skipped`);
+      continue;
+    }
+    // `visit_date` is NOT NULL; V1 always stamps `time` (falling back to the
+    // creation timestamp). Skip rows whose date cannot be parsed rather than
+    // inventing one.
+    const visitDate = toDateOnly(t.time ?? t.createdAt);
+    if (!visitDate) {
+      warn(`tasks/${t._id}: unparseable visit date — skipped (NOT NULL)`);
+      continue;
+    }
+    const createdAt = toIso(t.createdAt);
+    const row: Doc = {
       id: t._id,
       merchant_id: merchantId,
       merchant_name: baseName(t.name),
       team: str(t.team),
       city_id: cityId,
-      visit_date: toDateOnly(t.time || t.createdAt),
+      visit_date: visitDate,
       target_commission: pct(t.target),
       strategic_notes: str(t.notes),
       instructions: str(t.instructions),
@@ -1230,9 +1667,10 @@ async function migrateTasks() {
       follow_up_contact_number: null,
       created_by: str(t.createdBy),
       created_by_name: str(t.createdBy),
-      created_at: toIso(t.createdAt) || new Date().toISOString(),
     };
-  });
+    if (createdAt) row.created_at = createdAt;
+    rows.push(row);
+  }
 
   await pgUpsert("field_tasks", "field_tasks", rows, "id");
 }
@@ -1252,7 +1690,11 @@ async function migrateVisits() {
     for (const report of Array.isArray(task.reports) ? (task.reports as Doc[]) : []) {
       const repName = str(report.name);
       if (!repName) continue;
-      const at = toIso(report.ts ?? report.timestamp ?? report.date) || new Date().toISOString();
+      const at = toIso(report.ts ?? report.timestamp ?? report.date);
+      if (!at) {
+        warn(`tasks/${task._id}: report by ${repName} has no parseable date — skipped`);
+        continue;
+      }
       const clientVisitId = `report:${task._id}:${report.ts ?? at}:${repName}`;
       const dedupeKey = `${merchantId}\u0000${clientVisitId}`;
       if (seenVisitKeys.has(dedupeKey)) {
@@ -1314,8 +1756,13 @@ async function migrateVisits() {
         continue;
       }
       // `time` carries the precise timestamp; `date` is date-only, so prefer `time`.
-      const startedAt = toIso(open?.time) || toIso(open?.date) || toIso(att.time) || toIso(att.date) || new Date().toISOString();
+      const startedAt = toIso(open?.time) || toIso(open?.date) || toIso(att.time) || toIso(att.date);
       const endedAt = toIso(att.time) || toIso(att.date) || startedAt;
+      if (!startedAt || !endedAt) {
+        warn(`tasks/${task._id}: attendance by ${repName} has no parseable timestamp — skipped`);
+        open = null;
+        continue;
+      }
       const duration = Math.max(0, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000));
       const clientVisitId = `attendance:${task._id}:${startedAt}:${repName}`;
       const dedupeKey = `${merchantId}\u0000${clientVisitId}`;
@@ -1378,8 +1825,12 @@ async function migrateTransferRequests() {
     }
     const raw = str(d.status);
     const status = raw === "approved" || raw === "rejected" ? raw : "pending";
-    const createdAt = toIso(d.timestamp) || new Date().toISOString();
+    const createdAt = toIso(d.timestamp);
     const requestedBy = str(d.requestedBy);
+    if (!createdAt && status !== "pending") {
+      warn(`transferRequests/${d._id}: ${status} request has no timestamp for reviewed_at — skipped`);
+      continue;
+    }
 
     // Unique partial index: one pending row per (merchant_id, requested_by).
     if (status === "pending") {
@@ -1391,7 +1842,7 @@ async function migrateTransferRequests() {
       seenPending.add(key);
     }
 
-    rows.push({
+    const row: Doc = {
       id: d._id,
       merchant_id: merchantId,
       merchant_name: baseName(d.taskName),
@@ -1401,13 +1852,14 @@ async function migrateTransferRequests() {
       requested_by_name: requestedBy,
       justification: str(d.reason),
       status,
-      created_at: createdAt,
       reviewed_by: null,
       reviewed_by_name: null,
       // Decision shape: (status='pending') = (reviewed_at is null).
-      reviewed_at: status === "pending" ? null : toIso(d.reviewedAt) || createdAt,
+      reviewed_at: status === "pending" ? null : toIso(d.reviewedAt) ?? createdAt,
       review_note: str(d.reviewNote),
-    });
+    };
+    if (createdAt) row.created_at = createdAt;
+    rows.push(row);
   }
 
   await pgUpsert("transfer_requests", "transfer_requests", rows, "id");
@@ -1444,8 +1896,25 @@ async function migrateContracts() {
       continue;
     }
     seenReference.add(reference);
-    const createdAt = toIso(d.createdAt) || new Date().toISOString();
-    rows.push({
+    const createdAt = toIso(d.createdAt);
+    // Contract shape constraints require signed_at/cancelled_at to be non-null
+    // exactly when the status matches. Without any parseable V1 timestamp we
+    // cannot satisfy them, so skip rather than fabricate one.
+    const signedAt = toIso(d.signedAt ?? d.signed_at);
+    const cancelledAt = toIso(d.cancelledAt ?? d.cancelled_at);
+    if (!createdAt && (status !== "signed" && status !== "cancelled")) {
+      warn(`contracts/${d._id}: no parseable created date — skipped (NOT NULL)`);
+      continue;
+    }
+    if (status === "signed" && !(signedAt ?? createdAt)) {
+      warn(`contracts/${d._id}: signed but no parseable date — skipped (shape constraint)`);
+      continue;
+    }
+    if (status === "cancelled" && !(cancelledAt ?? createdAt)) {
+      warn(`contracts/${d._id}: cancelled but no parseable date — skipped (shape constraint)`);
+      continue;
+    }
+    const row: Doc = {
       _key: reference,
       reference,
       merchant_id: merchantId,
@@ -1461,11 +1930,12 @@ async function migrateContracts() {
       signed_by: resolveUserId(d.signedBy),
       cancelled_by: resolveUserId(d.cancelledBy),
       // Shape: (status='signed') = (signed_at is not null), same for cancelled.
-      signed_at: status === "signed" ? toIso(d.signedAt || d.signed_at) || createdAt : null,
-      cancelled_at: status === "cancelled" ? toIso(d.cancelledAt || d.cancelled_at) || createdAt : null,
-      created_at: createdAt,
-      updated_at: toIso(d.updatedAt) || createdAt,
-    });
+      signed_at: status === "signed" ? signedAt ?? createdAt : null,
+      cancelled_at: status === "cancelled" ? cancelledAt ?? createdAt : null,
+      updated_at: toIso(d.updatedAt) ?? createdAt ?? signedAt ?? cancelledAt ?? null,
+    };
+    if (createdAt) row.created_at = createdAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1673,7 +2143,8 @@ async function migrateKpiSnapshots() {
 
       // NOTE: the locked salary is recomputed by V2; V1 money is never copied
       // into the frozen financial columns.
-      rows.push({
+      const lockedAt = toIso(header.lockedAt);
+      const row: Doc = {
         _key: `${userId}\u0000${monthYear}`,
         rep_id: userId,
         month_year: monthYear,
@@ -1687,8 +2158,10 @@ async function migrateKpiSnapshots() {
         applied_contract_fee: null,
         legacy_metrics: legacyMetrics,
         status: "pending",
-        locked_at: toIso(header.lockedAt) || new Date().toISOString(),
-      });
+      };
+      // `locked_at` defaults to now() at insert; never invent a lock date.
+      if (lockedAt) row.locked_at = lockedAt;
+      rows.push(row);
     }
   }
 
@@ -1721,15 +2194,17 @@ async function migrateMerchantLeads() {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    rows.push({
+    const row: Doc = {
       _key: key,
       store_name: storeName.slice(0, 160),
       contact_person: contact.slice(0, 120),
       phone_number: phoneDigits,
       business_type: (str(d.category) || str(d.business_type) || "غير محدد").slice(0, 120),
       status: "pending",
-      created_at: toIso(d.createdAt) || new Date().toISOString(),
-    });
+    };
+    const createdAt = toIso(d.createdAt);
+    if (createdAt) row.created_at = createdAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1749,9 +2224,8 @@ async function migrateAuditLogs() {
   for (const d of await readAll("audit_logs")) {
     if (seen.has(d._id)) continue;
     seen.add(d._id);
-    rows.push({
+    const row: Doc = {
       legacy_id: d._id,
-      occurred_at: toIso(d.timestamp) || toIso(d.ts) || new Date().toISOString(),
       actor_id: resolveUserId(d.userName),
       actor_name: str(d.userName),
       actor_role: str(d.userRole),
@@ -1766,7 +2240,12 @@ async function migrateAuditLogs() {
       previous_data: d.previousData ?? null,
       new_data: d.newData ?? null,
       changes: Array.isArray(d.changes) ? d.changes : (d.changes ?? null),
-    });
+    };
+    // `occurred_at` defaults to now(); omit it when V1 has no timestamp rather
+    // than inventing an event time in the ETL.
+    const occurredAt = toIso(d.timestamp) ?? toIso(d.ts);
+    if (occurredAt) row.occurred_at = occurredAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1784,7 +2263,7 @@ async function migrateNotifications() {
   for (const d of await readAll("notifications")) {
     if (seen.has(d._id)) continue;
     seen.add(d._id);
-    rows.push({
+    const row: Doc = {
       _key: d._id,
       legacy_id: d._id,
       // V1 notifications were written once for the whole company: a broadcast.
@@ -1798,8 +2277,10 @@ async function migrateNotifications() {
       link: str(d.link),
       is_read: false,
       read_at: null,
-      occurred_at: toIso(d.timestamp) || toIso(d.date) || new Date().toISOString(),
-    });
+    };
+    const occurredAt = toIso(d.timestamp) ?? toIso(d.date);
+    if (occurredAt) row.occurred_at = occurredAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1854,7 +2335,7 @@ async function migrateArchivedReports() {
     if (seen.has(d._id)) continue;
     seen.add(d._id);
     const taskId = str(d.taskId);
-    rows.push({
+    const row: Doc = {
       _key: d._id,
       legacy_id: d._id,
       task_id: taskId || null,
@@ -1864,8 +2345,10 @@ async function migrateArchivedReports() {
       archived_by: resolveUserId(d.archivedBy),
       archived_by_name: str(d.archivedBy),
       reason: str(d.reason),
-      occurred_at: toIso(d.timestamp) || new Date().toISOString(),
-    });
+    };
+    const occurredAt = toIso(d.timestamp);
+    if (occurredAt) row.occurred_at = occurredAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1888,7 +2371,7 @@ async function migrateCampaignLeads() {
       warn(`campaign_leads/${d._id}: phone "${str(d.phone_number || d.phone)}" not dialable — skipped`);
       continue;
     }
-    rows.push({
+    const row: Doc = {
       _key: d._id,
       legacy_id: d._id,
       city_id: cityId,
@@ -1899,9 +2382,10 @@ async function migrateCampaignLeads() {
       source: "spinwheel",
       status: "new",
       notes: "",
-      occurred_at:
-        toIso(d.created_at ?? d.createdAt ?? d.timestamp) || new Date().toISOString(),
-    });
+    };
+    const occurredAt = toIso(d.created_at ?? d.createdAt ?? d.timestamp);
+    if (occurredAt) row.occurred_at = occurredAt;
+    rows.push(row);
   }
 
   const existing = new Set<string>();
@@ -1938,7 +2422,9 @@ const STEPS: Step[] = [
 ];
 
 async function main() {
-  log(`V1 → V2 migration  (project=${PROJECT_ID}${dryRun ? ", DRY RUN" : ""})`);
+  log(
+    `V1 → V2 migration  (project=${PROJECT_ID}${dryRun ? ", DRY RUN" : ""}${sampleLimit ? `, SAMPLE ${sampleLimit}/collection` : ""})`,
+  );
 
   const started = Date.now();
   for (const step of STEPS) {
