@@ -6,11 +6,6 @@ import type { CatalogMerchantCard as CatalogMerchantCardData } from "@/lib/catal
 import { resolveDisplayImageUrl } from "@/lib/catalog/format";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((part) => part.charAt(0)).join("");
-}
-
 /**
  * One merchant tile in the catalog directory.
  *
@@ -29,27 +24,27 @@ export function CatalogMerchantCard({
 
   return (
     <Link href={`/catalog/${card.id}`} className="cat-merchant-card">
-      <div className="cat-merchant-cover">
-        {coverImage ? (
-          <CatalogImage src={card.coverImage} alt="" />
-        ) : (
-          <span className="cat-merchant-initials">{initials(card.name)}</span>
-        )}
+      <div
+        className={`cat-merchant-cover${coverImage ? "" : " is-placeholder"}`}
+      >
+        {coverImage ? <CatalogImage src={card.coverImage} alt="" /> : null}
         {card.vipMenu ? (
           <span className="badge badge-gold cat-merchant-vip">VIP</span>
         ) : null}
+
+        <span className="cat-merchant-logo">
+          <MerchantAvatar
+            name={card.name}
+            logoUrl={card.logoUrl}
+            size="xl"
+            elevated
+          />
+        </span>
       </div>
 
       <div className="cat-merchant-body">
         <div className="cat-merchant-head">
-          <div className="merchant-identity">
-            <MerchantAvatar
-              name={card.name}
-              logoUrl={card.logoUrl}
-              size="md"
-            />
-            <strong>{card.name}</strong>
-          </div>
+          <strong>{card.name}</strong>
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
         </div>
         <span className="cat-merchant-meta">

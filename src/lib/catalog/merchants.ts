@@ -18,6 +18,8 @@ export type CatalogMerchantSource = {
   contractState: ContractState;
   /** Merchant logo URL, when one was uploaded in V1. */
   logoUrl: string | null;
+  /** Operator-uploaded cover/banner URL. Null renders the brand gradient. */
+  coverUrl: string | null;
   /** Manager-controlled VIP flag from the merchant's V1 working fields. */
   vipMenu: boolean;
   /** Merchant is published on the customer app. */
@@ -28,7 +30,11 @@ export type CatalogMerchantCard = CatalogMerchantSource & {
   productCount: number;
   publishedCount: number;
   pendingCount: number;
-  /** First product image, shown as the tile cover. */
+  /**
+   * Banner for the tile. The operator-uploaded cover wins; when there is none we
+   * fall back to the first product image so a merchant with products still shows
+   * a real photo instead of the gradient placeholder.
+   */
   coverImage: string | null;
   /** True once at least one product is live on the app. */
   live: boolean;
@@ -38,7 +44,7 @@ type MerchantTally = {
   productCount: number;
   publishedCount: number;
   pendingCount: number;
-  coverImage: string | null;
+  firstProductImage: string | null;
 };
 
 export function buildMerchantCards(
@@ -51,13 +57,13 @@ export function buildMerchantCards(
       productCount: 0,
       publishedCount: 0,
       pendingCount: 0,
-      coverImage: null,
+      firstProductImage: null,
     };
     tally.productCount += 1;
     if (product.state === "published") tally.publishedCount += 1;
     if (product.state === "pending_review") tally.pendingCount += 1;
-    if (!tally.coverImage && product.imageDataUrl) {
-      tally.coverImage = product.imageDataUrl;
+    if (!tally.firstProductImage && product.imageDataUrl) {
+      tally.firstProductImage = product.imageDataUrl;
     }
     tallies.set(product.merchantId, tally);
   }
@@ -70,7 +76,7 @@ export function buildMerchantCards(
         productCount: tally?.productCount ?? 0,
         publishedCount: tally?.publishedCount ?? 0,
         pendingCount: tally?.pendingCount ?? 0,
-        coverImage: tally?.coverImage ?? null,
+        coverImage: merchant.coverUrl ?? tally?.firstProductImage ?? null,
         live: (tally?.publishedCount ?? 0) > 0,
       };
     })

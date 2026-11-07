@@ -5,13 +5,15 @@ import { useState } from "react";
 import { CatalogImage } from "@/components/catalog/catalog-image";
 import { merchantInitials } from "@/lib/merchants/format";
 
-type MerchantAvatarSize = "sm" | "md" | "lg";
+type MerchantAvatarSize = "sm" | "md" | "lg" | "xl";
 
 type MerchantAvatarProps = {
   name: string;
   logoUrl?: string | null;
   size?: MerchantAvatarSize;
   className?: string;
+  /** Renders a circular mark with a white ring, for overlapping a cover image. */
+  elevated?: boolean;
 };
 
 /**
@@ -27,9 +29,15 @@ export function MerchantAvatar({
   logoUrl,
   size = "md",
   className,
+  elevated = false,
 }: MerchantAvatarProps) {
   const [failed, setFailed] = useState(false);
-  const classes = ["merchant-avatar", `merchant-avatar-${size}`, className]
+  const classes = [
+    "merchant-avatar",
+    `merchant-avatar-${size}`,
+    elevated ? "merchant-avatar-elevated" : "",
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
   const showLogo = Boolean(logoUrl) && !failed;

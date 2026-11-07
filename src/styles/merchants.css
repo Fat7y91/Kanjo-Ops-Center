@@ -10,12 +10,17 @@
   flex: 0 0 auto;
   place-items: center;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 9999px;
   background: var(--kanjo-purple-base);
   color: var(--gold);
   font-weight: 800;
   line-height: 1;
   user-select: none;
+  /* A hairline ring lifts the mark off the row background without drawing a
+   * heavy outline; the shadow gives the table a little depth. */
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shadow-sm);
 }
 
 .merchant-avatar img {
@@ -30,26 +35,38 @@
   letter-spacing: 0;
 }
 
-/* Sizes: table rows stay compact, cards breathe a little more. */
+/* Sizes. The directory table uses `lg` (48px) so a logo reads as a brand mark
+ * rather than a favicon; cards use `xl`. */
 .merchant-avatar-sm {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
   font-size: 0.78rem;
 }
 
 .merchant-avatar-md {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
   font-size: 1rem;
 }
 
 .merchant-avatar-lg {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  font-size: 1.3rem;
+  width: 48px;
+  height: 48px;
+  font-size: 1.1rem;
+}
+
+.merchant-avatar-xl {
+  width: 64px;
+  height: 64px;
+  font-size: 1.4rem;
+}
+
+/* Overlaps a cover image: a thick surface-colored ring separates the logo from
+ * the banner behind it, like a social profile avatar. The ring is drawn as a
+ * border so the shadow sits outside it. */
+.merchant-avatar-elevated {
+  border: 3px solid var(--surface);
+  box-shadow: var(--shadow-md);
 }
 
 /* Name + avatar pair used in table cells and card headers. */
@@ -78,4 +95,84 @@
 [data-theme="dark"] .merchant-avatar {
   background: var(--gradient-tile);
   color: var(--gold);
+}
+
+/* ── Merchant logo / cover manager (profile) ───────────────────────────── */
+
+.merchant-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.merchant-assets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.merchant-assets-head h3 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+.merchant-assets-preview {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.merchant-assets-cover {
+  position: relative;
+  height: 148px;
+  background:
+    radial-gradient(
+      120% 120% at 15% 0%,
+      color-mix(in srgb, var(--kanjo-gold) 50%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      135deg,
+      var(--kanjo-purple-deep) 0%,
+      var(--kanjo-purple-base) 55%,
+      var(--kanjo-purple-interactive) 100%
+    );
+}
+
+.merchant-assets-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.merchant-assets-cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--kanjo-cream) 82%, transparent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* The logo straddles the cover's bottom edge, matching the catalog tile. */
+.merchant-assets-logo {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 18px;
+  transform: translateY(50%);
+  display: inline-flex;
+  border-radius: 9999px;
+}
+
+.merchant-assets-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* Clears the half-overlapping logo drawn over the preview above. */
+  margin-top: 22px;
 }

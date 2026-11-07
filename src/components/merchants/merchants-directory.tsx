@@ -114,7 +114,7 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
                     <MerchantAvatar
                       name={row.name}
                       logoUrl={row.logoUrl}
-                      size="sm"
+                      size="lg"
                     />
                     <div className="merchant-identity-text">
                       <Link href={`/merchants/${row.id}`}>

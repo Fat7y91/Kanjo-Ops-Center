@@ -8,12 +8,13 @@ import {
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import {
-  isUndefinedColumn,
   MERCHANT_COLUMNS as COLUMNS,
-  MERCHANT_COLUMNS_WITHOUT_LOGO,
+  nextMerchantProjection,
   toMerchant,
   type MerchantRow,
 } from "./merchant-mapping";
+import { toPatchColumns as patchColumns } from "./merchant-patch";
+import type { MerchantPatch } from "./merchant-patch";
 import type {
   ContractState,
   Merchant,
@@ -36,21 +37,10 @@ import type {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Columns the domain mutates after creation. Kept as a camelCase patch so the
- * call sites stay in domain terms; the mapping to snake_case lives here only.
+ * Columns the domain mutates after creation live in `merchant-patch.ts`, next to
+ * the read-side mapping, so the repository stays a thin I/O shell.
  */
-export type MerchantPatch = Partial<{
-  team: string | null;
-  contractState: ContractState;
-  commissionAmount: number;
-  agreedCommission: number | null;
-  editUnlocked: boolean;
-  documents: MerchantDocument[];
-  contact: VisitContact | null;
-  opinions: RepOpinion[];
-  contactUpdatedAt: string | null;
-  lastVisitAt: string | null;
-}>;
+export type { MerchantPatch } from "./merchant-patch";
 
 export class MerchantRepositoryError extends Error {
   readonly code: string;
@@ -69,26 +59,35 @@ export function isMerchantsDatabaseConfigured(): boolean {
 }
 
 function toPatchColumns(patch: MerchantPatch): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (patch.team !== undefined) row.team = patch.team;
-  if (patch.contractState !== undefined) {
-    row.contract_state = patch.contractState;
+  return patchColumns(patch);
+}
+
+type RowsResponse = {
+  data: unknown;
+  error: unknown;
+};
+
+/**
+ * Runs a select-bearing query, dropping only the image column the server says
+ * is missing, then retries.
+ *
+ * A statement that fails on an undefined column is rejected at parse time, so
+ * nothing is written and retrying is safe for inserts and updates alike. This
+ * keeps the directory working on a deployment that has `logo_url` but not yet
+ * `cover_url` (and vice versa) without blanking both.
+ */
+async function withImageColumnFallback(
+  run: (columns: string) => PromiseLike<RowsResponse>,
+): Promise<RowsResponse> {
+  let columns = COLUMNS;
+  let result = await run(columns);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const next = nextMerchantProjection(columns, result.error);
+    if (!next) break;
+    columns = next;
+    result = await run(columns);
   }
-  if (patch.commissionAmount !== undefined) {
-    row.commission_amount = patch.commissionAmount;
-  }
-  if (patch.agreedCommission !== undefined) {
-    row.agreed_commission = patch.agreedCommission;
-  }
-  if (patch.editUnlocked !== undefined) row.edit_unlocked = patch.editUnlocked;
-  if (patch.documents !== undefined) row.documents = patch.documents;
-  if (patch.contact !== undefined) row.contact = patch.contact;
-  if (patch.opinions !== undefined) row.opinions = patch.opinions;
-  if (patch.contactUpdatedAt !== undefined) {
-    row.contact_updated_at = patch.contactUpdatedAt;
-  }
-  if (patch.lastVisitAt !== undefined) row.last_visit_at = patch.lastVisitAt;
-  return row;
+  return result;
 }
 
 /** Every merchant, alphabetically, as the directory lists them. */
@@ -96,19 +95,13 @@ export async function listMerchantRows(): Promise<Merchant[]> {
   if (!isMerchantsDatabaseConfigured()) return [];
 
   const client = getSupabaseServerClient();
-  let { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .select(COLUMNS)
-    .order("name", { ascending: true });
-
-  if (isUndefinedColumn(error)) {
-    ({ data, error } = await client
+  const { data, error } = await withImageColumnFallback((columns) =>
+    client
       .schema("app")
       .from("merchants")
-      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
-      .order("name", { ascending: true }));
-  }
+      .select(columns)
+      .order("name", { ascending: true }),
+  );
 
   if (error) {
     if (isMissingSchemaObject(error)) return [];
@@ -121,21 +114,14 @@ export async function getMerchantRow(id: string): Promise<Merchant | null> {
   if (!isMerchantsDatabaseConfigured()) return null;
 
   const client = getSupabaseServerClient();
-  let { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .select(COLUMNS)
-    .eq("id", id)
-    .maybeSingle();
-
-  if (isUndefinedColumn(error)) {
-    ({ data, error } = await client
+  const { data, error } = await withImageColumnFallback((columns) =>
+    client
       .schema("app")
       .from("merchants")
-      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
+      .select(columns)
       .eq("id", id)
-      .maybeSingle());
-  }
+      .maybeSingle(),
+  );
 
   if (error) {
     if (isMissingSchemaObject(error)) return null;
@@ -151,21 +137,14 @@ export async function findMerchantByNormalizedName(
   if (!isMerchantsDatabaseConfigured()) return null;
 
   const client = getSupabaseServerClient();
-  let { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .select(COLUMNS)
-    .eq("normalized_name", normalizedName)
-    .maybeSingle();
-
-  if (isUndefinedColumn(error)) {
-    ({ data, error } = await client
+  const { data, error } = await withImageColumnFallback((columns) =>
+    client
       .schema("app")
       .from("merchants")
-      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
+      .select(columns)
       .eq("normalized_name", normalizedName)
-      .maybeSingle());
-  }
+      .maybeSingle(),
+  );
 
   if (error) {
     if (isMissingSchemaObject(error)) return null;
@@ -223,23 +202,17 @@ export async function insertMerchant(
     updated_at: merchant.updatedAt,
   };
 
-  let { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .insert(values)
-    .select(COLUMNS)
-    .single();
-
   /* The row is inserted and returned in one statement, so an undefined-column
-   * parse error leaves nothing behind; retrying without the logo is safe. */
-  if (isUndefinedColumn(error)) {
-    ({ data, error } = await client
+   * parse error leaves nothing behind; retrying without the missing image
+   * column is safe. */
+  const { data, error } = await withImageColumnFallback((columns) =>
+    client
       .schema("app")
       .from("merchants")
       .insert(values)
-      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
-      .single());
-  }
+      .select(columns)
+      .single(),
+  );
 
   if (error) {
     if (isUniqueViolation(error)) {
@@ -269,26 +242,19 @@ export async function updateMerchantRow(
 
   const client = getSupabaseServerClient();
   const patchColumns = toPatchColumns(patch);
-  let { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .update(patchColumns)
-    .eq("id", id)
-    .select(COLUMNS)
-    .maybeSingle();
 
   /* Update and read are a single statement, so the retry cannot apply the patch
    * twice. This keeps edits working on a deployment whose migration has not
    * landed yet. */
-  if (isUndefinedColumn(error)) {
-    ({ data, error } = await client
+  const { data, error } = await withImageColumnFallback((columns) =>
+    client
       .schema("app")
       .from("merchants")
       .update(patchColumns)
       .eq("id", id)
-      .select(MERCHANT_COLUMNS_WITHOUT_LOGO)
-      .maybeSingle());
-  }
+      .select(columns)
+      .maybeSingle(),
+  );
 
   if (error) throw error;
   return data ? toMerchant(data as unknown as MerchantRow) : null;

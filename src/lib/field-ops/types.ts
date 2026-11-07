@@ -169,6 +169,8 @@ export type Merchant = {
   cityId: string;
   /** Logo image URL (V1 Firebase Storage object or Drive link). */
   logoUrl: string | null;
+  /** Wide cover/banner image URL shown behind the logo on the catalog tile. */
+  coverUrl: string | null;
   targetCommission: number;
   monthlyValue: number;
   strategicNotes: string;

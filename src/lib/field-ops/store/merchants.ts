@@ -81,6 +81,7 @@ export async function createMerchant(
     team: null,
     cityId: input.cityId,
     logoUrl: null,
+    coverUrl: null,
     targetCommission: input.targetCommission,
     monthlyValue: input.estimatedMonthlyValue,
     strategicNotes: input.strategicNotes.trim(),

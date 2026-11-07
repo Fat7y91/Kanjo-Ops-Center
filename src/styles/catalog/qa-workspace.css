@@ -9,12 +9,17 @@
 .img-qa-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* Grid stretches items to their row height by default; stating it keeps the
+   * intent explicit. Rows size to their own content, so one tall card does not
+   * inflate every other row in the grid. */
+  align-items: stretch;
   gap: 14px;
 }
 
 .img-qa-card {
   display: flex;
   flex-direction: column;
+  height: 100%;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -32,7 +37,12 @@
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 16 / 10;
+  /* Fixed square media box: every tile's image occupies exactly the same
+   * footprint regardless of the source file's aspect ratio, which is what keeps
+   * the grid from going ragged. `aspect-ratio` with `overflow: hidden` is the
+   * enforcement; the img below object-covers into it. */
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
   border: 0;
   padding: 0;
   font-family: inherit;
@@ -48,14 +58,20 @@
 }
 
 .img-qa-thumb img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
 .img-qa-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  /* `justify-content: space-between` pins the action bar to the bottom, so cards
+   * with short titles and cards with long ones still align their controls. */
+  justify-content: space-between;
   gap: 10px;
   padding: 12px 14px 14px;
 }
@@ -67,11 +83,26 @@
   gap: 10px;
 }
 
+.img-qa-head > div {
+  /* Let a long product name wrap instead of forcing the badge off the card. */
+  min-width: 0;
+}
+
 .img-qa-head h2 {
   margin: 0;
   font-size: 0.98rem;
   font-weight: 800;
   color: var(--ink);
+  /* Clamp the title so a very long name cannot distort the shared row height. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.img-qa-head .badge {
+  flex: 0 0 auto;
 }
 
 .img-qa-meta {
@@ -88,6 +119,9 @@
 }
 
 .img-qa-card .img-qa-bar {
+  /* The action bar is the last child; `margin-top: auto` keeps it pinned to the
+   * bottom even when the body has spare height on a short card. */
+  margin-top: auto;
   border-style: solid;
   border-color: var(--line);
   background: var(--surface-soft);

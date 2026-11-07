@@ -28,6 +28,7 @@ import type {
 import { CrmMetrics } from "./merchant-profile/crm-metrics";
 import { DocumentsPanel } from "./merchant-profile/documents-panel";
 import { EconomicsPanel } from "./merchant-profile/economics-panel";
+import { MerchantAssetManager } from "./merchant-profile/merchant-asset-manager";
 import { MerchantV1Panel } from "./merchant-profile/merchant-v1-panel";
 import { ProfileHero } from "./merchant-profile/profile-hero";
 import { TasksFollowups } from "./merchant-profile/tasks-followups";
@@ -130,6 +131,14 @@ export function MerchantProfileClient({
       />
 
       <CrmMetrics summary={summary} followUps={followUps} />
+
+      <MerchantAssetManager
+        merchantId={merchant.id}
+        merchantName={merchant.name}
+        logoUrl={merchant.logoUrl}
+        coverUrl={merchant.coverUrl}
+        canEdit={canEditMerchants}
+      />
 
       <section className="profile-grid">
         <VisitHistory merchant={merchant} summary={summary} />

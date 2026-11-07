@@ -47,6 +47,7 @@ export default async function CatalogPage() {
     vendorType: merchant.vendorType,
     contractState: states.get(merchant.id)?.state ?? merchant.contractState,
     logoUrl: merchant.logoUrl,
+    coverUrl: merchant.coverUrl,
     vipMenu: flags.get(merchant.id)?.vipMenu ?? false,
     appPublished: flags.get(merchant.id)?.appPublished ?? false,
   }));

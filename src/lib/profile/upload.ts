@@ -51,7 +51,7 @@ export function isUploadTarget(value: unknown): value is UploadTarget {
 }
 
 /** Leading bytes that identify each accepted format. */
-function matchesSignature(mime: string, bytes: Uint8Array): boolean {
+export function matchesSignature(mime: string, bytes: Uint8Array): boolean {
   switch (mime) {
     case "image/jpeg":
       return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;

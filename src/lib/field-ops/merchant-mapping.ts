@@ -26,6 +26,7 @@ export const MERCHANT_COLUMNS = [
   "monthly_value_minor",
   "strategic_notes",
   "logo_url",
+  "cover_url",
   "contract_state",
   "commission_amount",
   "agreed_commission",
@@ -40,14 +41,19 @@ export const MERCHANT_COLUMNS = [
 ].join(",");
 
 /**
- * Projection for a deployment whose code shipped before
- * `20261113000000_merchant_logo.sql` was applied.
+ * Fallback projections for a deployment whose code shipped before one of the
+ * optional image migrations was applied.
  *
- * Selecting an undefined `logo_url` makes PostgREST reject the whole select, so
- * a directory that should merely lose its avatars would render empty. Retrying
- * without the column keeps every other field available during rollout ordering.
+ * Selecting an undefined column makes PostgREST reject the whole select, so a
+ * directory that should merely lose its banners would render empty. Each tier
+ * drops exactly one image column: dropping both at once would silently wipe
+ * logos on a deployment that has `logo_url` but not yet `cover_url`.
  */
-export const MERCHANT_COLUMNS_WITHOUT_LOGO = MERCHANT_COLUMNS.replace(
+export const MERCHANT_COLUMNS_WITHOUT_COVER = MERCHANT_COLUMNS.replace(
+  "cover_url,",
+  "",
+);
+export const MERCHANT_COLUMNS_WITHOUT_IMAGES = MERCHANT_COLUMNS_WITHOUT_COVER.replace(
   "logo_url,",
   "",
 );
@@ -59,6 +65,32 @@ export function isUndefinedColumn(error: unknown): boolean {
     error !== null &&
     (error as { code?: unknown }).code === "42703"
   );
+}
+
+/**
+ * Next projection to try after an undefined-column error, or `null` to stop.
+ *
+ * PostgREST names the offending column in the message, so we remove only that
+ * one and keep the rest. Stopping (rather than looping) when the column cannot
+ * be identified surfaces a genuine schema problem instead of hiding it behind
+ * repeated retries.
+ */
+export function nextMerchantProjection(
+  columns: string,
+  error: unknown,
+): string | null {
+  if (!isUndefinedColumn(error)) return null;
+  const message = String(
+    (error as { message?: unknown }).message ?? "",
+  );
+  const drop = message.includes("logo_url")
+    ? "logo_url,"
+    : message.includes("cover_url")
+      ? "cover_url,"
+      : null;
+  if (!drop || !columns.includes(drop)) return null;
+  const next = columns.replace(drop, "");
+  return next === columns ? null : next;
 }
 
 export type MerchantRow = {
@@ -73,6 +105,7 @@ export type MerchantRow = {
   monthly_value_minor: number | string;
   strategic_notes: string;
   logo_url?: string | null;
+  cover_url?: string | null;
   contract_state: ContractState;
   commission_amount: number | string;
   agreed_commission: number | string | null;
@@ -100,6 +133,7 @@ export function toMerchant(row: MerchantRow): Merchant {
     team: row.team,
     cityId: row.city_id,
     logoUrl: row.logo_url ?? null,
+    coverUrl: row.cover_url ?? null,
     targetCommission: Number(row.target_commission),
     monthlyValue: Number(row.monthly_value_minor) / 100,
     strategicNotes: row.strategic_notes,
