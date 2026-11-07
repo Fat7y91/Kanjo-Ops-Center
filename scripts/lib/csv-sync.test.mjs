@@ -51,6 +51,17 @@ test("parseCategories normalises headers and drops invalid rows", () => {
   assert.match(result.issues[0].message, /معرّف التصنيف/);
 });
 
+test("parseVendorTypes accepts numeric ids sent as JSON numbers", () => {
+  const result = parse.parseVendorTypes([
+    { id: 1, name_ar: "مطاعم" },
+    { id: "2", name_ar: "كافيهات" },
+  ]);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows[0].numericId, 1);
+  assert.equal(result.rows[1].numericId, 2);
+  assert.equal(result.issues.length, 0);
+});
+
 test("buildCategoryPlan derives levels from the parent chain", () => {
   const parsed = parse.parseCategories([
     { id: "1", vendor_type: "5", parent_id: "", name_ar: "جذر" },

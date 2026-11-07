@@ -65,9 +65,22 @@
 }
 
 /* Sits after the revision marker; keeps its own gap so the count does not
- * look glued to the sync action on narrow layouts. */
+ * look glued to the sync action on narrow layouts. High-visibility brand
+ * treatment: royal purple plate with a warm-gold border and cream ink, legible
+ * on both light and dark canvases. */
 .taxonomy-sync-trigger {
   margin-inline-start: 8px;
+  border: 2px solid var(--kanjo-gold) !important;
+  background: var(--gradient-primary) !important;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 10px 24px -12px rgba(35, 5, 53, 0.85);
+}
+
+.taxonomy-sync-trigger:hover {
+  background: linear-gradient(135deg, #2c0643, #5a24a6) !important;
+  color: var(--kanjo-gold) !important;
+  transform: translateY(-1px);
 }
 
 .taxonomy-pane {

@@ -278,7 +278,7 @@ export function TaxonomyCenter({
           {canManageCategories ? (
             <button
               type="button"
-              className="button button-small button-quiet taxonomy-sync-trigger"
+              className="button button-small taxonomy-sync-trigger"
               onClick={() => setSyncOpen(true)}
             >
               مزامنة لوحة التحكم

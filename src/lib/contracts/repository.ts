@@ -14,34 +14,18 @@ import type {
   ContractEditInput,
   ContractStatus,
 } from "./types";
+import { CONTRACT_BASE_COLUMNS, CONTRACT_COLUMNS, toContract, type ContractRow } from "./row";
 
 /**
- * Tier 4 repository for `app.contracts` (`20261109000000_contracts.sql`).
+ * Tier 4 repository for `app.contracts` (`20261109000000_contracts.sql`,
+ * widened by `20261117000000_contracts_v2.sql`).
  *
  * This is the only module that knows the column names. Reads degrade to an
  * empty register when the migration is not deployed yet, so the page renders
  * its empty state instead of an error; writes stay strict.
  */
 
-const COLUMNS =
-  "id,reference,merchant_id,merchant_name,city_id,value_minor,currency,status,signatory,body,signed_at,cancelled_at,created_at,updated_at";
-
-type ContractRow = {
-  id: string;
-  reference: string;
-  merchant_id: string;
-  merchant_name: string;
-  city_id: string | null;
-  value_minor: number | string;
-  currency: Contract["currency"];
-  status: ContractStatus;
-  signatory: string;
-  body: string;
-  signed_at: string | null;
-  cancelled_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
+const COLUMNS = CONTRACT_COLUMNS;
 
 export class ContractRepositoryError extends Error {
   readonly code: string;
@@ -59,39 +43,30 @@ export function isContractsDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
-function toContract(row: ContractRow): Contract {
-  return {
-    id: row.id,
-    reference: row.reference,
-    merchantId: row.merchant_id,
-    merchantName: row.merchant_name,
-    cityId: row.city_id,
-    value: Number(row.value_minor) / 100,
-    currency: row.currency,
-    status: row.status,
-    signatory: row.signatory,
-    body: row.body,
-    signedAt: row.signed_at,
-    cancelledAt: row.cancelled_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
-
 export async function listContractRows(): Promise<Contract[]> {
   if (!isContractsDatabaseConfigured()) return [];
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("contracts")
-    .select(COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const read = async (columns: string) =>
+    client
+      .schema("app")
+      .from("contracts")
+      .select(columns)
+      .order("created_at", { ascending: false })
+      .limit(500);
 
+  let { data, error } = await read(COLUMNS);
+  // The V2 columns (serial/storage/sha256) may not be deployed yet. Fall back to
+  // the pre-V2 projection so real rows still render instead of an empty state.
   if (error) {
-    if (isMissingSchemaObject(error)) return [];
-    throw error;
+    if (!isMissingSchemaObject(error)) throw error;
+    const fallback = await read(CONTRACT_BASE_COLUMNS);
+    if (fallback.error) {
+      if (isMissingSchemaObject(fallback.error)) return [];
+      throw fallback.error;
+    }
+    data = fallback.data;
+    error = null;
   }
   return ((data ?? []) as unknown as ContractRow[]).map(toContract);
 }
@@ -100,16 +75,24 @@ export async function findContractRow(id: string): Promise<Contract | null> {
   if (!isContractsDatabaseConfigured()) return null;
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("contracts")
-    .select(COLUMNS)
-    .eq("id", id)
-    .maybeSingle();
+  const read = async (columns: string) =>
+    client
+      .schema("app")
+      .from("contracts")
+      .select(columns)
+      .eq("id", id)
+      .maybeSingle();
 
+  let { data, error } = await read(COLUMNS);
   if (error) {
-    if (isMissingSchemaObject(error)) return null;
-    throw error;
+    if (!isMissingSchemaObject(error)) throw error;
+    const fallback = await read(CONTRACT_BASE_COLUMNS);
+    if (fallback.error) {
+      if (isMissingSchemaObject(fallback.error)) return null;
+      throw fallback.error;
+    }
+    data = fallback.data;
+    error = null;
   }
   return data ? toContract(data as unknown as ContractRow) : null;
 }
@@ -149,7 +132,7 @@ export async function insertContractRow(
       body: input.body,
       drafted_by: actorIdOrNull(actorId),
     })
-    .select(COLUMNS)
+    .select(CONTRACT_BASE_COLUMNS)
     .single();
 
   if (error) {
@@ -200,7 +183,7 @@ export async function updateContractRow(
     .from("contracts")
     .update({ ...patch, edited_by: actorIdOrNull(actorId) })
     .eq("id", id)
-    .select(COLUMNS)
+    .select(CONTRACT_BASE_COLUMNS)
     .maybeSingle();
 
   if (error) {
@@ -249,7 +232,7 @@ export async function setContractStatusRow(
     .from("contracts")
     .update(patch)
     .eq("id", id)
-    .select(COLUMNS)
+    .select(CONTRACT_BASE_COLUMNS)
     .maybeSingle();
 
   if (error) {

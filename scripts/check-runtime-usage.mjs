@@ -99,6 +99,18 @@ const relative = (file) => path.relative(root, file);
 
 const problems = new Set();
 
+/**
+ * Entry points that must run on the Node runtime.
+ *
+ * The contract PDF route drives a real Chromium through Puppeteer to render the
+ * document; that is impossible on the edge runtime, so this single route opts in
+ * to `runtime = "nodejs"`. It still pins caching explicitly. Anything else added
+ * here needs a comment explaining why the edge runtime cannot serve it.
+ */
+const NODE_RUNTIME_ALLOWLIST = new Set([
+  "src/app/api/contracts/[id]/pdf/route.ts",
+]);
+
 const appFiles = (await walk(appDir)).filter((file) =>
   /\.(?:ts|tsx)$/.test(file),
 );
@@ -108,8 +120,9 @@ for (const file of appFiles) {
   if (!isEntryPoint) continue;
 
   const source = await readFile(file, "utf8");
+  const allowsNode = NODE_RUNTIME_ALLOWLIST.has(relative(file));
 
-  if (!RUNTIME_EDGE.test(source)) {
+  if (!RUNTIME_EDGE.test(source) && !allowsNode) {
     problems.add(
       `${relative(file)}: missing \`export const runtime = "edge"\` — this entry point would run on the Node runtime.`,
     );

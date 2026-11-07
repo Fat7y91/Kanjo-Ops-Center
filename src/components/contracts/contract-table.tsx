@@ -15,6 +15,7 @@ type ContractTableProps = {
   canCancel: boolean;
   onEdit: (contract: Contract) => void;
   onAction: (contract: Contract, action: "send" | "sign" | "cancel") => void;
+  onDownloadPdf: (contract: Contract) => void;
 };
 
 export function ContractTable({
@@ -25,6 +26,7 @@ export function ContractTable({
   canCancel,
   onEdit,
   onAction,
+  onDownloadPdf,
 }: ContractTableProps) {
   if (contracts.length === 0) {
     return (
@@ -75,6 +77,15 @@ export function ContractTable({
                   <td className="muted">{shortDate(contract.updatedAt)}</td>
                   <td>
                     <div className="row-actions">
+                      <Button
+                        size="sm"
+                        variant="quiet"
+                        disabled={busy}
+                        onClick={() => onDownloadPdf(contract)}
+                      >
+                        PDF
+                      </Button>
+
                       {canEdit && open ? (
                         <Button
                           size="sm"
@@ -125,12 +136,6 @@ export function ContractTable({
           </tbody>
         </table>
       </div>
-
-      <p className="panel-note">
-        زر التوقيع يتطلب <code>sign_contract</code>. محرر العقود الذي لا يملك هذه
-        الصلاحية يمكنه تعديل البنود لكنه لا يستطيع التوقيع أبداً. العقد الموقّع أو
-        الملغى نهائي ولا يقبل أي تعديل.
-      </p>
     </section>
   );
 }

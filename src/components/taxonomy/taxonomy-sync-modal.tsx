@@ -11,6 +11,7 @@ type SyncSummary = {
   categoriesParsed: number;
   duplicates: number;
   unresolvedParents: number;
+  unknownVendors: number[];
   created: number;
   updated: number;
   issues: { file: string; line: number; message: string }[];
@@ -69,12 +70,24 @@ export function TaxonomySyncModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const loadedCount = useMemo(
+    () =>
+      [files.vendorTypes, files.categories, files.variantAttributes].filter(
+        (rows) => rows.length > 0,
+      ).length,
+    [files],
+  );
+
   const parsedCount = useMemo(
     () => files.vendorTypes.length + files.categories.length + files.variantAttributes.length,
     [files],
   );
 
-  const canSync = files.categories.length > 0 && !busy;
+  // Every file is independent: an operator may sync categories alone, vendor
+  // types alone (names resolve against the seed for later category imports), or
+  // variant attributes alone (parse-only today). The button unlocks as soon as
+  // any one file has rows.
+  const canSync = loadedCount > 0 && !busy;
 
   async function choose(key: FileKey, file: File | null) {
     if (!file) return;
@@ -133,7 +146,7 @@ export function TaxonomySyncModal({
       open={open}
       title="مزامنة لوحة التحكم"
       eyebrow="استيراد التصنيفات من V1"
-      description="ارفع ملفات CSV الثلاثة من لوحة V1. تُشتق المعرّفات تلقائياً بنفس صيغة البذرة (md5 موسّع بنطاق نوع التاجر) لمنع تصادم المعرّفات بين الأنواع."
+      description="ارفع أي ملف من ملفات CSV من لوحة V1 بشكل مستقل. تُشتق المعرّفات تلقائياً بنفس صيغة البذرة (md5 موسّع بنطاق نوع التاجر) لمنع تصادم المعرّفات بين الأنواع."
       onClose={() => {
         if (busy) return;
         onClose();
@@ -159,14 +172,14 @@ export function TaxonomySyncModal({
                 ? `${names[key]} · ${files[key].length} صف`
                 : key === "variantAttributes"
                   ? "اختياري: يُحلَّل للعرض فقط حالياً."
-                  : "مطلوب."}
+                  : "اختياري: ارفعه عند الحاجة فقط."}
             </span>
           </label>
         ))}
 
         <div className="inline-note">
-          تم تحليل {parsedCount} صفاً. سيتم إرسال التصنيفات فقط إلى قاعدة
-          البيانات.
+          تم تحليل {parsedCount} صفاً من {loadedCount} ملف. تُزامن التصنيفات فقط
+          مع قاعدة البيانات؛ تُستخدم أنواع التجّار لحل الأسماء.
         </div>
 
         {error ? (
@@ -187,6 +200,13 @@ export function TaxonomySyncModal({
               ? `، و${summary.unresolvedParents} أب غير موجود (اعتُبر المستوى الأول)`
               : ""}
             .
+            {summary.unknownVendors.length > 0 ? (
+              <>
+                <br />
+                {summary.unknownVendors.length} نوع تاجر غير معروف: ارفع
+                vendor-types.csv لاستبدال المعرّف الرقمي باسمه.
+              </>
+            ) : null}
             {summary.issues.length > 0 ? (
               <>
                 <br />

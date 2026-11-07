@@ -50,7 +50,11 @@ export type ParsedCsv<T> = {
 };
 
 function clean(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (typeof value === "string") return value.trim();
+  // The browser parser yields strings, but a direct API call may send numbers.
+  // Coerce finite numbers so a re-derivation from JSON is as forgiving as CSV.
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
 }
 
 function toPositiveInt(value: unknown): number | null {

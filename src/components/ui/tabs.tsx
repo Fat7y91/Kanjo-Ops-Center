@@ -65,18 +65,18 @@ export function Tabs({
             key={item.id}
             disabled={item.disabled}
             className={cx(
-              "group inline-flex shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink-soft)] transition duration-200 ease-out",
+              "group inline-flex shrink-0 items-center gap-2 rounded-[var(--radius-control)] px-3.5 py-1.5 text-xs font-bold leading-none text-[color:var(--ink)] transition duration-200 ease-out",
               "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] focus-visible:ring-offset-0",
-              "hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-purple-base)]",
-              "data-[hover]:bg-[color:var(--kanjo-pastel)] data-[hover]:text-[color:var(--kanjo-purple-base)]",
+              "hover:bg-[color:var(--kanjo-pastel)] hover:text-[color:var(--kanjo-pastel-ink)]",
+              "data-[hover]:bg-[color:var(--kanjo-pastel)] data-[hover]:text-[color:var(--kanjo-pastel-ink)]",
               "data-[selected]:bg-[image:var(--gradient-primary)] data-[selected]:text-white data-[selected]:shadow-[0_8px_20px_-12px_rgba(35,5,53,0.8)]",
               "data-[selected]:hover:brightness-110 data-[selected]:data-[hover]:brightness-110",
-              "disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[color:var(--ink-soft)] disabled:opacity-45",
+              "disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[color:var(--ink)] disabled:opacity-45",
             )}
           >
             <span>{item.label}</span>
             {item.badge !== undefined ? (
-              <span className="rounded-[var(--radius-control)] bg-[color:var(--surface)] px-2 py-0.5 text-[0.68rem] font-bold leading-none text-[color:var(--ink-soft)] group-data-[selected]:bg-[color:var(--kanjo-gold)] group-data-[selected]:text-[color:var(--kanjo-purple-base)]">
+              <span className="rounded-[var(--radius-control)] bg-[color:var(--kanjo-pastel)] px-2 py-0.5 text-[0.68rem] font-bold leading-none text-[color:var(--kanjo-pastel-ink)] group-data-[selected]:bg-[color:var(--kanjo-gold)] group-data-[selected]:text-[color:var(--kanjo-purple-base)]">
                 {item.badge}
               </span>
             ) : null}

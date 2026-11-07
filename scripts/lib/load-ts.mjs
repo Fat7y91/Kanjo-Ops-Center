@@ -14,8 +14,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 import ts from "typescript";
+
+const nativeRequire = createRequire(import.meta.url);
 
 export const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -59,6 +62,16 @@ export function loadTsModule(file) {
     }
     if (specifier.startsWith(".")) {
       return loadTsModule(path.resolve(path.dirname(resolved), specifier));
+    }
+    // `server-only` is a build-time marker with no runtime exports; treat it as
+    // an empty module so pure helpers in server files stay unit-testable.
+    if (specifier === "server-only") {
+      return {};
+    }
+    // Node builtins (node:fs, node:path) are needed by the asset loader; delegate
+    // them to the native resolver rather than failing the whole import graph.
+    if (specifier.startsWith("node:")) {
+      return nativeRequire(specifier);
     }
     throw new Error(
       `Unsupported import "${specifier}" while loading ${resolved}`,

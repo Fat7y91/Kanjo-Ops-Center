@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // `puppeteer` ships a Chromium download and must not be bundled by webpack; it
+  // is required at runtime from node_modules by the contract PDF route.
+  serverExternalPackages: ["puppeteer", "puppeteer-core"],
   allowedDevOrigins: ["*.monkeycode-ai.live", ".monkeycode-ai.live"],
   images: {
     remotePatterns: [

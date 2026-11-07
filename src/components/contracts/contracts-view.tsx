@@ -52,8 +52,7 @@ export function ContractsView({
     onReload();
   }
 
-  async function act(contract: Contract, action: "send" | "sign" | "cancel") {
-    setBusyId(contract.id);
+  async function act(contract: Contract, action: "send" | "sign" | "cancel") {    setBusyId(contract.id);
     setNotice("");
     setError("");
     try {
@@ -79,6 +78,40 @@ export function ContractsView({
         actionError instanceof Error
           ? actionError.message
           : "تعذر تنفيذ الإجراء.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function downloadPdf(contract: Contract) {
+    setBusyId(contract.id);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/contracts/${contract.id}/pdf`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(payload.error ?? "تعذر إنشاء ملف العقد.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `contract-${contract.reference}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "تعذر إنشاء ملف العقد.",
       );
     } finally {
       setBusyId(null);
@@ -122,6 +155,7 @@ export function ContractsView({
         canCancel={canCancel}
         onEdit={(contract) => setDialog({ kind: "edit", contract })}
         onAction={(contract, action) => void act(contract, action)}
+        onDownloadPdf={(contract) => void downloadPdf(contract)}
       />
 
       <Modal

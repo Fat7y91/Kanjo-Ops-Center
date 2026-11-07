@@ -89,6 +89,19 @@
   color: var(--kanjo-pastel-ink);
 }
 
+/* Dark surfaces invert the quiet button: `--kanjo-purple-base` is near-black,
+ * so it would vanish on `--surface-soft` (#273449). Use the bright lavender
+ * ink and the deep brand tint instead, keeping the interactive purple. */
+[data-theme="dark"] .button-quiet {
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+}
+
+[data-theme="dark"] .button-quiet:hover {
+  background: rgba(108, 53, 182, 0.32);
+  color: #ffffff;
+}
+
 .button-danger {
   background: var(--red-soft);
   color: var(--red);
