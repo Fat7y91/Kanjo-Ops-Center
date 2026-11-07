@@ -24,13 +24,15 @@ export function CatalogMerchantCard({
 
   return (
     <Link href={`/catalog/${card.id}`} className="cat-merchant-card">
-      <div
-        className={`cat-merchant-cover${coverImage ? "" : " is-placeholder"}`}
-      >
-        {coverImage ? <CatalogImage src={card.coverImage} alt="" /> : null}
-        {card.vipMenu ? (
-          <span className="badge badge-gold cat-merchant-vip">VIP</span>
-        ) : null}
+      <div className="cat-merchant-hero">
+        <div
+          className={`cat-merchant-cover${coverImage ? "" : " is-placeholder"}`}
+        >
+          {coverImage ? <CatalogImage src={card.coverImage} alt="" /> : null}
+          {card.vipMenu ? (
+            <span className="badge badge-gold cat-merchant-vip">VIP</span>
+          ) : null}
+        </div>
 
         <span className="cat-merchant-logo">
           <MerchantAvatar

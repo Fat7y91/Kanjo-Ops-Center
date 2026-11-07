@@ -64,6 +64,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Sits after the revision marker; keeps its own gap so the count does not
+ * look glued to the sync action on narrow layouts. */
+.taxonomy-sync-trigger {
+  margin-inline-start: 8px;
+}
+
 .taxonomy-pane {
   display: flex;
   flex-direction: column;

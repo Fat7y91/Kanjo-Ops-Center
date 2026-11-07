@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/field-ops/modal";
 import { usePermission } from "@/components/auth/use-permission";
 import { TaxonomyRequestButton } from "@/components/taxonomy/taxonomy-request-button";
+import { TaxonomySyncModal } from "@/components/taxonomy/taxonomy-sync-modal";
 import {
   TAXONOMY_KIND_META,
   TAXONOMY_STATUS_META,
@@ -79,6 +80,7 @@ export function TaxonomyCenter({
   const [vendorFilter, setVendorFilter] = useState<number | "all">("all");
   const [categoryQuery, setCategoryQuery] = useState("");
   const [toast, setToast] = useState("");
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const [approveTarget, setApproveTarget] = useState<TaxonomyRequest | null>(null);
   const [approveId, setApproveId] = useState("");
@@ -273,6 +275,15 @@ export function TaxonomyCenter({
             </button>
           ))}
           <span className="taxonomy-revision">rev {revision}</span>
+          {canManageCategories ? (
+            <button
+              type="button"
+              className="button button-small button-quiet taxonomy-sync-trigger"
+              onClick={() => setSyncOpen(true)}
+            >
+              مزامنة لوحة التحكم
+            </button>
+          ) : null}
         </div>
 
         {tab === "requests" ? (
@@ -754,6 +765,15 @@ export function TaxonomyCenter({
           </div>
         ) : null}
       </Modal>
+
+      <TaxonomySyncModal
+        open={syncOpen}
+        onClose={() => setSyncOpen(false)}
+        onSynced={(message) => {
+          setToast(message);
+          void refresh();
+        }}
+      />
 
       {toast ? (
         <div className="toast" role="status">

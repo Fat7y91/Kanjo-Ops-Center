@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { CatalogImage } from "@/components/catalog/catalog-image";
 import { Button } from "@/components/ui/button";
 import { MerchantAvatar } from "@/components/merchants/merchant-avatar";
+import { downloadAsset } from "@/lib/field-ops/download-asset";
 
 type MerchantAssetManagerProps = {
   merchantId: string;
@@ -35,6 +36,7 @@ export function MerchantAssetManager({
 }: MerchantAssetManagerProps) {
   const [assets, setAssets] = useState<AssetState>({ logoUrl, coverUrl });
   const [uploading, setUploading] = useState<"logo" | "cover" | null>(null);
+  const [downloading, setDownloading] = useState<"logo" | "cover" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
@@ -81,6 +83,20 @@ export function MerchantAssetManager({
   function pick(kind: "logo" | "cover", input: HTMLInputElement | null) {
     if (!canEdit || uploading) return;
     input?.click();
+  }
+
+  async function download(kind: "logo" | "cover") {
+    const url = kind === "logo" ? assets.logoUrl : assets.coverUrl;
+    if (!url) return;
+    setDownloading(kind);
+    setError(null);
+    try {
+      await downloadAsset(url, `${merchantName}-${kind}`);
+    } catch {
+      setError("تعذر تحميل الملف.");
+    } finally {
+      setDownloading(null);
+    }
   }
 
   return (
@@ -148,10 +164,26 @@ export function MerchantAssetManager({
         <Button
           size="sm"
           variant="quiet"
+          onClick={() => void download("logo")}
+          disabled={!assets.logoUrl || downloading !== null}
+        >
+          {downloading === "logo" ? "جارٍ التحميل…" : "تحميل الشعار"}
+        </Button>
+        <Button
+          size="sm"
+          variant="quiet"
           onClick={() => pick("cover", coverInput.current)}
           disabled={!canEdit || uploading !== null}
         >
           {uploading === "cover" ? "جارٍ رفع الغلاف…" : "رفع غلاف"}
+        </Button>
+        <Button
+          size="sm"
+          variant="quiet"
+          onClick={() => void download("cover")}
+          disabled={!assets.coverUrl || downloading !== null}
+        >
+          {downloading === "cover" ? "جارٍ التحميل…" : "تحميل الغلاف"}
         </Button>
       </div>
 

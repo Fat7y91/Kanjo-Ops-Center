@@ -118,16 +118,22 @@
   font-size: 1.05rem;
 }
 
+/* Positioning wrapper for cover + overlapping logo. Must NOT clip: the logo
+ * is translated past the cover's bottom edge and an `overflow: hidden` here
+ * would cut it in half. The cover clips only its own image, with its top
+ * corners rounded to match the wrapper's border. */
 .merchant-assets-preview {
   position: relative;
-  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
 
 .merchant-assets-cover {
   position: relative;
+  overflow: hidden;
   height: 148px;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
   background:
     radial-gradient(
       120% 120% at 15% 0%,

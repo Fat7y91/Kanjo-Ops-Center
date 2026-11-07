@@ -93,12 +93,22 @@
   border-color: var(--line-strong);
 }
 
+/* Positioning wrapper for the cover and the overlapping logo. It must NOT
+ * clip: the logo is translated down past the cover's bottom edge and would be
+ * cut off by an `overflow: hidden` here. Only the cover below clips its own
+ * image to the tile's rounded corners. */
+.cat-merchant-hero {
+  position: relative;
+}
+
 .cat-merchant-cover {
   position: relative;
   overflow: hidden;
   /* Fixed banner height: every tile reserves the same media area so the grid
    * stays level whether or not a cover was uploaded. */
   height: 144px;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
   background: var(--surface-soft);
 }
 
