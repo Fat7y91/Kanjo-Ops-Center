@@ -11,6 +11,12 @@ type ModalProps = {
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /**
+   * Closing when the backdrop is clicked is opt-in. A stray click while filling
+   * a form should not discard entered data, so the default keeps the dialog
+   * open and the user closes it through the explicit controls.
+   */
+  closeOnBackdrop?: boolean;
 };
 
 export function Modal({
@@ -21,6 +27,7 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  closeOnBackdrop = false,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -39,7 +46,11 @@ export function Modal({
   if (!open) return null;
 
   const content = (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={closeOnBackdrop ? onClose : undefined}
+    >
       <div
         className={`modal-card${wide ? " modal-wide" : ""}`}
         role="dialog"

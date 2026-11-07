@@ -9,6 +9,7 @@ import type {
   TaxonomyKind,
   TaxonomyVendorType,
 } from "@/lib/taxonomy/types";
+import { TAXONOMY_KIND_META } from "@/lib/taxonomy/types";
 
 type TaxonomyRequestButtonProps = {
   kind: TaxonomyKind;
@@ -25,8 +26,8 @@ export function TaxonomyRequestButton({
   vendorTypes,
   vendorTypeId,
   suggestedName,
-  label = "طلب إضافة",
-  directLabel,
+  label = `طلب إضافة ${TAXONOMY_KIND_META[kind].label}`,
+  directLabel = `إضافة ${TAXONOMY_KIND_META[kind].label} مباشرة`,
   onRequested,
 }: TaxonomyRequestButtonProps) {
   const { hasPermission } = usePermission();
