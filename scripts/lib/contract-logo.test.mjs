@@ -62,3 +62,35 @@ test("resolveLogoDataUri degrades to empty on fetch failure", async () => {
     globalThis.fetch = original;
   }
 });
+
+test("resolveLogoDataUri swallows a rejected fetch (never throws)", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new TypeError("network down");
+  };
+  try {
+    assert.equal(await resolveLogoDataUri("https://example.com/logo.png"), "");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("resolveLogoDataUri rejects a corrupt base64 data URI", async () => {
+  // Matches the format regex but decodes to non-image bytes ("notvalid").
+  const corrupt = "data:image/png;base64,bm90dmFsaWQ=";
+  assert.equal(await resolveLogoDataUri(corrupt), "");
+});
+
+test("resolveLogoDataUri drops a WebP even when served as image", async () => {
+  // "RIFF....WEBP" signature — the UI renders it, react-pdf cannot.
+  const webp = new Uint8Array([
+    0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+  ]);
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(webp, { status: 200 });
+  try {
+    assert.equal(await resolveLogoDataUri("https://example.com/logo.webp"), "");
+  } finally {
+    globalThis.fetch = original;
+  }
+});

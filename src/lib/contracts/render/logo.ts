@@ -2,15 +2,18 @@
  * Resolves a merchant logo into bytes react-pdf can always embed.
  *
  * `@react-pdf/layout` calls `resolveImage` while laying out the document and
- * does not catch a rejected fetch or an undecodable payload: one bad remote
- * logo (a Firebase URL that 404s, times out, or returns HTML/WebP instead of a
- * raster) rejects the whole render and the route answers 500. Fetching here,
- * up front, with a deadline and a byte-signature check, lets the document drop a
- * broken logo and still produce the rest of the contract.
+ * does not catch a rejected fetch or an undecodable payload: one bad logo (a
+ * Firebase URL that 404s, times out, returns WebP/HTML, or a corrupt data URI)
+ * rejects the whole render and the route answers 500. Web images (`<img>` in the
+ * UI) tolerate all of this in the browser, but react-pdf on the edge only decodes
+ * well-formed JPEG/PNG buffers.
+ *
+ * This module therefore never throws: every failure is swallowed and reported as
+ * an empty string ("no logo"). The contract must still print without the
+ * merchant mark rather than fail.
  *
  * Only JPEG and PNG are accepted — the formats react-pdf decodes without a Web
- * Worker, which the Workers runtime refuses to spawn. Anything else degrades to
- * "no logo" rather than a crash.
+ * Worker, which the Workers runtime refuses to spawn.
  */
 
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
@@ -39,26 +42,47 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/** Validates an existing data URI and returns it unchanged, or "" when unusable. */
+function fromBase64(value: string): Uint8Array | null {
+  try {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validates a data URI by decoding and byte-sniffing it, then re-encodes a clean
+ * URI. A regex-only check would let a corrupt payload (e.g. `notvalid`) through
+ * to react-pdf, which throws while decoding. Returns "" when unusable.
+ */
 function fromDataUri(uri: string): string {
-  const match = /^data:image\/(jpeg|jpg|png);base64,([A-Za-z0-9+/=]+)$/.exec(uri);
+  const match = /^data:image\/(?:jpeg|jpg|png);base64,([A-Za-z0-9+/=\s]+)$/i.exec(uri);
   if (!match) return "";
-  return uri;
+  const bytes = fromBase64(match[1]!.replace(/\s+/g, ""));
+  if (!bytes || bytes.length === 0 || bytes.length > MAX_LOGO_BYTES) return "";
+  const format = sniffRasterFormat(bytes);
+  if (!format) return "";
+  return `data:image/${format};base64,${toBase64(bytes)}`;
 }
 
 /**
  * Returns a data URI safe for react-pdf, or "" when the source is missing,
- * unreachable, oversized, or not a JPEG/PNG.
+ * unreachable, oversized, or not a well-formed JPEG/PNG. Never throws.
  */
 export async function resolveLogoDataUri(
   source: string | null | undefined,
 ): Promise<string> {
-  const raw = (source ?? "").trim();
-  if (!raw) return "";
-  if (raw.startsWith("data:image/")) return fromDataUri(raw);
-  if (!/^https?:\/\//i.test(raw)) return "";
-
   try {
+    const raw = (source ?? "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("data:image/")) return fromDataUri(raw);
+    if (!/^https?:\/\//i.test(raw)) return "";
+
     const response = await fetch(raw, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       cache: "no-store",
@@ -72,6 +96,7 @@ export async function resolveLogoDataUri(
     if (!format) return "";
     return `data:image/${format};base64,${toBase64(bytes)}`;
   } catch {
+    // Any transport/decode failure: drop the logo, keep the contract printable.
     return "";
   }
 }
