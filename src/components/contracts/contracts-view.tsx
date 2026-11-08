@@ -118,6 +118,25 @@ export function ContractsView({
     }
   }
 
+  /**
+   * Opens the rendered contract in a new tab for review/printing.
+   *
+   * The tab is opened synchronously on click (before the request) so the browser
+   * does not treat the later navigation as a pop-up. The PDF route answers as
+   * `inline`, so the browser's own viewer handles preview and print. Session
+   * cookies ride along on the navigation, so the route authorizes normally.
+   */
+  function previewPdf(contract: Contract) {
+    const url = `/api/contracts/${contract.id}/pdf`;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      setError("تعذّر فتح معاينة العقد. اسمح بالنوافذ المنبثقة ثم حاول مجدداً.");
+      return;
+    }
+    setError("");
+    setNotice("");
+  }
+
   return (
     <>
       <PageHeader
@@ -155,6 +174,7 @@ export function ContractsView({
         canCancel={canCancel}
         onEdit={(contract) => setDialog({ kind: "edit", contract })}
         onAction={(contract, action) => void act(contract, action)}
+        onPreviewPdf={previewPdf}
         onDownloadPdf={(contract) => void downloadPdf(contract)}
       />
 

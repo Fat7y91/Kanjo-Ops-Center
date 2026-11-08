@@ -15,6 +15,7 @@ type ContractTableProps = {
   canCancel: boolean;
   onEdit: (contract: Contract) => void;
   onAction: (contract: Contract, action: "send" | "sign" | "cancel") => void;
+  onPreviewPdf: (contract: Contract) => void;
   onDownloadPdf: (contract: Contract) => void;
 };
 
@@ -26,6 +27,7 @@ export function ContractTable({
   canCancel,
   onEdit,
   onAction,
+  onPreviewPdf,
   onDownloadPdf,
 }: ContractTableProps) {
   if (contracts.length === 0) {
@@ -77,6 +79,20 @@ export function ContractTable({
                   <td className="muted">{shortDate(contract.updatedAt)}</td>
                   <td>
                     <div className="row-actions">
+                      <Button
+                        size="sm"
+                        variant={
+                          contract.status === "pending_signature" ||
+                          contract.status === "signed"
+                            ? "primary"
+                            : "quiet"
+                        }
+                        disabled={busy}
+                        onClick={() => onPreviewPdf(contract)}
+                      >
+                        معاينة العقد
+                      </Button>
+
                       <Button
                         size="sm"
                         variant="quiet"

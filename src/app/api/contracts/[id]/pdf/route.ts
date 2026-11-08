@@ -42,22 +42,22 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
  * stored under `contracts/<id>.pdf` in a private bucket. The row's
  * `storage_path` and `sha256` are updated so a later fetch can serve the exact
  * bytes that were rendered.
+ *
+ * `GET` is the preview/print path: it renders and returns the same bytes inline
+ * without persisting, so an operator can read a contract before signing it.
+ * `POST` is the generate/download path and records the fingerprints.
  */
-export async function POST(_request: Request, { params }: RouteProps) {
-  const { id } = await params;
-  const { session, response } = await authorizeAny(READ_CAPABILITIES);
-  if (!session) return response;
+async function renderResponse(id: string, persist: boolean): Promise<NextResponse> {
+  const contract = await findContractRow(id);
+  if (!contract) {
+    throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
+  }
 
-  try {
-    const contract = await findContractRow(id);
-    if (!contract) {
-      throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
-    }
+  const input = await resolveContractDocumentInput(contract);
+  const bytes = await renderContractPdf(input);
+  const sha256 = await sha256Hex(bytes);
 
-    const input = await resolveContractDocumentInput(contract);
-    const bytes = await renderContractPdf(input);
-    const sha256 = await sha256Hex(bytes);
-
+  if (persist) {
     const path = `contracts/${id}.pdf`;
     const client = getSupabaseServerClient();
     // Persisting the rendered bytes is best-effort: a deployment whose
@@ -73,16 +73,38 @@ export async function POST(_request: Request, { params }: RouteProps) {
         .update({ storage_path: path, sha256 })
         .eq("id", id);
     }
+  }
 
-    return new NextResponse(bytes, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="contract-${contract.reference}.pdf"`,
-        "Cache-Control": "no-store",
-        "X-Contract-Sha256": sha256,
-      },
-    });
+  return new NextResponse(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="contract-${contract.reference}.pdf"`,
+      "Cache-Control": "no-store",
+      "X-Contract-Sha256": sha256,
+    },
+  });
+}
+
+export async function GET(_request: Request, { params }: RouteProps) {
+  const { id } = await params;
+  const { session, response } = await authorizeAny(READ_CAPABILITIES);
+  if (!session) return response;
+
+  try {
+    return await renderResponse(id, false);
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+export async function POST(_request: Request, { params }: RouteProps) {
+  const { id } = await params;
+  const { session, response } = await authorizeAny(READ_CAPABILITIES);
+  if (!session) return response;
+
+  try {
+    return await renderResponse(id, true);
   } catch (error) {
     return apiError(error);
   }

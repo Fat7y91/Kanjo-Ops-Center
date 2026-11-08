@@ -14,6 +14,8 @@ import type {
   ContractEditInput,
   ContractStatus,
 } from "./types";
+import { ContractRepositoryError } from "./errors";
+import { contractWriteError } from "./write-errors";
 import { CONTRACT_BASE_COLUMNS, CONTRACT_COLUMNS, toContract, type ContractRow } from "./row";
 
 /**
@@ -27,17 +29,7 @@ import { CONTRACT_BASE_COLUMNS, CONTRACT_COLUMNS, toContract, type ContractRow }
 
 const COLUMNS = CONTRACT_COLUMNS;
 
-export class ContractRepositoryError extends Error {
-  readonly code: string;
-  readonly status: number;
-
-  constructor(code: string, message: string, status = 400) {
-    super(message);
-    this.name = "ContractRepositoryError";
-    this.code = code;
-    this.status = status;
-  }
-}
+export { ContractRepositoryError } from "./errors";
 
 export function isContractsDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
@@ -187,14 +179,7 @@ export async function updateContractRow(
     .maybeSingle();
 
   if (error) {
-    if (isMissingSchemaObject(error)) {
-      throw new ContractRepositoryError(
-        "STORE_UNAVAILABLE",
-        "سجل العقود غير مُفعّل على هذا النشر بعد.",
-        503,
-      );
-    }
-    throw error;
+    contractWriteError(error);
   }
   return data ? toContract(data as unknown as ContractRow) : null;
 }
@@ -204,6 +189,7 @@ export async function setContractStatusRow(
   status: ContractStatus,
   actorId: string | null,
   signatory?: string,
+  expectedFrom?: ContractStatus,
 ): Promise<Contract | null> {
   if (!isContractsDatabaseConfigured()) {
     throw new ContractRepositoryError(
@@ -227,23 +213,27 @@ export async function setContractStatusRow(
         : { status };
 
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("contracts")
-    .update(patch)
-    .eq("id", id)
+  let query = client.schema("app").from("contracts").update(patch).eq("id", id);
+  // Optimistic concurrency: only advance the row if it is still in the state the
+  // caller read. Without this a second click (or an out-of-band edit) races the
+  // read→write window and trips the SQL `contracts_terminal_guard` trigger, which
+  // surfaced as an opaque 500.
+  if (expectedFrom) query = query.eq("status", expectedFrom);
+  const { data, error } = await query
     .select(CONTRACT_BASE_COLUMNS)
     .maybeSingle();
 
   if (error) {
-    if (isMissingSchemaObject(error)) {
-      throw new ContractRepositoryError(
-        "STORE_UNAVAILABLE",
-        "سجل العقود غير مُفعّل على هذا النشر بعد.",
-        503,
-      );
-    }
-    throw error;
+    contractWriteError(error);
+  }
+  // A guarded update that matched no row means the state moved under us: the id
+  // still exists (the caller just read it), so this is a lost update, not a 404.
+  if (!data && expectedFrom) {
+    throw new ContractRepositoryError(
+      "CONTRACT_TRANSITION",
+      "تغيّرت حالة العقد أثناء التنفيذ. أعد تحميل السجل ثم حاول مجدداً.",
+      409,
+    );
   }
   return data ? toContract(data as unknown as ContractRow) : null;
 }

@@ -141,11 +141,15 @@ export async function applyContractAction(
     );
   }
 
+  // Guard the write on the state we just read. If another operator (or a second
+  // click) advanced the row first, the update matches no row and we answer 409
+  // instead of letting the SQL terminal trigger raise a raw 500.
   const updated = await setContractStatusRow(
     id,
     next,
     actorId,
     parsed.data.signatory,
+    current.status,
   );
   if (!updated) {
     throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);

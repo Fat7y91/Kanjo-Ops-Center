@@ -53,3 +53,34 @@ export function isUniqueViolation(error: unknown): boolean {
     (error as { code?: unknown }).code === "23505"
   );
 }
+
+function errorField(error: unknown, key: "code" | "message" | "details"): string {
+  if (typeof error !== "object" || error === null) return "";
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** True for a Postgres foreign-key violation (`23503`). */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return errorField(error, "code") === "23503";
+}
+
+/** True for a Postgres check-constraint violation (`23514`). */
+export function isCheckViolation(error: unknown): boolean {
+  return errorField(error, "code") === "23514";
+}
+
+/**
+ * True for a Postgres `55000` raised deliberately by a domain guard trigger.
+ *
+ * The contract register uses this for its terminal-state guard: the trigger
+ * raises `CONTRACT_TERMINAL` when a signed or cancelled row is touched. It is a
+ * concurrency outcome (another request already closed the row), not a server
+ * defect, so callers map it to a conflict instead of a 500.
+ */
+export function isGuardViolation(error: unknown): boolean {
+  if (errorField(error, "code") !== "55000") return false;
+  return /CONTRACT_TERMINAL/i.test(
+    `${errorField(error, "message")} ${errorField(error, "details")}`,
+  );
+}
