@@ -5,11 +5,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TextAreaField, TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
+import type { ContractsPayload } from "@/lib/contracts/payload";
 import type { Contract } from "@/lib/contracts/types";
+import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
 
 type ContractFormProps = {
   contract?: Contract;
-  merchants: { id: string; name: string; cityId: string }[];
+  merchants: ContractsPayload["merchants"];
   onDone: (message: string) => void;
 };
 
@@ -30,6 +32,9 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   const merchantOptions = merchants.map((merchant) => ({
     value: merchant.id,
     label: merchant.name,
+    hint: merchant.vipMenu
+      ? "VIP"
+      : CONTRACT_STATE_META[merchant.state].labelAr,
   }));
 
   const [merchantId, setMerchantId] = useState(

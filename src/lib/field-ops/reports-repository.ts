@@ -162,6 +162,49 @@ export async function listVisitReportRows(
 }
 
 /**
+ * Merchant ids and display names seen in the visit history.
+ *
+ * Some field-ops merchants were captured in `app.visit_reports` but never made
+ * it into `app.merchants` (the V1 seed catalogue). Their history still makes
+ * them legitimate drafting targets, but their name lives only on the report.
+ * Selecting two small columns and de-duplicating in memory is cheaper than a
+ * per-id round trip.
+ *
+ * Pass `merchantIds` to narrow the read to the handful of ids that need a name.
+ */
+export async function listVisitMerchantNames(
+  merchantIds?: readonly string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (!hasSupabaseConfig()) return names;
+  if (merchantIds && merchantIds.length === 0) return names;
+
+  const client = getSupabaseServerClient();
+  let query = client
+    .schema("app")
+    .from("visit_reports")
+    .select("merchant_id,merchant_name,created_at")
+    .order("created_at", { ascending: false });
+  if (merchantIds) query = query.in("merchant_id", [...merchantIds]);
+
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingSchemaObject(error)) return names;
+    throw error;
+  }
+
+  for (const row of (data ?? []) as Array<{
+    merchant_id: string;
+    merchant_name: string | null;
+  }>) {
+    if (!names.has(row.merchant_id)) {
+      names.set(row.merchant_id, row.merchant_name ?? "");
+    }
+  }
+  return names;
+}
+
+/**
  * Persists one report.
  *
  * `unavailable` means the migration is not deployed yet and the caller must

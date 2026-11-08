@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { apiError, authorize, authorizeAny, readJson } from "@/lib/auth/api";
+import { apiError, authorizeAny, readJson } from "@/lib/auth/api";
+import { ContractRepositoryError } from "@/lib/contracts/errors";
+import {
+  findContractDraftMerchant,
+  listContractDraftMerchants,
+} from "@/lib/contracts/merchant-options";
 import { draftContract, listContracts } from "@/lib/contracts/store";
 import type { ContractDraftInput } from "@/lib/contracts/types";
 import { effectiveCityIds } from "@/lib/city-scope-query";
-import { listCities, listMerchants } from "@/lib/field-ops/store";
+import { listCities } from "@/lib/field-ops/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -30,7 +35,7 @@ export async function GET() {
     const allowed = new Set(await effectiveCityIds(session));
     const [contracts, merchants, cities] = await Promise.all([
       listContracts(),
-      listMerchants(),
+      listContractDraftMerchants(session),
       listCities(),
     ]);
 
@@ -39,13 +44,7 @@ export async function GET() {
         contracts: contracts.filter(
           (contract) => !contract.cityId || allowed.has(contract.cityId),
         ),
-        merchants: merchants
-          .filter((merchant) => allowed.has(merchant.cityId))
-          .map((merchant) => ({
-            id: merchant.id,
-            name: merchant.name,
-            cityId: merchant.cityId,
-          })),
+        merchants,
         cities: cities
           .filter((city) => allowed.has(city.id))
           .map((city) => ({ id: city.id, name: city.name })),
@@ -65,8 +64,25 @@ export async function POST(request: Request) {
   if (!session) return response;
 
   try {
+    const input = (await readJson(request)) as ContractDraftInput;
+
+    // The draft list is scoped and eligibility-filtered; re-derive it here so a
+    // request cannot paper a merchant the UI would never have offered.
+    const merchant = await findContractDraftMerchant(session, input.merchantId);
+    if (!merchant) {
+      throw new ContractRepositoryError(
+        "MERCHANT_NOT_ELIGIBLE",
+        "لا يمكن صياغة عقد لغير تاجر مؤهّل (اتفاق مبدئي/نهائي أو VIP).",
+        422,
+      );
+    }
+
     const contract = await draftContract(
-      (await readJson(request)) as ContractDraftInput,
+      {
+        ...input,
+        merchantName: merchant.name || input.merchantName,
+        cityId: merchant.cityId ?? input.cityId,
+      },
       session.user.id,
     );
     return NextResponse.json({ contract }, { status: 201 });
