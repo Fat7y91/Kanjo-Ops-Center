@@ -54,6 +54,18 @@ export function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+/**
+ * True for a Postgres invalid-text-representation error (`22P02`).
+ *
+ * Reached when a caller passes a malformed path parameter (e.g. a contract
+ * reference instead of a uuid) straight into a `uuid` column. It is a bad
+ * request, not a server defect, so reads treat it as "not found" and the API
+ * answers 404 instead of surfacing a raw 500.
+ */
+export function isInvalidTextRepresentation(error: unknown): boolean {
+  return errorField(error, "code") === "22P02";
+}
+
 function errorField(error: unknown, key: "code" | "message" | "details"): string {
   if (typeof error !== "object" || error === null) return "";
   const value = (error as Record<string, unknown>)[key];

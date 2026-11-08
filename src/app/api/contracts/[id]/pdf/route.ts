@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 import { apiError, authorizeAny } from "@/lib/auth/api";
 import { findContractRow } from "@/lib/contracts/repository";
-import { ContractRepositoryError } from "@/lib/contracts/repository";
+import {
+  ContractRenderError,
+  ContractRepositoryError,
+} from "@/lib/contracts/errors";
 import { renderContractPdf } from "@/lib/contracts/render/pdf/render";
 import { resolveContractDocumentInput } from "@/lib/contracts/render/resolve";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
@@ -54,7 +57,26 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
   }
 
   const input = await resolveContractDocumentInput(contract);
-  const bytes = await renderContractPdf(input);
+
+  let bytes: Uint8Array;
+  try {
+    bytes = await renderContractPdf(input);
+  } catch (error) {
+    // React-PDF throws bare Error/TypeError/Promise rejections (missing font,
+    // undecodable image, edge-runtime stream quirk) that carry no HTTP meaning.
+    // Wrap them so the client gets a descriptive 500 and the real stack is
+    // logged for diagnosis instead of surfacing as a generic "unexpected error".
+    console.error("Contract PDF render failed", {
+      contractId: id,
+      reference: contract.reference,
+      error,
+    });
+    throw new ContractRenderError(
+      "تعذّر إنشاء ملف العقد بصيغة PDF. تحقّق من بيانات التاجر (الشعار/الخط) ثم حاول مجدداً.",
+      error,
+    );
+  }
+
   const sha256 = await sha256Hex(bytes);
 
   if (persist) {

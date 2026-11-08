@@ -4,6 +4,7 @@ import { getMerchantById } from "@/lib/field-ops/store";
 import { resolveBusinessType } from "./constants";
 import { getBaseName, sanitizeLegalText } from "./format";
 import type { ContractDocumentInput } from "./input";
+import { resolveLogoDataUri } from "./logo";
 import type { Contract } from "../types";
 
 /**
@@ -35,6 +36,11 @@ export async function resolveContractDocumentInput(
         ? target
         : 0;
 
+  // Resolve the merchant logo to an embeddable data URI (or drop it) before the
+  // document is built: a bad remote logo would otherwise reject the whole
+  // react-pdf render on the edge runtime.
+  const merchantLogo = await resolveLogoDataUri(merchant?.logoUrl ?? "");
+
   return {
     merchantId: contract.merchantId,
     merchantName,
@@ -49,6 +55,6 @@ export async function resolveContractDocumentInput(
     contactName: merchant?.contact?.name ?? "",
     contactPhone: merchant?.contact?.mobile ?? "",
     address: "",
-    merchantLogo: merchant?.logoUrl ?? "",
+    merchantLogo,
   };
 }

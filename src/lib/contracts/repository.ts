@@ -3,6 +3,7 @@ import "server-only";
 import { actorIdOrNull } from "@/lib/db/actor-id";
 import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import {
+  isInvalidTextRepresentation,
   isMissingSchemaObject,
   isUniqueViolation,
 } from "@/lib/db/supabase/errors";
@@ -77,9 +78,14 @@ export async function findContractRow(id: string): Promise<Contract | null> {
 
   let { data, error } = await read(COLUMNS);
   if (error) {
+    // A malformed id (e.g. a reference in the path instead of a uuid) makes
+    // Postgres reject the comparison with `22P02`; that is a missing row, not a
+    // server fault, so the caller gets a clean "not found" instead of a 500.
+    if (isInvalidTextRepresentation(error)) return null;
     if (!isMissingSchemaObject(error)) throw error;
     const fallback = await read(CONTRACT_BASE_COLUMNS);
     if (fallback.error) {
+      if (isInvalidTextRepresentation(fallback.error)) return null;
       if (isMissingSchemaObject(fallback.error)) return null;
       throw fallback.error;
     }

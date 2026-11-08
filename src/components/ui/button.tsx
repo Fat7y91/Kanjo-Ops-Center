@@ -4,15 +4,27 @@ import {
   Button as HeadlessButton,
   type ButtonProps as HeadlessButtonProps,
 } from "@headlessui/react";
+import type { ElementType } from "react";
 
 import { cx } from "@/components/ui/cx";
 
 export type ButtonVariant = "primary" | "quiet" | "danger" | "ghost" | "accent";
 export type ButtonSize = "sm" | "md";
 
-export type ButtonProps = HeadlessButtonProps & {
+/**
+ * Polymorphic button props. `as` selects the rendered element so a navigation
+ * affordance (e.g. opening a PDF in a new tab) can render as a real `<a>` with
+ * `href`/`target` instead of a script-driven `window.open`, which pop-up
+ * blockers reject. The default tag stays `button`.
+ */
+export type ButtonProps = Omit<HeadlessButtonProps, "as"> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  as?: ElementType;
+  href?: string;
+  target?: string;
+  rel?: string;
+  download?: boolean | string;
 };
 
 const BASE =
@@ -45,20 +57,24 @@ const SIZE: Record<ButtonSize, string> = {
  * Primary uses `--kanjo-purple-interactive` (#6C35B6); headings and shell
  * backgrounds own `--kanjo-purple-base` (#230535) instead. Controls are
  * borderless by design: elevation and background carry the affordance, so no
- * variant introduces a 1px outline.
+ * variant introduces a 1px outline. Pass `as="a"` (with `href`) to render a
+ * link styled as a button.
  */
 export function Button({
   variant = "quiet",
   size = "md",
   className,
-  type = "button",
+  type,
+  as,
   ...props
 }: ButtonProps) {
+  const isAnchor = as === "a";
   return (
     <HeadlessButton
-      type={type}
+      as={as}
+      type={isAnchor ? undefined : (type ?? "button")}
       className={cx(BASE, VARIANT[variant], SIZE[size], className)}
-      {...props}
+      {...(props as HeadlessButtonProps)}
     />
   );
 }

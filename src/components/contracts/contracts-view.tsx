@@ -84,59 +84,6 @@ export function ContractsView({
     }
   }
 
-  async function downloadPdf(contract: Contract) {
-    setBusyId(contract.id);
-    setNotice("");
-    setError("");
-    try {
-      const response = await fetch(`/api/contracts/${contract.id}/pdf`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(payload.error ?? "تعذر إنشاء ملف العقد.");
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `contract-${contract.reference}.pdf`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-    } catch (downloadError) {
-      setError(
-        downloadError instanceof Error
-          ? downloadError.message
-          : "تعذر إنشاء ملف العقد.",
-      );
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  /**
-   * Opens the rendered contract in a new tab for review/printing.
-   *
-   * The tab is opened synchronously on click (before the request) so the browser
-   * does not treat the later navigation as a pop-up. The PDF route answers as
-   * `inline`, so the browser's own viewer handles preview and print. Session
-   * cookies ride along on the navigation, so the route authorizes normally.
-   */
-  function previewPdf(contract: Contract) {
-    const url = `/api/contracts/${contract.id}/pdf`;
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      setError("تعذّر فتح معاينة العقد. اسمح بالنوافذ المنبثقة ثم حاول مجدداً.");
-      return;
-    }
-    setError("");
-    setNotice("");
-  }
-
   return (
     <>
       <PageHeader
@@ -174,8 +121,6 @@ export function ContractsView({
         canCancel={canCancel}
         onEdit={(contract) => setDialog({ kind: "edit", contract })}
         onAction={(contract, action) => void act(contract, action)}
-        onPreviewPdf={previewPdf}
-        onDownloadPdf={(contract) => void downloadPdf(contract)}
       />
 
       <Modal

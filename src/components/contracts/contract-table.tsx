@@ -15,8 +15,6 @@ type ContractTableProps = {
   canCancel: boolean;
   onEdit: (contract: Contract) => void;
   onAction: (contract: Contract, action: "send" | "sign" | "cancel") => void;
-  onPreviewPdf: (contract: Contract) => void;
-  onDownloadPdf: (contract: Contract) => void;
 };
 
 export function ContractTable({
@@ -27,8 +25,6 @@ export function ContractTable({
   canCancel,
   onEdit,
   onAction,
-  onPreviewPdf,
-  onDownloadPdf,
 }: ContractTableProps) {
   if (contracts.length === 0) {
     return (
@@ -80,6 +76,10 @@ export function ContractTable({
                   <td>
                     <div className="row-actions">
                       <Button
+                        as="a"
+                        href={`/api/contracts/${contract.id}/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         size="sm"
                         variant={
                           contract.status === "pending_signature" ||
@@ -88,16 +88,18 @@ export function ContractTable({
                             : "quiet"
                         }
                         disabled={busy}
-                        onClick={() => onPreviewPdf(contract)}
                       >
                         معاينة العقد
                       </Button>
 
                       <Button
+                        as="a"
+                        href={`/api/contracts/${contract.id}/pdf`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         size="sm"
                         variant="quiet"
                         disabled={busy}
-                        onClick={() => onDownloadPdf(contract)}
                       >
                         PDF
                       </Button>

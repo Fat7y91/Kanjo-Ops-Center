@@ -11,6 +11,7 @@ import { OperationsError } from "@/lib/operations/errors";
 import { GovernanceError } from "@/lib/governance/errors";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import { ContractRepositoryError } from "@/lib/contracts/repository";
+import { ContractRenderError } from "@/lib/contracts/errors";
 import type { Permission } from "@/lib/rbac/permissions";
 import { TaxonomyError } from "@/lib/taxonomy/store";
 import type { ActiveSession } from "@/lib/rbac/types";
@@ -200,6 +201,14 @@ export function apiError(error: unknown): NextResponse {
     );
   }
   if (error instanceof ContractRepositoryError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof ContractRenderError) {
+    // The render path already logged the underlying react-pdf failure; answer
+    // with the descriptive message it produced instead of the generic 500.
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },
