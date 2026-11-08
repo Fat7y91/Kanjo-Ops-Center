@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 
 import { apiError, authorizeAny } from "@/lib/auth/api";
 import { findContractRow } from "@/lib/contracts/repository";
 import { ContractRepositoryError } from "@/lib/contracts/repository";
-import { buildContractBody, contractDocumentTitle } from "@/lib/contracts/render/document";
-import { renderHtmlToPdf } from "@/lib/contracts/render/pdf";
+import { renderContractPdf } from "@/lib/contracts/render/pdf/render";
 import { resolveContractDocumentInput } from "@/lib/contracts/render/resolve";
-import {
-  contractFooterTemplate,
-  contractHeaderTemplate,
-  wrapContractDocument,
-} from "@/lib/contracts/render/shell";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 const READ_CAPABILITIES = [
   "view_contracts",
@@ -33,14 +26,22 @@ const BUCKET = "contract-documents";
 
 type RouteProps = { params: Promise<{ id: string }> };
 
+/** Hex-encodes a digest buffer using Web Crypto (available on the edge runtime). */
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 /**
- * Renders the contract as a V1-faithful PDF.
+ * Renders the contract as a V1-faithful PDF on the edge runtime.
  *
- * The document is generated from the merchant classification and commission so
- * the legal clauses stay canonical, then stored under
- * `contracts/<id>.pdf` in a private bucket. The row's `storage_path` and
- * `sha256` are updated so a later fetch can serve the exact bytes that were
- * rendered. Page numbers come from Puppeteer's footer template.
+ * The document is generated with `@react-pdf/renderer` from the merchant
+ * classification and commission so the legal clauses stay canonical, then
+ * stored under `contracts/<id>.pdf` in a private bucket. The row's
+ * `storage_path` and `sha256` are updated so a later fetch can serve the exact
+ * bytes that were rendered.
  */
 export async function POST(_request: Request, { params }: RouteProps) {
   const { id } = await params;
@@ -54,14 +55,8 @@ export async function POST(_request: Request, { params }: RouteProps) {
     }
 
     const input = await resolveContractDocumentInput(contract);
-    const body = buildContractBody(input);
-    const html = wrapContractDocument(contractDocumentTitle(input), body);
-
-    const pdf = await renderHtmlToPdf(html, {
-      headerTemplate: contractHeaderTemplate(),
-      footerTemplate: contractFooterTemplate(),
-    });
-    const sha256 = createHash("sha256").update(pdf).digest("hex");
+    const bytes = await renderContractPdf(input);
+    const sha256 = await sha256Hex(bytes);
 
     const path = `contracts/${id}.pdf`;
     const client = getSupabaseServerClient();
@@ -70,7 +65,7 @@ export async function POST(_request: Request, { params }: RouteProps) {
     // PDF the operator asked for, not a 500.
     const { error: uploadError } = await client.storage
       .from(BUCKET)
-      .upload(path, pdf, { contentType: "application/pdf", upsert: true });
+      .upload(path, bytes, { contentType: "application/pdf", upsert: true });
     if (!uploadError) {
       await client
         .schema("app")
@@ -79,7 +74,7 @@ export async function POST(_request: Request, { params }: RouteProps) {
         .eq("id", id);
     }
 
-    return new NextResponse(new Uint8Array(pdf), {
+    return new NextResponse(bytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

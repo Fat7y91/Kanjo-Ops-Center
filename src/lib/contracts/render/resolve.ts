@@ -3,7 +3,7 @@ import "server-only";
 import { getMerchantById } from "@/lib/field-ops/store";
 import { resolveBusinessType } from "./constants";
 import { getBaseName, sanitizeLegalText } from "./format";
-import type { ContractDocumentInput } from "./document";
+import type { ContractDocumentInput } from "./input";
 import type { Contract } from "../types";
 
 /**
