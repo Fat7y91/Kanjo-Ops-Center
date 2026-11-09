@@ -29,7 +29,13 @@ const sourceRoot = path.join(projectRoot, "src");
 const cache = new Map();
 
 function resolveFile(candidate) {
-  const attempts = [candidate, `${candidate}.ts`, `${candidate}.tsx`];
+  const attempts = [
+    candidate,
+    `${candidate}.ts`,
+    `${candidate}.tsx`,
+    `${candidate}/index.ts`,
+    `${candidate}/index.tsx`,
+  ];
   for (const attempt of attempts) {
     if (fs.existsSync(attempt) && fs.statSync(attempt).isFile()) return attempt;
   }
@@ -73,9 +79,16 @@ export function loadTsModule(file) {
     if (specifier.startsWith("node:")) {
       return nativeRequire(specifier);
     }
-    throw new Error(
-      `Unsupported import "${specifier}" while loading ${resolved}`,
-    );
+    // Bare package specifiers (pdf-lib, fontkit, bidi-js) are real runtime
+    // dependencies of the PDF engine; resolve them through Node so the engine
+    // can be exercised exactly as it ships.
+    try {
+      return nativeRequire(specifier);
+    } catch {
+      throw new Error(
+        `Unsupported import "${specifier}" while loading ${resolved}`,
+      );
+    }
   };
 
   new Function("exports", "require", "module", outputText)(

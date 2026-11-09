@@ -40,7 +40,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 /**
  * Renders the contract as a V1-faithful PDF on the edge runtime.
  *
- * The document is generated with `@react-pdf/renderer` from the merchant
+ * The document is generated with the pure-JS PDF engine from the merchant
  * classification and commission so the legal clauses stay canonical, then
  * stored under `contracts/<id>.pdf` in a private bucket. The row's
  * `storage_path` and `sha256` are updated so a later fetch can serve the exact
@@ -62,7 +62,7 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
   try {
     bytes = await renderContractPdf(input);
   } catch (error) {
-    // React-PDF throws bare Error/TypeError/Promise rejections (missing font,
+    // The renderer throws bare Error/TypeError/Promise rejections (missing font,
     // undecodable image, edge-runtime stream quirk) that carry no HTTP meaning.
     // Wrap them so the client gets a descriptive 500 and the real stack is
     // logged for diagnosis instead of surfacing as a generic "unexpected error".

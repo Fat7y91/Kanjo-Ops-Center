@@ -4,7 +4,7 @@ import type { ClauseRenderInput } from "./clauses";
  * Renderer input for a contract document.
  *
  * Kept free of Node imports so it can be shared by the resolver (server data
- * path) and the react-pdf tree (edge runtime).
+ * path) and the pure-JS PDF engine (edge runtime).
  */
 export type ContractDocumentInput = ClauseRenderInput & {
   merchantId: string;

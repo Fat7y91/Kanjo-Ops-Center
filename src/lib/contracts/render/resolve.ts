@@ -38,7 +38,7 @@ export async function resolveContractDocumentInput(
 
   // Resolve the merchant logo to an embeddable data URI (or drop it) before the
   // document is built: a bad remote logo would otherwise reject the whole
-  // react-pdf render on the edge runtime.
+  // render on the edge runtime.
   const merchantLogo = await resolveLogoDataUri(merchant?.logoUrl ?? "");
 
   return {

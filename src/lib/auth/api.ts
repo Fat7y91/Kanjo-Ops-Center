@@ -207,7 +207,7 @@ export function apiError(error: unknown): NextResponse {
     );
   }
   if (error instanceof ContractRenderError) {
-    // The render path already logged the underlying react-pdf failure; answer
+    // The render path already logged the underlying failure; answer
     // with the descriptive message it produced instead of the generic 500.
     return NextResponse.json(
       { error: error.message, code: error.code },
