@@ -92,17 +92,17 @@ export function ContractTable({
                         معاينة العقد
                       </Button>
 
-                      <Button
-                        as="a"
-                        href={`/api/contracts/${contract.id}/pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        size="sm"
-                        variant="quiet"
-                        disabled={busy}
-                      >
-                        PDF
-                      </Button>
+                      {canEdit && open ? (
+                        <Button
+                          as="a"
+                          href={`/contracts/draft-editor?contract=${contract.id}`}
+                          size="sm"
+                          variant="quiet"
+                          disabled={busy}
+                        >
+                          تحرير المسودة
+                        </Button>
+                      ) : null}
 
                       {canEdit && open ? (
                         <Button

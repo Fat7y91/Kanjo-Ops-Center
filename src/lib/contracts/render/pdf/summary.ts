@@ -225,9 +225,11 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
   const cardWidth = (innerWidth - CARD_GAP) / 2;
   const cardsTop = Math.min(cursor, bottom + CARD_HEIGHT + PAD);
   const contactName = input.contactName || FILL;
+  // RTL reading order: the first party (Kanjo) occupies the right card, the
+  // second party (merchant) the left card.
   signatureCard(
     writer,
-    writer.left + PAD,
+    writer.left + PAD + cardWidth + CARD_GAP,
     cardsTop,
     cardWidth,
     `الطرف الأول: ${KANJO_FIRST_PARTY.tradeName}`,
@@ -237,7 +239,7 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
   );
   signatureCard(
     writer,
-    writer.left + PAD + cardWidth + CARD_GAP,
+    writer.left + PAD,
     cardsTop,
     cardWidth,
     `الطرف الثاني: ${input.merchantName}`,

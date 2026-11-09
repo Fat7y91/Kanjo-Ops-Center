@@ -136,15 +136,15 @@ function drawLogoBlock(
     const leftX = area.centerX - totalW / 2;
     const rightX = leftX + logoSize + gap;
 
-    // Merchant logo on the reading-start (right) side, Kanjo on the left so the
-    // pair mirrors the RTL reading order used throughout the document.
-    canvas.page.drawImage(merchant, {
+    // RTL reading order: the first party (Kanjo) on the right, the merchant on
+    // the left, so the pair matches the rest of the document.
+    canvas.page.drawImage(kanjo ?? merchant, {
       x: rightX,
       y: logoY,
       width: logoSize,
       height: logoSize,
     });
-    canvas.page.drawImage(kanjo ?? merchant, {
+    canvas.page.drawImage(merchant, {
       x: leftX,
       y: logoY,
       width: logoSize,
