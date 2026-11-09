@@ -157,7 +157,7 @@ export function useUserCapabilities({
     setUsers((current) => current.filter((item) => item.id !== userId));
   }, []);
 
-  const { patchUser, toggle, revokeMany, changeLevel, removeUser } =
+  const { patchUser, savePermissions, changeLevel, removeUser } =
     useUserMutations({
       upsertUser,
       dropUser,
@@ -198,8 +198,7 @@ export function useUserCapabilities({
     manageableUsers,
     canGrant,
     withinViewer,
-    toggle,
-    revokeMany,
+    savePermissions,
     changeLevel,
     removeUser,
     patchUser,

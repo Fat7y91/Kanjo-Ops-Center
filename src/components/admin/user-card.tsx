@@ -59,7 +59,11 @@ function UserCardBase({
       ? "بدون نطاق مدن"
       : user.accessibleCities.map((cityId) => cityName(cityId)).join(" · ");
   const busy = pendingKey !== null;
-  const saving = pendingKey?.startsWith(`${user.id}:`) ?? false;
+  const saving =
+    pendingKey === `permissions:${user.id}` ||
+    pendingKey?.startsWith(`level:${user.id}`) ||
+    pendingKey?.startsWith(`scope:${user.id}`) ||
+    false;
 
   return (
     <article className="matrix-card">

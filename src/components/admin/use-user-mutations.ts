@@ -75,33 +75,20 @@ export function useUserMutations({
     [setError, setPendingKey, upsertUser],
   );
 
-  const toggle = useCallback(
-    async (userId: string, permission: Permission, enabled: boolean) => {
-      await patchUser(`${userId}:${permission}`, userId, {
-        permission,
-        enabled,
-      });
-    },
-    [patchUser],
-  );
-
   /**
-   * Revokes several keys through the single-key PATCH path.
+   * Replaces a user's entire capability set in one PATCH.
    *
-   * A cascade (the overview master dropping its section grants) needs the
-   * multi-key form, but the per-key route is the safest contract: it only
-   * validates additions, so it works even when the target already holds a
-   * capability the actor does not.
+   * The permission dialog edits a local draft and submits it once, so this is
+   * the single write behind it. The body carries the final desired set; the
+   * server diffs additions for the escalation guard, which also lets a caller
+   * revoke a key the actor does not personally hold.
    */
-  const revokeMany = useCallback(
-    async (userId: string, permissions: readonly Permission[]) => {
-      for (const permission of permissions) {
-        await patchUser(`${userId}:${permission}`, userId, {
-          permission,
-          enabled: false,
-        });
-      }
-    },
+  const savePermissions = useCallback(
+    async (
+      userId: string,
+      permissions: readonly Permission[],
+    ): Promise<boolean> =>
+      patchUser(`permissions:${userId}`, userId, { permissions }),
     [patchUser],
   );
 
@@ -142,5 +129,5 @@ export function useUserMutations({
     [broadcastChange, dropUser, setError, setPendingKey],
   );
 
-  return { patchUser, toggle, revokeMany, changeLevel, removeUser };
+  return { patchUser, savePermissions, changeLevel, removeUser };
 }

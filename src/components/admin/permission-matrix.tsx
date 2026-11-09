@@ -130,14 +130,8 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
 
       <UserPermissionsModal
         target={matrix.permissionsTarget}
-        pendingKey={matrix.pendingKey}
         canGrant={matrix.canGrant}
-        onToggle={(userId, permission, enabled) =>
-          void matrix.toggle(userId, permission, enabled)
-        }
-        onRevokeMany={(userId, permissions) =>
-          void matrix.revokeMany(userId, permissions)
-        }
+        onSave={matrix.savePermissions}
         onClose={matrix.closePermissions}
       />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
@@ -15,57 +15,92 @@ import type { AppUser } from "@/lib/rbac/types";
 
 type UserPermissionsModalProps = {
   target: AppUser | null;
-  pendingKey: string | null;
   /** Same self-grant rule as the server, so a checkbox cannot over-promise. */
   canGrant: (user: AppUser, permission: Permission) => boolean;
-  onToggle: (userId: string, permission: Permission, enabled: boolean) => void;
-  /** Multi-key revoke used when a parent cascades into its children. */
-  onRevokeMany: (userId: string, permissions: Permission[]) => void;
+  /**
+   * Replaces the user's whole capability set in one request. Resolves `true`
+   * only when the server stored it, which is the signal to close the dialog.
+   */
+  onSave: (userId: string, permissions: Permission[]) => Promise<boolean>;
   onClose: () => void;
 };
 
 /**
  * Full capability grid for a single operator.
  *
- * Every toggle commits immediately through the same PATCH route the matrix used
- * inline, so the dialog stays open while the card behind it re-renders with the
- * new grant count.
+ * Edits are buffered in local state: toggling a checkbox only updates the draft,
+ * so assigning or revoking many capabilities costs no network round trip and
+ * cannot race the server. The single Save button submits the final desired set
+ * once, and the dialog closes only after that write succeeds.
  *
  * Parent capabilities (`view_overview`) group the `view_overview_*` sections.
- * Revoking the parent also revokes its held sections, so no orphaned section
- * grant survives; granting any section on its own stays allowed because each
- * also opens the overview module.
+ * Revoking the parent also drops its held sections in the draft, so no orphaned
+ * section grant can be submitted; granting any section on its own stays allowed
+ * because each also opens the overview module.
  */
 export function UserPermissionsModal({
   target,
-  pendingKey,
   canGrant,
-  onToggle,
-  onRevokeMany,
+  onSave,
   onClose,
 }: UserPermissionsModalProps) {
-  const held = useMemo(
+  const targetId = target?.id ?? null;
+
+  // Snapshot of what the server had when the dialog opened, and the buffered
+  // edit. Both reset together when a different operator is opened. We key on
+  // the id (not the permissions array) so a background roster refresh cannot
+  // clobber edits the operator is still making.
+  const [initial, setInitial] = useState<Set<Permission>>(
     () => new Set(target?.permissions ?? []),
-    [target?.permissions],
   );
-  const busy = pendingKey !== null;
+  const [draft, setDraft] = useState<Set<Permission>>(
+    () => new Set(target?.permissions ?? []),
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!targetId) return;
+    const held = new Set(target?.permissions ?? []);
+    setInitial(held);
+    setDraft(new Set(held));
+    setError("");
+  }, [targetId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const grantable = (permission: Permission) =>
     target ? canGrant(target, permission) : false;
 
+  const dirty =
+    draft.size !== initial.size ||
+    [...draft].some((permission) => !initial.has(permission));
+
   function change(permission: Permission, checked: boolean) {
-    if (!target) return;
+    setDraft((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(permission);
+        return next;
+      }
+      next.delete(permission);
+      for (const child of cascadeRevoke([...current], permission) ?? []) {
+        next.delete(child);
+      }
+      return next;
+    });
+  }
 
-    if (checked) {
-      onToggle(target.id, permission, true);
+  async function save() {
+    if (!target || saving) return;
+    if (!dirty) {
+      onClose();
       return;
     }
-
-    const children = cascadeRevoke(target.permissions, permission);
-    if (children) {
-      onRevokeMany(target.id, [permission, ...children]);
-      return;
-    }
-    onToggle(target.id, permission, false);
+    setSaving(true);
+    setError("");
+    const ok = await onSave(target.id, [...draft]);
+    setSaving(false);
+    if (ok) onClose();
+    else setError("تعذر حفظ الصلاحيات. أعد المحاولة.");
   }
 
   return (
@@ -75,7 +110,9 @@ export function UserPermissionsModal({
       title={target ? `صلاحيات ${target.name}` : "الصلاحيات"}
       eyebrow="القدرات الدقيقة"
       description="فعّل ما يحتاجه المشغّل فقط؛ لا يمكنك منح صلاحية لا تملكها أنت."
-      onClose={onClose}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
     >
       <div className="matrix-groups matrix-groups-dialog">
         {PERMISSION_GROUPS.map((group) => (
@@ -84,23 +121,13 @@ export function UserPermissionsModal({
             <div className="matrix-perms">
               {group.items.map((permission) => {
                 const key = permission.key as Permission;
-                const granted = held.has(key);
-                const keyId = `${target?.id}:${key}`;
+                const granted = draft.has(key);
                 return (
                   <CheckboxField
                     key={key}
-                    label={
-                      pendingKey === keyId ? (
-                        <span>
-                          {permission.label}
-                          <em className="sync-mark">جارٍ الحفظ</em>
-                        </span>
-                      ) : (
-                        permission.label
-                      )
-                    }
+                    label={permission.label}
                     checked={granted}
-                    disabled={busy || (!granted && !grantable(key))}
+                    disabled={saving || (!granted && !grantable(key))}
                     onChange={(checked) => change(key, checked)}
                   />
                 );
@@ -110,12 +137,23 @@ export function UserPermissionsModal({
         ))}
       </div>
 
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       <div className="form-actions matrix-dialog-actions">
         <span className="matrix-dialog-count">
-          {held.size} من {PERMISSION_KEYS.length} صلاحية ممنوحة
+          {draft.size} من {PERMISSION_KEYS.length} صلاحية ممنوحة
+          {dirty ? " · تغييرات غير محفوظة" : ""}
         </span>
-        <Button variant="primary" onClick={onClose}>
-          تم
+        <Button
+          variant="primary"
+          onClick={() => void save()}
+          disabled={saving}
+        >
+          {saving ? "جارٍ الحفظ…" : "حفظ"}
         </Button>
       </div>
     </Modal>
