@@ -101,12 +101,15 @@ function drawFillRules(writer: DocumentWriter, count: number): void {
 /** Draws the numbered legal clauses (with the commission clause injected). */
 export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput): void {
   const { financialSpecialException, jurisdictionClause } = resolveLegalContext(input);
-  const clauses = buildClauses({
-    category: input.category,
-    achievedPercent: input.displayRate,
-    financialSpecialException,
-    jurisdictionClause,
-  });
+  const clauses =
+    input.clauses && input.clauses.length > 0
+      ? input.clauses
+      : buildClauses({
+          category: input.category,
+          achievedPercent: input.displayRate,
+          financialSpecialException,
+          jurisdictionClause,
+        });
 
   for (let index = 0; index < clauses.length; index += 1) {
     const clause = clauses[index]!;

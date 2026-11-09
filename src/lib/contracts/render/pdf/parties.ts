@@ -136,13 +136,19 @@ function fieldRow(writer: DocumentWriter, top: number, label: string, value: str
   });
 }
 
-function firstParty(writer: DocumentWriter): void {
-  const rows = [
-    `السجل التجاري رقم (${KANJO_FIRST_PARTY.commercialRegister}) — ${KANJO_FIRST_PARTY.commercialRegisterOffice}`,
-    `البطاقة الضريبية رقم (${KANJO_FIRST_PARTY.taxCard}) — ${KANJO_FIRST_PARTY.taxOffice}`,
-    `المقر: ${KANJO_FIRST_PARTY.address}`,
-    "ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.",
-  ];
+function firstParty(writer: DocumentWriter, input: ContractDocumentInput): void {
+  const override = input.firstPartyRows;
+  const rows =
+    override && override.length > 0
+      ? override.map((row) =>
+          row.label ? `${row.label}: ${row.value}` : row.value,
+        )
+      : [
+          `السجل التجاري رقم (${KANJO_FIRST_PARTY.commercialRegister}) — ${KANJO_FIRST_PARTY.commercialRegisterOffice}`,
+          `البطاقة الضريبية رقم (${KANJO_FIRST_PARTY.taxCard}) — ${KANJO_FIRST_PARTY.taxOffice}`,
+          `المقر: ${KANJO_FIRST_PARTY.address}`,
+          "ويمثلها م/ محمود الجمل بصفته مدير التشغيل والتعاقدات.",
+        ];
   const estimate =
     PANEL_PAD + TEXT.heading.lineHeight + TEXT.dense.lineHeight + 16 + rows.length * TEXT.dense.lineHeight + PANEL_PAD;
 
@@ -172,16 +178,20 @@ function firstParty(writer: DocumentWriter): void {
 }
 
 function secondParty(writer: DocumentWriter, input: ContractDocumentInput): void {
-  const rows: [string, string][] = [
-    ["اسم المنشأة / المحل:", input.merchantName],
-    ["اسم المفوض / صاحب النشاط:", input.contactName || FILL],
-    ["بطاقة الرقم القومي (١٤ رقمًا):", FILL],
-    ["رقم السجل التجاري:", FILL],
-    ["رقم التسجيل الضريبي:", FILL],
-    ["رقم الهاتف / واتساب:", input.contactPhone || FILL],
-    ["البريد الإلكتروني:", FILL],
-    ["العنوان:", input.address || FILL],
-  ];
+  const override = input.secondPartyRows;
+  const rows: [string, string][] =
+    override && override.length > 0
+      ? override.map((row) => [row.label, row.value || FILL])
+      : [
+          ["اسم المنشأة / المحل:", input.merchantName],
+          ["اسم المفوض / صاحب النشاط:", input.contactName || FILL],
+          ["بطاقة الرقم القومي (١٤ رقمًا):", FILL],
+          ["رقم السجل التجاري:", FILL],
+          ["رقم التسجيل الضريبي:", FILL],
+          ["رقم الهاتف / واتساب:", input.contactPhone || FILL],
+          ["البريد الإلكتروني:", FILL],
+          ["العنوان:", input.address || FILL],
+        ];
   const estimate =
     PANEL_PAD + TEXT.heading.lineHeight + TEXT.dense.lineHeight + 16 + rows.length * TEXT.dense.lineHeight + PANEL_PAD;
 
@@ -204,7 +214,7 @@ function secondParty(writer: DocumentWriter, input: ContractDocumentInput): void
 /** Draws the preamble date and both identification panels. */
 export function drawParties(writer: DocumentWriter, input: ContractDocumentInput): void {
   datePreamble(writer);
-  firstParty(writer);
+  firstParty(writer, input);
   secondParty(writer, input);
 }
 

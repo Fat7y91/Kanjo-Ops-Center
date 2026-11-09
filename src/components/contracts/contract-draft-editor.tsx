@@ -2,29 +2,66 @@
 
 import { useState } from "react";
 
+import { usePermission } from "@/components/auth/use-permission";
 import { ClauseEditorItem } from "@/components/contracts/clause-editor-item";
 import { CommissionEditor } from "@/components/contracts/commission-editor";
+import {
+  DraftPreview,
+  DraftSummaryStrip,
+} from "@/components/contracts/draft-editor-panels";
+import { SectionEditor } from "@/components/contracts/section-editor";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { toArabicNumerals } from "@/lib/contracts/render/format";
-import type { ContractDraft } from "@/lib/contracts/draft-editor";
+import { CONTRACT_STATUS_META } from "@/lib/contracts/types";
+import type { Contract } from "@/lib/contracts/types";
 import type { DraftEditorController } from "@/components/contracts/use-draft-editor";
 
 type ContractDraftEditorProps = {
   editor: DraftEditorController;
+  contract: Contract;
+  saving: boolean;
+  onSave: () => Promise<string>;
 };
 
 /**
  * Contract draft editor shell.
  *
- * Presents the mocked editable terms in two working tabs (clauses, commission)
- * plus a read-only preview tab that renders the current draft as ordered prose.
- * Every control is wired to the controller so the review reflects real editing
- * behaviour; nothing here persists yet — this is the UI-first step.
+ * Presents the editable terms across three working tabs (clauses, commission,
+ * sections) plus a read-only preview. The "تحرير المسودة" entry point is
+ * available for every contract status; a finalised contract (signed/cancelled)
+ * only becomes editable when the operator holds `edit_finalized_contracts`.
+ * Every mutation is wired to the controller, and saving PUTs the whole terms
+ * payload to the terms endpoint.
  */
-export function ContractDraftEditor({ editor }: ContractDraftEditorProps) {
+export function ContractDraftEditor({
+  editor,
+  contract,
+  saving,
+  onSave,
+}: ContractDraftEditorProps) {
+  const { hasPermission } = usePermission();
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   const { draft } = editor;
+
+  const meta = CONTRACT_STATUS_META[contract.status];
+  const finalised =
+    contract.status === "signed" || contract.status === "cancelled";
+  const canForceEdit = hasPermission("edit_finalized_contracts");
+  const locked = finalised && !canForceEdit;
+
+  async function save() {
+    setNotice("");
+    setError("");
+    try {
+      setNotice(await onSave());
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error ? saveError.message : "تعذر حفظ المسودة.",
+      );
+    }
+  }
 
   const clausesTab = (
     <div className="flex flex-col gap-3">
@@ -32,7 +69,7 @@ export function ContractDraftEditor({ editor }: ContractDraftEditorProps) {
         <p className="text-[0.78rem] text-[color:var(--ink-soft)]">
           رتّب البنود، عدّل نصها، عطّل ما لا يلزم أو أضف بنودًا مخصصة.
         </p>
-        <Button size="sm" onClick={editor.addClause}>
+        <Button size="sm" onClick={editor.addClause} disabled={locked}>
           + إضافة بند
         </Button>
       </div>
@@ -69,123 +106,83 @@ export function ContractDraftEditor({ editor }: ContractDraftEditorProps) {
     />
   );
 
-  const previewTab = <DraftPreview draft={draft} />;
-
   return (
     <div className="flex flex-col gap-4">
-      <DraftSummaryStrip editor={editor} />
-
-      <Tabs
-        items={[
-          {
-            id: "clauses",
-            label: `البنود (${toArabicNumerals(draft.clauses.length)})`,
-            content: clausesTab,
-          },
-          {
-            id: "commission",
-            label: "العمولات",
-            content: commissionTab,
-          },
-          {
-            id: "preview",
-            label: "معاينة",
-            content: previewTab,
-          },
-        ]}
-      />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--line)] pt-4">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="quiet"
-            onClick={() => {
-              editor.reset();
-              setNotice("تمت استعادة المسودة الأصلية.");
-            }}
-            disabled={!editor.dirty}
-          >
-            استعادة
-          </Button>
-          <Button
-            onClick={() => setNotice("تم حفظ المسودة (معاينة تجريبية).")}
-          >
-            حفظ المسودة
-          </Button>
-        </div>
-        {notice ? (
-          <p className="text-[0.78rem] font-semibold text-[color:var(--green)]" role="status">
-            {notice}
-          </p>
-        ) : editor.dirty ? (
-          <p className="text-[0.78rem] text-[color:var(--ink-soft)]">
-            توجد تغييرات غير محفوظة.
-          </p>
-        ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`badge ${meta.tone}`}>{meta.label}</span>
+        <span className="text-[0.78rem] font-semibold text-[color:var(--ink)]">
+          {contract.reference}
+        </span>
+        <DraftSummaryStrip editor={editor} />
       </div>
-    </div>
-  );
-}
 
-/** Compact status strip above the tabs. */
-function DraftSummaryStrip({ editor }: { editor: DraftEditorController }) {
-  const { draft } = editor;
-  const activeCount = draft.clauses.filter((clause) => clause.enabled).length;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="badge badge-gold">{draft.merchantName}</span>
-      <span className="text-[0.78rem] text-[color:var(--ink-soft)]">
-        {toArabicNumerals(activeCount)} بند نشط
-        {editor.disabledCount > 0
-          ? ` · ${toArabicNumerals(editor.disabledCount)} معطّل`
-          : ""}
-        {` · ${toArabicNumerals(editor.totalCommissionRows)} تصنيف عمولة`}
-      </span>
-    </div>
-  );
-}
+      {locked ? (
+        <>
+          <p
+            className="rounded-[var(--radius-lg)] bg-[color:var(--surface-soft)] p-3 text-[0.82rem] text-[color:var(--ink-soft)]"
+            role="alert"
+          >
+            هذا العقد منتهٍ. يتطلب تحريره صلاحية «تحرير العقود المنتهية» التي
+            يمنحها المسؤول من مصفوفة الصلاحيات. العرض متاح للقراءة فقط.
+          </p>
+          <DraftPreview draft={draft} />
+        </>
+      ) : (
+        <>
+          <Tabs
+            items={[
+              {
+                id: "clauses",
+                label: `البنود (${toArabicNumerals(draft.clauses.length)})`,
+                content: clausesTab,
+              },
+              { id: "commission", label: "العمولات", content: commissionTab },
+              {
+                id: "sections",
+                label: "الأقسام",
+                content: <SectionEditor editor={editor} />,
+              },
+              {
+                id: "preview",
+                label: "معاينة",
+                content: <DraftPreview draft={draft} />,
+              },
+            ]}
+          />
 
-/** Read-only rendering of the current draft as ordered contract prose. */
-function DraftPreview({ draft }: { draft: ContractDraft }) {
-  const active = draft.clauses.filter((clause) => clause.enabled);
-  return (
-    <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-soft)] p-5">
-      <div>
-        <p className="text-[0.7rem] font-bold uppercase tracking-wide text-[color:var(--ink-soft)]">
-          {draft.merchantName}
-        </p>
-        <h3 className="mt-1 text-base font-bold text-[color:var(--ink)]">
-          مسودة بنود العقد
-        </h3>
-      </div>
-      <div className="flex flex-col gap-3">
-        {active.map((clause, index) => (
-          <div key={clause.id}>
-            <p className="text-sm font-bold text-[color:var(--kanjo-pastel-ink)]">
-              {toArabicNumerals(index + 1)}. {clause.title}
-            </p>
-            <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-[color:var(--ink)]">
-              {clause.body.replace(/\*\*/g, "")}
-            </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--line)] pt-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="quiet"
+                onClick={() => {
+                  editor.reset();
+                  setNotice("تمت استعادة المسودة الأصلية.");
+                  setError("");
+                }}
+                disabled={!editor.dirty}
+              >
+                استعادة
+              </Button>
+              <Button onClick={() => void save()} disabled={!editor.dirty || saving}>
+                {saving ? "جارٍ الحفظ..." : "حفظ المسودة"}
+              </Button>
+            </div>
+            {error ? (
+              <p className="text-[0.78rem] font-semibold text-red-600" role="alert">
+                {error}
+              </p>
+            ) : notice ? (
+              <p className="text-[0.78rem] font-semibold text-[color:var(--green)]" role="status">
+                {notice}
+              </p>
+            ) : editor.dirty ? (
+              <p className="text-[0.78rem] text-[color:var(--ink-soft)]">
+                توجد تغييرات غير محفوظة.
+              </p>
+            ) : null}
           </div>
-        ))}
-      </div>
-      <div className="rounded-[var(--radius-control)] bg-[color:var(--kanjo-surface)] p-3">
-        <p className="text-[0.72rem] font-bold text-[color:var(--ink-soft)]">
-          العمولات
-        </p>
-        <p className="mt-1 text-sm text-[color:var(--ink)]">
-          النسبة الأساسية: {toArabicNumerals(draft.baseCommission)}%
-          {draft.commissionLines.length > 0
-            ? ` · ${draft.commissionLines
-                .map(
-                  (line) =>
-                    `${line.category || "بدون اسم"}: ${toArabicNumerals(line.rate)}%`,
-                )
-                .join(" · ")}`
-            : ""}
-        </p>
-      </div>
+        </>
+      )}
     </div>
   );
 }

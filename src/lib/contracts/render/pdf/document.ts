@@ -54,10 +54,10 @@ export async function renderContractDocument(
 
   writer.addPage("content");
   drawParties(writer, input);
-  drawPreamble(writer);
+  drawPreamble(writer, input);
   drawClauses(writer, input);
   drawCommission(writer, input);
-  drawCopiesNote(writer);
+  drawCopiesNote(writer, input);
   drawSummary(writer, input);
   drawSocial(writer);
 

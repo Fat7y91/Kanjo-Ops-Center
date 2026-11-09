@@ -16,6 +16,7 @@ type ContractsViewProps = {
   canEdit: boolean;
   canSign: boolean;
   canCancel: boolean;
+  canForceEdit: boolean;
   onReload: () => void;
 };
 
@@ -38,6 +39,7 @@ export function ContractsView({
   canEdit,
   canSign,
   canCancel,
+  canForceEdit,
   onReload,
 }: ContractsViewProps) {
   const [dialog, setDialog] = useState<Dialog>({ kind: "closed" });
@@ -119,6 +121,7 @@ export function ContractsView({
         canEdit={canEdit}
         canSign={canSign}
         canCancel={canCancel}
+        canForceEdit={canForceEdit}
         onEdit={(contract) => setDialog({ kind: "edit", contract })}
         onAction={(contract, action) => void act(contract, action)}
       />

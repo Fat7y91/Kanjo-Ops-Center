@@ -98,7 +98,6 @@ function signatureCard(
 
 /** Draws the final summary card and the two signature blocks. */
 export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput): void {
-  const { canvas } = writer;
   const exceptions = input.exceptions ?? [];
   const displayRate = input.baseCommission !== null ? input.baseCommission : input.displayRate;
   const title = "ملحق مختصر: البيانات والتوقيعات النهائية";
@@ -127,6 +126,11 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
     ? wrapSpans([{ text: exceptionNote }], innerWidth, TEXT.dense.size, writer.fonts, "rtl").length
     : 0;
 
+  const summaryText = input.summaryNote?.trim() ?? "";
+  const summaryLines = summaryText
+    ? wrapSpans([{ text: summaryText }], innerWidth, TEXT.dense.size, writer.fonts, "rtl").length
+    : 0;
+
   const bodyH =
     TEXT.dense.lineHeight * 2 +
     8 +
@@ -134,6 +138,8 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
     (vipLines ? 10 : 0) +
     exceptionLines * TEXT.dense.lineHeight +
     (exceptionLines ? 6 : 0) +
+    summaryLines * TEXT.dense.lineHeight +
+    (summaryLines ? 6 : 0) +
     CARD_HEIGHT +
     PAD * 2;
   const height = headingHeight({ title }) + bodyH;
@@ -141,6 +147,7 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
   if (writer.y - height < writer.floor) writer.addPage();
   drawSectionHeading(writer, { eyebrow: "ملحق", title });
 
+  const { canvas } = writer;
   const top = writer.y;
   const bottom = top - bodyH;
   canvas.box(
@@ -216,6 +223,23 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
         align: "start",
         direction: "rtl",
         color: PALETTE.ink,
+      });
+      cursor -= TEXT.dense.lineHeight;
+    }
+    cursor -= 6;
+  }
+
+  if (summaryLines > 0) {
+    const lines = wrapSpans([{ text: summaryText }], innerWidth, TEXT.dense.size, writer.fonts, "rtl");
+    for (const line of lines) {
+      canvas.text(line, {
+        x: writer.left + PAD,
+        y: cursor - TEXT.dense.size,
+        size: TEXT.dense.size,
+        maxWidth: innerWidth,
+        align: "start",
+        direction: "rtl",
+        color: PALETTE.inkSoft,
       });
       cursor -= TEXT.dense.lineHeight;
     }

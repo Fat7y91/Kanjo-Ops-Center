@@ -7,6 +7,7 @@ import {
   type ContractDraft,
   type DraftClause,
   type DraftCommissionLine,
+  type DraftPartyRow,
 } from "@/lib/contracts/draft-editor";
 
 export type DraftEditorController = {
@@ -27,6 +28,17 @@ export type DraftEditorController = {
   ) => void;
   removeCommissionLine: (id: string) => void;
   setBaseCommission: (value: number) => void;
+  setSectionText: (
+    field: "preamble" | "copiesNote" | "summaryNote",
+    value: string,
+  ) => void;
+  addPartyRow: (party: "firstPartyRows" | "secondPartyRows") => void;
+  updatePartyRow: (
+    party: "firstPartyRows" | "secondPartyRows",
+    id: string,
+    patch: Partial<Omit<DraftPartyRow, "id">>,
+  ) => void;
+  removePartyRow: (party: "firstPartyRows" | "secondPartyRows", id: string) => void;
   reset: () => void;
 };
 
@@ -41,19 +53,22 @@ function move<T>(list: T[], from: number, to: number): T[] {
 /**
  * Local editor state.
  *
- * Clauses and commission rows are held in local memory only; every mutation is
- * an immutable update so the review UI behaves exactly as it will once wired to
- * a save endpoint. `dirty` flips on the first change so the shell can guard
- * against discarding edits.
+ * Clauses, commission rows and narrative sections are held in local memory;
+ * every mutation is an immutable update so the review UI behaves exactly like
+ * the persisted save path in `contract-draft-editor`. `dirty` flips on the first
+ * change so the shell can guard against discarding edits.
  */
 export function useDraftEditor(seed: ContractDraft): DraftEditorController {
   const [draft, setDraft] = useState<ContractDraft>(seed);
   const [dirty, setDirty] = useState(false);
 
-  const commit = useCallback((updater: (current: ContractDraft) => ContractDraft) => {
-    setDraft((current) => updater(current));
-    setDirty(true);
-  }, []);
+  const commit = useCallback(
+    (updater: (current: ContractDraft) => ContractDraft) => {
+      setDraft((current) => updater(current));
+      setDirty(true);
+    },
+    [],
+  );
 
   const updateClause: DraftEditorController["updateClause"] = useCallback(
     (id, patch) =>
@@ -72,12 +87,7 @@ export function useDraftEditor(seed: ContractDraft): DraftEditorController {
         ...current,
         clauses: [
           ...current.clauses,
-          {
-            id: draftId("clause"),
-            title: "بند جديد",
-            body: "",
-            enabled: true,
-          },
+          { id: draftId("clause"), title: "بند جديد", body: "", enabled: true },
         ],
       })),
     [commit],
@@ -150,8 +160,42 @@ export function useDraftEditor(seed: ContractDraft): DraftEditorController {
   );
 
   const setBaseCommission = useCallback(
-    (value: number) =>
-      commit((current) => ({ ...current, baseCommission: value })),
+    (value: number) => commit((current) => ({ ...current, baseCommission: value })),
+    [commit],
+  );
+
+  const setSectionText = useCallback(
+    (field: "preamble" | "copiesNote" | "summaryNote", value: string) =>
+      commit((current) => ({ ...current, [field]: value })),
+    [commit],
+  );
+
+  const addPartyRow = useCallback(
+    (party: "firstPartyRows" | "secondPartyRows") =>
+      commit((current) => ({
+        ...current,
+        [party]: [...current[party], { id: draftId("row"), label: "", value: "" }],
+      })),
+    [commit],
+  );
+
+  const updatePartyRow: DraftEditorController["updatePartyRow"] = useCallback(
+    (party, id, patch) =>
+      commit((current) => ({
+        ...current,
+        [party]: current[party].map((row) =>
+          row.id === id ? { ...row, ...patch } : row,
+        ),
+      })),
+    [commit],
+  );
+
+  const removePartyRow = useCallback(
+    (party: "firstPartyRows" | "secondPartyRows", id: string) =>
+      commit((current) => ({
+        ...current,
+        [party]: current[party].filter((row) => row.id !== id),
+      })),
     [commit],
   );
 
@@ -179,6 +223,10 @@ export function useDraftEditor(seed: ContractDraft): DraftEditorController {
     updateCommissionLine,
     removeCommissionLine,
     setBaseCommission,
+    setSectionText,
+    addPartyRow,
+    updatePartyRow,
+    removePartyRow,
     reset,
   };
 }

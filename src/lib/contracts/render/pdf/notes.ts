@@ -8,6 +8,7 @@
 
 import { PALETTE, TEXT, wrapSpans, type DocumentWriter } from "@/lib/pdf";
 
+import type { ContractDocumentInput } from "../input";
 import { drawSectionHeading, headingHeight } from "./heading";
 
 const PREAMBLE =
@@ -19,10 +20,14 @@ const COPIES_NOTE =
 const BODY_PAD = 12;
 
 /** Draws the "التمهيد" preamble as a justified panel under a shared heading. */
-export function drawPreamble(writer: DocumentWriter): void {
+export function drawPreamble(
+  writer: DocumentWriter,
+  input: ContractDocumentInput,
+): void {
   const title = "التمهيد";
+  const text = input.preamble?.trim() || PREAMBLE;
   const lines = wrapSpans(
-    [{ text: PREAMBLE }],
+    [{ text }],
     writer.contentWidth - BODY_PAD * 2,
     TEXT.body.size,
     writer.fonts,
@@ -60,10 +65,13 @@ export function drawPreamble(writer: DocumentWriter): void {
 }
 
 /** Draws the "نسختان" copies note as a centred gold band. */
-export function drawCopiesNote(writer: DocumentWriter): void {
-  const { canvas } = writer;
+export function drawCopiesNote(
+  writer: DocumentWriter,
+  input: ContractDocumentInput,
+): void {
+  const text = input.copiesNote?.trim() || COPIES_NOTE;
   const lines = wrapSpans(
-    [{ text: COPIES_NOTE }],
+    [{ text }],
     writer.contentWidth - BODY_PAD * 2,
     TEXT.dense.size,
     writer.fonts,
@@ -71,6 +79,7 @@ export function drawCopiesNote(writer: DocumentWriter): void {
   );
   const height = lines.length * TEXT.dense.lineHeight + 20;
   writer.ensure(height);
+  const { canvas } = writer;
   const top = writer.y;
   const bottom = top - height;
 

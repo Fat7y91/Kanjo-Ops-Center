@@ -13,6 +13,7 @@ type ContractTableProps = {
   canEdit: boolean;
   canSign: boolean;
   canCancel: boolean;
+  canForceEdit: boolean;
   onEdit: (contract: Contract) => void;
   onAction: (contract: Contract, action: "send" | "sign" | "cancel") => void;
 };
@@ -23,6 +24,7 @@ export function ContractTable({
   canEdit,
   canSign,
   canCancel,
+  canForceEdit,
   onEdit,
   onAction,
 }: ContractTableProps) {
@@ -92,7 +94,7 @@ export function ContractTable({
                         معاينة العقد
                       </Button>
 
-                      {canEdit && open ? (
+                      {canEdit || canForceEdit ? (
                         <Button
                           as="a"
                           href={`/contracts/draft-editor?contract=${contract.id}`}
