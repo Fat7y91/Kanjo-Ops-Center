@@ -1,142 +1,131 @@
 /**
  * Cover page for the contract document.
  *
- * A full-bleed branded cover that states the partnership and puts the Kanjo
- * mark prominently in the lower half. It is a `cover`-kind page, so the numbering
- * hook excludes it: the first clause page is "page 1". The cover carries no
- * header or signature footer, so it reads as a title sheet, not contract body.
+ * A full-bleed branded title sheet: a deep royal upper band carrying the
+ * partnership statement, and a clean lower half that puts the Kanjo mark and the
+ * official website front and centre. It is a `cover`-kind page, so the numbering
+ * hook excludes it and the first clause page becomes "page 1". The cover carries
+ * no header, signature footer or commission figures — it is a title sheet, not
+ * contract body.
  */
 
 import type { PDFImage } from "pdf-lib";
 
 import { PALETTE, TEXT, type DocumentWriter } from "@/lib/pdf";
 
-import { toArabicNumerals } from "../format";
 import type { ContractDocumentInput } from "../input";
-import { contractDocumentTitle } from "../title";
 
-const MARGIN = 48;
+const MARGIN = 52;
 const WEBSITE = "kanjo.com.eg";
 
-function drawBackdrop(writer: DocumentWriter): { left: number; right: number; width: number } {
+/** Fraction of the page height occupied by the royal title band. */
+const BAND_RATIO = 0.46;
+
+type Area = { left: number; right: number; width: number; centerX: number };
+
+/**
+ * Lays down the page: a deep royal upper band, a gold seam, a subtle inner
+ * frame, and the royal footer band that anchors the website.
+ */
+function drawBackdrop(writer: DocumentWriter): Area {
   const { canvas } = writer;
   const width = canvas.width;
   const height = canvas.height;
+  const bandBottom = height * BAND_RATIO;
 
-  // A deep royal band across the top third anchors the title block.
-  const bandH = height * 0.42;
-  canvas.page.drawRectangle({
-    x: 0,
-    y: height - bandH,
-    width,
-    height: bandH,
-    color: PALETTE.royalDeep,
-  });
-  canvas.page.drawRectangle({
-    x: 0,
-    y: height - bandH - 4,
-    width,
-    height: 4,
-    color: PALETTE.gold,
-  });
+  canvas.box({ x: 0, y: 0, width, height }, { fill: PALETTE.white });
 
-  // A faint gold frame inset from the page edge gives the sheet a finishing edge.
-  const inset = 22;
-  canvas.page.drawRectangle({
-    x: inset,
-    y: inset,
-    width: width - inset * 2,
-    height: height - inset * 2,
-    borderColor: PALETTE.lineStrong,
-    borderWidth: 1,
-  });
+  // Upper band: a royal base with a lighter inner seam for depth, plus a thin
+  // gold seam that reads as a premium rule between the dark and light halves.
+  canvas.box({ x: 0, y: bandBottom, width, height: height - bandBottom }, { fill: PALETTE.royalDeep });
+  canvas.box({ x: 0, y: bandBottom - 3, width, height: 3 }, { fill: PALETTE.gold });
 
-  return { left: MARGIN, right: width - MARGIN, width: width - MARGIN * 2 };
+  // Footer band for the website, mirroring the top band for a framed page.
+  const footerH = 66;
+  canvas.box({ x: 0, y: 0, width, height: footerH }, { fill: PALETTE.royalDeep });
+  canvas.box({ x: 0, y: footerH, width, height: 2.5 }, { fill: PALETTE.gold });
+
+  // Fine inner frame on the white lower half for a finished, engraved feel.
+  const inset = 24;
+  canvas.box(
+    {
+      x: inset,
+      y: footerH + 12,
+      width: width - inset * 2,
+      height: bandBottom - footerH - 24,
+    },
+    { border: PALETTE.lineStrong, borderWidth: 0.8 },
+  );
+
+  return {
+    left: MARGIN,
+    right: width - MARGIN,
+    width: width - MARGIN * 2,
+    centerX: width / 2,
+  };
 }
 
+/** The partnership statement inside the royal band, vertically centred. */
 function drawTitleBlock(
   writer: DocumentWriter,
   input: ContractDocumentInput,
-  area: { left: number; right: number; width: number },
+  area: Area,
 ): void {
   const { canvas } = writer;
-  const height = canvas.height;
-  const centerX = area.left + area.width / 2;
+  const bandBottom = canvas.height * BAND_RATIO;
 
-  canvas.text([{ text: "اتفاقية شراكة وتشغيل", bold: true }], {
-    x: area.left,
-    y: height - 96,
-    size: TEXT.coverKicker.size,
-    maxWidth: area.width,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.goldBright,
-  });
+  // Lay the stack out with a downward cursor, then centre the whole block in the
+  // band so it never floats at the top or sinks to the seam.
+  const kickerSize = TEXT.coverKicker.size;
+  const titleSize = TEXT.coverTitle.size;
+  const kanjoSize = titleSize + 16;
+  const wawSize = titleSize - 8;
+  const nameSize = TEXT.coverName.size + 9;
 
-  canvas.text([{ text: "عقد اتفاق بين", bold: true }], {
-    x: area.left,
-    y: height - 168,
-    size: TEXT.coverTitle.size,
-    maxWidth: area.width,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.white,
-  });
-  canvas.text([{ text: "كانجو", bold: true }], {
-    x: area.left,
-    y: height - 214,
-    size: TEXT.coverTitle.size + 4,
-    maxWidth: area.width,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.goldBright,
-  });
-  canvas.text([{ text: "و", bold: true }], {
-    x: area.left,
-    y: height - 250,
-    size: TEXT.coverTitle.size - 2,
-    maxWidth: area.width,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.white,
-  });
+  const stack: { text?: string; size: number; gap: number; color?: typeof PALETTE.white; ruleW?: number }[] = [
+    { text: "اتفاقية شراكة وتشغيل", size: kickerSize, gap: 8, color: PALETTE.goldBright },
+    { ruleW: 68, size: 2, gap: 30 },
+    { text: "عقد اتفاق بين", size: titleSize, gap: 10, color: PALETTE.white },
+    { text: "كانجو", size: kanjoSize, gap: 4, color: PALETTE.goldBright },
+    { text: "و", size: wawSize, gap: 20, color: PALETTE.white },
+    { text: input.merchantName, size: nameSize, gap: 12, color: PALETTE.white },
+    { ruleW: 180, size: 2, gap: 0 },
+  ];
+  const totalH = stack.reduce((sum, item) => sum + item.size + item.gap, 0);
 
-  // Merchant name on a solid white plate: high contrast over the dark band and
-  // the single strongest identifier on the cover.
-  const plateW = Math.min(area.width, 420);
-  const plateX = centerX - plateW / 2;
-  const plateH = 56;
-  const nameTop = height - 286;
-  canvas.box(
-    { x: plateX, y: nameTop - plateH, width: plateW, height: plateH },
-    { fill: PALETTE.white, radius: 8 },
-  );
-  canvas.text([{ text: input.merchantName, bold: true }], {
-    x: plateX + 12,
-    y: nameTop - plateH / 2 - TEXT.coverName.size / 2 + 2,
-    size: TEXT.coverName.size,
-    maxWidth: plateW - 24,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.royal,
-  });
+  let y = (canvas.height + bandBottom) / 2 + totalH / 2;
+  for (const item of stack) {
+    if (item.ruleW !== undefined) {
+      canvas.box(
+        { x: area.centerX - item.ruleW / 2, y: y - item.size, width: item.ruleW, height: item.size },
+        { fill: PALETTE.gold },
+      );
+    } else {
+      canvas.text([{ text: item.text!, bold: true }], {
+        x: area.left,
+        y: y - item.size,
+        size: item.size,
+        maxWidth: area.width,
+        align: "center",
+        direction: "rtl",
+        color: item.color!,
+      });
+    }
+    y -= item.size + item.gap;
+  }
 }
 
-function drawLogoBlock(
-  writer: DocumentWriter,
-  kanjo: PDFImage | null,
-  area: { left: number; right: number; width: number },
-): void {
+/** Kanjo mark and identity on the clean lower half. */
+function drawLogoBlock(writer: DocumentWriter, kanjo: PDFImage | null, area: Area): void {
   const { canvas } = writer;
-  const centerX = area.left + area.width / 2;
+  const bandBottom = canvas.height * BAND_RATIO;
 
-  // Anchor the mark clearly below the dark band so it never clips the gold edge.
-  const bandBottom = canvas.height * 0.58;
-  const logoSize = 172;
-  const logoY = bandBottom - 44 - logoSize;
+  const logoSize = 150;
+  const logoTop = bandBottom - 46;
+  const logoY = logoTop - logoSize;
   if (kanjo) {
     canvas.page.drawImage(kanjo, {
-      x: centerX - logoSize / 2,
+      x: area.centerX - logoSize / 2,
       y: logoY,
       width: logoSize,
       height: logoSize,
@@ -145,8 +134,8 @@ function drawLogoBlock(
 
   canvas.text([{ text: "KANJO", bold: true }], {
     x: area.left,
-    y: logoY - 30,
-    size: 20,
+    y: logoY - 28,
+    size: 17,
     maxWidth: area.width,
     align: "center",
     direction: "ltr",
@@ -154,64 +143,26 @@ function drawLogoBlock(
   });
   canvas.text([{ text: "منصة التوصيل والتجارة الإلكترونية" }], {
     x: area.left,
-    y: logoY - 48,
+    y: logoY - 46,
     size: TEXT.coverMeta.size,
     maxWidth: area.width,
     align: "center",
     direction: "rtl",
     color: PALETTE.inkSoft,
   });
-
-  // A short gold divider between the mark and the metadata footer.
-  const ruleY = logoY - 70;
-  canvas.box(
-    { x: centerX - 40, y: ruleY, width: 80, height: 2.5 },
-    { fill: PALETTE.gold },
-  );
 }
 
-function drawCoverMeta(
-  writer: DocumentWriter,
-  input: ContractDocumentInput,
-  area: { left: number; right: number; width: number },
-): void {
+/** Website, centred in the royal footer band. */
+function drawWebsite(writer: DocumentWriter, area: Area): void {
   const { canvas } = writer;
-  const y = 96;
-
-  const rate =
-    input.baseCommission !== null ? input.baseCommission : input.displayRate;
-
-  canvas.text([{ text: contractDocumentTitle(input) }], {
-    x: area.left,
-    y: y + 34,
-    size: TEXT.coverMeta.size,
-    maxWidth: area.width,
-    align: "center",
-    direction: "rtl",
-    color: PALETTE.royal,
-  });
-  canvas.text(
-    [{ text: `نسبة مقابل خدمات المنصة: ${toArabicNumerals(rate)}%` }],
-    {
-      x: area.left,
-      y: y + 16,
-      size: TEXT.coverMeta.size,
-      maxWidth: area.width,
-      align: "center",
-      direction: "rtl",
-      color: PALETTE.inkSoft,
-    },
-  );
-
-  canvas.rule(area.left + 80, area.right - 80, y - 2, PALETTE.line, 0.8);
   canvas.text([{ text: WEBSITE, bold: true }], {
     x: area.left,
-    y: y - 20,
-    size: TEXT.coverMeta.size,
+    y: 30,
+    size: TEXT.coverMeta.size + 1.5,
     maxWidth: area.width,
     align: "center",
     direction: "ltr",
-    color: PALETTE.goldDeep,
+    color: PALETTE.goldBright,
   });
 }
 
@@ -229,5 +180,5 @@ export function drawCover(
   const area = drawBackdrop(writer);
   drawTitleBlock(writer, input, area);
   drawLogoBlock(writer, kanjo, area);
-  drawCoverMeta(writer, input, area);
+  drawWebsite(writer, area);
 }

@@ -27,7 +27,9 @@ function drawSignatureFooter(canvas: PageCanvas, input: ContractDocumentInput): 
   const merchant = input.merchantName || "الطرف الثاني";
   const labelY = 60;
 
-  canvas.text([{ text: "توقيع الطرف الأول (كانجو)", bold: true }], {
+  // RTL reading order: the first party signs on the right (reading start), the
+  // second party on the left.
+  canvas.text([{ text: `توقيع الطرف الثاني (${merchant})`, bold: true }], {
     x: left,
     y: labelY,
     size: TEXT.small.size,
@@ -36,7 +38,7 @@ function drawSignatureFooter(canvas: PageCanvas, input: ContractDocumentInput): 
     direction: "rtl",
     color: PALETTE.royal,
   });
-  canvas.text([{ text: `توقيع الطرف الثاني (${merchant})`, bold: true }], {
+  canvas.text([{ text: "توقيع الطرف الأول (كانجو)", bold: true }], {
     x: mid + 10,
     y: labelY,
     size: TEXT.small.size,

@@ -107,9 +107,17 @@ function datePreamble(writer: DocumentWriter): void {
 function fieldRow(writer: DocumentWriter, top: number, label: string, value: string): void {
   const { canvas } = writer;
   const size = TEXT.dense.size;
-  const labelWidth = writer.contentWidth * LABEL_WIDTH_RATIO;
+  const innerLeft = writer.left + PANEL_PAD;
+  const innerRight = writer.left + writer.contentWidth - PANEL_PAD - SPINE_WIDTH;
+  const innerWidth = innerRight - innerLeft;
+  const labelWidth = innerWidth * LABEL_WIDTH_RATIO;
+  const gap = 10;
+
+  // RTL reading order: the label sits at the far-right (reading start) and the
+  // value occupies the space to its left, right-aligned against the label.
+  const labelX = innerRight - labelWidth;
   canvas.text([{ text: label }], {
-    x: writer.left + PANEL_PAD,
+    x: labelX,
     y: top - size,
     size,
     maxWidth: labelWidth,
@@ -118,10 +126,10 @@ function fieldRow(writer: DocumentWriter, top: number, label: string, value: str
     color: PALETTE.royal,
   });
   canvas.text([{ text: value }], {
-    x: writer.left + PANEL_PAD + labelWidth,
+    x: innerLeft,
     y: top - size,
     size,
-    maxWidth: writer.contentWidth - labelWidth - PANEL_PAD * 2 - SPINE_WIDTH,
+    maxWidth: innerWidth - labelWidth - gap,
     align: "start",
     direction: "rtl",
     color: PALETTE.ink,
