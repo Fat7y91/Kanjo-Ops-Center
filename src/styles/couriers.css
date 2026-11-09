@@ -1,0 +1,111 @@
+/* Couriers roster and the per-employee operations report.
+ *
+ * Layout only: colour, radii and elevation come from the tokens and the shared
+ * `panel`, `badge`, `data-table` and `search-shell` primitives.
+ */
+
+.courier-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.courier-filters .search-shell {
+  flex: 1 1 320px;
+  width: auto;
+}
+
+.courier-filters > div:not(.search-shell) {
+  width: 180px;
+}
+
+.courier-table td {
+  white-space: nowrap;
+}
+
+.courier-identity,
+.courier-vehicle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.courier-identity strong {
+  color: var(--ink);
+}
+
+.courier-identity span,
+.courier-vehicle span {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.courier-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.courier-form-toggle {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.courier-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.courier-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+
+.courier-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-block-end: 10px;
+  border-block-end: 1px solid var(--line);
+}
+
+.courier-details dt {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.courier-details dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.kpi-month-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kpi-month-picker > div {
+  width: 200px;
+}
+
+@media (max-width: 720px) {
+  .courier-filters > div:not(.search-shell) {
+    width: 100%;
+  }
+
+  .courier-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

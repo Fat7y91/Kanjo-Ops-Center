@@ -480,6 +480,10 @@ columns after INSERT; status may move `pending → paid` only.
 | `display_name` | `text` | no | `''` |
 | `courier_cut_percent` | `numeric(6,2)` | no | 0–100 |
 | `active` | `boolean` | no | `true` |
+| `vehicle_type` | `text` | no | `''` |
+| `vehicle_plate` | `text` | no | `''` |
+| `availability` | `text` | no | `available` \| `busy` \| `offline` |
+| `applied_at` | `timestamptz` | no | `now()` |
 | `created_at` / `updated_at` | `timestamptz` | no | |
 
 ### `app.operation_logs`
@@ -942,6 +946,15 @@ guarded `add column`, `drop ... if exists` before `create`).
 20261110000000  field_ops_catalogue
 20261111000000  payout_egypt_post_enum
 20261112000000  legacy_gap_resolutions
+20261113000000  merchant_logo
+20261114000000  ai_taxonomy_service_role_grants
+20261114000100  seed_taxonomy_categories
+20261115000000  merchant_cover
+20261116000000  taxonomy_sync_grants
+20261117000000  contracts_v2
+20261118000000  remove_sync_test_row
+20261119000000  contract_force_edit
+20261120000000  couriers_management
 ```
 
 ---

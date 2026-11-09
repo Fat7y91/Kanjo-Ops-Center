@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (104 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (107 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:
@@ -668,5 +668,24 @@ export const PERMISSIONS = [
     label: "إدارة عملاء الحملات",
     description: "تحديث حالة العميل المحتمل وربطه بحملة وتسجيل الملاحظات.",
     group: "التسويق",
+  },
+  /* ── 25. المناديب (شركاء التوصيل) ── */
+  {
+    key: "view_couriers",
+    label: "عرض المناديب",
+    description: "فتح دليل شركاء التوصيل وبيانات مركباتهم وتوفرهم وأرصدتهم.",
+    group: "المقاصة والعمليات",
+  },
+  {
+    key: "manage_couriers",
+    label: "إدارة المناديب",
+    description: "إضافة شريك توصيل وتعديل بياناته وتعطيله أو حذفه.",
+    group: "المقاصة والعمليات",
+  },
+  {
+    key: "view_operations_kpi",
+    label: "عرض سجل أداء الموظفين",
+    description: "الاطلاع على عدد العمليات المسجلة لكل موظف وقيمتها لحساب المؤشرات.",
+    group: "المقاصة والعمليات",
   },
 ] as const;

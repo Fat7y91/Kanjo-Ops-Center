@@ -230,6 +230,29 @@ export const MODULES: readonly ModuleDefinition[] = [
     icon: "operations",
   },
   {
+    // Delivery roster: the same partners that appear in the operations logger,
+    // managed as records rather than selected inside a form. Managing and
+    // viewing are separate grants so a logger can see the roster without being
+    // able to edit a partner's login or deactivate them.
+    href: "/couriers",
+    label: "المناديب",
+    shortLabel: "المناديب",
+    description: "شركاء التوصيل وبيانات مركباتهم وأرصدتهم وحالة توفرهم.",
+    permission: "view_couriers",
+    alsoGrantedBy: ["manage_couriers"],
+    icon: "operations",
+  },
+  {
+    // Per-employee operations ledger. This is the evidence the payroll desk
+    // reviews when it computes incentive bands; it is not a payslip itself.
+    href: "/operations/kpi",
+    label: "سجل أداء الموظفين",
+    shortLabel: "الأداء",
+    description: "عدد العمليات المسجلة لكل موظف وقيمتها الشهرية.",
+    permission: "view_operations_kpi",
+    icon: "kpi",
+  },
+  {
     href: "/finance/clearinghouse",
     label: "المقاصة",
     shortLabel: "المقاصة",

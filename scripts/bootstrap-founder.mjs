@@ -30,7 +30,7 @@ const TITLE = process.env.KANJO_FOUNDER_TITLE ?? 'المؤسس';
 const TEAM = process.env.KANJO_FOUNDER_TEAM ?? 'الإدارة التنفيذية';
 const CLEARANCE_LEVEL = 4;
 /** Must match `PERMISSION_KEYS.length` in `src/lib/rbac/permissions.ts`. */
-const EXPECTED_CATALOGUE_KEYS = 104;
+const EXPECTED_CATALOGUE_KEYS = 107;
 
 function fail(message) {
   console.error(`\n  ✗ ${message}\n`);
