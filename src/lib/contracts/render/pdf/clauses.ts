@@ -1,11 +1,17 @@
 /**
- * Numbered clauses and the commission appendix for the contract PDF.
+ * Numbered clauses and the commission appendix for the contract document.
  *
- * Each clause renders as a titled block: a purple heading strip with a gold
- * spine, then the wrapped body, then any dashed fill rules the source HTML asked
- * for. Blocks never split across pages mid-sentence: the heading and at least the
- * first lines are reserved together, and the body flows onto the next page only
- * at a line boundary.
+ * Clauses are the heart of the document, so this module implements the "smart
+ * pagination" the printed contract needs:
+ *
+ *   - a heading is never stranded at the bottom of a page: it reserves room for
+ *     itself plus at least two body lines before it commits;
+ *   - a body never leaves a single orphan line on the next page (a "widow"); if
+ *     only one line would spill, a line is pulled back to keep at least two;
+ *   - body text is justified to the content width so the right and left edges
+ *     stay flush, giving the dense, ruled look of a corporate contract;
+ *   - spacing between clauses is elastic: tighter when a page is filling up so
+ *     we do not leave large gaps at the bottom.
  */
 
 import { PALETTE, TEXT, wrapSpans, type DocumentWriter, type StyledSpan } from "@/lib/pdf";
@@ -14,51 +20,24 @@ import { buildClauses, clauseNumberLabel } from "../clauses";
 import { toArabicNumerals } from "../format";
 import type { ContractDocumentInput } from "../input";
 import { resolveLegalContext } from "../legal-context";
+import { drawSectionHeading, headingHeight } from "./heading";
 import { countFillRules } from "./html";
 
 const FILL_RULE_HEIGHT = 22;
+const MIN_BODY_LINES_AFTER_HEADING = 2;
 
-function clauseHeading(
-  writer: DocumentWriter,
-  clauseIndex: number,
-  title: string,
-): void {
-  sectionHeading(
-    writer,
-    `البند ${clauseNumberLabel(clauseIndex)}: ${title}`,
-  );
-}
-
-/** A purple heading strip with a gold spine, used for clauses and appendices. */
-function sectionHeading(writer: DocumentWriter, title: string): void {
-  const { canvas } = writer;
-  const height = TEXT.heading.lineHeight + 6;
-  const top = writer.y;
-  canvas.box(
-    { x: writer.left, y: top - height, width: writer.contentWidth, height },
-    { fill: PALETTE.purpleSoft, radius: 3 },
-  );
-  canvas.box(
-    { x: writer.left + writer.contentWidth - 4, y: top - height, width: 4, height },
-    { fill: PALETTE.gold },
-  );
-  canvas.text([{ text: title, bold: true }], {
-    x: writer.left + 10,
-    y: top - height + 6,
-    size: TEXT.heading.size,
-    maxWidth: writer.contentWidth - 20,
-    align: "start",
-    direction: "rtl",
-    color: PALETTE.royal,
-  });
-  writer.commit(height, 6);
+/** True when the remaining space can hold a heading plus two body lines. */
+function headingFits(writer: DocumentWriter, title: string): boolean {
+  const needed = headingHeight({ title }) + TEXT.body.lineHeight * MIN_BODY_LINES_AFTER_HEADING;
+  return writer.y - needed >= writer.floor;
 }
 
 /**
- * Draws a paragraph that may spill across pages, breaking only between lines.
+ * Draws a justified paragraph that may spill across pages, breaking only between
+ * lines. Every line except the last of a page-run is justified to the right edge.
  *
- * Reserves at least one line before drawing so a body never starts with an
- * orphaned heading alone at the bottom of a page.
+ * `avoidWidow` pulls one line back when a break would leave a single orphan line
+ * on the following page.
  */
 function flowingParagraph(writer: DocumentWriter, spans: StyledSpan[]): void {
   const size = TEXT.body.size;
@@ -66,28 +45,42 @@ function flowingParagraph(writer: DocumentWriter, spans: StyledSpan[]): void {
   const lines = wrapSpans(spans, writer.contentWidth, size, writer.fonts, "rtl");
   if (lines.length === 0) return;
 
+  // Reserve two lines so a heading is never left with a single body line.
   writer.ensure(Math.min(lineHeight * 2, writer.y - writer.floor));
-  let cursor = writer.y;
-  for (const line of lines) {
-    if (cursor - lineHeight < writer.floor) {
-      writer.y = cursor;
-      writer.addPage();
-      cursor = writer.y;
+
+  let index = 0;
+  while (index < lines.length) {
+    const available = writer.y - writer.floor;
+    const fit = Math.max(1, Math.floor(available / lineHeight));
+
+    // Widow control: if a break would strand exactly one line on the next page,
+    // move one line down with it so the following page opens with two lines.
+    let take = Math.min(fit, lines.length - index);
+    if (take < lines.length - index && lines.length - index - take === 1 && take > 1) {
+      take -= 1;
     }
-    // Re-read the canvas each iteration: a mid-paragraph page break swaps the
-    // active page, and the previous reference would draw at the wrong origin.
-    writer.canvas.text(line, {
-      x: writer.left,
-      y: cursor - size,
-      size,
-      maxWidth: writer.contentWidth,
-      align: "start",
-      direction: "rtl",
-      color: PALETTE.ink,
-    });
-    cursor -= lineHeight;
+
+    for (let i = 0; i < take; i += 1) {
+      const isLastLineOfParagraph = index + i === lines.length - 1;
+      const y = writer.y - size;
+      writer.canvas.text(lines[index + i]!, {
+        x: writer.left,
+        y,
+        size,
+        maxWidth: writer.contentWidth,
+        align: "start",
+        direction: "rtl",
+        color: PALETTE.ink,
+        justifyWidth: isLastLineOfParagraph ? undefined : writer.contentWidth,
+      });
+      writer.y -= lineHeight;
+    }
+    index += take;
+
+    if (index < lines.length) {
+      writer.addPage();
+    }
   }
-  writer.y = cursor;
 }
 
 function drawFillRules(writer: DocumentWriter, count: number): void {
@@ -98,7 +91,7 @@ function drawFillRules(writer: DocumentWriter, count: number): void {
       start: { x: writer.left + 4, y },
       end: { x: writer.right - 4, y },
       thickness: 0.8,
-      color: PALETTE.inkSoft,
+      color: PALETTE.lineStrong,
       dashArray: [3, 3],
     });
     writer.commit(FILL_RULE_HEIGHT, 0);
@@ -117,12 +110,20 @@ export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput
 
   for (let index = 0; index < clauses.length; index += 1) {
     const clause = clauses[index]!;
-    writer.ensure(60);
-    clauseHeading(writer, index, clause.title);
+    const title = `البند ${clauseNumberLabel(index)}: ${clause.title}`;
+
+    if (!headingFits(writer, title)) writer.addPage();
+
+    drawSectionHeading(writer, { eyebrow: "بند تعاقدي", title });
     flowingParagraph(writer, [{ text: stripMarkup(clause.body) }]);
     const rules = countFillRules(clause.body);
     if (rules > 0) drawFillRules(writer, rules);
-    writer.commit(0, 12);
+
+    // Elastic gap: tighter when the page is nearly full, roomier when there is
+    // space, so bottoms never gape and clauses never crowd.
+    const remaining = writer.y - writer.floor;
+    const gap = remaining < 90 ? 6 : 12;
+    writer.commit(0, gap);
   }
 }
 
@@ -152,30 +153,30 @@ export function drawCommission(writer: DocumentWriter, input: ContractDocumentIn
   }
   for (const ex of exceptions) rows.push({ label: ex.category, rate: ex.rate });
 
-  const rowHeight = TEXT.cell.lineHeight + 8;
+  const rowHeight = TEXT.cell.lineHeight + 10;
   const headHeight = rowHeight;
-  const estimate = TEXT.heading.lineHeight + 12 + headHeight + rows.length * rowHeight;
+  const title = "ملحق العمولات: نسبة مقابل خدمات المنصة والتشغيل";
+  const estimate =
+    headingHeight({ title }) + headHeight + rows.length * rowHeight + 6;
   writer.ensure(estimate);
-  sectionHeading(writer, "ملحق العمولات: نسبة مقابل خدمات المنصة والتشغيل");
+
+  drawSectionHeading(writer, { eyebrow: "ملحق", title });
 
   const { canvas } = writer;
   const rateColWidth = 150;
   const labelColWidth = writer.contentWidth - rateColWidth;
-  // Right-to-left table: the first column (category) sits on the right, the
-  // numeric rate column on the left. Both cells are anchored to their own column
-  // edges so a long label never runs under the rate.
+  // RTL table: the category column sits on the right, the rate on the left.
   const labelX = writer.left + rateColWidth;
   const rateX = writer.left;
   let top = writer.y;
 
-  // Header row.
   canvas.box(
     { x: writer.left, y: top - headHeight, width: writer.contentWidth, height: headHeight },
     { fill: PALETTE.royal },
   );
   canvas.text([{ text: "الفئة / النشاط", bold: true }], {
     x: labelX + 8,
-    y: top - headHeight + 8,
+    y: top - headHeight + 9,
     size: TEXT.cellHead.size,
     maxWidth: labelColWidth - 16,
     align: "start",
@@ -184,7 +185,7 @@ export function drawCommission(writer: DocumentWriter, input: ContractDocumentIn
   });
   canvas.text([{ text: "نسبة مقابل خدمات المنصة", bold: true }], {
     x: rateX,
-    y: top - headHeight + 8,
+    y: top - headHeight + 9,
     size: TEXT.cellHead.size,
     maxWidth: rateColWidth,
     align: "center",
@@ -203,7 +204,7 @@ export function drawCommission(writer: DocumentWriter, input: ContractDocumentIn
     canvas.rule(writer.left, writer.right, top - rowHeight, PALETTE.line, 0.8);
     canvas.text([{ text: row.label }], {
       x: labelX + 8,
-      y: top - rowHeight + 8,
+      y: top - rowHeight + 9,
       size: TEXT.cell.size,
       maxWidth: labelColWidth - 16,
       align: "start",
@@ -212,7 +213,7 @@ export function drawCommission(writer: DocumentWriter, input: ContractDocumentIn
     });
     canvas.text([{ text: `${toArabicNumerals(row.rate)}%`, bold: true }], {
       x: rateX,
-      y: top - rowHeight + 8,
+      y: top - rowHeight + 9,
       size: TEXT.cell.size,
       maxWidth: rateColWidth,
       align: "center",

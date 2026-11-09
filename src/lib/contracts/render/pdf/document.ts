@@ -1,24 +1,24 @@
 /**
  * Contract document assembly for the Kanjo PDF engine.
  *
- * Builds the full A4 contract on the pure-JS engine: masthead, party panels,
- * preamble, numbered clauses, commission appendix, copies note, summary with
- * signatures, and the social/copyright footer, then adds the watermark, inner
- * page headers and page numbers once the page count is known.
- *
- * This replaces the former react-pdf component tree. Keeping assembly separate
- * from rendering means the order the sections print in lives in one readable
- * function rather than being implied by React component nesting.
+ * Builds the full contract: a dedicated branded cover (unnumbered), then the
+ * content pages (party panels, preamble, numbered clauses, commission appendix,
+ * copies note, summary with signatures, social/copyright footer). Per-page chrome
+ * (running header, watermark, signature footer, page numbers) is added once the
+ * page count is known, and excludes the cover so "page 1" is the first clause
+ * page.
  */
 
-import { A4, DocumentWriter } from "@/lib/pdf";
+import { DocumentWriter } from "@/lib/pdf";
 import type { PDFImage } from "pdf-lib";
 
 import type { ContractDocumentInput } from "../input";
 import { decodeLogoDataUri, kanjoLogoBytes } from "./assets";
 import { drawClauses, drawCommission } from "./clauses";
+import { drawCover } from "./cover";
 import { pageDecorations } from "./decorations";
-import { drawHeader, type HeaderAssets } from "./header";
+import { CONTRACT_PAGE } from "./geometry";
+import type { ChromeAssets } from "./header";
 import { drawCopiesNote, drawPreamble } from "./notes";
 import { drawParties } from "./parties";
 import { drawSocial } from "./social";
@@ -27,7 +27,7 @@ import { drawSummary } from "./summary";
 async function embedAssets(
   writer: DocumentWriter,
   input: ContractDocumentInput,
-): Promise<HeaderAssets> {
+): Promise<ChromeAssets> {
   const kanjo = await writer.embedImage(kanjoLogoBytes());
 
   let merchant: PDFImage | null = null;
@@ -47,10 +47,12 @@ async function embedAssets(
 export async function renderContractDocument(
   input: ContractDocumentInput,
 ): Promise<Uint8Array> {
-  const writer = await DocumentWriter.create(A4);
+  const writer = await DocumentWriter.create(CONTRACT_PAGE, "cover");
   const assets = await embedAssets(writer, input);
 
-  drawHeader(writer, input, assets);
+  drawCover(writer, input, assets.kanjo);
+
+  writer.addPage("content");
   drawParties(writer, input);
   drawPreamble(writer);
   drawClauses(writer, input);
@@ -59,5 +61,5 @@ export async function renderContractDocument(
   drawSummary(writer, input);
   drawSocial(writer);
 
-  return writer.finish(pageDecorations(assets.kanjo, input));
+  return writer.finish(pageDecorations(assets, input));
 }

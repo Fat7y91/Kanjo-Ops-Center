@@ -1,80 +1,128 @@
 /**
- * Per-page decorations for the contract PDF.
+ * Page decorations for the contract document.
  *
- * Runs after every page is laid out, when the total page count is known. Draws
- * the faint Kanjo watermark, a slim header continuation rule on inner pages, and
- * the "صفحة X من Y" footer with Eastern-Arabic numerals.
+ * Drawn by the finish hook once every section has flowed onto pages. Content
+ * pages get the running header, a faint watermark, the per-page signature footer
+ * and the page strip (page number + website). Cover pages are skipped entirely so
+ * the title sheet stays clean and unnumbered.
  */
 
-import { PALETTE, TEXT, type DocumentWriter, type PageHook } from "@/lib/pdf";
+import { PALETTE, TEXT } from "@/lib/pdf";
+import type { PageCanvas, PageHook, PageHookInfo } from "@/lib/pdf";
 import type { PDFImage } from "pdf-lib";
 
-import { contractDocumentTitle } from "../title";
-import type { ContractDocumentInput } from "../input";
 import { toArabicNumerals } from "../format";
+import type { ContractDocumentInput } from "../input";
+import { PAGE_MARGIN } from "./geometry";
+import { drawRunningHeader, type ChromeAssets } from "./header";
 
 const WATERMARK_SIZE = 300;
+const WEBSITE = "kanjo.com.eg";
 
-/**
- * Builds the page hook for a document.
- *
- * Page one skips the continuation rule (the masthead already fills the top).
- * The watermark is drawn on every page at very low opacity so the sheet reads as
- * Kanjo paperwork even if pages are separated.
- */
-export function pageDecorations(
-  watermark: PDFImage | null,
+/** The two required signature lines plus their fill rules. */
+function drawSignatureFooter(canvas: PageCanvas, input: ContractDocumentInput): void {
+  const left = PAGE_MARGIN;
+  const right = canvas.width - PAGE_MARGIN;
+  const mid = left + (right - left) / 2;
+  const merchant = input.merchantName || "الطرف الثاني";
+  const labelY = 60;
+
+  canvas.text([{ text: "توقيع الطرف الأول (كانجو)", bold: true }], {
+    x: left,
+    y: labelY,
+    size: TEXT.small.size,
+    maxWidth: mid - left - 10,
+    align: "start",
+    direction: "rtl",
+    color: PALETTE.royal,
+  });
+  canvas.text([{ text: `توقيع الطرف الثاني (${merchant})`, bold: true }], {
+    x: mid + 10,
+    y: labelY,
+    size: TEXT.small.size,
+    maxWidth: right - mid - 10,
+    align: "start",
+    direction: "rtl",
+    color: PALETTE.royal,
+  });
+
+  const lineY = labelY - 5;
+  canvas.dashedRule(left, mid - 14, lineY, PALETTE.lineStrong, 0.8);
+  canvas.dashedRule(mid + 6, right, lineY, PALETTE.lineStrong, 0.8);
+}
+
+/** Page number (centred), website (start) and merchant (end) at the very bottom. */
+function drawPageStrip(
+  canvas: PageCanvas,
+  page: PageHookInfo,
   input: ContractDocumentInput,
-): PageHook {
-  return (canvas, pageNumber, totalPages) => {
-    const { page } = canvas;
+): void {
+  const left = PAGE_MARGIN;
+  const right = canvas.width - PAGE_MARGIN;
+  const width = right - left;
+  const y = 24;
 
-    if (watermark) {
-      const size = WATERMARK_SIZE;
-      const x = (page.getWidth() - size) / 2;
-      const y = (page.getHeight() - size) / 2 - 40;
-      page.drawImage(watermark, { x, y, width: size, height: size, opacity: 0.045 });
-    }
+  canvas.rule(left, right, y + 12, PALETTE.line, 0.8);
 
-    if (pageNumber > 1) {
-      const top = page.getHeight() - 40;
-      canvas.rule(40, page.getWidth() - 40, top, PALETTE.lineStrong, 0.8);
-      canvas.text([{ text: contractDocumentTitle(input), bold: true }], {
-        x: 40,
-        y: top - 14,
-        size: TEXT.small.size,
-        maxWidth: page.getWidth() - 80,
-        align: "end",
-        direction: "rtl",
-        color: PALETTE.royal,
-      });
-    }
-
-    const footerY = 30;
-    canvas.rule(40, page.getWidth() - 40, footerY + 12, PALETTE.line, 0.8);
+  if (page.number !== null) {
     canvas.text(
-      [{ text: `صفحة ${toArabicNumerals(pageNumber)} من ${toArabicNumerals(totalPages)}` }],
+      [{ text: `صفحة ${toArabicNumerals(page.number)} من ${toArabicNumerals(page.total)}`, bold: true }],
       {
-        x: 40,
-        y: footerY,
+        x: left + width / 3,
+        y,
         size: TEXT.small.size,
-        maxWidth: page.getWidth() - 80,
+        maxWidth: width / 3,
         align: "center",
         direction: "rtl",
         color: PALETTE.royal,
       },
     );
-    canvas.text([{ text: "KANJO" }], {
-      x: 40,
-      y: footerY,
-      size: TEXT.small.size,
-      maxWidth: page.getWidth() - 80,
-      align: "start",
-      direction: "ltr",
-      color: PALETTE.muted,
-    });
-  };
+  }
+
+  canvas.text([{ text: WEBSITE, bold: true }], {
+    x: left,
+    y,
+    size: TEXT.small.size,
+    maxWidth: width / 3,
+    align: "start",
+    direction: "ltr",
+    color: PALETTE.goldDeep,
+  });
+  canvas.text([{ text: input.merchantName || "KANJO" }], {
+    x: right - width / 3,
+    y,
+    size: TEXT.small.size,
+    maxWidth: width / 3,
+    align: "start",
+    direction: "rtl",
+    color: PALETTE.muted,
+  });
 }
 
-/** Exposes the writer geometry type for the decorator's callers. */
-export type { DocumentWriter };
+/**
+ * Builds the finish hook. Covers are skipped; content pages get header, a very
+ * faint watermark for continuity, the signature footer and the page strip.
+ */
+export function pageDecorations(
+  assets: ChromeAssets,
+  input: ContractDocumentInput,
+): PageHook {
+  return (canvas, page) => {
+    if (page.isCover) return;
+
+    if (assets.kanjo) {
+      const size = WATERMARK_SIZE;
+      canvas.page.drawImage(assets.kanjo, {
+        x: (canvas.width - size) / 2,
+        y: (canvas.height - size) / 2 - 30,
+        width: size,
+        height: size,
+        opacity: 0.04,
+      });
+    }
+
+    drawRunningHeader(canvas, input, assets);
+    drawSignatureFooter(canvas, input);
+    drawPageStrip(canvas, page, input);
+  };
+}

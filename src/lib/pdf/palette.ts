@@ -21,18 +21,30 @@ function hex(value: string): Rgb {
 }
 
 export const PALETTE = {
-  ink: hex("#1B0F26"),
-  inkSoft: hex("#4B3B5A"),
+  /** Deepest ink for body copy on white paper. */
+  ink: hex("#1B1024"),
+  inkStrong: hex("#0F0717"),
+  /** Softer ink for secondary lines and labels. */
+  inkSoft: hex("#463652"),
+  slate: hex("#334155"),
   muted: hex("#6B7280"),
-  royal: hex("#3B0764"),
+  /** Primary brand purple, matching the issued V1 contracts. */
+  royal: hex("#4B0082"),
+  /** Darker purple used for cover bands and mastheads. */
+  royalDeep: hex("#2C0A4D"),
+  /** Mid purple for gradients-by-bands and accents. */
+  royalMid: hex("#5B1799"),
   purple: hex("#6C35B6"),
   purpleSoft: hex("#F3EDFB"),
   gold: hex("#B8860B"),
-  goldBright: hex("#E0B84C"),
+  goldDeep: hex("#8C6508"),
+  goldBright: hex("#D9B44A"),
   goldSoft: hex("#FBF3DC"),
-  panel: hex("#F8F5FC"),
-  line: hex("#E6DAF3"),
-  lineStrong: hex("#C9B6E4"),
+  /** Card and panel fills. */
+  panel: hex("#F7F4FB"),
+  panelAlt: hex("#FDFBF7"),
+  line: hex("#E7DEF3"),
+  lineStrong: hex("#CBB8E4"),
   white: hex("#FFFFFF"),
   success: hex("#15803D"),
   warning: hex("#B45309"),

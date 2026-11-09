@@ -80,6 +80,24 @@ export class PageCanvas {
     });
   }
 
+  /** Dashed horizontal rule, used for fill-in lines and soft dividers. */
+  dashedRule(
+    x1: number,
+    x2: number,
+    y: number,
+    color: Rgb = PALETTE.lineStrong,
+    thickness = 0.8,
+    dash: number[] = [2.5, 2.5],
+  ): void {
+    this.page.drawLine({
+      start: { x: x1, y },
+      end: { x: x2, y },
+      thickness,
+      color,
+      dashArray: dash,
+    });
+  }
+
   /** Vertical rule between two y positions at `x`. */
   vrule(x: number, y1: number, y2: number, color: Rgb = PALETTE.line, thickness = 1): void {
     this.page.drawLine({
@@ -110,6 +128,7 @@ export class PageCanvas {
       align?: TextAlign;
       direction?: Direction;
       color?: Rgb;
+      justifyWidth?: number;
     },
   ): number {
     return drawLine({
@@ -124,6 +143,7 @@ export class PageCanvas {
       align: options.align,
       direction: options.direction ?? "rtl",
       color: options.color,
+      justifyWidth: options.justifyWidth,
     });
   }
 

@@ -1,12 +1,14 @@
 /**
- * Narrative blocks for the contract PDF: the preamble and the copies note.
+ * Narrative blocks for the contract document: the preamble and the copies note.
  *
- * These are fixed legal copy with no data binding, drawn as centred callout
- * cards so they stand apart from the numbered clauses without competing with
- * them.
+ * Both are fixed legal copy with no data binding. The preamble uses the shared
+ * section heading so it reads as part of the same system as the clauses; the
+ * copies note is a gold-toned band that closes the legal body before the summary.
  */
 
 import { PALETTE, TEXT, wrapSpans, type DocumentWriter } from "@/lib/pdf";
+
+import { drawSectionHeading, headingHeight } from "./heading";
 
 const PREAMBLE =
   "حيث إن كانجو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانجو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.";
@@ -14,81 +16,85 @@ const PREAMBLE =
 const COPIES_NOTE =
   "تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها، ويتكون العقد من البنود والملاحق المذكورة أعلاه.";
 
-/** Reserved height for a padded callout containing `lineCount` body lines. */
-function calloutHeight(lineCount: number): number {
-  const title = TEXT.heading.lineHeight + 6;
-  return title + lineCount * TEXT.body.lineHeight + 18;
-}
+const BODY_PAD = 12;
 
-/** Draws the "التمهيد" preamble as a titled callout card. */
+/** Draws the "التمهيد" preamble as a justified panel under a shared heading. */
 export function drawPreamble(writer: DocumentWriter): void {
+  const title = "التمهيد";
+  const lines = wrapSpans(
+    [{ text: PREAMBLE }],
+    writer.contentWidth - BODY_PAD * 2,
+    TEXT.body.size,
+    writer.fonts,
+    "rtl",
+  );
+  const panelH = lines.length * TEXT.body.lineHeight + BODY_PAD * 2;
+  writer.ensure(headingHeight({ title }) + panelH);
+
+  drawSectionHeading(writer, { eyebrow: "تمهيد", title });
+
   const { canvas } = writer;
-  const lines = wrapSpans([{ text: PREAMBLE }], writer.contentWidth - 24, TEXT.body.size, writer.fonts, "rtl");
-  const height = calloutHeight(lines.length);
-  writer.ensure(height);
   const top = writer.y;
-  const bottom = top - height;
-
+  const bottom = top - panelH;
   canvas.box(
-    { x: writer.left, y: bottom, width: writer.contentWidth, height },
-    { fill: PALETTE.panel, border: PALETTE.line, borderWidth: 1, radius: 4 },
+    { x: writer.left, y: bottom, width: writer.contentWidth, height: panelH },
+    { fill: PALETTE.panel, border: PALETTE.line, borderWidth: 1, radius: 5 },
   );
-  canvas.box(
-    { x: writer.left + writer.contentWidth - 4, y: bottom, width: 4, height },
-    { fill: PALETTE.gold },
-  );
-  canvas.text([{ text: "التمهيد", bold: true }], {
-    x: writer.left + 12,
-    y: top - TEXT.heading.size - 8,
-    size: TEXT.heading.size,
-    maxWidth: writer.contentWidth - 24,
-    align: "start",
-    direction: "rtl",
-    color: PALETTE.royal,
-  });
 
-  let baseline = top - TEXT.heading.lineHeight - 6 - TEXT.body.size;
-  for (const line of lines) {
+  let cursor = top - BODY_PAD;
+  lines.forEach((line, index) => {
+    const last = index === lines.length - 1;
     canvas.text(line, {
-      x: writer.left + 12,
-      y: baseline,
+      x: writer.left + BODY_PAD,
+      y: cursor - TEXT.body.size,
       size: TEXT.body.size,
-      maxWidth: writer.contentWidth - 24,
+      maxWidth: writer.contentWidth - BODY_PAD * 2,
       align: "start",
       direction: "rtl",
       color: PALETTE.ink,
+      justifyWidth: last ? undefined : writer.contentWidth - BODY_PAD * 2,
     });
-    baseline -= TEXT.body.lineHeight;
-  }
-  writer.commit(height, 12);
+    cursor -= TEXT.body.lineHeight;
+  });
+  writer.commit(panelH, 14);
 }
 
-/** Draws the "نسختان" copies note as a centred band. */
+/** Draws the "نسختان" copies note as a centred gold band. */
 export function drawCopiesNote(writer: DocumentWriter): void {
   const { canvas } = writer;
-  const lines = wrapSpans([{ text: COPIES_NOTE }], writer.contentWidth - 24, TEXT.dense.size, writer.fonts, "rtl");
-  const height = lines.length * TEXT.dense.lineHeight + 18;
+  const lines = wrapSpans(
+    [{ text: COPIES_NOTE }],
+    writer.contentWidth - BODY_PAD * 2,
+    TEXT.dense.size,
+    writer.fonts,
+    "rtl",
+  );
+  const height = lines.length * TEXT.dense.lineHeight + 20;
   writer.ensure(height);
   const top = writer.y;
   const bottom = top - height;
 
   canvas.box(
     { x: writer.left, y: bottom, width: writer.contentWidth, height },
-    { fill: PALETTE.goldSoft, border: PALETTE.goldBright, borderWidth: 0.8, radius: 4 },
+    { fill: PALETTE.goldSoft, border: PALETTE.goldBright, borderWidth: 0.8, radius: 5 },
+  );
+  canvas.box(
+    { x: writer.left, y: bottom, width: 4, height },
+    { fill: PALETTE.gold, radius: 2 },
   );
 
-  let baseline = top - 9 - TEXT.dense.size;
+  let baseline = top - 10 - TEXT.dense.size;
   for (const line of lines) {
     canvas.text(line, {
-      x: writer.left + 12,
+      x: writer.left + BODY_PAD,
       y: baseline,
       size: TEXT.dense.size,
-      maxWidth: writer.contentWidth - 24,
+      maxWidth: writer.contentWidth - BODY_PAD * 2,
       align: "center",
       direction: "rtl",
       color: PALETTE.ink,
     });
     baseline -= TEXT.dense.lineHeight;
   }
-  writer.commit(height, 12);
+  writer.commit(height, 14);
 }

@@ -23,5 +23,7 @@ export {
   A4,
   type PageGeometry,
   type PageHook,
+  type PageHookInfo,
+  type PageKind,
   type RenderPage,
 } from "./document";

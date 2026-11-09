@@ -138,6 +138,37 @@ if (CAN_EMBED) {
     const large = layout.measureSpans(spans, 20, fonts, "rtl");
     assert.ok(large > small);
   });
+
+  test("drawn justified line fills the requested width", async () => {
+    const draw = loadTsModule(path.join(projectRoot, "src/lib/pdf/draw.ts"));
+    const doc2 = await PDFDocument.create();
+    const page = doc2.addPage([595, 842]);
+    const fonts2 = await font.embedFonts(doc2);
+    const canvasMod = loadTsModule(path.join(projectRoot, "src/lib/pdf/canvas.ts"));
+    const canvas = new canvasMod.PageCanvas(page, fonts2);
+
+    const spans = [{ text: "تحصل كانجو مقابل خدمات المنصة والتشغيل على نسبة من كل طلب" }];
+    const natural = canvas.text(spans, {
+      x: 40,
+      y: 700,
+      size: 10.5,
+      maxWidth: 400,
+      align: "start",
+      direction: "rtl",
+    });
+    const target = natural + 40;
+    const justified = canvas.text(spans, {
+      x: 40,
+      y: 680,
+      size: 10.5,
+      maxWidth: 400,
+      align: "start",
+      direction: "rtl",
+      justifyWidth: target,
+    });
+    assert.ok(Math.abs(justified - target) < 0.5, `justified ${justified} vs ${target}`);
+    assert.ok(draw.drawLine);
+  });
 } else {
   test("pdf-assets unavailable; engine shaping tests skipped", () => {
     assert.ok(true);

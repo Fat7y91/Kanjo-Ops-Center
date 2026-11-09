@@ -40,10 +40,27 @@ export const A4: PageGeometry = {
   continuationTopReserve: 26,
 };
 
-export type PageHook = (canvas: PageCanvas, pageNumber: number, totalPages: number) => void;
+export type PageHook = (canvas: PageCanvas, page: PageHookInfo) => void;
+
+/** Page metadata handed to the finish hook once the whole document is known. */
+export type PageHookInfo = {
+  /** Zero-based physical page index. */
+  index: number;
+  /** Whether this page is a cover (excluded from numbering). */
+  isCover: boolean;
+  /** 1-based number within the numbered pages; `null` on a cover. */
+  number: number | null;
+  /** Total numbered (non-cover) pages. */
+  total: number;
+  /** Total physical pages, covers included. */
+  totalPages: number;
+};
+
+/** A page is either a cover (unnumbered) or numbered content. */
+export type PageKind = "cover" | "content";
 
 /** A single rendered page plus its canvas. */
-export type RenderPage = { page: PDFPage; canvas: PageCanvas };
+export type RenderPage = { page: PDFPage; canvas: PageCanvas; kind: PageKind };
 
 export class DocumentWriter {
   readonly doc: PDFDocument;
@@ -59,11 +76,14 @@ export class DocumentWriter {
     this.geometry = geometry;
   }
 
-  static async create(geometry: PageGeometry = A4): Promise<DocumentWriter> {
+  static async create(
+    geometry: PageGeometry = A4,
+    firstPageKind: PageKind = "content",
+  ): Promise<DocumentWriter> {
     const doc = await PDFDocument.create();
     const fonts = await embedFonts(doc);
     const writer = new DocumentWriter(doc, fonts, geometry);
-    writer.addPage();
+    writer.addPage(firstPageKind);
     return writer;
   }
 
@@ -106,10 +126,10 @@ export class DocumentWriter {
     this.cursorY = value;
   }
 
-  addPage(): void {
+  addPage(kind: PageKind = "content"): void {
     const page = this.doc.addPage([this.geometry.width, this.geometry.height]);
     const canvas = new PageCanvas(page, this.fonts);
-    this.current = { page, canvas };
+    this.current = { page, canvas, kind };
     this.pages.push(this.current);
     const extra = this.pages.length > 1 ? (this.geometry.continuationTopReserve ?? 0) : 0;
     this.cursorY = this.geometry.height - this.geometry.marginTop - extra;
@@ -161,14 +181,25 @@ export class DocumentWriter {
 
   /**
    * Finalises the document: draws per-page decorations in order, then serialises
-   * to bytes. `hook` receives the page number (1-based) and the total count.
+   * to bytes. Covers are excluded from the numbering, so the first content page
+   * is "page 1" and `total` counts numbered pages only.
    */
   async finish(hook?: PageHook): Promise<Uint8Array> {
-    const total = this.pages.length;
+    const totalPages = this.pages.length;
+    const total = this.pages.filter((entry) => entry.kind === "content").length;
+    let number = 0;
     this.pages.forEach((renderPage, index) => {
+      const isCover = renderPage.kind === "cover";
+      if (!isCover) number += 1;
       // Reset the active page so hooks can use the high-level canvas helpers.
       this.current = renderPage;
-      hook?.(renderPage.canvas, index + 1, total);
+      hook?.(renderPage.canvas, {
+        index,
+        isCover,
+        number: isCover ? null : number,
+        total,
+        totalPages,
+      });
     });
     return this.doc.save();
   }
