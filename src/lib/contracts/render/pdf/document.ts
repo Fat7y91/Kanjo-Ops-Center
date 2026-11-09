@@ -50,7 +50,7 @@ export async function renderContractDocument(
   const writer = await DocumentWriter.create(CONTRACT_PAGE, "cover");
   const assets = await embedAssets(writer, input);
 
-  drawCover(writer, input, assets.kanjo);
+  drawCover(writer, input, assets.kanjo, assets.merchant);
 
   writer.addPage("content");
   drawParties(writer, input);

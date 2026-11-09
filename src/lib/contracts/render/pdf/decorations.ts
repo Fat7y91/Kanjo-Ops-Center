@@ -27,38 +27,39 @@ function drawSignatureFooter(canvas: PageCanvas, input: ContractDocumentInput): 
   const merchant = input.merchantName || "الطرف الثاني";
   const labelY = 60;
 
+  // The two signature rules: second party on the left half, first party on the
+  // right half. Labels are centred over their own rule.
+  const leftRule = { x1: left, x2: mid - 14 };
+  const rightRule = { x1: mid + 6, x2: right };
+
   // RTL reading order: the first party signs on the right (reading start), the
   // second party on the left.
   canvas.text([{ text: `توقيع الطرف الثاني (${merchant})`, bold: true }], {
-    x: left,
+    x: leftRule.x1,
     y: labelY,
     size: TEXT.small.size,
-    maxWidth: mid - left - 10,
-    align: "start",
+    maxWidth: leftRule.x2 - leftRule.x1,
+    align: "center",
     direction: "rtl",
     color: PALETTE.royal,
   });
-  canvas.text([{ text: "توقيع الطرف الأول (كانجو)", bold: true }], {
-    x: mid + 10,
+  canvas.text([{ text: "توقيع الطرف الأول (كانچو)", bold: true }], {
+    x: rightRule.x1,
     y: labelY,
     size: TEXT.small.size,
-    maxWidth: right - mid - 10,
-    align: "start",
+    maxWidth: rightRule.x2 - rightRule.x1,
+    align: "center",
     direction: "rtl",
     color: PALETTE.royal,
   });
 
   const lineY = labelY - 5;
-  canvas.dashedRule(left, mid - 14, lineY, PALETTE.lineStrong, 0.8);
-  canvas.dashedRule(mid + 6, right, lineY, PALETTE.lineStrong, 0.8);
+  canvas.dashedRule(leftRule.x1, leftRule.x2, lineY, PALETTE.lineStrong, 0.8);
+  canvas.dashedRule(rightRule.x1, rightRule.x2, lineY, PALETTE.lineStrong, 0.8);
 }
 
-/** Page number (centred), website (start) and merchant (end) at the very bottom. */
-function drawPageStrip(
-  canvas: PageCanvas,
-  page: PageHookInfo,
-  input: ContractDocumentInput,
-): void {
+/** Page number centred and the website at the start of the very bottom strip. */
+function drawPageStrip(canvas: PageCanvas, page: PageHookInfo): void {
   const left = PAGE_MARGIN;
   const right = canvas.width - PAGE_MARGIN;
   const width = right - left;
@@ -70,10 +71,10 @@ function drawPageStrip(
     canvas.text(
       [{ text: `صفحة ${toArabicNumerals(page.number)} من ${toArabicNumerals(page.total)}`, bold: true }],
       {
-        x: left + width / 3,
+        x: left,
         y,
         size: TEXT.small.size,
-        maxWidth: width / 3,
+        maxWidth: width,
         align: "center",
         direction: "rtl",
         color: PALETTE.royal,
@@ -89,15 +90,6 @@ function drawPageStrip(
     align: "start",
     direction: "ltr",
     color: PALETTE.goldDeep,
-  });
-  canvas.text([{ text: input.merchantName || "KANJO" }], {
-    x: right - width / 3,
-    y,
-    size: TEXT.small.size,
-    maxWidth: width / 3,
-    align: "start",
-    direction: "rtl",
-    color: PALETTE.muted,
   });
 }
 
@@ -125,6 +117,6 @@ export function pageDecorations(
 
     drawRunningHeader(canvas, input, assets);
     drawSignatureFooter(canvas, input);
-    drawPageStrip(canvas, page, input);
+    drawPageStrip(canvas, page);
   };
 }

@@ -149,7 +149,7 @@ function firstParty(writer: DocumentWriter): void {
   panel(
     writer,
     "royal",
-    "الطرف الأول: كانجو",
+    "الطرف الأول: كانچو",
     KANJO_FIRST_PARTY.tradeName,
     estimate,
     (top) => {

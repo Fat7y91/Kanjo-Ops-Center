@@ -86,7 +86,7 @@ function drawTitleBlock(
     { text: "اتفاقية شراكة وتشغيل", size: kickerSize, gap: 8, color: PALETTE.goldBright },
     { ruleW: 68, size: 2, gap: 30 },
     { text: "عقد اتفاق بين", size: titleSize, gap: 10, color: PALETTE.white },
-    { text: "كانجو", size: kanjoSize, gap: 4, color: PALETTE.goldBright },
+    { text: "كانچو", size: kanjoSize, gap: 4, color: PALETTE.goldBright },
     { text: "و", size: wawSize, gap: 20, color: PALETTE.white },
     { text: input.merchantName, size: nameSize, gap: 12, color: PALETTE.white },
     { ruleW: 180, size: 2, gap: 0 },
@@ -115,15 +115,50 @@ function drawTitleBlock(
   }
 }
 
-/** Kanjo mark and identity on the clean lower half. */
-function drawLogoBlock(writer: DocumentWriter, kanjo: PDFImage | null, area: Area): void {
+/** Kanjo + merchant marks on the clean lower half, side by side. */
+function drawLogoBlock(
+  writer: DocumentWriter,
+  kanjo: PDFImage | null,
+  merchant: PDFImage | null,
+  area: Area,
+): void {
   const { canvas } = writer;
   const bandBottom = canvas.height * BAND_RATIO;
 
-  const logoSize = 150;
-  const logoTop = bandBottom - 46;
-  const logoY = logoTop - logoSize;
-  if (kanjo) {
+  const logoSize = 132;
+  const gap = merchant ? 96 : 0;
+  const rowTop = bandBottom - 52;
+  const logoY = rowTop - logoSize;
+
+  if (merchant) {
+    // Two marks flanking a small gold "partnership" divider, centred together.
+    const totalW = logoSize * 2 + gap;
+    const leftX = area.centerX - totalW / 2;
+    const rightX = leftX + logoSize + gap;
+
+    // Merchant logo on the reading-start (right) side, Kanjo on the left so the
+    // pair mirrors the RTL reading order used throughout the document.
+    canvas.page.drawImage(merchant, {
+      x: rightX,
+      y: logoY,
+      width: logoSize,
+      height: logoSize,
+    });
+    canvas.page.drawImage(kanjo ?? merchant, {
+      x: leftX,
+      y: logoY,
+      width: logoSize,
+      height: logoSize,
+    });
+
+    // Small gold connector mark between the two logos.
+    const dividerX = area.centerX;
+    const dividerY = logoY + logoSize / 2;
+    canvas.box(
+      { x: dividerX - 1, y: dividerY - 16, width: 2, height: 32 },
+      { fill: PALETTE.gold },
+    );
+  } else if (kanjo) {
     canvas.page.drawImage(kanjo, {
       x: area.centerX - logoSize / 2,
       y: logoY,
@@ -176,9 +211,10 @@ export function drawCover(
   writer: DocumentWriter,
   input: ContractDocumentInput,
   kanjo: PDFImage | null,
+  merchant: PDFImage | null,
 ): void {
   const area = drawBackdrop(writer);
   drawTitleBlock(writer, input, area);
-  drawLogoBlock(writer, kanjo, area);
+  drawLogoBlock(writer, kanjo, merchant, area);
   drawWebsite(writer, area);
 }

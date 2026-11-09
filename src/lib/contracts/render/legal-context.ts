@@ -27,7 +27,7 @@ export function resolveLegalContext(input: ContractDocumentInput): LegalContext 
   );
   const jurisdictionClause = isDesouk
     ? "ثم تختص محكمة دسوق."
-    : "ثم تختص المحكمة المختصة في نطاق مقر كانجو ما لم يتفق على خلاف ذلك.";
+    : "ثم تختص المحكمة المختصة في نطاق مقر كانچو ما لم يتفق على خلاف ذلك.";
 
   return { financialSpecialException, jurisdictionClause };
 }
