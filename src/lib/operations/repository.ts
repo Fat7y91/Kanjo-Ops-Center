@@ -25,6 +25,18 @@ export function isOperationsDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
+/**
+ * Deadlines for the operations reads and writes.
+ *
+ * An edge request that waits on a slow database is killed by the platform with
+ * an error the route cannot report as a 500, and the browser then sees an
+ * aborted fetch. Bounding each call here converts that into a timeout the
+ * service can translate, so the logger shows "retry" instead of losing the
+ * order silently.
+ */
+const READ_TIMEOUT_MS = 6_000;
+const WRITE_TIMEOUT_MS = 8_000;
+
 /* ── Row shapes ─────────────────────────────────────────────────────────── */
 
 type OperationRow = {
@@ -113,7 +125,8 @@ export async function listCouriers(): Promise<CourierOption[]> {
     .from("couriers")
     .select("id,display_name,active")
     .eq("active", true)
-    .order("display_name", { ascending: true });
+    .order("display_name", { ascending: true })
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
   if (error && isMissingSchemaObject(error)) return [];
   if (error) throw error;
@@ -132,7 +145,8 @@ export async function listMerchantOptions(): Promise<MerchantOption[]> {
     .from("merchants")
     .select("id,name")
     .order("name", { ascending: true })
-    .limit(500);
+    .limit(500)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
   if (error && isMissingSchemaObject(error)) return [];
   if (error) throw error;
@@ -155,7 +169,8 @@ async function selectOperations(
     .from("operation_logs")
     .select(columns)
     .order("occurred_at", { ascending: false })
-    .limit(limit);
+    .limit(limit)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
   return { data, error };
 }
 
@@ -210,6 +225,7 @@ export async function insertOperation(write: {
       logged_by: write.loggedBy,
     })
     .select(OPERATION_COLUMNS_NO_JOIN)
+    .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS))
     .single();
 
   if (error) throw error;
@@ -233,7 +249,8 @@ export async function listCouponOptions(): Promise<CouponOption[]> {
     .select("id,code,coupon_type,active")
     .eq("active", true)
     .order("code", { ascending: true })
-    .limit(1000);
+    .limit(1000)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
   if (error && isMissingSchemaObject(error)) return [];
   if (error) throw error;

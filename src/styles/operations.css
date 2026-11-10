@@ -10,6 +10,30 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* In-flight row: the entry is visible but explicitly not yet stored. */
+.operation-list li[data-pending] {
+  opacity: 0.72;
+}
+
+/* Toast owns the shared `.toast` / `.toast-error` shell; this only adds the
+ * dismiss affordance and lets the message sit beside it. */
+.operation-log .toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.operation-log .toast > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toast-dismiss {
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .operation-list,
 .clearing-rows,
 .clearing-parties {

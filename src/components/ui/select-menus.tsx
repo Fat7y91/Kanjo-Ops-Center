@@ -163,6 +163,12 @@ export type ComboFieldProps<T extends string | number> = {
 /**
  * Kanjo searchable combobox built on Headless UI `Combobox`.
  *
+ * `immediate` makes the panel open on focus and on click, not only after the
+ * first keystroke. Without it the control behaved as a pure autocomplete: the
+ * list stayed closed until the operator typed, which reads as "search only" and
+ * hides the choices. Opening on focus still lists everything, and typing then
+ * narrows that same list.
+ *
  * The query is local state so the filtered list resets when the panel closes;
  * matching itself stays with the caller-provided option list.
  */
@@ -195,6 +201,7 @@ export function ComboField<T extends string | number>({
       }}
       disabled={disabled}
       by={(left, right) => left === right}
+      immediate
       onClose={() => setQuery("")}
     >
       <div className="relative">
