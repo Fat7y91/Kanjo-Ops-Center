@@ -6,9 +6,10 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 /**
  * Tier 4 aggregates for the couriers roster.
  *
- * Earnings, delivery counts and the pending clearing balance are folded from
- * the operations append-only log and the clearinghouse ledger. Kept apart from
- * the roster repository so each file answers one question.
+ * Earnings and delivery counts come from the append-only operations log. The
+ * outstanding balance comes from the double-entry journal: a courier's ledger
+ * account under `2100` is a liability, so a positive "owed to courier" figure
+ * is the negation of its `debit − credit` balance. Nothing is stored.
  */
 
 export type CourierTotals = {
@@ -22,9 +23,9 @@ type OperationRow = {
   courier_cut_minor: number;
 };
 
-type LedgerRow = {
-  courier_id: string | null;
-  amount_minor: number;
+type BalanceRow = {
+  party_id: string | null;
+  balance_minor: number;
 };
 
 export async function loadCourierTotals(): Promise<CourierTotals> {
@@ -49,22 +50,21 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
     throw operations.error;
   }
 
-  const ledgers = await client
+  const journal = await client
     .schema("app")
-    .from("financial_ledgers")
-    .select("courier_id,amount_minor")
-    .eq("entity_type", "courier")
-    .eq("status", "pending")
+    .from("journal_account_balances")
+    .select("party_id,balance_minor")
+    .eq("party_type", "courier")
     .limit(5000);
 
-  if (!ledgers.error) {
-    for (const row of (ledgers.data ?? []) as LedgerRow[]) {
-      if (!row.courier_id) continue;
-      const current = balances.get(row.courier_id) ?? 0;
-      balances.set(row.courier_id, current + Number(row.amount_minor) / 100);
+  if (!journal.error) {
+    for (const row of (journal.data ?? []) as BalanceRow[]) {
+      if (!row.party_id) continue;
+      /* Credit-normal liability: owed = −(debit − credit). */
+      balances.set(row.party_id, -Number(row.balance_minor) / 100);
     }
-  } else if (!isMissingSchemaObject(ledgers.error)) {
-    throw ledgers.error;
+  } else if (!isMissingSchemaObject(journal.error)) {
+    throw journal.error;
   }
 
   return { earnings, deliveries, balances };

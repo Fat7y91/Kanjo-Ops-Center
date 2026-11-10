@@ -21,6 +21,7 @@ export type ModuleIcon =
   | "finance"
   | "operations"
   | "clearinghouse"
+  | "coupons"
   | "notifications"
   | "audit"
   | "archive";

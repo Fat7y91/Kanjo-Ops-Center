@@ -33,6 +33,8 @@ const paths: Record<ModuleIconName, string> = {
     "M4 5h16v14H4V5Zm4 4h8M8 13h5M16 13h.01M16 9h.01",
   clearinghouse:
     "M4 7h16M4 12h16M4 17h10M17 15v4M15 17h4",
+  coupons:
+    "M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7Zm10-2v14",
   notifications:
     "M6 9a6 6 0 0 1 12 0c0 4 1.5 6 1.5 6h-15S6 13 6 9Zm4 10a2 2 0 0 0 4 0",
   audit:

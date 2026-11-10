@@ -59,6 +59,9 @@
 /* Delivery roster and per-employee operations report */
 @import "./couriers.css";
 
+/* Discount coupons catalogue and bulk import */
+@import "./coupons.css";
+
 /* Field visit engine */
 @import "./visits/mode.css";
 @import "./visits/report.css";

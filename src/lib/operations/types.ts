@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { CouponType } from "@/lib/coupons/types";
+
 /**
  * Operations logger and clearinghouse domain types.
  *
@@ -16,16 +18,8 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   ONLINE: "دفع إلكتروني",
 };
 
-export const ENTITY_TYPES = ["merchant", "courier"] as const;
-export type ClearingEntityType = (typeof ENTITY_TYPES)[number];
-
-export const CLEARING_STATUSES = ["pending", "cleared"] as const;
-export type ClearingStatus = (typeof CLEARING_STATUSES)[number];
-
-export const CLEARING_STATUS_LABEL: Record<ClearingStatus, string> = {
-  pending: "قيد التسوية",
-  cleared: "مُسوّى",
-};
+export const CLEARING_PARTY_TYPES = ["merchant", "courier"] as const;
+export type ClearingPartyType = (typeof CLEARING_PARTY_TYPES)[number];
 
 export function toMinorUnits(amount: number): number {
   return Math.round(amount * 100);
@@ -46,47 +40,97 @@ export type OperationLog = {
   commission: number;
   courierCutPercent: number;
   courierCut: number;
+  /** Coupon code frozen onto the row, or empty when none was applied. */
+  couponCode: string;
+  /** Coupon discount actually granted at checkout (major units). */
+  couponDiscount: number;
+  couponShippingDiscount: number;
+  couponCashback: number;
+  couponPlatformFunded: number;
+  couponVendorFunded: number;
+  /** Manual wallet discount applied as cash (platform-funded). */
+  walletDiscount: number;
+  walletDiscountReason: string;
+  walletDiscountRef: string;
   note: string;
   occurredAt: string;
   createdAt: string;
 };
 
-export type ClearingLedgerRow = {
+/** One coupon option offered to the blind-entry form. Type only, never money. */
+export type CouponOption = {
   id: string;
-  operationId: string;
-  orderId: string;
-  entityType: ClearingEntityType;
-  partyId: string;
-  partyName: string;
-  amount: number;
-  currency: "EGP" | "SAR";
-  status: ClearingStatus;
-  receiptUrl: string | null;
-  clearedAt: string | null;
-  createdAt: string;
+  code: string;
+  couponType: CouponType;
+  active: boolean;
 };
 
-/** A party's open book: positive `balance` is owed to them, negative by them. */
-export type ClearingParty = {
-  entityType: ClearingEntityType;
+/**
+ * The blind-entry view of an operation.
+ *
+ * This is the only operation shape the logging surface (page, API and client)
+ * may carry. It deliberately omits commission, courier profit, balances and the
+ * coupon funding split: an employee entering orders must not be able to read a
+ * financial figure they did not type. Those fields stay in `OperationLog` for
+ * the ledger, KPI and repository layers.
+ */
+export type OperationSummary = {
+  id: string;
+  orderId: string;
+  merchantName: string;
+  courierName: string;
+  paymentMethod: PaymentMethod;
+  currency: "EGP" | "SAR";
+  orderValue: number;
+  deliveryFee: number;
+  couponCode: string;
+  walletDiscount: number;
+  note: string;
+  occurredAt: string;
+};
+
+export function toOperationSummary(operation: OperationLog): OperationSummary {
+  return {
+    id: operation.id,
+    orderId: operation.orderId,
+    merchantName: operation.merchantName,
+    courierName: operation.courierName,
+    paymentMethod: operation.paymentMethod,
+    currency: operation.currency,
+    orderValue: operation.orderValue,
+    deliveryFee: operation.deliveryFee,
+    couponCode: operation.couponCode,
+    walletDiscount: operation.walletDiscount,
+    note: operation.note,
+    occurredAt: operation.occurredAt,
+  };
+}
+
+/**
+ * One party ledger account in the clearinghouse.
+ *
+ * `balance` is the derived journal balance in major units. Positive means the
+ * party owes Kanjo (a receivable); negative means Kanjo owes the party (a
+ * payable). Settlement posts a balanced entry that zeroes it.
+ */
+export type ClearingAccountRow = {
+  accountId: string;
+  partyType: ClearingPartyType;
   partyId: string;
   partyName: string;
   currency: "EGP" | "SAR";
   balance: number;
-  pendingCount: number;
 };
 
 export type CourierOption = {
   id: string;
   displayName: string;
-  cutPercent: number;
   active: boolean;
 };
 
 export type MerchantOption = {
   id: string;
   name: string;
-  commissionPercent: number;
 };
 
 const optionalNote = z
@@ -103,22 +147,56 @@ export const operationLogInputSchema = z.object({
   currency: z.enum(["EGP", "SAR"]).default("EGP"),
   orderValue: z.coerce.number().positive("قيمة الطلب يجب أن تكون أكبر من صفر."),
   deliveryFee: z.coerce.number().min(0, "رسوم التوصيل لا تكون سالبة.").default(0),
-  courierCut: z.coerce.number().min(0, "حصة المندوب لا تكون سالبة.").default(0),
+  couponId: z
+    .string()
+    .uuid("اختر كوبوناً صحيحاً.")
+    .nullish()
+    .transform((value) => value ?? null),
+  walletDiscount: z.coerce
+    .number()
+    .min(0, "خصم المحفظة لا يكون سالباً.")
+    .default(0),
+  walletDiscountReason: z
+    .string()
+    .trim()
+    .max(200)
+    .default(""),
+  walletDiscountRef: z
+    .string()
+    .trim()
+    .max(120)
+    .default(""),
   note: optionalNote.default(""),
 });
 
 export type OperationLogInput = z.infer<typeof operationLogInputSchema>;
 
-export const settleInputSchema = z.object({
-  receiptUrl: z
-    .string()
-    .trim()
-    .max(2048)
-    .refine(
-      (value) => value === "" || /^https:\/\//i.test(value),
-      "يجب أن يبدأ رابط الإيصال بـ https://.",
-    )
-    .optional()
-    .nullable()
-    .transform((value) => (value ? value : null)),
-});
+export const settleInputSchema = z
+  .object({
+    receiptNo: z
+      .string()
+      .trim()
+      .max(80)
+      .optional()
+      .transform((value) => (value ? value : null)),
+    storagePath: z
+      .string()
+      .trim()
+      .max(2048)
+      .optional()
+      .transform((value) => (value ? value : null)),
+    mimeType: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .transform((value) => (value ? value : null)),
+    sizeBytes: z.coerce.number().int().min(0).optional().nullable(),
+  })
+  .refine(
+    (value) => (value.receiptNo ? Boolean(value.storagePath) : true),
+    {
+      message: "أرفق ملف الإيصال عند إدخال رقم الإيصال.",
+      path: ["storagePath"],
+    },
+  );

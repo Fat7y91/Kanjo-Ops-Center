@@ -2,12 +2,8 @@
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
-import {
-  availabilityLabel,
-  courierDate,
-  courierMoney,
-  courierStatusLabel,
-} from "@/lib/couriers/format";
+import { PAYOUT_METHOD_LABEL, type PayoutPreferences } from "@/lib/couriers/payout";
+import { courierDate, courierMoney, courierStatusLabel } from "@/lib/couriers/format";
 import type { Courier } from "@/lib/couriers/types";
 
 type CourierDetailsModalProps = {
@@ -16,6 +12,20 @@ type CourierDetailsModalProps = {
   onClose: () => void;
   onEdit: (courier: Courier) => void;
 };
+
+function payoutDetail(value: PayoutPreferences | null): string {
+  if (!value) return "—";
+  switch (value.method) {
+    case "bank_account":
+      return `${PAYOUT_METHOD_LABEL.bank_account} · ${value.bankName} · ${value.accountNumber}`;
+    case "e_wallet":
+      return `${value.provider} · ${value.walletPhone}`;
+    case "instapay":
+      return `${PAYOUT_METHOD_LABEL.instapay} · ${value.instapayValue}`;
+    case "egypt_post":
+      return `${value.postOffice} · ${value.beneficiaryName}`;
+  }
+}
 
 export function CourierDetailsModal({
   courier,
@@ -38,24 +48,14 @@ export function CourierDetailsModal({
               <dd dir="ltr">{courier.phone || "—"}</dd>
             </div>
             <div>
-              <dt>البريد الإلكتروني</dt>
-              <dd dir="ltr">{courier.email || "—"}</dd>
+              <dt>الربح الثابت لكل طلب</dt>
+              <dd dir="ltr">
+                {courierMoney(courier.fixedProfitPerOrder, "EGP")}
+              </dd>
             </div>
             <div>
-              <dt>المركبة</dt>
-              <dd>{courier.vehicleType || "—"}</dd>
-            </div>
-            <div>
-              <dt>اللوحة</dt>
-              <dd dir="ltr">{courier.vehiclePlate || "—"}</dd>
-            </div>
-            <div>
-              <dt>نسبة الربح</dt>
-              <dd dir="ltr">{courier.cutPercent}%</dd>
-            </div>
-            <div>
-              <dt>التوفر</dt>
-              <dd>{availabilityLabel(courier.availability)}</dd>
+              <dt>بيانات الصرف</dt>
+              <dd>{payoutDetail(courier.payoutPreferences)}</dd>
             </div>
             <div>
               <dt>عدد التوصيلات</dt>

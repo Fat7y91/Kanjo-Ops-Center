@@ -3,158 +3,101 @@ import "server-only";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
-import { embedName } from "./rows";
-import type {
-  ClearingLedgerRow,
-  ClearingParty,
-  ClearingStatus,
-} from "./types";
+import type { ClearingAccountRow, ClearingPartyType } from "./types";
 
 /**
- * Tier 4 repository for `app.financial_ledgers` (the clearinghouse).
+ * Tier 4 repository for the clearinghouse, backed by the double-entry journal.
  *
- * Split from `repository.ts` so each table group stays under the file-size
- * limit. The routing trigger owns creation; this module reads the book and
- * records the settle decision.
+ * There are no per-order "pending" rows to settle any more. The book is a set
+ * of party ledger accounts (`accounts.party_type` not null) under the merchant
+ * and courier control accounts, each with a derived balance:
+ *
+ *   balance_minor = sum(debits) − sum(credits)
+ *
+ * Positive → the party owes Kanjo (receivable). Negative → Kanjo owes the party
+ * (payable). Settlement posts a fresh balanced entry (see
+ * `app.post_settlement`); nothing is ever mutated in place.
  */
 
-type LedgerRow = {
+type BalanceViewRow = {
   id: string;
-  operation_id: string;
-  entity_type: ClearingLedgerRow["entityType"];
-  merchant_id: string | null;
-  courier_id: string | null;
-  amount_minor: number;
-  currency: ClearingLedgerRow["currency"];
-  status: ClearingStatus;
-  receipt_url: string | null;
-  cleared_at: string | null;
-  created_at: string;
-  merchants: { name: string } | { name: string }[] | null;
-  couriers: { display_name: string } | { display_name: string }[] | null;
-  operation_logs: { order_id: string } | { order_id: string }[] | null;
+  code: string;
+  name: string;
+  party_type: ClearingPartyType | null;
+  party_id: string | null;
+  currency: ClearingAccountRow["currency"];
+  balance_minor: number;
 };
 
-const LEDGER_COLUMNS =
-  "id,operation_id,entity_type,merchant_id,courier_id,amount_minor,currency,status,receipt_url,cleared_at,created_at,merchants(name),couriers(display_name),operation_logs(order_id)";
+const BALANCE_VIEW = "journal_account_balances";
+const BALANCE_COLUMNS =
+  "id,code,name,party_type,party_id,currency,balance_minor";
 
-const LEDGER_COLUMNS_NO_JOIN =
-  "id,operation_id,entity_type,merchant_id,courier_id,amount_minor,currency,status,receipt_url,cleared_at,created_at";
-
-/* ── Mapper ─────────────────────────────────────────────────────────────── */
-
-function toLedger(row: LedgerRow): ClearingLedgerRow {
-  const entityType = row.entity_type;
-  const partyId = entityType === "merchant" ? row.merchant_id : row.courier_id;
-  const partyName =
-    entityType === "merchant"
-      ? embedName(row.merchants, "تاجر")
-      : embedName(row.couriers, "مندوب");
-
+function toAccount(row: BalanceViewRow): ClearingAccountRow {
   return {
-    id: row.id,
-    operationId: row.operation_id,
-    orderId: embedName(row.operation_logs, "—"),
-    entityType,
-    partyId: partyId ?? "",
-    partyName,
-    amount: Number(row.amount_minor) / 100,
+    accountId: row.id,
+    partyType: row.party_type as ClearingPartyType,
+    partyId: row.party_id ?? "",
+    partyName: row.name,
     currency: row.currency,
-    status: row.status,
-    receiptUrl: row.receipt_url,
-    clearedAt: row.cleared_at,
-    createdAt: row.created_at,
+    balance: Number(row.balance_minor) / 100,
   };
 }
 
-/* ── Clearinghouse ──────────────────────────────────────────────────────── */
-
-async function selectLedgers(
-  columns: string,
-  status?: ClearingStatus,
-): Promise<{ data: unknown; error: unknown }> {
-  const client = getSupabaseServerClient();
-  const base = client
-    .schema("app")
-    .from("financial_ledgers")
-    .select(columns)
-    .order("created_at", { ascending: false })
-    .limit(500);
-
-  const { data, error } = status ? await base.eq("status", status) : await base;
-  return { data, error };
-}
-
-export async function listClearingLedgers(
-  status?: ClearingStatus,
-): Promise<ClearingLedgerRow[]> {
-  const primary = await selectLedgers(LEDGER_COLUMNS, status);
-  if (!primary.error) {
-    return ((primary.data ?? []) as unknown as LedgerRow[]).map(toLedger);
-  }
-  if (!isMissingSchemaObject(primary.error)) throw primary.error;
-
-  const fallback = await selectLedgers(LEDGER_COLUMNS_NO_JOIN, status);
-  if (fallback.error && isMissingSchemaObject(fallback.error)) return [];
-  if (fallback.error) throw fallback.error;
-  return ((fallback.data ?? []) as unknown as LedgerRow[]).map(toLedger);
-}
-
 /**
- * Aggregates the per-party book.
+ * Every party account with a non-zero balance, most material first.
  *
- * The database stores one row per order, so the balance is summed here rather
- * than by a view: the dataset is small (pending items only) and a view would
- * add another schema object whose absence would need degrading.
+ * The filter runs in JS rather than the query so the view stays a plain
+ * `select *`-shaped read; a party set is small (one row per active party).
  */
-export function summarizeParties(
-  rows: readonly ClearingLedgerRow[],
-): ClearingParty[] {
-  const buckets = new Map<string, ClearingParty>();
-
-  for (const row of rows) {
-    if (row.status !== "pending") continue;
-    const key = `${row.entityType}:${row.partyId}`;
-    const current = buckets.get(key);
-    if (current) {
-      current.balance += row.amount;
-      current.pendingCount += 1;
-      continue;
-    }
-    buckets.set(key, {
-      entityType: row.entityType,
-      partyId: row.partyId,
-      partyName: row.partyName,
-      currency: row.currency,
-      balance: row.amount,
-      pendingCount: 1,
-    });
-  }
-
-  return [...buckets.values()].sort(
-    (a, b) => Math.abs(b.balance) - Math.abs(a.balance),
-  );
-}
-
-export async function settleLedger(
-  id: string,
-  clearedBy: string,
-  receiptUrl: string | null,
-): Promise<ClearingLedgerRow> {
+export async function listClearingAccounts(): Promise<ClearingAccountRow[]> {
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
-    .from("financial_ledgers")
-    .update({
-      status: "cleared",
-      cleared_by: clearedBy,
-      cleared_at: new Date().toISOString(),
-      ...(receiptUrl ? { receipt_url: receiptUrl } : {}),
-    })
-    .eq("id", id)
-    .select(LEDGER_COLUMNS_NO_JOIN)
-    .single();
+    .from(BALANCE_VIEW)
+    .select(BALANCE_COLUMNS)
+    .not("party_type", "is", null)
+    .order("balance_minor", { ascending: false })
+    .limit(2000);
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return [];
+    throw error;
+  }
+
+  return ((data ?? []) as BalanceViewRow[])
+    .map(toAccount)
+    .filter((row) => row.balance !== 0);
+}
+
+/**
+ * Settles one party account by posting a balanced journal entry.
+ *
+ * The SQL function computes the outstanding balance itself, so a stale screen
+ * can never settle the wrong amount. Returns the new journal entry id.
+ */
+export async function postSettlement(
+  accountId: string,
+  actorId: string,
+  receipt: {
+    receiptNo: string | null;
+    storagePath: string | null;
+    mimeType: string | null;
+    sizeBytes: number | null;
+  },
+): Promise<string> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .rpc("post_settlement", {
+      p_account_id: accountId,
+      p_actor: actorId,
+      p_receipt_no: receipt.receiptNo,
+      p_storage_path: receipt.storagePath,
+      p_mime_type: receipt.mimeType,
+      p_size_bytes: receipt.sizeBytes,
+    });
 
   if (error) throw error;
-  return toLedger(data as unknown as LedgerRow);
+  return data as string;
 }

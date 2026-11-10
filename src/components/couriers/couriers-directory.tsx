@@ -3,15 +3,9 @@
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { SelectMenu } from "@/components/ui/select-menus";
+import { payoutSummary } from "@/lib/couriers/payout";
+import type { Courier, CourierStatus } from "@/lib/couriers/types";
 import {
-  AVAILABILITIES,
-  AVAILABILITY_LABEL,
-  type Availability,
-  type Courier,
-  type CourierStatus,
-} from "@/lib/couriers/types";
-import {
-  availabilityLabel,
   courierDate,
   courierMoney,
   courierStatusLabel,
@@ -38,14 +32,6 @@ const STATUS_OPTIONS: { value: CourierStatus | "all"; label: string }[] = [
   { value: "inactive", label: "موقوف" },
 ];
 
-const AVAILABILITY_OPTIONS: { value: Availability | "all"; label: string }[] = [
-  { value: "all", label: "كل حالات التوفر" },
-  ...AVAILABILITIES.map((value) => ({
-    value,
-    label: AVAILABILITY_LABEL[value],
-  })),
-];
-
 export function CouriersDirectory({
   rows,
   filters,
@@ -65,7 +51,7 @@ export function CouriersDirectory({
             name="q"
             value={filters.query}
             onChange={(event) => onFilter("query", event.target.value)}
-            placeholder="الاسم أو الهاتف أو البريد الإلكتروني"
+            placeholder="الاسم أو رقم الهاتف"
             aria-label="البحث عن المناديب"
             autoComplete="off"
           />
@@ -78,15 +64,6 @@ export function CouriersDirectory({
           onChange={(value) => onFilter("status", value as CourierStatus | "all")}
         />
 
-        <SelectMenu
-          ariaLabel="التوفر"
-          value={filters.availability}
-          options={AVAILABILITY_OPTIONS}
-          onChange={(value) =>
-            onFilter("availability", value as Availability | "all")
-          }
-        />
-
         <span className="badge" aria-live="polite">
           {rows.length} مندوب
         </span>
@@ -97,10 +74,9 @@ export function CouriersDirectory({
           <thead>
             <tr>
               <th>المندوب</th>
-              <th>البريد الإلكتروني</th>
-              <th>المركبة / اللوحة</th>
-              <th>الربح</th>
-              <th>التوفر</th>
+              <th>الهاتف</th>
+              <th>الربح الثابت</th>
+              <th>بيانات الصرف</th>
               <th>التوصيلات</th>
               <th>الرصيد</th>
               <th>الحالة</th>
@@ -111,7 +87,7 @@ export function CouriersDirectory({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={9}>
                   <p className="muted">لا يوجد مناديب مطابقون للتصفية.</p>
                 </td>
               </tr>
@@ -121,20 +97,15 @@ export function CouriersDirectory({
                   <td>
                     <div className="courier-identity">
                       <strong>{courier.displayName}</strong>
-                      <span dir="ltr">{courier.phone || "—"}</span>
                     </div>
                   </td>
-                  <td dir="ltr">{courier.email || "—"}</td>
-                  <td>
-                    <div className="courier-vehicle">
-                      <span>{courier.vehicleType || "—"}</span>
-                      <span dir="ltr">{courier.vehiclePlate || "—"}</span>
-                    </div>
+                  <td dir="ltr">{courier.phone || "—"}</td>
+                  <td dir="ltr">
+                    {courierMoney(courier.fixedProfitPerOrder, "EGP")}
                   </td>
-                  <td dir="ltr">{courierMoney(courier.earnings, "EGP")}</td>
                   <td>
-                    <span className={`badge badge-${availabilityTone(courier.availability)}`}>
-                      {availabilityLabel(courier.availability)}
+                    <span className="courier-payout">
+                      {payoutSummary(courier.payoutPreferences)}
                     </span>
                   </td>
                   <td dir="ltr">{courier.deliveries}</td>
@@ -179,10 +150,4 @@ export function CouriersDirectory({
       </div>
     </section>
   );
-}
-
-function availabilityTone(availability: Availability): string {
-  if (availability === "available") return "green";
-  if (availability === "busy") return "gold";
-  return "red";
 }

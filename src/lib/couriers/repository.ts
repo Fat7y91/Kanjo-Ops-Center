@@ -9,59 +9,38 @@ import {
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import { CouriersError } from "./errors";
+import { parsePayoutPreferences } from "./payout";
 import { loadCourierTotals } from "./totals";
 import type { Courier, CourierCreateInput, CourierUpdateInput } from "./types";
 
 /**
  * Tier 4 repository for the delivery roster.
  *
- * Identity (name, phone, email) lives on `app.users`; roster facts (vehicle,
- * plate, availability, cut rate) live on `app.couriers`. The list projection
- * joins the two and folds the operations ledger into earnings, deliveries and
- * the pending clearinghouse balance.
+ * The roster row is the whole record: a courier is not an operator, so there is
+ * no identity join and no auth account to keep in step. Earnings, deliveries
+ * and the pending clearing balance are folded from the operations ledger.
  */
 
 export function isCouriersDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
-type UserEmbed =
-  | { full_name: string | null; phone: string | null; email: string | null }
-  | { full_name: string | null; phone: string | null; email: string | null }[]
-  | null;
-
 type CourierRow = {
   id: string;
-  user_id: string;
   display_name: string;
-  courier_cut_percent: number;
+  phone: string;
+  fixed_profit_per_order_minor: number;
+  payout_preferences: unknown;
   active: boolean;
-  vehicle_type: string | null;
-  vehicle_plate: string | null;
-  availability: string | null;
   applied_at: string | null;
   created_at: string;
-  users: UserEmbed;
 };
 
 const COURIER_COLUMNS =
-  "id,user_id,display_name,courier_cut_percent,active,vehicle_type,vehicle_plate,availability,applied_at,created_at,users(full_name,phone,email)";
+  "id,display_name,phone,fixed_profit_per_order_minor,payout_preferences,active,applied_at,created_at";
 
 const COURIER_COLUMNS_LEGACY =
-  "id,user_id,display_name,courier_cut_percent,active,created_at,users(full_name)";
-
-function embedUser(embed: UserEmbed): {
-  fullName: string;
-  phone: string;
-  email: string;
-} {
-  const value = Array.isArray(embed) ? embed[0] : embed;
-  return {
-    fullName: value?.full_name?.trim() ?? "",
-    phone: value?.phone?.trim() ?? "",
-    email: value?.email?.trim() ?? "",
-  };
-}
+  "id,display_name,phone,active,applied_at,created_at";
 
 function toCourier(
   row: CourierRow,
@@ -69,18 +48,13 @@ function toCourier(
   deliveries: Map<string, number>,
   balances: Map<string, number>,
 ): Courier {
-  const user = embedUser(row.users);
   return {
     id: row.id,
-    userId: row.user_id,
-    displayName: row.display_name || user.fullName || "مندوب",
-    phone: user.phone,
-    email: user.email,
-    cutPercent: Number(row.courier_cut_percent ?? 0),
+    displayName: row.display_name?.trim() || "مندوب",
+    phone: row.phone?.trim() ?? "",
+    fixedProfitPerOrder: Number(row.fixed_profit_per_order_minor ?? 0) / 100,
+    payoutPreferences: parsePayoutPreferences(row.payout_preferences),
     active: row.active,
-    vehicleType: row.vehicle_type ?? "",
-    vehiclePlate: row.vehicle_plate ?? "",
-    availability: (row.availability ?? "available") as Courier["availability"],
     appliedAt: row.applied_at ?? row.created_at,
     earnings: earnings.get(row.id) ?? 0,
     deliveries: deliveries.get(row.id) ?? 0,
@@ -129,15 +103,42 @@ type CourierWrite = CourierCreateInput | CourierUpdateInput;
 function rosterPatch(input: CourierWrite) {
   return {
     display_name: input.fullName,
-    courier_cut_percent: input.cutPercent,
-    vehicle_type: input.vehicleType,
-    vehicle_plate: input.vehiclePlate,
-    availability: input.availability,
+    phone: input.phone,
+    fixed_profit_per_order_minor: Math.round(input.fixedProfit * 100),
+    payout_preferences: input.payout,
     active: input.active,
   };
 }
 
-/** Updates the roster row and keeps the identity record in step. */
+export async function insertCourier(
+  input: CourierCreateInput,
+): Promise<Courier> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("couriers")
+    .insert(rosterPatch(input))
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (isUniqueViolation(error)) {
+      throw new CouriersError(
+        "PHONE_TAKEN",
+        "يوجد مندوب مسجّل بهذا الرقم بالفعل.",
+        409,
+      );
+    }
+    throw new CouriersError("ROSTER_FAILED", "تعذر حفظ سجل المندوب.", 502);
+  }
+
+  const created = data ? await findCourierById((data as { id: string }).id) : null;
+  if (!created) {
+    throw new CouriersError("NOT_FOUND", "لم يُعثر على المندوب بعد الإنشاء.", 502);
+  }
+  return created;
+}
+
 export async function updateCourier(
   id: string,
   input: CourierUpdateInput,
@@ -149,42 +150,21 @@ export async function updateCourier(
     .from("couriers")
     .update(rosterPatch(input))
     .eq("id", id)
-    .select("id,user_id")
+    .select("id")
     .maybeSingle();
 
   if (error) {
     if (isUniqueViolation(error)) {
-      throw new CouriersError("CONFLICT", "هذا المندوب مسجّل بالفعل.", 409);
+      throw new CouriersError(
+        "PHONE_TAKEN",
+        "يوجد مندوب مسجّل بهذا الرقم بالفعل.",
+        409,
+      );
     }
     throw error;
   }
   if (!data) {
     throw new CouriersError("NOT_FOUND", "المندوب غير موجود.", 404);
-  }
-
-  const userId = (data as { user_id: string }).user_id;
-  const { error: userError } = await client
-    .schema("app")
-    .from("users")
-    .update({
-      full_name: input.fullName,
-      email: input.email === "" ? null : input.email,
-    })
-    .eq("id", userId);
-
-  if (userError && !isMissingSchemaObject(userError)) throw userError;
-
-  if (input.password !== "") {
-    const { error: authError } = await client.auth.admin.updateUserById(userId, {
-      password: input.password,
-    });
-    if (authError) {
-      throw new CouriersError(
-        "PASSWORD_FAILED",
-        "تعذر تحديث كلمة مرور المندوب.",
-        502,
-      );
-    }
   }
 
   const updated = await findCourierById(id);
@@ -193,43 +173,29 @@ export async function updateCourier(
 }
 
 /**
- * Removes a partner.
+ * Removes a roster record.
  *
- * The operations ledger references the roster row with `on delete restrict`,
- * so a partner with logged deliveries cannot be erased — that history must stay
+ * The operations ledger references the roster row with `on delete restrict`, so
+ * a partner with logged deliveries cannot be erased — that history must stay
  * attributable. The caller is told to deactivate instead.
  */
 export async function deleteCourier(id: string): Promise<void> {
   const client = getSupabaseServerClient();
 
-  const { data, error } = await client
-    .schema("app")
-    .from("couriers")
-    .select("user_id")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) throw new CouriersError("NOT_FOUND", "المندوب غير موجود.", 404);
-
-  const userId = (data as { user_id: string }).user_id;
-
-  const { error: deleteError } = await client
+  const { error } = await client
     .schema("app")
     .from("couriers")
     .delete()
     .eq("id", id);
 
-  if (deleteError) {
-    if (isForeignKeyViolation(deleteError)) {
+  if (error) {
+    if (isForeignKeyViolation(error)) {
       throw new CouriersError(
         "COURIER_IN_USE",
         "لا يمكن حذف مندوب له عمليات مسجلة. أوقفه بدلاً من حذفه.",
         409,
       );
     }
-    throw deleteError;
+    throw error;
   }
-
-  await client.auth.admin.deleteUser(userId).catch(() => undefined);
 }

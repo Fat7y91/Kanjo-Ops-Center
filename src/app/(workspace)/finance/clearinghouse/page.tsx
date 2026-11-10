@@ -11,8 +11,8 @@ export default async function ClearinghousePage() {
   // book without being able to release money, and a settler must still see it.
   await requireAnyPermission(["view_clearinghouse", "settle_clearinghouse"]);
 
-  const board = await loadClearinghouse("pending").catch(() => ({
-    rows: [],
+  const board = await loadClearinghouse().catch(() => ({
+    accounts: [],
     payables: [],
     receivables: [],
   }));
@@ -22,11 +22,11 @@ export default async function ClearinghousePage() {
       <PageHeader
         eyebrow="المالية"
         title="المقاصة"
-        description="مستحقات التجار والمناديب ومديونياتهم، منفصلة عن أرصدة الخزينة."
+        description="أرصدة التجار والمناديب المستخرجة من دفتر اليومية، والمستحقة السداد أو التحصيل."
       />
 
       <ClearinghouseBoard
-        initialRows={board.rows}
+        initialAccounts={board.accounts}
         initialPayables={board.payables}
         initialReceivables={board.receivables}
       />

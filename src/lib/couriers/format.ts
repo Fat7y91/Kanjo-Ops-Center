@@ -1,9 +1,7 @@
 import { currencyMoney, shortDate } from "@/lib/accounts/format";
 
 import {
-  AVAILABILITY_LABEL,
   COURIER_STATUS_LABEL,
-  type Availability,
   type CourierStatus,
 } from "./types";
 
@@ -27,10 +25,6 @@ export function courierMoney(value: unknown, currency: unknown): string {
   const amount = Number(value);
   if (!code || !Number.isFinite(amount)) return "—";
   return currencyMoney(amount, code);
-}
-
-export function availabilityLabel(value: unknown): string {
-  return AVAILABILITY_LABEL[value as Availability] ?? "غير متصل";
 }
 
 export function courierStatusLabel(active: boolean): string {

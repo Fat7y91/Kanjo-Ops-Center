@@ -10,22 +10,6 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
-.operation-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 26px;
-  margin-top: 18px;
-  padding: 14px 16px;
-  border-radius: var(--radius-card);
-  background: var(--surface-soft);
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-}
-
-.operation-preview strong {
-  color: var(--ink);
-}
-
 .operation-list,
 .clearing-rows,
 .clearing-parties {

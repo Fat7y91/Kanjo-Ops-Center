@@ -237,7 +237,7 @@ export const MODULES: readonly ModuleDefinition[] = [
     href: "/couriers",
     label: "المناديب",
     shortLabel: "المناديب",
-    description: "شركاء التوصيل وبيانات مركباتهم وأرصدتهم وحالة توفرهم.",
+    description: "شركاء التوصيل وربحهم الثابت وبيانات صرفهم وأرصدتهم.",
     permission: "view_couriers",
     alsoGrantedBy: ["manage_couriers"],
     icon: "operations",
@@ -251,6 +251,17 @@ export const MODULES: readonly ModuleDefinition[] = [
     description: "عدد العمليات المسجلة لكل موظف وقيمتها الشهرية.",
     permission: "view_operations_kpi",
     icon: "kpi",
+  },
+  {
+    // Discount catalogue. Managing and viewing are separate grants so a
+    // logger can pick a coupon without being able to edit funding rules.
+    href: "/coupons",
+    label: "الكوبونات",
+    shortLabel: "الكوبونات",
+    description: "كوبونات الخصم وقيمها وقواعد تمويلها ورفع ملف CSV.",
+    permission: "view_coupons",
+    alsoGrantedBy: ["manage_coupons"],
+    icon: "coupons",
   },
   {
     href: "/finance/clearinghouse",

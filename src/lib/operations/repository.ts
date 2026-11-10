@@ -8,6 +8,7 @@ import { embedName } from "./rows";
 
 import type {
   CourierOption,
+  CouponOption,
   MerchantOption,
   OperationLog,
 } from "./types";
@@ -39,6 +40,15 @@ type OperationRow = {
   commission_minor: number;
   courier_cut_percent: number;
   courier_cut_minor: number;
+  coupon_code: string | null;
+  coupon_discount_minor: number | null;
+  coupon_shipping_minor: number | null;
+  coupon_cashback_minor: number | null;
+  coupon_platform_funded_minor: number | null;
+  coupon_vendor_funded_minor: number | null;
+  wallet_discount_minor: number | null;
+  wallet_discount_reason: string | null;
+  wallet_discount_ref: string | null;
   note: string;
   occurred_at: string;
   created_at: string;
@@ -49,18 +59,15 @@ type OperationRow = {
 
 type CourierRow = {
   id: string;
-  user_id: string;
   display_name: string;
-  courier_cut_percent: number;
   active: boolean;
-  users: { full_name: string } | { full_name: string }[] | null;
 };
 
 const OPERATION_COLUMNS =
-  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,note,occurred_at,created_at,merchants(name),couriers(display_name)";
+  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at,merchants(name),couriers(display_name)";
 
 const OPERATION_COLUMNS_NO_JOIN =
-  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,note,occurred_at,created_at";
+  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at";
 
 
 /* ── Mappers ────────────────────────────────────────────────────────────── */
@@ -81,6 +88,15 @@ function toOperation(row: OperationRow): OperationLog {
     commission: Number(row.commission_minor) / 100,
     courierCutPercent: Number(row.courier_cut_percent),
     courierCut: Number(row.courier_cut_minor) / 100,
+    couponCode: row.coupon_code ?? "",
+    couponDiscount: Number(row.coupon_discount_minor ?? 0) / 100,
+    couponShippingDiscount: Number(row.coupon_shipping_minor ?? 0) / 100,
+    couponCashback: Number(row.coupon_cashback_minor ?? 0) / 100,
+    couponPlatformFunded: Number(row.coupon_platform_funded_minor ?? 0) / 100,
+    couponVendorFunded: Number(row.coupon_vendor_funded_minor ?? 0) / 100,
+    walletDiscount: Number(row.wallet_discount_minor ?? 0) / 100,
+    walletDiscountReason: row.wallet_discount_reason ?? "",
+    walletDiscountRef: row.wallet_discount_ref ?? "",
     note: row.note,
     occurredAt: row.occurred_at,
     createdAt: row.created_at,
@@ -95,7 +111,7 @@ export async function listCouriers(): Promise<CourierOption[]> {
   const { data, error } = await client
     .schema("app")
     .from("couriers")
-    .select("id,user_id,display_name,courier_cut_percent,active,users(full_name)")
+    .select("id,display_name,active")
     .eq("active", true)
     .order("display_name", { ascending: true });
 
@@ -104,8 +120,7 @@ export async function listCouriers(): Promise<CourierOption[]> {
 
   return ((data ?? []) as unknown as CourierRow[]).map((row) => ({
     id: row.id,
-    displayName: row.display_name || embedName(row.users, "مندوب"),
-    cutPercent: Number(row.courier_cut_percent),
+    displayName: row.display_name?.trim() || "مندوب",
     active: row.active,
   }));
 }
@@ -115,22 +130,16 @@ export async function listMerchantOptions(): Promise<MerchantOption[]> {
   const { data, error } = await client
     .schema("app")
     .from("merchants")
-    .select("id,name,agreed_commission,target_commission")
+    .select("id,name")
     .order("name", { ascending: true })
-    .limit(200);
+    .limit(500);
 
   if (error && isMissingSchemaObject(error)) return [];
   if (error) throw error;
 
-  return ((data ?? []) as {
-    id: string;
-    name: string;
-    agreed_commission: number | null;
-    target_commission: number;
-  }[]).map((row) => ({
+  return ((data ?? []) as { id: string; name: string }[]).map((row) => ({
     id: row.id,
     name: row.name,
-    commissionPercent: Number(row.agreed_commission ?? row.target_commission ?? 0),
   }));
 }
 
@@ -171,7 +180,10 @@ export async function insertOperation(write: {
   currency: OperationLog["currency"];
   orderValueMinor: number;
   deliveryFeeMinor: number;
-  courierCutMinor: number;
+  couponId: string | null;
+  walletDiscountMinor: number;
+  walletDiscountReason: string;
+  walletDiscountRef: string;
   note: string;
   loggedBy: string;
 }): Promise<OperationLog> {
@@ -187,7 +199,13 @@ export async function insertOperation(write: {
       currency: write.currency,
       order_value_minor: write.orderValueMinor,
       delivery_fee_minor: write.deliveryFeeMinor,
-      courier_cut_minor: write.courierCutMinor,
+      /* Courier profit is never entered by the logger: the freeze trigger
+       * resolves it from the courier's fixed profit. Sending zero keeps the
+       * employee blind to the amount while the database stays authoritative. */
+      coupon_id: write.couponId,
+      wallet_discount_minor: write.walletDiscountMinor,
+      wallet_discount_reason: write.walletDiscountReason,
+      wallet_discount_ref: write.walletDiscountRef,
       note: write.note,
       logged_by: write.loggedBy,
     })
@@ -196,4 +214,34 @@ export async function insertOperation(write: {
 
   if (error) throw error;
   return toOperation(data as unknown as OperationRow);
+}
+
+/* ── Coupon options for the blind-entry form ────────────────────────────── */
+
+type CouponOptionRow = {
+  id: string;
+  code: string;
+  coupon_type: CouponOption["couponType"];
+  active: boolean;
+};
+
+export async function listCouponOptions(): Promise<CouponOption[]> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("coupons")
+    .select("id,code,coupon_type,active")
+    .eq("active", true)
+    .order("code", { ascending: true })
+    .limit(1000);
+
+  if (error && isMissingSchemaObject(error)) return [];
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as CouponOptionRow[]).map((row) => ({
+    id: row.id,
+    code: row.code,
+    couponType: row.coupon_type,
+    active: row.active,
+  }));
 }

@@ -25,8 +25,7 @@
   white-space: nowrap;
 }
 
-.courier-identity,
-.courier-vehicle {
+.courier-identity {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -36,16 +35,9 @@
   color: var(--ink);
 }
 
-.courier-identity span,
-.courier-vehicle span {
+.courier-payout {
   color: var(--ink-soft);
   font-size: 0.78rem;
-}
-
-.courier-row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
 }
 
 .courier-form-toggle {

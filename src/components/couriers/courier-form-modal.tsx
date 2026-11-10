@@ -4,17 +4,15 @@ import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
+import { TextField, ToggleField } from "@/components/ui/form-inputs";
+import type { Courier } from "@/lib/couriers/types";
+
 import {
-  TextField,
-  ToggleField,
-} from "@/components/ui/form-inputs";
-import { SelectMenu } from "@/components/ui/select-menus";
-import {
-  AVAILABILITIES,
-  AVAILABILITY_LABEL,
-  type Availability,
-  type Courier,
-} from "@/lib/couriers/types";
+  formToPayout,
+  payoutToForm,
+  PayoutFields,
+  type PayoutForm,
+} from "./payout-fields";
 
 type CourierFormModalProps = {
   open: boolean;
@@ -24,46 +22,28 @@ type CourierFormModalProps = {
   onSaved: (courier: Courier, message: string) => void;
 };
 
-type FormState = {
+type FormState = PayoutForm & {
   fullName: string;
   phone: string;
-  email: string;
-  password: string;
-  cutPercent: string;
-  vehicleType: string;
-  vehiclePlate: string;
-  availability: Availability;
+  fixedProfit: string;
   active: boolean;
 };
 
 const EMPTY: FormState = {
+  ...payoutToForm(null),
   fullName: "",
   phone: "",
-  email: "",
-  password: "",
-  cutPercent: "",
-  vehicleType: "",
-  vehiclePlate: "",
-  availability: "available",
+  fixedProfit: "",
   active: true,
 };
-
-const AVAILABILITY_OPTIONS = AVAILABILITIES.map((value) => ({
-  value,
-  label: AVAILABILITY_LABEL[value],
-}));
 
 function formFrom(courier: Courier | null): FormState {
   if (!courier) return EMPTY;
   return {
+    ...payoutToForm(courier.payoutPreferences),
     fullName: courier.displayName,
     phone: courier.phone,
-    email: courier.email,
-    password: "",
-    cutPercent: String(courier.cutPercent),
-    vehicleType: courier.vehicleType,
-    vehiclePlate: courier.vehiclePlate,
-    availability: courier.availability,
+    fixedProfit: String(courier.fixedProfitPerOrder),
     active: courier.active,
   };
 }
@@ -89,20 +69,20 @@ export function CourierFormModal({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function patchPayout(patch: Partial<PayoutForm>) {
+    setForm((current) => ({ ...current, ...patch }));
+  }
+
   async function submit() {
     setError("");
     setBusy(true);
 
     const payload = {
       fullName: form.fullName.trim(),
-      email: form.email.trim(),
-      password: form.password,
-      cutPercent: Number(form.cutPercent) || 0,
-      vehicleType: form.vehicleType.trim(),
-      vehiclePlate: form.vehiclePlate.trim(),
-      availability: form.availability,
+      phone: form.phone.trim(),
+      fixedProfit: Number(form.fixedProfit) || 0,
+      payout: formToPayout(form),
       active: form.active,
-      ...(courier ? {} : { phone: form.phone.trim() }),
     };
 
     try {
@@ -143,8 +123,8 @@ export function CourierFormModal({
       title={isEdit ? "تعديل بيانات المندوب" : "إضافة شريك توصيل"}
       description={
         isEdit
-          ? "تعديل بيانات المركبة والتوفر ونسبة الربح."
-          : "إنشاء حساب دخول للمندوب وربطه بدليل شركاء التوصيل."
+          ? "تعديل بيانات المندوب والربح الثابت وبيانات الصرف."
+          : "إضافة مندوب إلى دليل شركاء التوصيل."
       }
       onClose={onClose}
       wide
@@ -159,69 +139,30 @@ export function CourierFormModal({
 
         <TextField
           label="رقم الهاتف"
-          required={!isEdit}
+          required
           dir="ltr"
-          disabled={isEdit}
-          hint={isEdit ? "رقم الدخول لا يُعدّل من هنا." : "بصيغة E.164 مثل +201012345678"}
+          hint="مثل 01012345678 أو +201012345678"
           value={form.phone}
           onChange={(event) => set("phone", event.target.value)}
         />
 
         <TextField
-          label="البريد الإلكتروني"
-          type="email"
-          dir="ltr"
-          value={form.email}
-          onChange={(event) => set("email", event.target.value)}
-        />
-
-        <TextField
-          label={isEdit ? "كلمة مرور جديدة" : "كلمة المرور"}
-          required={!isEdit}
-          type="password"
-          dir="ltr"
-          hint={isEdit ? "اتركها فارغة للإبقاء على كلمة المرور الحالية." : undefined}
-          value={form.password}
-          onChange={(event) => set("password", event.target.value)}
-        />
-
-        <TextField
-          label="نسبة الربح %"
+          label="الربح الثابت لكل طلب"
           type="number"
           inputMode="decimal"
           min="0"
-          max="100"
           step="0.01"
           dir="ltr"
-          value={form.cutPercent}
-          onChange={(event) => set("cutPercent", event.target.value)}
+          value={form.fixedProfit}
+          onChange={(event) => set("fixedProfit", event.target.value)}
         />
 
-        <SelectMenu
-          label="التوفر"
-          value={form.availability}
-          options={AVAILABILITY_OPTIONS}
-          onChange={(value) => set("availability", value as Availability)}
-        />
-
-        <TextField
-          label="المركبة"
-          placeholder="دراجة نارية، سيارة، فان…"
-          value={form.vehicleType}
-          onChange={(event) => set("vehicleType", event.target.value)}
-        />
-
-        <TextField
-          label="اللوحة"
-          dir="ltr"
-          value={form.vehiclePlate}
-          onChange={(event) => set("vehiclePlate", event.target.value)}
-        />
+        <PayoutFields value={form} onChange={patchPayout} />
       </div>
 
       <div className="courier-form-toggle">
         <ToggleField
-          label="الحساب نشط"
+          label="المندوب نشط"
           hint="المندوب الموقوف يبقى في السجل لكن لا يُختار في تسجيل العمليات."
           checked={form.active}
           onChange={(checked) => set("active", checked)}

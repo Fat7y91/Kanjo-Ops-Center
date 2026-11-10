@@ -1,65 +1,53 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import type {
-  ClearingLedgerRow,
-  ClearingParty,
-  ClearingStatus,
-} from "@/lib/operations/types";
+import type { ClearingAccountRow } from "@/lib/operations/types";
 
 /**
  * Settlement state for the clearinghouse board.
  *
- * A row is settled individually, not per party: the book groups by party for
- * reading, but money leaves against the exact order that produced it. The hook
- * therefore keeps the flat row list and re-derives the balances after each
- * successful decision.
+ * The book is a list of party accounts, each with a derived balance. Settling
+ * one account posts a fresh journal entry that zeroes it and refreshes the
+ * whole book, so the panels always reflect the journal rather than a local
+ * guess.
  */
 export function useClearinghouse(
-  initialRows: ClearingLedgerRow[],
-  initialPayables: ClearingParty[],
-  initialReceivables: ClearingParty[],
+  initialAccounts: ClearingAccountRow[],
+  initialPayables: ClearingAccountRow[],
+  initialReceivables: ClearingAccountRow[],
 ) {
   // Same defensive contract as the operations form: a partial board must
   // render an empty list, never crash on `.filter` / `.map`.
-  const [rows, setRows] = useState<ClearingLedgerRow[]>(
-    Array.isArray(initialRows) ? initialRows : [],
+  const [accounts, setAccounts] = useState<ClearingAccountRow[]>(
+    Array.isArray(initialAccounts) ? initialAccounts : [],
   );
-  const [payables, setPayables] = useState<ClearingParty[]>(
+  const [payables, setPayables] = useState<ClearingAccountRow[]>(
     Array.isArray(initialPayables) ? initialPayables : [],
   );
-  const [receivables, setReceivables] = useState<ClearingParty[]>(
+  const [receivables, setReceivables] = useState<ClearingAccountRow[]>(
     Array.isArray(initialReceivables) ? initialReceivables : [],
   );
-  const [status, setStatus] = useState<ClearingStatus>("pending");
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState<Record<string, string>>({});
+  const [receiptNo, setReceiptNo] = useState<Record<string, string>>({});
+  const [file, setFile] = useState<Record<string, File | null>>({});
 
-  const pendingTotal = useMemo(
-    () => rows.filter((row) => row.status === "pending").length,
-    [rows],
-  );
-
-  async function refresh(nextStatus: ClearingStatus) {
-    setStatus(nextStatus);
+  async function refresh() {
     setError("");
     try {
-      const response = await fetch(`/api/clearinghouse?status=${nextStatus}`, {
-        cache: "no-store",
-      });
+      const response = await fetch("/api/clearinghouse", { cache: "no-store" });
       const payload = (await response.json()) as {
-        rows?: ClearingLedgerRow[];
-        payables?: ClearingParty[];
-        receivables?: ClearingParty[];
+        accounts?: ClearingAccountRow[];
+        payables?: ClearingAccountRow[];
+        receivables?: ClearingAccountRow[];
         error?: string;
       };
-      if (!response.ok || !payload.rows) {
+      if (!response.ok || !payload.accounts) {
         setError(payload.error ?? "تعذر تحديث المقاصة.");
         return;
       }
-      setRows(payload.rows);
+      setAccounts(payload.accounts);
       setPayables(payload.payables ?? []);
       setReceivables(payload.receivables ?? []);
     } catch {
@@ -67,27 +55,32 @@ export function useClearinghouse(
     }
   }
 
-  async function settle(row: ClearingLedgerRow) {
-    setBusyId(row.id);
+  async function settle(account: ClearingAccountRow) {
+    setBusyId(account.accountId);
     setError("");
     try {
+      const form = new FormData();
+      form.set("accountId", account.accountId);
+      const no = receiptNo[account.accountId]?.trim();
+      if (no) form.set("receiptNo", no);
+      const chosen = file[account.accountId];
+      if (chosen) form.set("file", chosen);
+
       const response = await fetch("/api/clearinghouse", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, receiptUrl: receiptUrl[row.id] }),
+        body: form,
       });
       const payload = (await response.json()) as {
-        row?: ClearingLedgerRow;
+        entryId?: string;
         error?: string;
       };
-      if (!response.ok || !payload.row) {
-        setError(payload.error ?? "تعذر تسوية البند.");
+      if (!response.ok || !payload.entryId) {
+        setError(payload.error ?? "تعذر تسوية الحساب.");
         return;
       }
-      setRows((current) =>
-        current.map((item) => (item.id === row.id ? payload.row! : item)),
-      );
-      await refresh(status);
+      setReceiptNo((current) => ({ ...current, [account.accountId]: "" }));
+      setFile((current) => ({ ...current, [account.accountId]: null }));
+      await refresh();
     } catch {
       setError("تعذر الاتصال بالخادم.");
     } finally {
@@ -96,15 +89,15 @@ export function useClearinghouse(
   }
 
   return {
-    rows,
+    accounts,
     payables,
     receivables,
-    status,
-    pendingTotal,
     busyId,
     error,
-    receiptUrl,
-    setReceiptUrl,
+    receiptNo,
+    setReceiptNo,
+    file,
+    setFile,
     refresh,
     settle,
   };

@@ -2,18 +2,16 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import type { Availability, Courier, CourierStatus } from "@/lib/couriers/types";
+import type { Courier, CourierStatus } from "@/lib/couriers/types";
 
 export type CourierFilters = {
   query: string;
   status: CourierStatus | "all";
-  availability: Availability | "all";
 };
 
 const EMPTY_FILTERS: CourierFilters = {
   query: "",
   status: "all",
-  availability: "all",
 };
 
 /** View state for the couriers roster: filters, selection and modal flags. */
@@ -40,14 +38,8 @@ export function useCouriers(initialCouriers: Courier[]) {
     return couriers.filter((courier) => {
       if (filters.status === "active" && !courier.active) return false;
       if (filters.status === "inactive" && courier.active) return false;
-      if (
-        filters.availability !== "all" &&
-        courier.availability !== filters.availability
-      ) {
-        return false;
-      }
       if (!query) return true;
-      return [courier.displayName, courier.phone, courier.email].some((value) =>
+      return [courier.displayName, courier.phone].some((value) =>
         value.toLocaleLowerCase("ar").includes(query),
       );
     });

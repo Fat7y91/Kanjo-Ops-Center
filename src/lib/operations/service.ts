@@ -4,13 +4,13 @@ import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 
 import { OperationsError, fromDatabaseError } from "./errors";
 import {
-  listClearingLedgers,
-  settleLedger,
-  summarizeParties,
+  listClearingAccounts,
+  postSettlement,
 } from "./clearinghouse-repository";
 import {
   insertOperation,
   isOperationsDatabaseConfigured,
+  listCouponOptions,
   listCouriers,
   listMerchantOptions,
   listOperations,
@@ -19,33 +19,35 @@ import {
   operationLogInputSchema,
   settleInputSchema,
   toMinorUnits,
-  type ClearingLedgerRow,
-  type ClearingParty,
-  type ClearingStatus,
+  toOperationSummary,
+  type ClearingAccountRow,
   type CourierOption,
+  type CouponOption,
   type MerchantOption,
-  type OperationLog,
+  type OperationSummary,
 } from "./types";
 
 /**
  * Tier 3 rules for the operations logger and the clearinghouse.
  *
  * Logging an order is a single write: the SQL triggers freeze the money terms
- * and route both ledger rows in the same transaction, so this layer never
- * touches `app.financial_ledgers` on the create path. Settling is the only
- * place a ledger row is written, and it can only move forward.
+ * and post one balanced journal entry in the same transaction, so this layer
+ * never touches the ledger on the create path. Settling posts a fresh balanced
+ * entry that zeroes a party's derived balance; journal history is never
+ * mutated.
  */
 
 export type OperationsBoard = {
-  operations: OperationLog[];
+  operations: OperationSummary[];
   couriers: CourierOption[];
   merchants: MerchantOption[];
+  coupons: CouponOption[];
 };
 
 export type ClearinghouseBoard = {
-  rows: ClearingLedgerRow[];
-  payables: ClearingParty[];
-  receivables: ClearingParty[];
+  accounts: ClearingAccountRow[];
+  payables: ClearingAccountRow[];
+  receivables: ClearingAccountRow[];
 };
 
 function requireDatabase(): void {
@@ -69,31 +71,39 @@ function translate(error: unknown): never {
 export async function loadOperationsBoard(): Promise<OperationsBoard> {
   requireDatabase();
 
-  const [operations, couriers, merchants] = await Promise.all([
+  const [operations, couriers, merchants, coupons] = await Promise.all([
     listOperations(),
     listCouriers(),
     listMerchantOptions(),
+    listCouponOptions(),
   ]);
 
-  return { operations, couriers, merchants };
+  return {
+    operations: operations.map(toOperationSummary),
+    couriers,
+    merchants,
+    coupons,
+  };
 }
 
 /**
  * Logs a fulfilled order.
  *
- * Commission always comes from the merchant contract, not from the form: the
- * service parses the payload but deliberately does not forward a percent. The
- * SQL trigger resolves it, freezes it, and routes the two ledger rows.
+ * The employee only submits what they can see: the order, the parties, the
+ * payment method, an optional coupon and an optional manual wallet discount.
+ * Commission, courier profit and the coupon split are resolved and frozen by
+ * the SQL trigger, so no financial figure is accepted from the form and the
+ * logger never needs to see one.
  */
 export async function logOperation(
   loggedBy: string,
   rawInput: unknown,
-): Promise<OperationLog> {
+): Promise<OperationSummary> {
   requireDatabase();
   const input = operationLogInputSchema.parse(rawInput);
 
   try {
-    return await insertOperation({
+    const operation = await insertOperation({
       orderId: input.orderId,
       merchantId: input.merchantId,
       courierId: input.courierId,
@@ -101,10 +111,14 @@ export async function logOperation(
       currency: input.currency,
       orderValueMinor: toMinorUnits(input.orderValue),
       deliveryFeeMinor: toMinorUnits(input.deliveryFee),
-      courierCutMinor: toMinorUnits(input.courierCut),
+      couponId: input.couponId,
+      walletDiscountMinor: toMinorUnits(input.walletDiscount),
+      walletDiscountReason: input.walletDiscountReason,
+      walletDiscountRef: input.walletDiscountRef,
       note: input.note,
       loggedBy,
     });
+    return toOperationSummary(operation);
   } catch (error) {
     translate(error);
   }
@@ -113,42 +127,49 @@ export async function logOperation(
 /**
  * The clearinghouse book.
  *
- * Payables are parties with a positive balance (Kanjo owes them); receivables
- * are negative (they owe Kanjo). Both are derived from the same pending rows,
- * so the two panels can never disagree.
+ * Payables are party accounts with a negative balance (Kanjo owes them);
+ * receivables are positive (they owe Kanjo). Both are slices of the same
+ * derived list, so the two panels can never disagree.
  */
-export async function loadClearinghouse(
-  status: ClearingStatus = "pending",
-): Promise<ClearinghouseBoard> {
+export async function loadClearinghouse(): Promise<ClearinghouseBoard> {
   requireDatabase();
 
   try {
-    const rows = await listClearingLedgers(status);
-    const parties = summarizeParties(rows);
+    const accounts = await listClearingAccounts();
     return {
-      rows,
-      payables: parties.filter((party) => party.balance > 0),
-      receivables: parties.filter((party) => party.balance < 0),
+      accounts,
+      payables: accounts.filter((account) => account.balance < 0),
+      receivables: accounts.filter((account) => account.balance > 0),
     };
   } catch (error) {
     if (isMissingSchemaObject(error)) {
-      return { rows: [], payables: [], receivables: [] };
+      return { accounts: [], payables: [], receivables: [] };
     }
     throw error;
   }
 }
 
-/** Marks one row settled. The trigger stamps `cleared_at` if it is missing. */
-export async function settleClearingRow(
-  id: string,
-  clearedBy: string,
+/**
+ * Settles a party account by posting a balanced entry that zeroes its balance.
+ *
+ * The receipt (`receipt_no` + storage path) is attached to the same entry, so
+ * it is visible wherever the settlement is shown. Returns the new entry id.
+ */
+export async function settleClearingAccount(
+  accountId: string,
+  settledBy: string,
   rawInput: unknown,
-): Promise<ClearingLedgerRow> {
+): Promise<string> {
   requireDatabase();
   const input = settleInputSchema.parse(rawInput);
 
   try {
-    return await settleLedger(id, clearedBy, input.receiptUrl);
+    return await postSettlement(accountId, settledBy, {
+      receiptNo: input.receiptNo,
+      storagePath: input.storagePath,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes ?? null,
+    });
   } catch (error) {
     translate(error);
   }

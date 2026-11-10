@@ -152,6 +152,79 @@ Append-only. UPDATE and DELETE are rejected by `app.ledger_reject_mutation()`.
 
 Balance = `sum(deposit) - sum(expense)` via `app.account_balance(uuid)`.
 
+### `app.accounts`
+Chart of accounts (`20261122000000_financial_engine_core.sql`). Party
+sub-accounts hang under a system control account by `parent_id`; balances are
+derived, never stored.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `code` | `text` | no | Unique; e.g. `1000`, `2100:<courier-id>` |
+| `name` | `text` | no | |
+| `type` | `app.account_type` | no | `asset` \| `liability` \| `equity` \| `revenue` \| `expense` |
+| `normal_balance` | `app.normal_balance` | no | `debit` \| `credit` |
+| `currency` | `char(3)` | no | `EGP`/`SAR` |
+| `party_type` | `app.party_type` | yes | `merchant` \| `courier` \| `bank` \| `customer` |
+| `party_id` | `text` | yes | set together with `party_type` |
+| `is_system` | `boolean` | no | `true` for control accounts |
+| `active` | `boolean` | no | `true` |
+| `parent_id` | `uuid` | yes | FK → `accounts` RESTRICT |
+| `created_at` | `timestamptz` | no | |
+
+### `app.journal_entries`
+Append-only header; UPDATE/DELETE rejected by `app.journal_reject_mutation()`.
+Platform posts one entry per operation (idempotent on `(source_type, source_id)`).
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `entry_no` | `bigint` | no | Generated identity, unique |
+| `entry_date` | `date` | no | Business date |
+| `memo` | `text` | no | `''` |
+| `source_type` | `app.journal_source` | no | `operation` \| … \| `opening` \| `reversal` |
+| `source_id` | `text` | yes | Unique per `source_type` when present |
+| `currency` | `char(3)` | no | `EGP`/`SAR` |
+| `status` | `app.journal_status` | no | `posted` \| `reversed` |
+| `reverses_entry_id` | `uuid` | yes | FK → `journal_entries`; set iff `source_type='reversal'` |
+| `created_by` | `uuid` | yes | FK → `users` SET NULL |
+| `created_at` | `timestamptz` | no | |
+
+### `app.journal_lines`
+Debit/credit legs; each line is exactly one side. A deferred constraint trigger
+`journal_lines_balanced` rejects any entry whose debits ≠ credits at commit.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `entry_id` | `uuid` | no | FK → `journal_entries` CASCADE |
+| `account_id` | `uuid` | no | FK → `accounts` RESTRICT |
+| `debit_minor` | `bigint` | no | ≥0 |
+| `credit_minor` | `bigint` | no | ≥0; exactly one of debit/credit > 0 |
+| `memo` | `text` | no | `''` |
+
+View `app.journal_account_balances` derives `balance_minor = debits − credits`
+per account.
+
+### `app.transaction_receipts`
+Receipt attached to a journal entry; visible wherever that entry is.
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| `id` | `uuid` | no | PK |
+| `entry_id` | `uuid` | no | FK → `journal_entries` RESTRICT |
+| `receipt_no` | `text` | no | Unique; non-blank |
+| `storage_path` | `text` | no | |
+| `mime_type` | `text` | no | |
+| `size_bytes` | `integer` | no | ≥0 |
+| `uploaded_by` | `uuid` | yes | FK → `users` SET NULL |
+| `uploaded_at` | `timestamptz` | no | |
+
+Heart of the model: every posted operation yields a balanced entry whose lines
+route commission revenue, delivery revenue, coupon expense (platform share),
+vendor funding (reduces merchant payable/receivable), courier profit, wallet
+redemption expense and, for cashback, a customer wallet liability.
+
 ---
 
 ## 4. Payroll
@@ -473,22 +546,35 @@ columns after INSERT; status may move `pending → paid` only.
 ## 9. Operations & clearinghouse
 
 ### `app.couriers`
+Back-office roster record. A courier is **not** an operator: there is no
+`user_id`, no auth account and no password. Earnings and balances are derived
+from the operations ledger, never stored here.
+
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | `id` | `uuid` | no | PK |
-| `user_id` | `uuid` | no | Unique, FK → `users` CASCADE |
-| `display_name` | `text` | no | `''` |
-| `courier_cut_percent` | `numeric(6,2)` | no | 0–100 |
+| `display_name` | `text` | no | `''`; non-blank (check) |
+| `phone` | `text` | no | `''`; unique when non-empty |
+| `fixed_profit_per_order_minor` | `bigint` | no | ≥0; fixed profit per delivered order (minor units) |
+| `payout_preferences` | `jsonb` | no | `{}`; method-discriminated destination object |
 | `active` | `boolean` | no | `true` |
-| `vehicle_type` | `text` | no | `''` |
-| `vehicle_plate` | `text` | no | `''` |
-| `availability` | `text` | no | `available` \| `busy` \| `offline` |
 | `applied_at` | `timestamptz` | no | `now()` |
 | `created_at` / `updated_at` | `timestamptz` | no | |
 
+`payout_preferences` shape (one method per row):
+
+| Method | Fields |
+|---|---|
+| `bank_account` | `bankName`, `accountHolder`, `accountNumber`, `iban` |
+| `e_wallet` | `provider`, `walletPhone` |
+| `instapay` | `instapayValue` |
+| `egypt_post` | `postOffice`, `beneficiaryName` |
+
 ### `app.operation_logs`
-Append-only; amounts are frozen by `app.operation_freeze_amounts()`, and
-`app.operation_route_ledgers()` creates the merchant/courier clearing rows.
+Append-only. `app.operation_freeze_amounts()` resolves and freezes the money
+terms (commission, courier profit, coupon split, wallet discount) before the
+row is written, and `app.operation_post_journal()` posts one balanced journal
+entry per operation in the same transaction.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
@@ -502,31 +588,51 @@ Append-only; amounts are frozen by `app.operation_freeze_amounts()`, and
 | `delivery_fee_minor` | `bigint` | no | ≥0 |
 | `commission_percent` | `numeric(6,2)` | no | 0–100 |
 | `commission_minor` | `bigint` | no | ≥0 (computed) |
-| `courier_cut_percent` | `numeric(6,2)` | no | 0–100 |
-| `courier_cut_minor` | `bigint` | no | ≥0 (computed) |
+| `courier_cut_percent` | `numeric(6,2)` | no | always `0` (legacy column) |
+| `courier_cut_minor` | `bigint` | no | ≥0; defaults to courier fixed profit |
+| `coupon_id` | `uuid` | yes | FK → `coupons` RESTRICT |
+| `coupon_code` | `text` | no | `''` (frozen) |
+| `coupon_discount_minor` | `bigint` | no | 0; checkout discount C |
+| `coupon_shipping_minor` | `bigint` | no | 0; shipping portion of C |
+| `coupon_cashback_minor` | `bigint` | no | 0; wallet credit, not cash |
+| `coupon_platform_funded_minor` | `bigint` | no | 0; Cp |
+| `coupon_vendor_funded_minor` | `bigint` | no | 0; Cv (Cp + Cv = C) |
+| `wallet_discount_minor` | `bigint` | no | 0; manual wallet W (platform-funded) |
+| `wallet_discount_reason` | `text` | no | `''` |
+| `wallet_discount_ref` | `text` | no | `''` |
+| `journal_entry_id` | `uuid` | yes | FK → `journal_entries`; set once |
 | `note` | `text` | no | `''` |
 | `occurred_at` | `timestamptz` | no | `now()` |
 | `logged_by` | `uuid` | yes | FK → `users` SET NULL |
 | `created_at` | `timestamptz` | no | `now()` |
 
-### `app.financial_ledgers`
-One row per party per operation; `app.clearing_ledger_guard()` enforces the
-clearing transition.
+### `app.coupons`
+Discount catalogue. Funding is enforced by `app.coupon_enforce_funding()`:
+`free_shipping` coupons must be platform-funded.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
 | `id` | `uuid` | no | PK |
-| `operation_id` | `uuid` | no | FK → `operation_logs` RESTRICT |
-| `entity_type` | `app.clearing_entity_type` | no | `merchant` \| `courier` |
-| `merchant_id` | `text` | yes | FK → `merchants` RESTRICT; set iff merchant |
-| `courier_id` | `uuid` | yes | FK → `couriers` RESTRICT; set iff courier |
-| `amount_minor` | `bigint` | no | |
-| `currency` | `char(3)` | no | `EGP` |
-| `status` | `app.clearing_ledger_status` | no | `pending` \| `cleared` |
-| `receipt_url` | `text` | yes | |
-| `cleared_by` | `uuid` | yes | FK → `users` SET NULL |
-| `cleared_at` | `timestamptz` | yes | `(status='pending') = (cleared_at is null)` |
-| `created_at` | `timestamptz` | no | `now()` |
+| `code` | `text` | no | Unique on `upper(btrim(code))` |
+| `coupon_type` | `app.coupon_type` | no | `free_shipping` \| `welcome_coupon` \| `cashback` \| `percentage_discount` \| `fixed_amount` |
+| `discount_funded_by` | `app.coupon_funding` | no | `platform` \| `vendor` \| `split` |
+| `vendor_funding_percent` | `numeric(5,2)` | no | 0–100; honored per order |
+| `discount_amount_minor` | `bigint` | no | amount, or basis points for `percentage_discount` |
+| `shipping_discount_minor` | `bigint` | no | 0 |
+| `cashback_amount_minor` | `bigint` | no | 0 |
+| `budget_cap_minor` | `bigint` | yes | optional cap |
+| `budget_used_minor` | `bigint` | no | 0 |
+| `budget_remaining_minor` | `bigint` | — | generated: cap − used |
+| `active` | `boolean` | no | `true` |
+| `stackable` | `boolean` | no | `false` |
+| `stack_priority` | `integer` | no | 0 |
+| `last_used_at` | `timestamptz` | yes | |
+| `created_at` / `updated_at` | `timestamptz` | no | |
+
+### `app.financial_ledgers` (retired)
+Dropped in `20261122000003_retire_clearinghouse.sql`. Any rows were migrated
+into `app.journal_entries` as `opening` source entries. Read balances from
+`app.journal_account_balances` instead.
 
 ---
 
@@ -955,6 +1061,7 @@ guarded `add column`, `drop ... if exists` before `create`).
 20261118000000  remove_sync_test_row
 20261119000000  contract_force_edit
 20261120000000  couriers_management
+20261121000000  couriers_roster_refactor
 ```
 
 ---

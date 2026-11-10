@@ -37,7 +37,7 @@ export function CouriersIsland({ initialCouriers, canManage }: CouriersIslandPro
       <PageHeader
         eyebrow="المقاصة والعمليات"
         title="المناديب"
-        description="شركاء التوصيل وبيانات مركباتهم وأرصدتهم وحالة توفرهم."
+        description="شركاء التوصيل وربحهم الثابت وبيانات صرفهم وأرصدتهم."
         actions={
           canManage ? (
             <Button variant="primary" onClick={() => state.setCreating(true)}>

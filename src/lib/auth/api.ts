@@ -8,7 +8,9 @@ import { ImageQaError } from "@/lib/catalog/image-qa";
 import { MarketingError } from "@/lib/marketing/store";
 import { MissingEnvError } from "@/lib/db/env";
 import { OperationsError } from "@/lib/operations/errors";
+import { ReceiptError } from "@/lib/operations/receipt-upload";
 import { CouriersError } from "@/lib/couriers/errors";
+import { CouponsError } from "@/lib/coupons/errors";
 import { GovernanceError } from "@/lib/governance/errors";
 import { FieldOpsError } from "@/lib/field-ops/store";
 import { ContractRepositoryError } from "@/lib/contracts/repository";
@@ -195,7 +197,19 @@ export function apiError(error: unknown): NextResponse {
       { status: error.status },
     );
   }
+  if (error instanceof ReceiptError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
   if (error instanceof CouriersError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof CouponsError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },

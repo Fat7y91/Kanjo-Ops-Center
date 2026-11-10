@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-import { toMinorUnits } from "@/lib/operations/types";
-import type { OperationLog, PaymentMethod } from "@/lib/operations/types";
+import type { OperationSummary, PaymentMethod } from "@/lib/operations/types";
 
 type FormState = {
   orderId: string;
@@ -12,7 +11,10 @@ type FormState = {
   paymentMethod: PaymentMethod;
   orderValue: string;
   deliveryFee: string;
-  courierCut: string;
+  couponId: string;
+  walletDiscount: string;
+  walletDiscountReason: string;
+  walletDiscountRef: string;
   note: string;
 };
 
@@ -23,26 +25,28 @@ const EMPTY: FormState = {
   paymentMethod: "COD",
   orderValue: "",
   deliveryFee: "",
-  courierCut: "",
+  couponId: "",
+  walletDiscount: "",
+  walletDiscountReason: "",
+  walletDiscountRef: "",
   note: "",
 };
 
 /**
  * Form state and submit handler for the operations logger.
  *
- * Kept apart from the render module so the form body stays a pure presentation
- * of state. The commission is deliberately not part of the form: the database
- * resolves it from the merchant contract, so the preview here is advisory.
+ * This is a blind-entry surface: it carries only what an employee can observe
+ * at the counter (order, parties, payment method, coupon, manual wallet
+ * discount). Profit, commission, balances and the discount split are never in
+ * this state and never rendered, so the operator cannot read or forward them.
+ * The SQL triggers resolve every financial figure from the contract instead.
  */
-export function useOperationForm(
-  initialOperations: OperationLog[],
-  merchantRates: Record<string, number>,
-) {
+export function useOperationForm(initialOperations: OperationSummary[]) {
   const [form, setForm] = useState<FormState>(EMPTY);
-  // The page degrades to empty arrays when the schema is not reachable, but a
-  // direct/mocked caller could still omit the prop; never let `undefined`
-  // reach `.length` or `.map` in the render.
-  const [operations, setOperations] = useState<OperationLog[]>(
+  // The page degrades to an empty array when the schema is not reachable, but a
+  // direct/mocked caller could still omit the prop; never let `undefined` reach
+  // `.length` or `.map` in the render.
+  const [operations, setOperations] = useState<OperationSummary[]>(
     Array.isArray(initialOperations) ? initialOperations : [],
   );
   const [error, setError] = useState("");
@@ -52,21 +56,6 @@ export function useOperationForm(
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
-
-  const preview = useMemo(() => {
-    const value = Number(form.orderValue) || 0;
-    const rate = Number(merchantRates[form.merchantId] ?? 0) || 0;
-    const commission = toMinorUnits((value * rate) / 100) / 100;
-    const delivery = Number(form.deliveryFee) || 0;
-    const cut = Number(form.courierCut) || 0;
-    return {
-      commission,
-      merchantShare:
-        form.paymentMethod === "COD" ? -commission : value - commission,
-      courierShare:
-        form.paymentMethod === "COD" ? -(delivery - cut) : cut,
-    };
-  }, [form, merchantRates]);
 
   async function submit() {
     setBusy(true);
@@ -83,12 +72,15 @@ export function useOperationForm(
           paymentMethod: form.paymentMethod,
           orderValue: Number(form.orderValue),
           deliveryFee: Number(form.deliveryFee) || 0,
-          courierCut: Number(form.courierCut) || 0,
+          couponId: form.couponId || null,
+          walletDiscount: Number(form.walletDiscount) || 0,
+          walletDiscountReason: form.walletDiscountReason,
+          walletDiscountRef: form.walletDiscountRef,
           note: form.note,
         }),
       });
       const payload = (await response.json()) as {
-        operation?: OperationLog;
+        operation?: OperationSummary;
         error?: string;
       };
       if (!response.ok || !payload.operation) {
@@ -97,7 +89,7 @@ export function useOperationForm(
       }
       setOperations((current) => [payload.operation!, ...current]);
       setForm({ ...EMPTY });
-      setNotice("تم تسجيل العملية وتوجيه قيود المقاصة.");
+      setNotice("تم تسجيل العملية.");
       return true;
     } catch {
       setError("تعذر الاتصال بالخادم.");
@@ -107,5 +99,5 @@ export function useOperationForm(
     }
   }
 
-  return { form, set, preview, submit, operations, error, notice, busy };
+  return { form, set, submit, operations, error, notice, busy };
 }

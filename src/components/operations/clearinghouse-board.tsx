@@ -3,44 +3,36 @@
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { TextField } from "@/components/ui/form-inputs";
-import {
-  operationDate,
-  operationMoney,
-} from "@/lib/operations/format";
-import {
-  CLEARING_STATUS_LABEL,
-  type ClearingLedgerRow,
-  type ClearingParty,
-} from "@/lib/operations/types";
+import { operationMoney } from "@/lib/operations/format";
+import type { ClearingAccountRow } from "@/lib/operations/types";
 
 import { useClearinghouse } from "./use-clearinghouse";
 
 function PartyBook({
-  parties,
+  accounts,
   emptyLabel,
 }: {
-  parties: ClearingParty[];
+  accounts: ClearingAccountRow[];
   emptyLabel: string;
 }) {
-  if (parties.length === 0) return <p className="muted">{emptyLabel}</p>;
+  if (accounts.length === 0) return <p className="muted">{emptyLabel}</p>;
 
   return (
     <ul className="clearing-parties">
-      {parties.map((party) => (
-        <li key={`${party.entityType}:${party.partyId}`}>
+      {accounts.map((account) => (
+        <li key={account.accountId}>
           <div>
-            <strong>{party.partyName}</strong>
+            <strong>{account.partyName}</strong>
             <span className="muted">
-              {party.entityType === "merchant" ? "تاجر" : "مندوب"} ·{" "}
-              {party.pendingCount} بند
+              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
             </span>
           </div>
           <strong
             className={
-              party.balance > 0 ? "clearing-positive" : "clearing-negative"
+              account.balance > 0 ? "clearing-positive" : "clearing-negative"
             }
           >
-            {operationMoney(Math.abs(party.balance), party.currency)}
+            {operationMoney(Math.abs(account.balance), account.currency)}
           </strong>
         </li>
       ))}
@@ -48,73 +40,85 @@ function PartyBook({
   );
 }
 
-function LedgerRows({
-  rows,
+function AccountRows({
+  accounts,
   busyId,
-  receiptUrl,
-  setReceiptUrl,
+  receiptNo,
+  setReceiptNo,
+  setFile,
   settle,
 }: {
-  rows: ClearingLedgerRow[];
+  accounts: ClearingAccountRow[];
   busyId: string;
-  receiptUrl: Record<string, string>;
-  setReceiptUrl: (update: (current: Record<string, string>) => Record<string, string>) => void;
-  settle: (row: ClearingLedgerRow) => void;
+  receiptNo: Record<string, string>;
+  setReceiptNo: (
+    update: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  setFile: (
+    update: (current: Record<string, File | null>) => Record<string, File | null>,
+  ) => void;
+  settle: (account: ClearingAccountRow) => void;
 }) {
-  if (rows.length === 0) {
-    return <p className="muted">لا توجد بنود في هذه القائمة.</p>;
+  if (accounts.length === 0) {
+    return <p className="muted">لا توجد أرصدة مفتوحة في هذه القائمة.</p>;
   }
 
   return (
     <ul className="clearing-rows">
-      {rows.map((row) => (
-        <li key={row.id}>
+      {accounts.map((account) => (
+        <li key={account.accountId}>
           <div className="clearing-row-main">
-            <strong>{row.orderId}</strong>
+            <strong>{account.partyName}</strong>
             <span>
-              {row.partyName} · {row.entityType === "merchant" ? "تاجر" : "مندوب"}
+              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
             </span>
-            <span className="muted">{operationDate(row.createdAt)}</span>
           </div>
 
           <div className="clearing-row-amount">
             <strong
               className={
-                row.amount > 0 ? "clearing-positive" : "clearing-negative"
+                account.balance > 0 ? "clearing-positive" : "clearing-negative"
               }
             >
-              {operationMoney(Math.abs(row.amount), row.currency)}
+              {operationMoney(Math.abs(account.balance), account.currency)}
             </strong>
             <span className="badge badge-gold">
-              {CLEARING_STATUS_LABEL[row.status] ?? "—"}
+              {account.balance > 0 ? "مستحق لنا" : "مستحق لهم"}
             </span>
           </div>
 
-          {row.status === "pending" ? (
-            <div className="clearing-row-actions">
-              <TextField
-                fieldClassName="clearing-receipt"
-                placeholder="رابط إيصال السداد (اختياري)"
-                value={receiptUrl[row.id] ?? ""}
-                onChange={(event) =>
-                  setReceiptUrl((current) => ({
-                    ...current,
-                    [row.id]: event.target.value,
-                  }))
-                }
-              />
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={busyId === row.id}
-                onClick={() => settle(row)}
-              >
-                {row.amount > 0 ? "سداد" : "تحصيل"}
-              </Button>
-            </div>
-          ) : (
-            <span className="muted">سُوّي في {operationDate(row.clearedAt)}</span>
-          )}
+          <div className="clearing-row-actions">
+            <TextField
+              fieldClassName="clearing-receipt"
+              placeholder="رقم الإيصال (اختياري)"
+              value={receiptNo[account.accountId] ?? ""}
+              onChange={(event) =>
+                setReceiptNo((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.value,
+                }))
+              }
+            />
+            <input
+              type="file"
+              className="clearing-receipt"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) =>
+                setFile((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.files?.[0] ?? null,
+                }))
+              }
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={busyId === account.accountId}
+              onClick={() => settle(account)}
+            >
+              {account.balance > 0 ? "تحصيل" : "سداد"}
+            </Button>
+          </div>
         </li>
       ))}
     </ul>
@@ -122,29 +126,34 @@ function LedgerRows({
 }
 
 export function ClearinghouseBoard({
-  initialRows,
+  initialAccounts,
   initialPayables,
   initialReceivables,
 }: {
-  initialRows: ClearingLedgerRow[];
-  initialPayables: ClearingParty[];
-  initialReceivables: ClearingParty[];
+  initialAccounts: ClearingAccountRow[];
+  initialPayables: ClearingAccountRow[];
+  initialReceivables: ClearingAccountRow[];
 }) {
   const {
-    rows,
+    accounts,
     payables,
     receivables,
-    status,
-    pendingTotal,
     busyId,
     error,
-    receiptUrl,
-    setReceiptUrl,
-    refresh,
+    receiptNo,
+    setReceiptNo,
+    setFile,
     settle,
-  } = useClearinghouse(initialRows, initialPayables, initialReceivables);
+  } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
-  const rowsProps = { rows, busyId, receiptUrl, setReceiptUrl, settle };
+  const rowsProps = {
+    accounts,
+    busyId,
+    receiptNo,
+    setReceiptNo,
+    setFile,
+    settle,
+  };
 
   return (
     <div className="clearinghouse">
@@ -155,7 +164,7 @@ export function ClearinghouseBoard({
           {
             id: "book",
             label: "المستحقات",
-            badge: pendingTotal,
+            badge: accounts.length,
             content: (
               <div className="clearing-book">
                 <article className="panel">
@@ -164,7 +173,7 @@ export function ClearinghouseBoard({
                     <span className="muted">مبالغ على كانجو سدادها</span>
                   </div>
                   <PartyBook
-                    parties={payables}
+                    accounts={payables}
                     emptyLabel="لا توجد مبالغ مستحقة السداد."
                   />
                 </article>
@@ -175,7 +184,7 @@ export function ClearinghouseBoard({
                     <span className="muted">مبالغ على التجار والمناديب تحصيلها</span>
                   </div>
                   <PartyBook
-                    parties={receivables}
+                    accounts={receivables}
                     emptyLabel="لا توجد مبالغ مستحقة التحصيل."
                   />
                 </article>
@@ -183,29 +192,12 @@ export function ClearinghouseBoard({
             ),
           },
           {
-            id: "pending",
-            label: status === "pending" ? "بنود قيد التسوية" : "بنود مُسوّاة",
-            content: <LedgerRows {...rowsProps} />,
+            id: "accounts",
+            label: "أرصدة الأطراف",
+            content: <AccountRows {...rowsProps} />,
           },
         ]}
       />
-
-      <div className="clearing-toggle">
-        <Button
-          variant={status === "pending" ? "primary" : "quiet"}
-          size="sm"
-          onClick={() => void refresh("pending")}
-        >
-          قيد التسوية
-        </Button>
-        <Button
-          variant={status === "cleared" ? "primary" : "quiet"}
-          size="sm"
-          onClick={() => void refresh("cleared")}
-        >
-          مُسوّى
-        </Button>
-      </div>
     </div>
   );
 }

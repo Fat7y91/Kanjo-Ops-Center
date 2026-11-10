@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
-import { SelectMenu } from "@/components/ui/select-menus";
+import { ComboField, SelectMenu } from "@/components/ui/select-menus";
 import { TextAreaField, TextField } from "@/components/ui/form-inputs";
+import { couponTypeLabel } from "@/lib/coupons/format";
 import {
   operationDate,
   operationMethodLabel,
@@ -14,8 +15,9 @@ import {
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABEL,
   type CourierOption,
+  type CouponOption,
   type MerchantOption,
-  type OperationLog,
+  type OperationSummary,
   type PaymentMethod,
 } from "@/lib/operations/types";
 
@@ -26,32 +28,46 @@ const METHOD_OPTIONS = PAYMENT_METHODS.map((method) => ({
   label: PAYMENT_METHOD_LABEL[method],
 }));
 
+/** Sentinel for the optional coupon picker; a combobox cannot clear itself. */
+const NO_COUPON = "none";
+
 export function OperationLogForm({
   couriers,
   merchants,
+  coupons,
   initialOperations,
 }: {
   couriers: CourierOption[];
   merchants: MerchantOption[];
-  initialOperations: OperationLog[];
+  coupons: CouponOption[];
+  initialOperations: OperationSummary[];
 }) {
   const merchantList = Array.isArray(merchants) ? merchants : [];
   const courierList = Array.isArray(couriers) ? couriers : [];
+  const couponList = Array.isArray(coupons) ? coupons : [];
 
-  // Stable identity so the preview memo only recomputes when the roster or the
-  // typed values change, not on every parent render.
-  const rates = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const merchant of merchantList) {
-      map[merchant.id] = merchant.commissionPercent;
-    }
-    return map;
-  }, [merchantList]);
+  const { form, set, submit, operations, error, notice, busy } =
+    useOperationForm(initialOperations);
 
-  const { form, set, preview, submit, operations, error, notice, busy } =
-    useOperationForm(initialOperations, rates);
-
-  const currency = "EGP" as const;
+  const merchantOptions = useMemo(
+    () => merchantList.map((m) => ({ value: m.id, label: m.name })),
+    [merchantList],
+  );
+  const courierOptions = useMemo(
+    () => courierList.map((c) => ({ value: c.id, label: c.displayName })),
+    [courierList],
+  );
+  const couponOptions = useMemo(
+    () => [
+      { value: NO_COUPON, label: "بدون كوبون" },
+      ...couponList.map((c) => ({
+        value: c.id,
+        label: c.code,
+        hint: couponTypeLabel(c.couponType),
+      })),
+    ],
+    [couponList],
+  );
 
   return (
     <div className="operation-log">
@@ -59,7 +75,7 @@ export function OperationLogForm({
         <div className="panel-head">
           <h2>تسجيل عملية منفذة</h2>
           <span className="muted">
-            العمولة تُحسب من عقد التاجر لحظة التسجيل ولا تتغير بعدها.
+            أدخل بيانات الطلب كما تظهر في نقطة البيع. تُحسب المستحقات آلياً.
           </span>
         </div>
 
@@ -67,33 +83,28 @@ export function OperationLogForm({
           <TextField
             label="رقم الطلب"
             required
+            dir="ltr"
             value={form.orderId}
             onChange={(event) => set("orderId", event.target.value)}
             placeholder="ORD-100245"
           />
 
-          <SelectMenu
+          <ComboField
             label="التاجر"
             required
             value={form.merchantId || null}
-            options={merchantList.map((merchant) => ({
-              value: merchant.id,
-              label: merchant.name,
-              hint: `${merchant.commissionPercent}%`,
-            }))}
+            options={merchantOptions}
             onChange={(value) => set("merchantId", value)}
+            placeholder="ابحث عن التاجر"
           />
 
-          <SelectMenu
+          <ComboField
             label="المندوب"
             required
             value={form.courierId || null}
-            options={courierList.map((courier) => ({
-              value: courier.id,
-              label: courier.displayName,
-              hint: `${courier.cutPercent}%`,
-            }))}
+            options={courierOptions}
             onChange={(value) => set("courierId", value)}
+            placeholder="ابحث عن المندوب"
           />
 
           <SelectMenu
@@ -111,6 +122,7 @@ export function OperationLogForm({
             inputMode="decimal"
             min="0"
             step="0.01"
+            dir="ltr"
             value={form.orderValue}
             onChange={(event) => set("orderValue", event.target.value)}
           />
@@ -121,19 +133,47 @@ export function OperationLogForm({
             inputMode="decimal"
             min="0"
             step="0.01"
+            dir="ltr"
             value={form.deliveryFee}
             onChange={(event) => set("deliveryFee", event.target.value)}
           />
 
+          <ComboField
+            label="الكوبون"
+            value={form.couponId || NO_COUPON}
+            options={couponOptions}
+            onChange={(value) => set("couponId", value === NO_COUPON ? "" : value)}
+            placeholder="ابحث عن كود الكوبون"
+            hint="اختياري. يُطبَّق الخصم حسب قواعد الكوبون."
+          />
+
           <TextField
-            label="حصة المندوب"
-            hint="اتركها فارغة لتُحسب من نسبة المندوب."
+            label="خصم المحفظة"
             type="number"
             inputMode="decimal"
             min="0"
             step="0.01"
-            value={form.courierCut}
-            onChange={(event) => set("courierCut", event.target.value)}
+            dir="ltr"
+            hint="اختياري. مبلغ يُخصم من رصيد محفظة العميل."
+            value={form.walletDiscount}
+            onChange={(event) => set("walletDiscount", event.target.value)}
+          />
+
+          <TextField
+            label="سبب خصم المحفظة"
+            value={form.walletDiscountReason}
+            onChange={(event) =>
+              set("walletDiscountReason", event.target.value)
+            }
+            hint="يظهر في السجل عند وجود خصم محفظة."
+          />
+
+          <TextField
+            label="مرجع خصم المحفظة"
+            dir="ltr"
+            value={form.walletDiscountRef}
+            onChange={(event) => set("walletDiscountRef", event.target.value)}
+            hint="رقم إذن أو مرجع داخلي اختياري."
           />
 
           <TextAreaField
@@ -142,20 +182,6 @@ export function OperationLogForm({
             value={form.note}
             onChange={(event) => set("note", event.target.value)}
           />
-        </div>
-
-        <div className="operation-preview">
-          <span>
-            العمولة: <strong>{operationMoney(preview.commission, currency)}</strong>
-          </span>
-          <span>
-            مستحق التاجر:{" "}
-            <strong>{operationMoney(preview.merchantShare, currency)}</strong>
-          </span>
-          <span>
-            مستحق المندوب:{" "}
-            <strong>{operationMoney(preview.courierShare, currency)}</strong>
-          </span>
         </div>
 
         {error ? <p className="form-error">{error}</p> : null}
@@ -190,6 +216,11 @@ export function OperationLogForm({
                     {operation.merchantName ?? "تاجر"} ·{" "}
                     {operation.courierName ?? "مندوب"}
                   </span>
+                  {operation.couponCode ? (
+                    <span className="muted" dir="ltr">
+                      {operation.couponCode}
+                    </span>
+                  ) : null}
                 </div>
                 <div>
                   <span className="badge badge-gold">

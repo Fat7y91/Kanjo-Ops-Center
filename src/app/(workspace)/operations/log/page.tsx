@@ -13,6 +13,7 @@ export default async function OperationsLogPage() {
     operations: [],
     couriers: [],
     merchants: [],
+    coupons: [],
   }));
 
   // The service already degrades to an empty board, but a future repository
@@ -21,6 +22,7 @@ export default async function OperationsLogPage() {
   const operations = Array.isArray(board.operations) ? board.operations : [];
   const couriers = Array.isArray(board.couriers) ? board.couriers : [];
   const merchants = Array.isArray(board.merchants) ? board.merchants : [];
+  const coupons = Array.isArray(board.coupons) ? board.coupons : [];
 
   return (
     <>
@@ -33,6 +35,7 @@ export default async function OperationsLogPage() {
       <OperationLogForm
         couriers={couriers}
         merchants={merchants}
+        coupons={coupons}
         initialOperations={operations}
       />
     </>
