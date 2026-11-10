@@ -30,9 +30,19 @@ const TRIGGER =
  * stacking order must clear every overlay they can be opened from. The dialog
  * backdrop renders at z-index 70; at `z-50` the list painted behind it, which
  * made every dropdown inside a modal look like it had a single option.
+ *
+ * The width is supplied per control because Headless UI only measures an
+ * element it renders: a `Listbox` publishes `--button-width` from its
+ * `ListboxButton`, while a `Combobox` without a `ComboboxButton` publishes only
+ * `--input-width`. Sharing one width variable made the combobox panel collapse
+ * to `0px`, so the list opened invisibly and looked empty.
  */
-const PANEL =
-  "z-[100] max-h-64 w-[var(--button-width)] overflow-auto rounded-[var(--radius-lg)] border-0 bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--line)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
+const PANEL_BASE =
+  "z-[100] max-h-64 overflow-auto rounded-[var(--radius-lg)] border-0 bg-[color:var(--kanjo-surface)] p-1.5 shadow-[var(--shadow-lg)] ring-1 ring-[color:var(--line)] transition duration-200 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0";
+
+const LISTBOX_PANEL = `${PANEL_BASE} w-[var(--button-width)]`;
+
+const COMBO_PANEL = `${PANEL_BASE} w-[var(--input-width)] min-w-[12rem]`;
 
 const OPTION =
   "flex cursor-pointer items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm text-[color:var(--ink)] transition duration-150 ease-out data-[focus]:bg-[color:var(--kanjo-pastel)] data-[focus]:text-[color:var(--kanjo-pastel-ink)] data-[selected]:font-bold data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45";
@@ -95,7 +105,7 @@ export function SelectMenu<T extends string | number>({
         </svg>
       </ListboxButton>
 
-      <ListboxOptions anchor="bottom start" transition className={PANEL}>
+      <ListboxOptions anchor="bottom start" transition className={LISTBOX_PANEL}>
         {options.map((option) => (
           <ListboxOption
             key={String(option.value)}
@@ -208,7 +218,7 @@ export function ComboField<T extends string | number>({
         </svg>
       </div>
 
-      <ComboboxOptions anchor="bottom start" transition className={PANEL}>
+      <ComboboxOptions anchor="bottom start" transition className={COMBO_PANEL}>
         {filtered.length === 0 ? (
           <p className="px-3 py-2 text-sm text-[color:var(--ink-soft)]">
             لا نتائج مطابقة.
