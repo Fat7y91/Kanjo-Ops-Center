@@ -54,8 +54,12 @@ export const boardPayloadSchema = z.custom<BoardPayload>(isBoardPayload, {
  * One row of the merchant directory.
  *
  * Every value is already display text: the labels are resolved where the
- * vocabulary lives (`CONTRACT_STATE_META`, `teamLabel`) and the amount is
+ * vocabulary lives (`CONTRACT_STATE_META`, `teamLabel`) and the amounts are
  * formatted in the operator's locale, so the client formats nothing per row.
+ *
+ * The directory shows two money facts side by side: the agreed commission rate
+ * (a contract term) and the live net balance against the journal (a derived
+ * position). They are separate columns because a rate is not a balance.
  */
 export const merchantRowSchema = z.object({
   id: z.string(),
@@ -67,7 +71,12 @@ export const merchantRowSchema = z.object({
   teamLabel: z.string(),
   stateLabel: z.string(),
   stateTone: z.string(),
-  commissionLabel: z.string(),
+  /** Agreed commission percentage, e.g. `12%`, or a dash when unsigned. */
+  commissionRateLabel: z.string(),
+  /** Live net position from the journal, signed and currency-formatted. */
+  balanceLabel: z.string(),
+  /** `due_to_house`, `due_to_merchant` or `settled`, for colouring the cell. */
+  balanceTone: z.enum(["due_to_house", "due_to_merchant", "settled"]),
 });
 
 export type MerchantRow = z.infer<typeof merchantRowSchema>;

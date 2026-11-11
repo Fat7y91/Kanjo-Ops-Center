@@ -235,8 +235,8 @@ export const MODULES: readonly ModuleDefinition[] = [
     // viewing are separate grants so a logger can see the roster without being
     // able to edit a partner's login or deactivate them.
     href: "/couriers",
-    label: "المناديب",
-    shortLabel: "المناديب",
+    label: "مناديب التوصيل",
+    shortLabel: "التوصيل",
     description: "شركاء التوصيل وربحهم الثابت وبيانات صرفهم وأرصدتهم.",
     permission: "view_couriers",
     alsoGrantedBy: ["manage_couriers"],

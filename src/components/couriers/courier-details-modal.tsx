@@ -36,8 +36,8 @@ export function CourierDetailsModal({
   return (
     <Modal
       open={courier !== null}
-      eyebrow="ملف المندوب"
-      title={courier?.displayName ?? "المندوب"}
+      eyebrow="ملف مندوب التوصيل"
+      title={courier?.displayName ?? "مندوب التوصيل"}
       onClose={onClose}
     >
       {courier ? (
@@ -78,6 +78,23 @@ export function CourierDetailsModal({
               <dd>{courierDate(courier.appliedAt)}</dd>
             </div>
           </dl>
+
+          <section className="courier-performance">
+            <h3>الأداء الشهري</h3>
+            <p className="muted">الشهر الحالي حتى تاريخه.</p>
+            <dl className="courier-performance-grid">
+              <div>
+                <dt>إجمالي مبالغ التوصيل هذا الشهر</dt>
+                <dd dir="ltr">
+                  {courierMoney(courier.monthlyDeliveryAmount, "EGP")}
+                </dd>
+              </div>
+              <div>
+                <dt>إجمالي ربح مندوب التوصيل هذا الشهر</dt>
+                <dd dir="ltr">{courierMoney(courier.monthlyProfit, "EGP")}</dd>
+              </div>
+            </dl>
+          </section>
 
           {canManage ? (
             <div className="courier-modal-actions">

@@ -153,7 +153,7 @@ export function BreakdownModal({
               }
             />
             <Row
-              label="مستحقات المندوب"
+              label="مستحقات مندوب التوصيل"
               value={money(breakdown.courierDues)}
               hint="ربح ثابت لكل طلب"
             />
@@ -192,7 +192,7 @@ export function BreakdownModal({
               />
             ) : null}
             <Row
-              label="مصروف ربح المندوب"
+              label="مصروف ربح مندوب التوصيل"
               value={`− ${money(breakdown.platform.courierExpense)}`}
               tone="negative"
             />

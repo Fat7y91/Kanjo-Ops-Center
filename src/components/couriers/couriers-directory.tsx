@@ -52,7 +52,7 @@ export function CouriersDirectory({
             value={filters.query}
             onChange={(event) => onFilter("query", event.target.value)}
             placeholder="الاسم أو رقم الهاتف"
-            aria-label="البحث عن المناديب"
+            aria-label="البحث عن مناديب التوصيل"
             autoComplete="off"
           />
         </div>
@@ -65,7 +65,7 @@ export function CouriersDirectory({
         />
 
         <span className="badge" aria-live="polite">
-          {rows.length} مندوب
+          {rows.length} مندوب توصيل
         </span>
       </div>
 
@@ -73,7 +73,7 @@ export function CouriersDirectory({
         <table className="data-table courier-table">
           <thead>
             <tr>
-              <th>المندوب</th>
+              <th>مندوب التوصيل</th>
               <th>الهاتف</th>
               <th>الربح الثابت</th>
               <th>بيانات الصرف</th>
@@ -88,7 +88,7 @@ export function CouriersDirectory({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={9}>
-                  <p className="muted">لا يوجد مناديب مطابقون للتصفية.</p>
+                  <p className="muted">لا يوجد مناديب توصيل مطابقون للتصفية.</p>
                 </td>
               </tr>
             ) : (

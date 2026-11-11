@@ -55,6 +55,12 @@ export function AccountsView({
   const voucher = useJournalVoucher();
 
   const active = summaries.filter((summary) => summary.account.active);
+  /* EGP is the primary treasury account: every operational settlement posts
+   * there, so it leads the grid (rightmost in RTL) and renders larger. */
+  const ordered = [...active].sort((left, right) => {
+    const rank = (currency: string) => (currency === "EGP" ? 0 : 1);
+    return rank(left.account.currency) - rank(right.account.currency);
+  });
   const canRecord = canRecordDeposits || canRecordExpenses;
 
   return (
@@ -79,7 +85,7 @@ export function AccountsView({
           }
         >
           <div className="accounts-totals">
-            {(["SAR", "EGP"] as const).map((currency) => (
+            {(["EGP", "SAR"] as const).map((currency) => (
               <div className="accounts-total" key={currency}>
                 <WidgetStat
                   label={`الرصيد (${currency})`}
@@ -113,12 +119,13 @@ export function AccountsView({
       )}
 
       <div className="accounts-grid">
-        {active.map((summary) => (
+        {ordered.map((summary) => (
           <AccountCard
             key={summary.account.id}
             summary={summary}
             entries={entries}
             full={full}
+            primary={summary.account.currency === "EGP"}
             canRecord={canRecord && summary.account.currency === "EGP"}
             onRecord={() => setEntryFor(summary.account.id)}
             onOpenEntry={canViewTransactions ? voucher.openFor : undefined}

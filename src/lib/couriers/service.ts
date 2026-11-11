@@ -38,7 +38,7 @@ const UUID_PATTERN =
 /** A malformed path id is a bad request, never a database round-trip. */
 function requireCourierId(id: string): string {
   if (!UUID_PATTERN.test(id)) {
-    throw new CouriersError("NOT_FOUND", "المندوب غير موجود.", 404);
+    throw new CouriersError("NOT_FOUND", "مندوب التوصيل غير موجود.", 404);
   }
   return id;
 }

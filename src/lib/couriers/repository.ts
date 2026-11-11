@@ -10,7 +10,7 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import { CouriersError } from "./errors";
 import { parsePayoutPreferences } from "./payout";
-import { loadCourierTotals } from "./totals";
+import { loadCourierTotals, type CourierTotals } from "./totals";
 import type { Courier, CourierCreateInput, CourierUpdateInput } from "./types";
 
 /**
@@ -42,12 +42,7 @@ const COURIER_COLUMNS =
 const COURIER_COLUMNS_LEGACY =
   "id,display_name,phone,active,applied_at,created_at";
 
-function toCourier(
-  row: CourierRow,
-  earnings: Map<string, number>,
-  deliveries: Map<string, number>,
-  balances: Map<string, number>,
-): Courier {
+function toCourier(row: CourierRow, totals: CourierTotals): Courier {
   return {
     id: row.id,
     displayName: row.display_name?.trim() || "مندوب",
@@ -56,9 +51,11 @@ function toCourier(
     payoutPreferences: parsePayoutPreferences(row.payout_preferences),
     active: row.active,
     appliedAt: row.applied_at ?? row.created_at,
-    earnings: earnings.get(row.id) ?? 0,
-    deliveries: deliveries.get(row.id) ?? 0,
-    balance: balances.get(row.id) ?? 0,
+    earnings: totals.earnings.get(row.id) ?? 0,
+    deliveries: totals.deliveries.get(row.id) ?? 0,
+    balance: totals.balances.get(row.id) ?? 0,
+    monthlyDeliveryAmount: totals.monthlyDeliveryAmount.get(row.id) ?? 0,
+    monthlyProfit: totals.monthlyProfit.get(row.id) ?? 0,
   };
 }
 
@@ -74,7 +71,7 @@ export async function listCouriers(): Promise<Courier[]> {
 
   if (!error) {
     return ((data ?? []) as unknown as CourierRow[]).map((row) =>
-      toCourier(row, totals.earnings, totals.deliveries, totals.balances),
+      toCourier(row, totals),
     );
   }
   if (!isMissingSchemaObject(error)) throw error;
@@ -89,7 +86,7 @@ export async function listCouriers(): Promise<Courier[]> {
   if (fallback.error) throw fallback.error;
 
   return ((fallback.data ?? []) as unknown as CourierRow[]).map((row) =>
-    toCourier(row, totals.earnings, totals.deliveries, totals.balances),
+    toCourier(row, totals),
   );
 }
 
@@ -125,16 +122,16 @@ export async function insertCourier(
     if (isUniqueViolation(error)) {
       throw new CouriersError(
         "PHONE_TAKEN",
-        "يوجد مندوب مسجّل بهذا الرقم بالفعل.",
+        "يوجد مندوب توصيل مسجّل بهذا الرقم بالفعل.",
         409,
       );
     }
-    throw new CouriersError("ROSTER_FAILED", "تعذر حفظ سجل المندوب.", 502);
+    throw new CouriersError("ROSTER_FAILED", "تعذر حفظ سجل مندوب التوصيل.", 502);
   }
 
   const created = data ? await findCourierById((data as { id: string }).id) : null;
   if (!created) {
-    throw new CouriersError("NOT_FOUND", "لم يُعثر على المندوب بعد الإنشاء.", 502);
+    throw new CouriersError("NOT_FOUND", "لم يُعثر على مندوب التوصيل بعد الإنشاء.", 502);
   }
   return created;
 }
@@ -157,18 +154,18 @@ export async function updateCourier(
     if (isUniqueViolation(error)) {
       throw new CouriersError(
         "PHONE_TAKEN",
-        "يوجد مندوب مسجّل بهذا الرقم بالفعل.",
+        "يوجد مندوب توصيل مسجّل بهذا الرقم بالفعل.",
         409,
       );
     }
     throw error;
   }
   if (!data) {
-    throw new CouriersError("NOT_FOUND", "المندوب غير موجود.", 404);
+    throw new CouriersError("NOT_FOUND", "مندوب التوصيل غير موجود.", 404);
   }
 
   const updated = await findCourierById(id);
-  if (!updated) throw new CouriersError("NOT_FOUND", "المندوب غير موجود.", 404);
+  if (!updated) throw new CouriersError("NOT_FOUND", "مندوب التوصيل غير موجود.", 404);
   return updated;
 }
 
@@ -192,7 +189,7 @@ export async function deleteCourier(id: string): Promise<void> {
     if (isForeignKeyViolation(error)) {
       throw new CouriersError(
         "COURIER_IN_USE",
-        "لا يمكن حذف مندوب له عمليات مسجلة. أوقفه بدلاً من حذفه.",
+        "لا يمكن حذف مندوب توصيل له عمليات مسجلة. أوقفه بدلاً من حذفه.",
         409,
       );
     }

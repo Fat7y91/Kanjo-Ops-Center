@@ -79,9 +79,9 @@ export default async function OperationsKpiPage({
           tone="green"
         />
         <StatCard
-          label="مستحقات المناديب"
+          label="مستحقات مناديب التوصيل"
           value={operationMoney(report.totals.courierCutTotal, "EGP")}
-          detail="حصص المناديب المحتسبة"
+          detail="حصص مناديب التوصيل المحتسبة"
         />
       </section>
 

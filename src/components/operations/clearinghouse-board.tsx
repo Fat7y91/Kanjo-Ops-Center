@@ -83,7 +83,7 @@ export function ClearinghouseBoard({
                 <article className="panel">
                   <div className="panel-head">
                     <h2>مستحق لنا</h2>
-                    <span className="muted">مبالغ على التجار والمناديب تحصيلها</span>
+                    <span className="muted">مبالغ على التجار ومناديب التوصيل تحصيلها</span>
                   </div>
                   <PartyBook
                     accounts={receivables}

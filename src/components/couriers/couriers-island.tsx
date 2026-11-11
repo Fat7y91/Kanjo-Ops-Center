@@ -36,7 +36,7 @@ export function CouriersIsland({ initialCouriers, canManage }: CouriersIslandPro
     <>
       <PageHeader
         eyebrow="المقاصة والعمليات"
-        title="المناديب"
+        title="مناديب التوصيل"
         description="شركاء التوصيل وربحهم الثابت وبيانات صرفهم وأرصدتهم."
         actions={
           canManage ? (
@@ -59,7 +59,7 @@ export function CouriersIsland({ initialCouriers, canManage }: CouriersIslandPro
         onDelete={(courier) => {
           if (
             window.confirm(
-              `حذف المندوب ${courier.displayName}؟ لا يمكن التراجع عن هذا الإجراء.`,
+              `حذف مندوب التوصيل ${courier.displayName}؟ لا يمكن التراجع عن هذا الإجراء.`,
             )
           ) {
             void state.remove(courier);

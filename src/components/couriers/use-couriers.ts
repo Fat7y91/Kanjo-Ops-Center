@@ -73,11 +73,11 @@ export function useCouriers(initialCouriers: Courier[]) {
         error?: string;
       };
       if (!response.ok) {
-        setError(body.error ?? "تعذر حذف المندوب.");
+        setError(body.error ?? "تعذر حذف مندوب التوصيل.");
         return;
       }
       setCouriers((current) => current.filter((row) => row.id !== courier.id));
-      notify("تم حذف المندوب.");
+      notify("تم حذف مندوب التوصيل.");
     } catch {
       setError("تعذر الاتصال بالخادم.");
     }

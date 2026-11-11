@@ -37,10 +37,15 @@
   line-height: 1.6;
 }
 
+/* The treasury grid gives the EGP account the dominant column: every daily
+ * settlement posts there, so it is the screen's primary object. The SAR account
+ * is a funding/holding account and reads as secondary. In RTL the first column
+ * is the rightmost, which is already where the eye lands. */
 .accounts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
   gap: 16px;
+  align-items: stretch;
 }
 
 .account-card {
@@ -52,6 +57,40 @@
   border-radius: var(--radius-lg);
   background: var(--gradient-card);
   box-shadow: var(--shadow-sm);
+}
+
+/* Primary card: the Egyptian Bank. Larger type and a stronger frame signal
+ * that this is where operational money lands, not just another account. */
+.account-card-primary {
+  padding: 24px;
+  border-color: color-mix(in srgb, var(--kanjo-purple-base) 28%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.account-card-primary .account-balance {
+  font-size: 1.9rem;
+}
+
+.account-card-primary .account-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.account-card-primary .account-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.account-card-secondary {
+  align-self: stretch;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.account-card-secondary .account-balance {
+  font-size: 1.1rem;
+}
+
+.account-card-secondary .account-card-head h3 {
+  font-size: 0.92rem;
 }
 
 .account-card-head {
@@ -167,7 +206,8 @@
 
 @media (max-width: 720px) {
   .accounts-totals,
-  .account-form-grid {
+  .account-form-grid,
+  .accounts-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

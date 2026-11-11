@@ -23,7 +23,7 @@ export default async function ClearinghousePage() {
       <PageHeader
         eyebrow="المالية"
         title="المقاصة"
-        description="أرصدة التجار والمناديب المستخرجة من دفتر اليومية، والمستحقة السداد أو التحصيل."
+        description="أرصدة التجار ومناديب التوصيل المستخرجة من دفتر اليومية، والمستحقة السداد أو التحصيل."
       />
 
       <ClearinghouseBoard

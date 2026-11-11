@@ -21,8 +21,39 @@
   width: 180px;
 }
 
+/* The roster is dense: nine columns of mixed money, numbers, dates and text.
+ * Give every cell a consistent generous inline padding and align the numeric
+ * and money columns to the end of their cell so the digits line up in a column
+ * instead of drifting between rows. */
 .courier-table td {
   white-space: nowrap;
+  padding-inline: 16px;
+  vertical-align: middle;
+}
+
+.courier-table th {
+  padding-inline: 16px;
+}
+
+/* Numeric and money columns (`dir="ltr"`) read best flush-end, with tabular
+ * figures so a shorter number does not shift the ones above/below it. */
+.courier-table td[dir="ltr"] {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.courier-table th:nth-child(3),
+.courier-table th:nth-child(5),
+.courier-table th:nth-child(6) {
+  text-align: end;
+}
+
+.courier-table td:first-child {
+  padding-inline-start: 18px;
+}
+
+.courier-table td:last-child {
+  padding-inline-end: 18px;
 }
 
 .courier-identity {
@@ -82,6 +113,61 @@
   font-weight: 700;
 }
 
+/* Monthly performance block in the courier profile: two headline figures
+ * scoped to the current calendar month. */
+.courier-performance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.courier-performance h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.courier-performance > .muted {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.courier-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.courier-performance-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.courier-performance-grid dt {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.courier-performance-grid dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 .kpi-month-picker {
   display: flex;
   align-items: center;
@@ -98,6 +184,10 @@
   }
 
   .courier-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .courier-performance-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

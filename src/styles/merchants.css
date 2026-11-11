@@ -90,6 +90,37 @@
   white-space: nowrap;
 }
 
+/* Directory balance cell: signed amount plus a plain-language reading, so the
+ * column explains itself without a legend elsewhere on the page. */
+.merchant-balance {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.merchant-balance strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.merchant-balance-note {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.merchant-balance-due_to_house strong {
+  color: var(--red);
+}
+
+.merchant-balance-due_to_merchant strong {
+  color: var(--green);
+}
+
+.merchant-balance-settled strong {
+  color: var(--ink-soft);
+}
+
 /* Dark theme: the purple base is too close to the dark surface, so lift the
  * monogram onto the gold-on-deep-violet tile gradient instead. */
 [data-theme="dark"] .merchant-avatar {

@@ -9,6 +9,16 @@ import { smartTextScore } from "@/lib/search/normalize";
 
 export type { MerchantRow };
 
+/**
+ * Plain-language reading of a merchant's signed net position, so the balance
+ * cell is self-explanatory without a legend elsewhere on the page.
+ */
+const BALANCE_TONE_LABEL: Record<MerchantRow["balanceTone"], string> = {
+  due_to_house: "مستحق على التاجر",
+  due_to_merchant: "مستحق للتاجر",
+  settled: "الحساب مسدد",
+};
+
 type MerchantsDirectoryProps = {
   rows: MerchantRow[];
   initialQuery: string;
@@ -102,7 +112,8 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
               <th>المدينة</th>
               <th>الفريق المالك</th>
               <th>الحالة</th>
-              <th>العمولة</th>
+              <th>نسبة العمولة</th>
+              <th>الرصيد الحالي</th>
               <th className="align-right">إجراءات</th>
             </tr>
           </thead>
@@ -135,7 +146,17 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
                     {row.stateLabel}
                   </span>
                 </td>
-                <td>{row.commissionLabel}</td>
+                <td dir="ltr">{row.commissionRateLabel}</td>
+                <td>
+                  <span
+                    className={`merchant-balance merchant-balance-${row.balanceTone}`}
+                  >
+                    <strong dir="ltr">{row.balanceLabel}</strong>
+                    <span className="merchant-balance-note">
+                      {BALANCE_TONE_LABEL[row.balanceTone]}
+                    </span>
+                  </span>
+                </td>
                 <td>
                   <div className="row-actions">
                     <Link
@@ -150,7 +171,7 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
             ))}
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <p className="empty-state">
                     {query.trim()
                       ? `لا يوجد تاجر مطابق لـ «${query.trim()}». جرّب إملاءً أقصر.`

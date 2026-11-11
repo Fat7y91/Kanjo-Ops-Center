@@ -1,6 +1,12 @@
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import type { ActiveSession } from "@/lib/rbac/types";
 
+import { loadMerchantBalances } from "./merchant-balances";
+import {
+  commissionRateLabel,
+  effectiveCommissionRate,
+  merchantBalanceTone,
+} from "./merchant-balance-format";
 import type { MerchantRow } from "./payload";
 import { loadMerchantStates } from "./state-source";
 import { listCities, listMerchants } from "./store";
@@ -9,7 +15,12 @@ import { CONTRACT_STATE_META, teamLabel } from "./types";
 const currency = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   style: "currency",
   currency: "EGP",
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+});
+
+const percent = new Intl.NumberFormat("ar-EG-u-nu-latn", {
+  maximumFractionDigits: 2,
 });
 
 /**
@@ -25,6 +36,11 @@ const currency = new Intl.NumberFormat("ar-EG-u-nu-latn", {
  * or a manager override — not from the stored column, because the profile and
  * the visit form already read the rollup: a directory that echoed the raw column
  * would contradict both.
+ *
+ * The commission column shows the agreed *rate* (a contract term) and the
+ * balance column shows the live journal position, so the directory answers the
+ * two different questions an operator asks: "what did we agree?" and "where do
+ * we stand today?".
  */
 export async function buildMerchantRows(
   session: ActiveSession,
@@ -40,11 +56,15 @@ export async function buildMerchantRows(
     allowedCities.has(merchant.cityId),
   );
 
-  const states = await loadMerchantStates(scoped);
+  const [states, balances] = await Promise.all([
+    loadMerchantStates(scoped),
+    loadMerchantBalances(scoped.map((merchant) => merchant.id)),
+  ]);
 
   return scoped.map((merchant) => {
     const meta =
       CONTRACT_STATE_META[states.get(merchant.id)?.state ?? merchant.contractState];
+    const net = balances.get(merchant.id)?.net ?? 0;
     return {
       id: merchant.id,
       name: merchant.name,
@@ -55,7 +75,15 @@ export async function buildMerchantRows(
       teamLabel: teamLabel(merchant.team),
       stateLabel: meta.label,
       stateTone: meta.tone,
-      commissionLabel: currency.format(merchant.commissionAmount),
+      commissionRateLabel: commissionRateLabel(
+        effectiveCommissionRate(
+          merchant.agreedCommission,
+          merchant.targetCommission,
+        ),
+        (value) => percent.format(value),
+      ),
+      balanceLabel: currency.format(Math.abs(net)),
+      balanceTone: merchantBalanceTone(net),
     };
   });
 }

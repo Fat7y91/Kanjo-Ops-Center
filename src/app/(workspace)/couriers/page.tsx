@@ -20,9 +20,9 @@ export default async function CouriersPage() {
 
   return (
     <ClientErrorBoundary
-      title="تعذر عرض المناديب"
+      title="تعذر عرض مناديب التوصيل"
       description="لم تكتمل قراءة دليل شركاء التوصيل. أعد المحاولة دون مغادرة الصفحة."
-      connectionTitle="انقطع الاتصال أثناء تحميل المناديب"
+      connectionTitle="انقطع الاتصال أثناء تحميل مناديب التوصيل"
     >
       <CouriersIsland
         initialCouriers={couriers}

@@ -29,7 +29,7 @@ export default async function OperationsLogPage() {
       <PageHeader
         eyebrow="المقاصة والعمليات"
         title="تسجيل العمليات"
-        description="تسجيل الطلبات المنفذة وتوجيه قيود المستحقات للتجار والمناديب."
+        description="تسجيل الطلبات المنفذة وتوجيه قيود المستحقات للتجار ومناديب التوصيل."
       />
 
       <OperationLogForm

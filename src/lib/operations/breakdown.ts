@@ -201,7 +201,7 @@ export function buildOrderBreakdown(
     },
     {
       key: "courier_dues",
-      label: "مستحقات المندوب",
+      label: "مستحقات مندوب التوصيل",
       amount: courierDues,
       tone: "deduction",
     },

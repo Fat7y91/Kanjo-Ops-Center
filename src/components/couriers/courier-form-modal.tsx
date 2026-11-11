@@ -99,12 +99,12 @@ export function CourierFormModal({
         courier?: Courier;
       };
       if (!response.ok || !body.courier) {
-        setError(body.error ?? "تعذر حفظ بيانات المندوب.");
+        setError(body.error ?? "تعذر حفظ بيانات مندوب التوصيل.");
         return;
       }
       onSaved(
         body.courier,
-        courier ? "تم تحديث بيانات المندوب." : "تمت إضافة شريك التوصيل.",
+        courier ? "تم تحديث بيانات مندوب التوصيل." : "تمت إضافة شريك التوصيل.",
       );
       onClose();
     } catch {
@@ -119,12 +119,12 @@ export function CourierFormModal({
   return (
     <Modal
       open={open}
-      eyebrow="المناديب"
-      title={isEdit ? "تعديل بيانات المندوب" : "إضافة شريك توصيل"}
+      eyebrow="مناديب التوصيل"
+      title={isEdit ? "تعديل بيانات مندوب التوصيل" : "إضافة شريك توصيل"}
       description={
         isEdit
-          ? "تعديل بيانات المندوب والربح الثابت وبيانات الصرف."
-          : "إضافة مندوب إلى دليل شركاء التوصيل."
+          ? "تعديل بيانات مندوب التوصيل والربح الثابت وبيانات الصرف."
+          : "إضافة مندوب توصيل إلى الدليل."
       }
       onClose={onClose}
       wide
@@ -162,8 +162,8 @@ export function CourierFormModal({
 
       <div className="courier-form-toggle">
         <ToggleField
-          label="المندوب نشط"
-          hint="المندوب الموقوف يبقى في السجل لكن لا يُختار في تسجيل العمليات."
+          label="مندوب التوصيل نشط"
+          hint="مندوب التوصيل الموقوف يبقى في السجل لكن لا يُختار في تسجيل العمليات."
           checked={form.active}
           onChange={(checked) => set("active", checked)}
         />
@@ -173,7 +173,7 @@ export function CourierFormModal({
 
       <div className="courier-modal-actions">
         <Button variant="primary" onClick={() => void submit()} disabled={busy}>
-          {busy ? "جارٍ الحفظ…" : isEdit ? "حفظ التعديلات" : "إضافة المندوب"}
+          {busy ? "جارٍ الحفظ…" : isEdit ? "حفظ التعديلات" : "إضافة مندوب التوصيل"}
         </Button>
         <Button variant="quiet" onClick={onClose} disabled={busy}>
           إلغاء

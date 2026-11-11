@@ -65,12 +65,12 @@ export function OperationLogFields({
       />
 
       <ComboField
-        label="المندوب"
+        label="مندوب التوصيل"
         required
         value={form.courierId || null}
         options={courierOptions}
         onChange={(value) => set("courierId", value)}
-        placeholder="ابحث أو اختر المندوب"
+        placeholder="ابحث أو اختر مندوب التوصيل"
       />
 
       <SelectMenu

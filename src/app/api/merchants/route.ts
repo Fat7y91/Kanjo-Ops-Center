@@ -12,9 +12,9 @@ export const runtime = "edge";
  *
  * `/api/field-ops/merchants` answers the visit engine's picker: merchant
  * identity plus the resolved agreement state. The directory needs a different
- * projection — formatted commission, city name, ownership label — so it has its
- * own read rather than a flag on the other one that would make both payloads
- * carry fields only one caller renders.
+ * projection — agreed commission rate, live journal balance, city name,
+ * ownership label — so it has its own read rather than a flag on the other one
+ * that would make both payloads carry fields only one caller renders.
  *
  * The gate is the `/merchants` nav module, the same capability set the page
  * requires, so the endpoint cannot be opened by a session the page would

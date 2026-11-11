@@ -78,7 +78,7 @@ export function MerchantsIsland({
 
       {status === "loading" ? (
         <div aria-busy="true">
-          <TableSkeleton rows={8} columns={6} />
+          <TableSkeleton rows={8} columns={7} />
         </div>
       ) : null}
 

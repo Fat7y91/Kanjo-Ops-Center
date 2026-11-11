@@ -46,7 +46,7 @@ export function OperationsKpiTable({
               <th>عدد العمليات</th>
               <th>قيمة الطلبات</th>
               <th>العمولات</th>
-              <th>مستحقات المناديب</th>
+              <th>مستحقات مناديب التوصيل</th>
               <th>آخر عملية</th>
             </tr>
           </thead>

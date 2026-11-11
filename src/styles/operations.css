@@ -77,6 +77,99 @@
   font-size: 0.82rem;
 }
 
+/* Recent-operations rows read like a bank statement: a source → destination
+ * route, a reference line, an arithmetic breakdown and a signed amount. */
+.operation-row-main {
+  flex: 1 1 260px;
+  gap: 6px;
+}
+
+.operation-row-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.operation-party {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.operation-party strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operation-party-role {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.operation-row-arrow {
+  color: var(--kanjo-purple-base);
+  font-weight: 800;
+}
+
+.operation-row-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.operation-row-dot {
+  opacity: 0.5;
+}
+
+.operation-row-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-row-deduction {
+  color: var(--red);
+}
+
+.operation-row-note {
+  font-size: 0.72rem;
+}
+
+.operation-row-amount {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.operation-amount {
+  font-size: 0.98rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.operation-amount-credit {
+  color: var(--green);
+}
+
+.operation-amount-debit {
+  color: var(--red);
+}
+
+.operation-row-date {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
 .clearinghouse {
   display: grid;
   gap: 18px;

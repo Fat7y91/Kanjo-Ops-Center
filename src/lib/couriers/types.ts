@@ -38,11 +38,15 @@ export type Courier = {
   deliveries: number;
   /** Pending clearinghouse balance owed to the courier (major units). */
   balance: number;
+  /** Gross delivery value handled in the current calendar month (major units). */
+  monthlyDeliveryAmount: number;
+  /** Fixed profit earned in the current calendar month (major units). */
+  monthlyProfit: number;
 };
 
 /** Identity portion shared by create and update. */
 const identityShape = {
-  fullName: z.string().trim().min(2, "اسم المندوب مطلوب.").max(80),
+  fullName: z.string().trim().min(2, "اسم مندوب التوصيل مطلوب.").max(80),
   phone: z
     .string()
     .trim()

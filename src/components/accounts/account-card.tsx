@@ -9,6 +9,12 @@ type AccountCardProps = {
   /** Full viewers see balances and expenses; deposit-only viewers do not. */
   full: boolean;
   canRecord: boolean;
+  /**
+   * The primary treasury card (the Egyptian bank, EGP). It is rendered larger
+   * than the secondary card because it is where every operational settlement
+   * posts, and it sits first in the RTL grid.
+   */
+  primary?: boolean;
   onRecord: () => void;
   /** Opens the voucher for a row when the viewer may read transactions. */
   onOpenEntry?: (entryId: string) => void;
@@ -19,16 +25,20 @@ export function AccountCard({
   entries,
   full,
   canRecord,
+  primary = false,
   onRecord,
   onOpenEntry,
 }: AccountCardProps) {
   const recent = entries
     .filter((entry) => entry.accountId === summary.account.id)
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
-    .slice(0, 6);
+    .slice(0, primary ? 8 : 4);
 
   return (
-    <article className="account-card">
+    <article
+      className={`account-card${primary ? " account-card-primary" : " account-card-secondary"}`}
+      data-currency={summary.account.currency}
+    >
       <header className="account-card-head">
         <div>
           <span className="badge">{summary.account.currency}</span>

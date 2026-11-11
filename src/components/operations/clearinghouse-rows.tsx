@@ -35,7 +35,7 @@ export function PartyBook({
           <div>
             <strong>{account.partyName}</strong>
             <span className="muted">
-              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
+              {account.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
             </span>
           </div>
           <strong
@@ -90,7 +90,7 @@ export function AccountRows({
           <div className="clearing-row-main">
             <strong>{account.partyName}</strong>
             <span>
-              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
+              {account.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
             </span>
           </div>
 
