@@ -7,12 +7,7 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 import { resolvePartyNames } from "./party-lookup";
 import { embedName } from "./rows";
 
-import type {
-  CourierOption,
-  CouponOption,
-  MerchantOption,
-  OperationLog,
-} from "./types";
+import type { OperationLog } from "./types";
 
 /**
  * Tier 4 repository for `app.couriers` and `app.operation_logs`.
@@ -69,13 +64,6 @@ type OperationRow = {
   couriers: { display_name: string } | { display_name: string }[] | null;
 };
 
-
-type CourierRow = {
-  id: string;
-  display_name: string;
-  active: boolean;
-};
-
 const OPERATION_COLUMNS =
   "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at,merchants(name),couriers(display_name)";
 
@@ -115,47 +103,6 @@ function toOperation(row: OperationRow): OperationLog {
   };
 }
 
-
-/* ── Lookups for the logging form ───────────────────────────────────────── */
-
-export async function listCouriers(): Promise<CourierOption[]> {
-  const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("couriers")
-    .select("id,display_name,active")
-    .eq("active", true)
-    .order("display_name", { ascending: true })
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
-
-  if (error && isMissingSchemaObject(error)) return [];
-  if (error) throw error;
-
-  return ((data ?? []) as unknown as CourierRow[]).map((row) => ({
-    id: row.id,
-    displayName: row.display_name?.trim() || "مندوب",
-    active: row.active,
-  }));
-}
-
-export async function listMerchantOptions(): Promise<MerchantOption[]> {
-  const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .select("id,name")
-    .order("name", { ascending: true })
-    .limit(500)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
-
-  if (error && isMissingSchemaObject(error)) return [];
-  if (error) throw error;
-
-  return ((data ?? []) as { id: string; name: string }[]).map((row) => ({
-    id: row.id,
-    name: row.name,
-  }));
-}
 
 /* ── Operations ─────────────────────────────────────────────────────────── */
 
@@ -262,88 +209,6 @@ export async function findOperation(
   });
 }
 
-/**
- * The operation's journal entry id.
- *
- * `operation_logs.journal_entry_id` is the link the posting trigger stamps, so
- * the breakdown reads the exact entry that was posted for this order rather than
- * guessing from the source id.
- */
-export async function findOperationEntryId(
-  operationId: string,
-): Promise<string | null> {
-  const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("operation_logs")
-    .select("journal_entry_id")
-    .eq("id", operationId)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingSchemaObject(error)) return null;
-    throw error;
-  }
-  return (data as { journal_entry_id: string | null } | null)?.journal_entry_id ?? null;
-}
-
-type JournalLineRow = {
-  id: string;
-  debit_minor: number | string;
-  credit_minor: number | string;
-  memo: string | null;
-  accounts:
-    | { code: string; name: string }
-    | { code: string; name: string }[]
-    | null;
-};
-
-/**
- * The posted lines of one journal entry, with account code and name.
- *
- * Ordering is by account code so the audit view reads as a statement; the
- * caller must not rely on insert order, which the table does not promise.
- */
-export async function listEntryLines(entryId: string): Promise<
-  {
-    id: string;
-    code: string;
-    name: string;
-    debitMinor: number;
-    creditMinor: number;
-    memo: string;
-  }[]
-> {
-  const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("journal_lines")
-    .select("id,debit_minor,credit_minor,memo,accounts(code,name)")
-    .eq("entry_id", entryId)
-    .limit(200)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
-
-  if (error) {
-    if (isMissingSchemaObject(error)) return [];
-    throw error;
-  }
-
-  return ((data ?? []) as unknown as JournalLineRow[])
-    .map((row) => {
-      const account = Array.isArray(row.accounts) ? row.accounts[0] : row.accounts;
-      return {
-        id: row.id,
-        code: account?.code ?? "",
-        name: account?.name ?? "",
-        debitMinor: Number(row.debit_minor),
-        creditMinor: Number(row.credit_minor),
-        memo: row.memo ?? "",
-      };
-    })
-    .sort((left, right) => left.code.localeCompare(right.code));
-}
-
 export async function insertOperation(write: {
   orderId: string;
   merchantId: string;
@@ -387,35 +252,4 @@ export async function insertOperation(write: {
 
   if (error) throw error;
   return toOperation(data as unknown as OperationRow);
-}
-
-/* ── Coupon options for the blind-entry form ────────────────────────────── */
-
-type CouponOptionRow = {
-  id: string;
-  code: string;
-  coupon_type: CouponOption["couponType"];
-  active: boolean;
-};
-
-export async function listCouponOptions(): Promise<CouponOption[]> {
-  const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("coupons")
-    .select("id,code,coupon_type,active")
-    .eq("active", true)
-    .order("code", { ascending: true })
-    .limit(1000)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
-
-  if (error && isMissingSchemaObject(error)) return [];
-  if (error) throw error;
-
-  return ((data ?? []) as unknown as CouponOptionRow[]).map((row) => ({
-    id: row.id,
-    code: row.code,
-    couponType: row.coupon_type,
-    active: row.active,
-  }));
 }

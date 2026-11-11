@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiError, authorize } from "@/lib/auth/api";
-import { loadOrderBreakdown } from "@/lib/operations/service";
+import { loadOrderBreakdown } from "@/lib/operations/read-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";

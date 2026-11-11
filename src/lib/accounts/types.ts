@@ -30,6 +30,13 @@ export const bankAccountSchema = z.object({
   cityId: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
+  /**
+   * Authoritative live balance for a bank control account, read directly from
+   * `app.journal_account_balances` (debits − credits). Null for a registry row
+   * that has no ledger balance of its own. The treasury dashboard shows this
+   * figure verbatim so it can never drift from the journal.
+   */
+  ledgerBalance: z.number().nullable().default(null),
 });
 export type BankAccount = z.infer<typeof bankAccountSchema>;
 

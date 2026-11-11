@@ -44,7 +44,8 @@ export function AccountsView({
   canRecordDeposits,
   canRecordExpenses,
   canAddAccount,
-}: AccountsViewProps) {
+  onRefresh,
+}: AccountsViewProps & { onRefresh: () => void }) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [entryFor, setEntryFor] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export function AccountsView({
             summary={summary}
             entries={entries}
             full={full}
-            canRecord={canRecord}
+            canRecord={canRecord && summary.account.currency === "EGP"}
             onRecord={() => setEntryFor(summary.account.id)}
           />
         ))}
@@ -132,6 +133,7 @@ export function AccountsView({
             setNotice(message);
             setAddOpen(false);
             router.refresh();
+            onRefresh();
           }}
         />
       </Modal>
@@ -150,6 +152,11 @@ export function AccountsView({
             onDone={(message) => {
               setNotice(message);
               setEntryFor(null);
+              /* Re-fetch the balances now: the movement just posted a journal
+               * entry, and the operator must see the new bank balance without
+               * a manual reload. `router.refresh()` alone does not re-run the
+               * island's endpoint fetch. */
+              onRefresh();
               router.refresh();
             }}
           />

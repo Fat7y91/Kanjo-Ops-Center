@@ -6,23 +6,21 @@ import {
 } from "@/lib/db/supabase/errors";
 
 import { OperationsError, fromDatabaseError } from "./errors";
-import { buildOrderBreakdown, type OrderBreakdown } from "./breakdown";
 import {
   listClearingAccounts,
   postSettlement,
 } from "./clearinghouse-repository";
 import { resolvePartyNames } from "./party-lookup";
 import {
-  findOperation,
-  findOperationEntryId,
   insertOperation,
   isOperationsDatabaseConfigured,
-  listCouponOptions,
-  listCouriers,
-  listEntryLines,
-  listMerchantOptions,
   listOperations,
 } from "./repository";
+import {
+  listCouponOptions,
+  listCouriers,
+  listMerchantOptions,
+} from "./options-repository";
 import {
   operationLogInputSchema,
   settleInputSchema,
@@ -206,39 +204,6 @@ export async function settleClearingAccount(
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes ?? null,
     });
-  } catch (error) {
-    translate(error);
-  }
-}
-
-/**
- * Unit-economics breakdown for one logged order.
- *
- * Reads the frozen money terms from the operation row and the posted lines from
- * its journal entry. The two are shown together so a reviewer can reconcile the
- * invoice against the book without a second screen. Missing rows answer 404;
- * a missing journal entry is reported as an unposted order, never as a fake
- * zeroed entry.
- */
-export async function loadOrderBreakdown(
-  operationId: string,
-): Promise<OrderBreakdown> {
-  requireDatabase();
-
-  try {
-    const operation = await findOperation(operationId);
-    if (!operation) {
-      throw new OperationsError(
-        "OPERATION_NOT_FOUND",
-        "العملية غير موجودة.",
-        404,
-      );
-    }
-
-    const entryId = await findOperationEntryId(operationId);
-    const lines = entryId ? await listEntryLines(entryId) : [];
-
-    return buildOrderBreakdown(operation, entryId, lines);
   } catch (error) {
     translate(error);
   }

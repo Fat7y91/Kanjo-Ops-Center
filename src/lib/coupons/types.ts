@@ -59,6 +59,8 @@ export type Coupon = {
   budgetCap: number | null;
   budgetUsed: number;
   budgetRemaining: number | null;
+  /** Absolute per-order cap in major units; null means no cap. */
+  maxDiscount: number | null;
   usesCount: number;
   lastUsedAt: string | null;
   createdAt: string;
@@ -89,6 +91,8 @@ const ruleShape = {
   shippingDiscount: z.coerce.number().min(0).default(0),
   cashbackAmount: z.coerce.number().min(0).default(0),
   budgetCap: z.coerce.number().min(0).nullable().default(null),
+  /** Absolute discount cap per order; relevant to percentage coupons. */
+  maxDiscount: z.coerce.number().min(0).nullable().default(null),
 };
 
 export const couponCreateSchema = z.object(ruleShape).refine(

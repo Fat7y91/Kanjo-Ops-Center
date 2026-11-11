@@ -45,6 +45,8 @@ export type CouponCsvRow = {
   budgetAppliedMinor: number;
   budgetCapMinor: number | null;
   budgetUsedMinor: number;
+  /** Absolute per-order cap; null when the export omits it or leaves it blank. */
+  maxDiscountMinor: number | null;
   lastUsedAt: string | null;
   sourceCreatedAt: string | null;
 };
@@ -147,6 +149,7 @@ export function parseCouponRows(
 
     const vendorFundingPercent = toNumber(row.vendor_funding_percent) ?? 0;
     const budgetCapRaw = clean(row.budget_cap);
+    const maxDiscountRaw = clean(row.max_discount);
 
     seen.add(code);
     out.rows.push({
@@ -167,6 +170,7 @@ export function parseCouponRows(
       budgetAppliedMinor: toMinor(row.budget_applied_amount),
       budgetCapMinor: budgetCapRaw === "" ? null : toMinor(budgetCapRaw),
       budgetUsedMinor: toMinor(row.budget_used),
+      maxDiscountMinor: maxDiscountRaw === "" ? null : toMinor(maxDiscountRaw),
       lastUsedAt: toTimestamp(row.last_used_at),
       sourceCreatedAt: toTimestamp(row.created_at),
     });

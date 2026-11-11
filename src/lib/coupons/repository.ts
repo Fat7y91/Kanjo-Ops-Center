@@ -43,6 +43,7 @@ type CouponRow = {
   budget_applied_minor: number;
   budget_cap_minor: number | null;
   budget_used_minor: number;
+  max_discount_minor: number | null;
   budget_remaining_minor: number | null;
   uses_count: number;
   last_used_at: string | null;
@@ -50,7 +51,7 @@ type CouponRow = {
 };
 
 const COUPON_COLUMNS =
-  "id,code,coupon_type,active,discount_funded_by,vendor_funding_percent,stackable,stack_priority,discount_amount_minor,shipping_discount_minor,cashback_amount_minor,total_impact_minor,vendor_funded_minor,platform_funded_minor,budget_applied_minor,budget_cap_minor,budget_used_minor,budget_remaining_minor,uses_count,last_used_at,source_created_at";
+  "id,code,coupon_type,active,discount_funded_by,vendor_funding_percent,stackable,stack_priority,discount_amount_minor,shipping_discount_minor,cashback_amount_minor,total_impact_minor,vendor_funded_minor,platform_funded_minor,budget_applied_minor,budget_cap_minor,budget_used_minor,budget_remaining_minor,max_discount_minor,uses_count,last_used_at,source_created_at";
 
 function toCoupon(row: CouponRow): Coupon {
   const isPercent = row.coupon_type === "percentage_discount";
@@ -81,6 +82,8 @@ function toCoupon(row: CouponRow): Coupon {
       row.budget_remaining_minor === null
         ? null
         : toMajor(row.budget_remaining_minor),
+    maxDiscount:
+      row.max_discount_minor === null ? null : toMajor(row.max_discount_minor),
     usesCount: row.uses_count,
     lastUsedAt: row.last_used_at,
     createdAt: row.source_created_at,
@@ -138,6 +141,8 @@ export async function insertCoupon(
       cashback_amount_minor: Math.round(input.cashbackAmount * 100),
       budget_cap_minor:
         input.budgetCap === null ? null : Math.round(input.budgetCap * 100),
+      max_discount_minor:
+        input.maxDiscount === null ? null : Math.round(input.maxDiscount * 100),
     })
     .select(COUPON_COLUMNS)
     .single();
@@ -170,6 +175,8 @@ export async function updateCoupon(
       cashback_amount_minor: Math.round(input.cashbackAmount * 100),
       budget_cap_minor:
         input.budgetCap === null ? null : Math.round(input.budgetCap * 100),
+      max_discount_minor:
+        input.maxDiscount === null ? null : Math.round(input.maxDiscount * 100),
     })
     .eq("id", id)
     .select(COUPON_COLUMNS)
@@ -223,6 +230,7 @@ export async function upsertCouponRows(
       budget_applied_minor: row.budgetAppliedMinor,
       budget_cap_minor: row.budgetCapMinor,
       budget_used_minor: row.budgetUsedMinor,
+      max_discount_minor: row.maxDiscountMinor,
       last_used_at: row.lastUsedAt,
       source_created_at: row.sourceCreatedAt,
     }));

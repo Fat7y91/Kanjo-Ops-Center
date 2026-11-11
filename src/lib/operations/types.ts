@@ -122,6 +122,37 @@ export type ClearingAccountRow = {
   balance: number;
 };
 
+/** One posted line in a party's statement of account. */
+export type PartyStatementLine = {
+  id: string;
+  entryId: string;
+  date: string;
+  reference: string;
+  memo: string;
+  debit: number;
+  credit: number;
+  /** Running balance after this line, in major units (debit − credit). */
+  running: number;
+};
+
+/**
+ * A party's full statement of account.
+ *
+ * Lines are the party's own journal lines, oldest first, with a running
+ * balance, so the closing figure equals the clearinghouse balance. `reference`
+ * names the source (order id, settlement label) so a line is readable on its
+ * own, which is what makes the statement printable.
+ */
+export type PartyStatement = {
+  accountId: string;
+  partyType: ClearingPartyType;
+  partyId: string;
+  partyName: string;
+  currency: "EGP" | "SAR";
+  balance: number;
+  lines: PartyStatementLine[];
+};
+
 export type CourierOption = {
   id: string;
   displayName: string;

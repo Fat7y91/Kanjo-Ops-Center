@@ -12,6 +12,11 @@ export type AccountSummary = {
  * Balance is derived, never stored: ΣDeposits − ΣExpenses over the immutable
  * ledger. Every screen reads this function, so the figure can never drift from
  * the entries that produced it.
+ *
+ * When the account carries a `ledgerBalance` freshly read from
+ * `app.journal_account_balances`, that view figure is authoritative: it is the
+ * whole journal for the account, not the capped page of movements fetched for
+ * the card. The header numbers therefore always equal the double-entry book.
  */
 export function summarizeAccount(
   account: BankAccount,
@@ -28,11 +33,14 @@ export function summarizeAccount(
     else expenses += entry.amount;
   }
 
+  const balance =
+    account.ledgerBalance === null ? deposits - expenses : account.ledgerBalance;
+
   return {
     account,
     deposits,
     expenses,
-    balance: deposits - expenses,
+    balance,
     entryCount,
   };
 }
@@ -43,24 +51,29 @@ export type LedgerTotals = {
   balance: number;
 };
 
-/** Totals per currency, because bank ledgers must never mix denominations. */
+/**
+ * Totals per currency across the bank accounts.
+ *
+ * The balance is the sum of each account's authoritative `balance` (which the
+ * view supplies), so the header can never disagree with the cards beneath it.
+ * Only EGP and SAR bank accounts are in scope — cash accounts are not part of
+ * the treasury dashboard.
+ */
 export function totalByCurrency(
-  accounts: readonly BankAccount[],
-  entries: readonly LedgerEntry[],
+  summaries: readonly AccountSummary[],
 ): Record<"EGP" | "SAR", LedgerTotals> {
   const totals: Record<"EGP" | "SAR", LedgerTotals> = {
     EGP: { deposits: 0, expenses: 0, balance: 0 },
     SAR: { deposits: 0, expenses: 0, balance: 0 },
   };
 
-  for (const entry of entries) {
-    const bucket = totals[entry.currency];
-    if (entry.kind === "deposit") bucket.deposits += entry.amount;
-    else bucket.expenses += entry.amount;
+  for (const summary of summaries) {
+    const bucket = totals[summary.account.currency];
+    bucket.deposits += summary.deposits;
+    bucket.expenses += summary.expenses;
+    bucket.balance += summary.balance;
   }
 
-  totals.EGP.balance = totals.EGP.deposits - totals.EGP.expenses;
-  totals.SAR.balance = totals.SAR.deposits - totals.SAR.expenses;
   return totals;
 }
 

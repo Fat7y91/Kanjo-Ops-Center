@@ -284,3 +284,19 @@
   flex-direction: column;
   gap: 12px;
 }
+
+/* Party statement of account (printable). */
+.statement {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.statement-table td:nth-child(1),
+.statement-table th:nth-child(1) {
+  white-space: nowrap;
+}
+
+.statement-table td:nth-child(2) {
+  line-height: 1.5;
+}

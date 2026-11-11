@@ -9,12 +9,11 @@ import {
 import { AccountsError } from "./errors";
 import {
   findBankAccountRow,
-  insertBankAccount,
-  insertLedgerEntry,
   isAccountsDatabaseConfigured,
   listBankAccountRows,
   listLedgerRows,
 } from "./repository";
+import { insertBankAccount, insertLedgerEntry } from "./movements";
 
 export { AccountsError };
 

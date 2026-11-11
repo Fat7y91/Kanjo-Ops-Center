@@ -37,12 +37,13 @@ export async function GET() {
     ]);
     const accounts = visibleAccounts(allAccounts, access);
     const entries = visibleEntries(allEntries, access);
+    const summaries = summarizeAll(accounts, entries);
 
     return NextResponse.json(
       {
-        accounts: summarizeAll(accounts, entries),
+        accounts: summaries,
         entries,
-        totals: totalByCurrency(accounts, entries),
+        totals: totalByCurrency(summaries),
         full: access.full,
         canViewTransactions: access.canViewTransactions,
         canRecordDeposits: access.canRecordDeposits,

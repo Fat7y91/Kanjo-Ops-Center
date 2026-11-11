@@ -21,6 +21,7 @@ export type CouponFormState = {
   shippingDiscount: string;
   cashbackAmount: string;
   budgetCap: string;
+  maxDiscount: string;
 };
 
 export const EMPTY_COUPON_FORM: CouponFormState = {
@@ -35,6 +36,7 @@ export const EMPTY_COUPON_FORM: CouponFormState = {
   shippingDiscount: "0",
   cashbackAmount: "0",
   budgetCap: "",
+  maxDiscount: "",
 };
 
 export function couponFormFrom(coupon: Coupon | null): CouponFormState {
@@ -51,6 +53,7 @@ export function couponFormFrom(coupon: Coupon | null): CouponFormState {
     shippingDiscount: String(coupon.shippingDiscount),
     cashbackAmount: String(coupon.cashbackAmount),
     budgetCap: coupon.budgetCap === null ? "" : String(coupon.budgetCap),
+    maxDiscount: coupon.maxDiscount === null ? "" : String(coupon.maxDiscount),
   };
 }
 
@@ -80,5 +83,7 @@ export function couponPayloadFrom(form: CouponFormState) {
     shippingDiscount: Number(form.shippingDiscount) || 0,
     cashbackAmount: Number(form.cashbackAmount) || 0,
     budgetCap: form.budgetCap.trim() === "" ? null : Number(form.budgetCap),
+    maxDiscount:
+      form.maxDiscount.trim() === "" ? null : Number(form.maxDiscount),
   };
 }

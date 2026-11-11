@@ -1,5 +1,5 @@
 import { listBankAccounts, listLedgerEntries } from "@/lib/accounts/store";
-import { totalByCurrency } from "@/lib/accounts/ledger";
+import { summarizeAll, totalByCurrency } from "@/lib/accounts/ledger";
 import { buildPayslips, type Payslip } from "@/lib/payroll/store";
 
 export type AccountsSnapshot = {
@@ -43,7 +43,7 @@ export async function buildFounderFinancials(
     listBankAccounts(),
     listLedgerEntries(),
   ]);
-  const totals = totalByCurrency(bankAccounts, ledgerEntries);
+  const totals = totalByCurrency(summarizeAll(bankAccounts, ledgerEntries));
 
   const pending: Record<"EGP" | "SAR", number> = { EGP: 0, SAR: 0 };
   for (const slip of payslips ?? (await buildPayslips())) {

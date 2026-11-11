@@ -141,6 +141,18 @@ export function CouponFormModal({
         />
 
         <TextField
+          label="أقصى خصم للطلب الواحد"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          dir="ltr"
+          hint="سقف مطلق بالجنيه يحدّ خصم النسبة. اتركه فارغاً بلا سقف."
+          value={form.maxDiscount}
+          onChange={(event) => set("maxDiscount", event.target.value)}
+        />
+
+        <TextField
           label="نسبة تمويل التاجر %"
           type="number"
           inputMode="decimal"

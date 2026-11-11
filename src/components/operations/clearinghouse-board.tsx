@@ -10,15 +10,19 @@ import type {
 } from "@/lib/operations/types";
 
 import { BreakdownModal } from "./breakdown-modal";
+import { PartyStatementModal } from "./party-statement-modal";
 import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
+import { usePartyStatement } from "./use-party-statement";
 
 function PartyBook({
   accounts,
   emptyLabel,
+  onOpenStatement,
 }: {
   accounts: ClearingAccountRow[];
   emptyLabel: string;
+  onOpenStatement: (accountId: string) => void;
 }) {
   if (accounts.length === 0) return <p className="muted">{emptyLabel}</p>;
 
@@ -39,6 +43,13 @@ function PartyBook({
           >
             {operationMoney(Math.abs(account.balance), account.currency)}
           </strong>
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => onOpenStatement(account.accountId)}
+          >
+            كشف حساب
+          </Button>
         </li>
       ))}
     </ul>
@@ -198,6 +209,7 @@ export function ClearinghouseBoard({
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
   const breakdown = useBreakdown();
+  const statement = usePartyStatement();
   const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
   const rowsProps = {
@@ -229,6 +241,7 @@ export function ClearinghouseBoard({
                   <PartyBook
                     accounts={payables}
                     emptyLabel="لا توجد مبالغ مستحقة السداد."
+                    onOpenStatement={statement.openFor}
                   />
                 </article>
 
@@ -240,6 +253,7 @@ export function ClearinghouseBoard({
                   <PartyBook
                     accounts={receivables}
                     emptyLabel="لا توجد مبالغ مستحقة التحصيل."
+                    onOpenStatement={statement.openFor}
                   />
                 </article>
               </div>
@@ -268,6 +282,15 @@ export function ClearinghouseBoard({
         breakdown={breakdown.breakdown}
         onClose={breakdown.close}
         onRetry={breakdown.retry}
+      />
+
+      <PartyStatementModal
+        open={statement.open}
+        loading={statement.loading}
+        error={statement.error}
+        statement={statement.statement}
+        onClose={statement.close}
+        onRetry={statement.retry}
       />
     </div>
   );
