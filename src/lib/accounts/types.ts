@@ -19,7 +19,12 @@ export const bankAccountSchema = z.object({
   bankName: z.string().min(1),
   accountName: z.string().min(1),
   accountNumber: z.string().min(1),
-  iban: z.string().min(1),
+  /**
+   * Empty for a ledger control account (`1000`/`1010`), which has no IBAN. The
+   * treasury balance is read from the journal, so the identity of the row is the
+   * account code, not a bank identifier.
+   */
+  iban: z.string(),
   country: accountCountrySchema,
   currency: z.enum(["EGP", "SAR"]),
   cityId: z.string().nullable(),

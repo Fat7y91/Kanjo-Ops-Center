@@ -6,15 +6,20 @@ import {
 } from "@/lib/db/supabase/errors";
 
 import { OperationsError, fromDatabaseError } from "./errors";
+import { buildOrderBreakdown, type OrderBreakdown } from "./breakdown";
 import {
   listClearingAccounts,
   postSettlement,
 } from "./clearinghouse-repository";
+import { resolvePartyNames } from "./party-lookup";
 import {
+  findOperation,
+  findOperationEntryId,
   insertOperation,
   isOperationsDatabaseConfigured,
   listCouponOptions,
   listCouriers,
+  listEntryLines,
   listMerchantOptions,
   listOperations,
 } from "./repository";
@@ -51,6 +56,8 @@ export type ClearinghouseBoard = {
   accounts: ClearingAccountRow[];
   payables: ClearingAccountRow[];
   receivables: ClearingAccountRow[];
+  /** Recent orders with their frozen money terms, for the breakdown drill-down. */
+  operations: OperationSummary[];
 };
 
 function requireDatabase(): void {
@@ -131,7 +138,19 @@ export async function logOperation(
       note: input.note,
       loggedBy,
     });
-    return toOperationSummary(operation);
+    // The insert answers with the stored money terms but no joined roster, so
+    // the row the operator sees would revert to a generic party label. Resolve
+    // the names once here, after the write is committed, so the returned row
+    // matches the list. A lookup failure still answers with a neutral label.
+    const names = await resolvePartyNames({
+      merchantIds: [operation.merchantId],
+      courierIds: [operation.courierId],
+    });
+    return toOperationSummary({
+      ...operation,
+      merchantName: names.merchants.get(operation.merchantId) ?? "تاجر",
+      courierName: names.couriers.get(operation.courierId) ?? "مندوب",
+    });
   } catch (error) {
     translate(error);
   }
@@ -148,15 +167,19 @@ export async function loadClearinghouse(): Promise<ClearinghouseBoard> {
   requireDatabase();
 
   try {
-    const accounts = await listClearingAccounts();
+    const [accounts, operations] = await Promise.all([
+      listClearingAccounts(),
+      listOperations(40),
+    ]);
     return {
       accounts,
       payables: accounts.filter((account) => account.balance < 0),
       receivables: accounts.filter((account) => account.balance > 0),
+      operations: operations.map(toOperationSummary),
     };
   } catch (error) {
     if (isMissingSchemaObject(error)) {
-      return { accounts: [], payables: [], receivables: [] };
+      return { accounts: [], payables: [], receivables: [], operations: [] };
     }
     throw error;
   }
@@ -183,6 +206,39 @@ export async function settleClearingAccount(
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes ?? null,
     });
+  } catch (error) {
+    translate(error);
+  }
+}
+
+/**
+ * Unit-economics breakdown for one logged order.
+ *
+ * Reads the frozen money terms from the operation row and the posted lines from
+ * its journal entry. The two are shown together so a reviewer can reconcile the
+ * invoice against the book without a second screen. Missing rows answer 404;
+ * a missing journal entry is reported as an unposted order, never as a fake
+ * zeroed entry.
+ */
+export async function loadOrderBreakdown(
+  operationId: string,
+): Promise<OrderBreakdown> {
+  requireDatabase();
+
+  try {
+    const operation = await findOperation(operationId);
+    if (!operation) {
+      throw new OperationsError(
+        "OPERATION_NOT_FOUND",
+        "العملية غير موجودة.",
+        404,
+      );
+    }
+
+    const entryId = await findOperationEntryId(operationId);
+    const lines = entryId ? await listEntryLines(entryId) : [];
+
+    return buildOrderBreakdown(operation, entryId, lines);
   } catch (error) {
     translate(error);
   }

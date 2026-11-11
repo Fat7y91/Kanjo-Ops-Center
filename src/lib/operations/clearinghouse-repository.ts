@@ -3,6 +3,8 @@ import "server-only";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
+import { resolvePartyNames } from "./party-lookup";
+
 import type { ClearingAccountRow, ClearingPartyType } from "./types";
 
 /**
@@ -17,6 +19,11 @@ import type { ClearingAccountRow, ClearingPartyType } from "./types";
  * Positive → the party owes Kanjo (receivable). Negative → Kanjo owes the party
  * (payable). Settlement posts a fresh balanced entry (see
  * `app.post_settlement`); nothing is ever mutated in place.
+ *
+ * The account row carries a label frozen when the party sub-account was opened
+ * (`"merchant KJ-…"`), so the current name is resolved from the roster at read
+ * time. A renamed merchant shows its new name, and a raw id never reaches the
+ * screen.
  */
 
 type BalanceViewRow = {
@@ -33,12 +40,24 @@ const BALANCE_VIEW = "journal_account_balances";
 const BALANCE_COLUMNS =
   "id,code,name,party_type,party_id,currency,balance_minor";
 
-function toAccount(row: BalanceViewRow): ClearingAccountRow {
+function toAccount(
+  row: BalanceViewRow,
+  names: { merchants: Map<string, string>; couriers: Map<string, string> },
+): ClearingAccountRow {
+  const partyType = row.party_type as ClearingPartyType;
+  const partyId = row.party_id ?? "";
+  const resolved =
+    partyType === "merchant"
+      ? names.merchants.get(partyId)
+      : names.couriers.get(partyId);
+
   return {
     accountId: row.id,
-    partyType: row.party_type as ClearingPartyType,
-    partyId: row.party_id ?? "",
-    partyName: row.name,
+    partyType,
+    partyId,
+    partyName:
+      resolved ??
+      (partyType === "merchant" ? "تاجر غير معروف" : "مندوب غير معروف"),
     currency: row.currency,
     balance: Number(row.balance_minor) / 100,
   };
@@ -65,8 +84,18 @@ export async function listClearingAccounts(): Promise<ClearingAccountRow[]> {
     throw error;
   }
 
-  return ((data ?? []) as BalanceViewRow[])
-    .map(toAccount)
+  const rows = (data ?? []) as BalanceViewRow[];
+  const names = await resolvePartyNames({
+    merchantIds: rows
+      .filter((row) => row.party_type === "merchant")
+      .map((row) => row.party_id ?? ""),
+    courierIds: rows
+      .filter((row) => row.party_type === "courier")
+      .map((row) => row.party_id ?? ""),
+  });
+
+  return rows
+    .map((row) => toAccount(row, names))
     .filter((row) => row.balance !== 0);
 }
 

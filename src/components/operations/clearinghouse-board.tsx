@@ -4,8 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { TextField } from "@/components/ui/form-inputs";
 import { operationMoney } from "@/lib/operations/format";
-import type { ClearingAccountRow } from "@/lib/operations/types";
+import type {
+  ClearingAccountRow,
+  OperationSummary,
+} from "@/lib/operations/types";
 
+import { BreakdownModal } from "./breakdown-modal";
+import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
 
 function PartyBook({
@@ -125,14 +130,60 @@ function AccountRows({
   );
 }
 
+function OrderRows({
+  operations,
+  onOpen,
+}: {
+  operations: OperationSummary[];
+  onOpen: (operation: OperationSummary) => void;
+}) {
+  if (operations.length === 0) {
+    return <p className="muted">لا توجد عمليات مسجلة بعد.</p>;
+  }
+
+  return (
+    <ul className="clearing-rows">
+      {operations.map((operation) => (
+        <li key={operation.id}>
+          <div className="clearing-row-main">
+            <strong dir="ltr">{operation.orderId}</strong>
+            <span>
+              {operation.merchantName} · {operation.courierName}
+            </span>
+          </div>
+          <div className="clearing-row-amount">
+            <strong dir="ltr">
+              {operationMoney(operation.orderValue, operation.currency)}
+            </strong>
+            <span className="badge badge-gold">
+              {operation.couponCode ? `كوبون ${operation.couponCode}` : "بدون كوبون"}
+            </span>
+          </div>
+          <div className="clearing-row-actions">
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => onOpen(operation)}
+            >
+              تفاصيل الأرباح
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function ClearinghouseBoard({
   initialAccounts,
   initialPayables,
   initialReceivables,
+  initialOperations,
 }: {
   initialAccounts: ClearingAccountRow[];
   initialPayables: ClearingAccountRow[];
   initialReceivables: ClearingAccountRow[];
+  initialOperations: OperationSummary[];
 }) {
   const {
     accounts,
@@ -145,6 +196,9 @@ export function ClearinghouseBoard({
     setFile,
     settle,
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
+
+  const breakdown = useBreakdown();
+  const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
   const rowsProps = {
     accounts,
@@ -196,7 +250,24 @@ export function ClearinghouseBoard({
             label: "أرصدة الأطراف",
             content: <AccountRows {...rowsProps} />,
           },
+          {
+            id: "orders",
+            label: "العمليات",
+            badge: operations.length,
+            content: (
+              <OrderRows operations={operations} onOpen={breakdown.openFor} />
+            ),
+          },
         ]}
+      />
+
+      <BreakdownModal
+        open={breakdown.open}
+        loading={breakdown.loading}
+        error={breakdown.error}
+        breakdown={breakdown.breakdown}
+        onClose={breakdown.close}
+        onRetry={breakdown.retry}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
+import { resolvePartyNames } from "./party-lookup";
 import { embedName } from "./rows";
 
 import type {
@@ -91,8 +92,7 @@ function toOperation(row: OperationRow): OperationLog {
     merchantId: row.merchant_id,
     merchantName: embedName(row.merchants, "تاجر"),
     courierId: row.courier_id,
-    courierName: embedName(row.couriers, "مندوب"),
-    paymentMethod: row.payment_method,
+    courierName: embedName(row.couriers, "مندوب"),    paymentMethod: row.payment_method,
     currency: row.currency,
     orderValue: Number(row.order_value_minor) / 100,
     deliveryFee: Number(row.delivery_fee_minor) / 100,
@@ -184,7 +184,164 @@ export async function listOperations(limit = 100): Promise<OperationLog[]> {
   const fallback = await selectOperations(OPERATION_COLUMNS_NO_JOIN, limit);
   if (fallback.error && isMissingSchemaObject(fallback.error)) return [];
   if (fallback.error) throw fallback.error;
-  return ((fallback.data ?? []) as unknown as OperationRow[]).map(toOperation);
+
+  const rows = (fallback.data ?? []) as unknown as OperationRow[];
+  if (rows.length === 0) return [];
+
+  // Without the embed, resolve the roster names in one batch so the recent list
+  // still shows a merchant/courier name rather than a raw identifier.
+  const names = await resolvePartyNames({
+    merchantIds: rows.map((row) => row.merchant_id),
+    courierIds: rows.map((row) => row.courier_id),
+  });
+
+  return rows.map((row) =>
+    toOperation({
+      ...row,
+      merchants: names.merchants.has(row.merchant_id)
+        ? { name: names.merchants.get(row.merchant_id) as string }
+        : null,
+      couriers: names.couriers.has(row.courier_id)
+        ? { display_name: names.couriers.get(row.courier_id) as string }
+        : null,
+    }),
+  );
+}
+
+/**
+ * One operation with its party names resolved.
+ *
+ * The detail view needs the frozen money terms of a single order. The joined
+ * read is preferred; when the embed is unavailable the roster is queried once.
+ */
+export async function findOperation(
+  operationId: string,
+): Promise<OperationLog | null> {
+  const client = getSupabaseServerClient();
+  const primary = await client
+    .schema("app")
+    .from("operation_logs")
+    .select(OPERATION_COLUMNS)
+    .eq("id", operationId)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
+    .maybeSingle();
+
+  if (!primary.error) {
+    return primary.data
+      ? toOperation(primary.data as unknown as OperationRow)
+      : null;
+  }
+  if (!isMissingSchemaObject(primary.error)) throw primary.error;
+
+  const fallback = await client
+    .schema("app")
+    .from("operation_logs")
+    .select(OPERATION_COLUMNS_NO_JOIN)
+    .eq("id", operationId)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
+    .maybeSingle();
+
+  if (fallback.error && isMissingSchemaObject(fallback.error)) return null;
+  if (fallback.error) throw fallback.error;
+  if (!fallback.data) return null;
+
+  const row = fallback.data as unknown as OperationRow;
+  const names = await resolvePartyNames({
+    merchantIds: [row.merchant_id],
+    courierIds: [row.courier_id],
+  });
+
+  return toOperation({
+    ...row,
+    merchants: names.merchants.has(row.merchant_id)
+      ? { name: names.merchants.get(row.merchant_id) as string }
+      : null,
+    couriers: names.couriers.has(row.courier_id)
+      ? { display_name: names.couriers.get(row.courier_id) as string }
+      : null,
+  });
+}
+
+/**
+ * The operation's journal entry id.
+ *
+ * `operation_logs.journal_entry_id` is the link the posting trigger stamps, so
+ * the breakdown reads the exact entry that was posted for this order rather than
+ * guessing from the source id.
+ */
+export async function findOperationEntryId(
+  operationId: string,
+): Promise<string | null> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("operation_logs")
+    .select("journal_entry_id")
+    .eq("id", operationId)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    throw error;
+  }
+  return (data as { journal_entry_id: string | null } | null)?.journal_entry_id ?? null;
+}
+
+type JournalLineRow = {
+  id: string;
+  debit_minor: number | string;
+  credit_minor: number | string;
+  memo: string | null;
+  accounts:
+    | { code: string; name: string }
+    | { code: string; name: string }[]
+    | null;
+};
+
+/**
+ * The posted lines of one journal entry, with account code and name.
+ *
+ * Ordering is by account code so the audit view reads as a statement; the
+ * caller must not rely on insert order, which the table does not promise.
+ */
+export async function listEntryLines(entryId: string): Promise<
+  {
+    id: string;
+    code: string;
+    name: string;
+    debitMinor: number;
+    creditMinor: number;
+    memo: string;
+  }[]
+> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("journal_lines")
+    .select("id,debit_minor,credit_minor,memo,accounts(code,name)")
+    .eq("entry_id", entryId)
+    .limit(200)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return [];
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as JournalLineRow[])
+    .map((row) => {
+      const account = Array.isArray(row.accounts) ? row.accounts[0] : row.accounts;
+      return {
+        id: row.id,
+        code: account?.code ?? "",
+        name: account?.name ?? "",
+        debitMinor: Number(row.debit_minor),
+        creditMinor: Number(row.credit_minor),
+        memo: row.memo ?? "",
+      };
+    })
+    .sort((left, right) => left.code.localeCompare(right.code));
 }
 
 export async function insertOperation(write: {

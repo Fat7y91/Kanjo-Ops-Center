@@ -59,10 +59,12 @@ export async function createBankAccount(
     );
   }
   const accounts = await listBankAccountRows();
+  const candidate = parsed.data.iban.replace(/\s/g, "").toUpperCase();
+  // Ledger control accounts carry no IBAN; only real registry rows can collide.
   const duplicate = accounts.some(
     (account) =>
-      account.iban.replace(/\s/g, "").toUpperCase() ===
-      parsed.data.iban.replace(/\s/g, "").toUpperCase(),
+      account.iban !== "" &&
+      account.iban.replace(/\s/g, "").toUpperCase() === candidate,
   );
   if (duplicate) {
     throw new AccountsError("DUPLICATE_IBAN", "رقم الآيبان مسجّل مسبقاً.");

@@ -15,6 +15,7 @@ export default async function ClearinghousePage() {
     accounts: [],
     payables: [],
     receivables: [],
+    operations: [],
   }));
 
   return (
@@ -29,6 +30,7 @@ export default async function ClearinghousePage() {
         initialAccounts={board.accounts}
         initialPayables={board.payables}
         initialReceivables={board.receivables}
+        initialOperations={board.operations}
       />
     </>
   );
