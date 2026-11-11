@@ -1,0 +1,186 @@
+/* Order breakdown invoice and printable party statement.
+ *
+ * Split out of `operations.css` to keep each stylesheet focused and under the
+ * repository's file-size ceiling. Layout only; tokens and shared primitives
+ * supply colour and elevation.
+ */
+
+/* Order breakdown invoice (management view). */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.breakdown-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.breakdown-head h4 {
+  margin: 6px 0 4px;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-head-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.breakdown-head-total strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+    color: var(--kanjo-purple-base);
+}
+
+.breakdown-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.breakdown-section h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.breakdown-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.breakdown-row:last-child {
+  border-bottom: 0;
+}
+
+.breakdown-row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breakdown-row-hint {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.breakdown-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-row-positive strong {
+  color: var(--green);
+}
+
+.breakdown-row-negative strong {
+  color: var(--red);
+}
+
+.breakdown-row-total {
+  border-bottom: 0;
+  border-top: 2px solid var(--line);
+  margin-top: 4px;
+  padding-top: 10px;
+  font-weight: 700;
+}
+
+.breakdown-journal {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.breakdown-journal th,
+.breakdown-journal td {
+  padding: 8px;
+  text-align: start;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.breakdown-journal th {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.breakdown-journal td:nth-child(2),
+.breakdown-journal td:nth-child(3),
+.breakdown-journal th:nth-child(2),
+.breakdown-journal th:nth-child(3) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.breakdown-journal tfoot td {
+  font-weight: 700;
+  border-bottom: 0;
+  border-top: 2px solid var(--line);
+}
+
+.breakdown-journal-memo {
+  display: block;
+  font-style: normal;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.breakdown-balanced {
+  color: var(--green);
+  font-size: 0.8rem;
+}
+
+.breakdown-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.breakdown-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Party statement of account (printable). */
+.statement {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.statement-table td:nth-child(1),
+.statement-table th:nth-child(1) {
+  white-space: nowrap;
+}
+
+.statement-table td:nth-child(2) {
+  line-height: 1.5;
+}
+
+/* Statement rows open the voucher for their journal entry. */
+.statement-row-clickable {
+  cursor: pointer;
+}
+
+.statement-row-clickable:hover,
+.statement-row-clickable:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
+}

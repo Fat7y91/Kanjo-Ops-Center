@@ -56,6 +56,9 @@
 /* Operations logger and clearinghouse */
 @import "./operations.css";
 
+/* Order breakdown invoice and printable party statement */
+@import "./operations-invoice.css";
+
 /* Delivery roster and per-employee operations report */
 @import "./couriers.css";
 
