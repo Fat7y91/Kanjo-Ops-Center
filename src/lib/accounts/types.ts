@@ -68,6 +68,12 @@ export const LEDGER_KIND_META: Record<
 
 export const ledgerEntrySchema = z.object({
   id: z.string(),
+  /**
+   * The journal entry this line belongs to. A bank movement posts a balanced
+   * entry with two legs, so the row is one leg but the drill-down voucher is the
+   * whole entry. Kept on the row so the UI can open it without a second lookup.
+   */
+  entryId: z.string(),
   accountId: z.string(),
   kind: z.enum(LEDGER_KINDS),
   label: z.string().min(1),

@@ -6,6 +6,8 @@ import { useState } from "react";
 import { AccountCard } from "@/components/accounts/account-card";
 import { AccountForm } from "@/components/accounts/account-form";
 import { LedgerEntryForm } from "@/components/accounts/ledger-entry-form";
+import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
+import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
@@ -50,6 +52,7 @@ export function AccountsView({
   const [addOpen, setAddOpen] = useState(false);
   const [entryFor, setEntryFor] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const voucher = useJournalVoucher();
 
   const active = summaries.filter((summary) => summary.account.active);
   const canRecord = canRecordDeposits || canRecordExpenses;
@@ -118,6 +121,7 @@ export function AccountsView({
             full={full}
             canRecord={canRecord && summary.account.currency === "EGP"}
             onRecord={() => setEntryFor(summary.account.id)}
+            onOpenEntry={canViewTransactions ? voucher.openFor : undefined}
           />
         ))}
       </div>
@@ -162,6 +166,15 @@ export function AccountsView({
           />
         ) : null}
       </Modal>
+
+      <JournalVoucherModal
+        open={voucher.open}
+        loading={voucher.loading}
+        error={voucher.error}
+        voucher={voucher.voucher}
+        onClose={voucher.close}
+        onRetry={voucher.retry}
+      />
     </div>
   );
 }

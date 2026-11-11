@@ -12,6 +12,8 @@ type PartyStatementModalProps = {
   statement: PartyStatement | null;
   onClose: () => void;
   onRetry: () => void;
+  /** Opens the voucher for a statement line when the viewer may read it. */
+  onOpenEntry?: (entryId: string) => void;
 };
 
 /**
@@ -29,6 +31,7 @@ export function PartyStatementModal({
   statement,
   onClose,
   onRetry,
+  onOpenEntry,
 }: PartyStatementModalProps) {
   const currency = statement?.currency ?? "EGP";
   const money = (value: number) => currencyMoney(value, currency);
@@ -87,7 +90,30 @@ export function PartyStatementModal({
               </thead>
               <tbody>
                 {statement.lines.map((line) => (
-                  <tr key={line.id}>
+                  <tr
+                    key={line.id}
+                    className={onOpenEntry ? "statement-row-clickable" : undefined}
+                    onClick={
+                      onOpenEntry ? () => onOpenEntry(line.entryId) : undefined
+                    }
+                    onKeyDown={
+                      onOpenEntry
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onOpenEntry(line.entryId);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onOpenEntry ? 0 : undefined}
+                    role={onOpenEntry ? "button" : undefined}
+                    aria-label={
+                      onOpenEntry
+                        ? `عرض تفاصيل حركة ${line.reference}`
+                        : undefined
+                    }
+                  >
                     <td>{shortDate(line.date)}</td>
                     <td>
                       {line.reference}

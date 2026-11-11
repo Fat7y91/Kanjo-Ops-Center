@@ -1,0 +1,190 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/form-inputs";
+import { operationMoney } from "@/lib/operations/format";
+import type {
+  ClearingAccountRow,
+  OperationSummary,
+} from "@/lib/operations/types";
+
+/**
+ * The clearinghouse lists: party balances, open accounts, and logged orders.
+ *
+ * Extracted from the board container so each list stays a focused, presentational
+ * component and the board only wires state and modals around them.
+ */
+
+type PartyBookProps = {
+  accounts: ClearingAccountRow[];
+  emptyLabel: string;
+  onOpenStatement: (accountId: string) => void;
+};
+
+export function PartyBook({
+  accounts,
+  emptyLabel,
+  onOpenStatement,
+}: PartyBookProps) {
+  if (accounts.length === 0) return <p className="muted">{emptyLabel}</p>;
+
+  return (
+    <ul className="clearing-parties">
+      {accounts.map((account) => (
+        <li key={account.accountId}>
+          <div>
+            <strong>{account.partyName}</strong>
+            <span className="muted">
+              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
+            </span>
+          </div>
+          <strong
+            className={
+              account.balance > 0 ? "clearing-positive" : "clearing-negative"
+            }
+          >
+            {operationMoney(Math.abs(account.balance), account.currency)}
+          </strong>
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => onOpenStatement(account.accountId)}
+          >
+            كشف حساب
+          </Button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export type AccountRowsProps = {
+  accounts: ClearingAccountRow[];
+  busyId: string;
+  receiptNo: Record<string, string>;
+  setReceiptNo: (
+    update: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  setFile: (
+    update: (current: Record<string, File | null>) => Record<string, File | null>,
+  ) => void;
+  settle: (account: ClearingAccountRow) => void;
+};
+
+export function AccountRows({
+  accounts,
+  busyId,
+  receiptNo,
+  setReceiptNo,
+  setFile,
+  settle,
+}: AccountRowsProps) {
+  if (accounts.length === 0) {
+    return <p className="muted">لا توجد أرصدة مفتوحة في هذه القائمة.</p>;
+  }
+
+  return (
+    <ul className="clearing-rows">
+      {accounts.map((account) => (
+        <li key={account.accountId}>
+          <div className="clearing-row-main">
+            <strong>{account.partyName}</strong>
+            <span>
+              {account.partyType === "merchant" ? "تاجر" : "مندوب"}
+            </span>
+          </div>
+
+          <div className="clearing-row-amount">
+            <strong
+              className={
+                account.balance > 0 ? "clearing-positive" : "clearing-negative"
+              }
+            >
+              {operationMoney(Math.abs(account.balance), account.currency)}
+            </strong>
+            <span className="badge badge-gold">
+              {account.balance > 0 ? "مستحق لنا" : "مستحق لهم"}
+            </span>
+          </div>
+
+          <div className="clearing-row-actions">
+            <TextField
+              fieldClassName="clearing-receipt"
+              placeholder="رقم الإيصال (اختياري)"
+              value={receiptNo[account.accountId] ?? ""}
+              onChange={(event) =>
+                setReceiptNo((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.value,
+                }))
+              }
+            />
+            <input
+              type="file"
+              className="clearing-receipt"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) =>
+                setFile((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.files?.[0] ?? null,
+                }))
+              }
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={busyId === account.accountId}
+              onClick={() => settle(account)}
+            >
+              {account.balance > 0 ? "تحصيل" : "سداد"}
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function OrderRows({
+  operations,
+  onOpen,
+}: {
+  operations: OperationSummary[];
+  onOpen: (operation: OperationSummary) => void;
+}) {
+  if (operations.length === 0) {
+    return <p className="muted">لا توجد عمليات مسجلة بعد.</p>;
+  }
+
+  return (
+    <ul className="clearing-rows">
+      {operations.map((operation) => (
+        <li key={operation.id}>
+          <div className="clearing-row-main">
+            <strong dir="ltr">{operation.orderId}</strong>
+            <span>
+              {operation.merchantName} · {operation.courierName}
+            </span>
+          </div>
+          <div className="clearing-row-amount">
+            <strong dir="ltr">
+              {operationMoney(operation.orderValue, operation.currency)}
+            </strong>
+            <span className="badge badge-gold">
+              {operation.couponCode ? `كوبون ${operation.couponCode}` : "بدون كوبون"}
+            </span>
+          </div>
+          <div className="clearing-row-actions">
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => onOpen(operation)}
+            >
+              تفاصيل الأرباح
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}

@@ -7,6 +7,7 @@ import { CatalogError } from "@/lib/catalog/store";
 import { ImageQaError } from "@/lib/catalog/image-qa";
 import { MarketingError } from "@/lib/marketing/store";
 import { MissingEnvError } from "@/lib/db/env";
+import { JournalError } from "@/lib/journal/errors";
 import { OperationsError } from "@/lib/operations/errors";
 import { ReceiptError } from "@/lib/operations/receipt-upload";
 import { CouriersError } from "@/lib/couriers/errors";
@@ -192,6 +193,12 @@ export function apiError(error: unknown): NextResponse {
     );
   }
   if (error instanceof OperationsError) {
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status: error.status },
+    );
+  }
+  if (error instanceof JournalError) {
     return NextResponse.json(
       { error: error.message, code: error.code },
       { status: error.status },

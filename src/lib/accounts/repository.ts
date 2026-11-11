@@ -112,6 +112,7 @@ function toEntry(row: LineRow): LedgerEntry {
 
   return {
     id: row.id,
+    entryId: row.entry_id,
     accountId: row.account_id,
     // A debit leg on a bank account is cash in; a credit leg is cash out.
     kind: debit > 0 ? "deposit" : "expense",

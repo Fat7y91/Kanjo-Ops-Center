@@ -300,3 +300,14 @@
 .statement-table td:nth-child(2) {
   line-height: 1.5;
 }
+
+/* Statement rows open the voucher for their journal entry. */
+.statement-row-clickable {
+  cursor: pointer;
+}
+
+.statement-row-clickable:hover,
+.statement-row-clickable:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
+}

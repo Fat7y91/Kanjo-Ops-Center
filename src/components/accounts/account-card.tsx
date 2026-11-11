@@ -10,6 +10,8 @@ type AccountCardProps = {
   full: boolean;
   canRecord: boolean;
   onRecord: () => void;
+  /** Opens the voucher for a row when the viewer may read transactions. */
+  onOpenEntry?: (entryId: string) => void;
 };
 
 export function AccountCard({
@@ -18,6 +20,7 @@ export function AccountCard({
   full,
   canRecord,
   onRecord,
+  onOpenEntry,
 }: AccountCardProps) {
   const recent = entries
     .filter((entry) => entry.accountId === summary.account.id)
@@ -68,21 +71,39 @@ export function AccountCard({
         {recent.length === 0 ? (
           <li className="account-ledger-empty">لا توجد حركات مسجّلة.</li>
         ) : (
-          recent.map((entry) => (
-            <li key={entry.id}>
-              <span className={`badge ${LEDGER_KIND_META[entry.kind].tone}`}>
-                {LEDGER_KIND_META[entry.kind].label}
-              </span>
-              <span className="account-ledger-label">{entry.label}</span>
-              <span className="account-ledger-date">
-                {shortDate(entry.occurredAt)}
-              </span>
-              <strong>
-                {entry.kind === "expense" ? "−" : "+"}
-                {currencyMoney(entry.amount, entry.currency)}
-              </strong>
-            </li>
-          ))
+          recent.map((entry) => {
+            const content = (
+              <>
+                <span className={`badge ${LEDGER_KIND_META[entry.kind].tone}`}>
+                  {LEDGER_KIND_META[entry.kind].label}
+                </span>
+                <span className="account-ledger-label">{entry.label}</span>
+                <span className="account-ledger-date">
+                  {shortDate(entry.occurredAt)}
+                </span>
+                <strong>
+                  {entry.kind === "expense" ? "−" : "+"}
+                  {currencyMoney(entry.amount, entry.currency)}
+                </strong>
+              </>
+            );
+
+            return onOpenEntry ? (
+              <li key={entry.id}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="account-ledger-row"
+                  onClick={() => onOpenEntry(entry.entryId)}
+                  aria-label={`عرض تفاصيل حركة ${entry.label}`}
+                >
+                  {content}
+                </Button>
+              </li>
+            ) : (
+              <li key={entry.id}>{content}</li>
+            );
+          })
         )}
       </ul>
 

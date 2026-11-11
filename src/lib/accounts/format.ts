@@ -29,3 +29,18 @@ export function shortDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "—" : DATE.format(date);
 }
+
+const DATE_TIME = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
+  year: "numeric",
+  month: "short",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/** Exact date and time, for an audit voucher where the minute matters. */
+export function fullDateTime(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : DATE_TIME.format(date);
+}

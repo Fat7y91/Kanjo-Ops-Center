@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+/**
+ * Dialogs can open on top of one another (a voucher opened from a statement).
+ * Every stacked dialog listens for Escape, so without an order only the top one
+ * may react — otherwise a single Escape would close the whole chain.
+ */
+const openStack: string[] = [];
 
 type ModalProps = {
   open: boolean;
@@ -29,19 +36,26 @@ export function Modal({
   wide = false,
   closeOnBackdrop = false,
 }: ModalProps) {
+  const modalId = useId();
+
   useEffect(() => {
     if (!open) return;
+    openStack.push(modalId);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (openStack[openStack.length - 1] !== modalId) return;
+      onClose();
     };
     document.addEventListener("keydown", onKey);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
+      const index = openStack.lastIndexOf(modalId);
+      if (index !== -1) openStack.splice(index, 1);
       document.body.style.overflow = previous;
     };
-  }, [open, onClose]);
+  }, [open, onClose, modalId]);
 
   if (!open) return null;
 

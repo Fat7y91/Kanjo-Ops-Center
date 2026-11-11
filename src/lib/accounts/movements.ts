@@ -140,8 +140,14 @@ export async function insertLedgerEntry(
     throw error;
   }
 
+  // `post_bank_movement` returns the journal entry id, not a line id. The
+  // optimistic row is keyed on it, so the drill-down works before the list is
+  // reloaded.
+  const entryId = typeof data === "string" ? data : `movement-${Date.now()}`;
+
   return {
-    id: typeof data === "string" ? data : `movement-${Date.now()}`,
+    id: entryId,
+    entryId,
     accountId: account.id,
     kind: input.kind,
     label: input.label,
