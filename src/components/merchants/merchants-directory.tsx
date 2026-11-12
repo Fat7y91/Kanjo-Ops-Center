@@ -1,21 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 
 import { MerchantAvatar } from "@/components/merchants/merchant-avatar";
+import { MerchantFilterBar } from "@/components/merchants/merchant-filter-bar";
+import { useMerchantDirectory } from "@/components/merchants/use-merchant-directory";
 import type { MerchantRow } from "@/lib/field-ops/payload";
-import { smartTextScore } from "@/lib/search/normalize";
 
 export type { MerchantRow };
 
 /**
- * Plain-language reading of a merchant's signed net position, so the balance
- * cell is self-explanatory without a legend elsewhere on the page.
+ * Plain-language reading of a merchant's signed net position.
+ *
+ * `due_to_house` is money Kanjo will collect (a receivable); `due_to_merchant`
+ * is money Kanjo will pay out (a payable). The label states the direction in the
+ * operator's words so the colour is never the only signal.
  */
 const BALANCE_TONE_LABEL: Record<MerchantRow["balanceTone"], string> = {
-  due_to_house: "مستحق على التاجر",
-  due_to_merchant: "مستحق للتاجر",
+  due_to_house: "لنا عند التاجر",
+  due_to_merchant: "للتاجر عندنا",
   settled: "الحساب مسدد",
 };
 
@@ -25,84 +28,42 @@ type MerchantsDirectoryProps = {
 };
 
 /**
- * Instant directory search.
+ * Merchant directory.
  *
- * Filtering happens in the client against the already-streamed rows, so typing
- * never triggers a server round-trip or a document navigation. The query is
- * mirrored into the URL via history.replaceState so deep links and
- * back/forward stay correct without any full page reload.
+ * Search and the four attribute slicers run client-side against the
+ * already-streamed rows, so typing never triggers a server round-trip or a
+ * document navigation. The search term is mirrored into the URL so deep links
+ * and back/forward stay correct without a full page reload.
  */
-export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryProps) {
-  const [query, setQuery] = useState(initialQuery);
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    const trimmed = query.trim();
-    if (trimmed) params.set("q", trimmed);
-    const target = params.toString() ? `/merchants?${params}` : "/merchants";
-
-    if (target !== `${window.location.pathname}${window.location.search}`) {
-      window.history.replaceState(null, "", target);
-    }
-  }, [query]);
-
-  useEffect(() => {
-    const onPopState = () => {
-      const params = new URLSearchParams(window.location.search);
-      setQuery(params.get("q") ?? "");
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
-  const visibleRows = useMemo(() => {
-    const trimmed = query.trim();
-    if (!trimmed) return rows;
-
-    return rows
-      .map((row) => ({
-        row,
-        score: Math.max(
-          smartTextScore(trimmed, row.name).score,
-          smartTextScore(trimmed, row.vendorType).score,
-          smartTextScore(trimmed, row.cityName).score,
-        ),
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((left, right) => right.score - left.score)
-      .map((entry) => entry.row);
-  }, [rows, query]);
+export function MerchantsDirectory({
+  rows,
+  initialQuery,
+}: MerchantsDirectoryProps) {
+  const {
+    filters,
+    setFilter,
+    reset,
+    isFiltered,
+    visibleRows,
+    cityOptions,
+    teamOptions,
+    stateOptions,
+    categoryOptions,
+  } = useMerchantDirectory(rows, initialQuery);
 
   return (
     <section className="panel">
-      <div className="table-toolbar">
-        <div className="search-shell">
-          <span>بحث</span>
-          <input
-            type="search"
-            name="q"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="اسم التاجر أو الإملاء العربي أو خطأ إملائي"
-            aria-label="البحث عن التجار"
-            autoComplete="off"
-          />
-        </div>
-        <div className="row-actions">
-          <span className="badge" aria-live="polite">
-            {visibleRows.length} نتيجة
-          </span>
-          {query ? (
-            <button
-              type="button"
-              className="button button-quiet"
-              onClick={() => setQuery("")}
-            >
-              مسح
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <MerchantFilterBar
+        filters={filters}
+        setFilter={setFilter}
+        reset={reset}
+        isFiltered={isFiltered}
+        resultCount={visibleRows.length}
+        cityOptions={cityOptions}
+        teamOptions={teamOptions}
+        stateOptions={stateOptions}
+        categoryOptions={categoryOptions}
+      />
 
       <div className="table-wrap w-full overflow-x-auto">
         <table className="data-table">
@@ -132,7 +93,7 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
                         <strong>{row.name}</strong>
                       </Link>
                       <span className="muted merchant-category">
-                        {row.vendorType} · ID {row.vendorTypeId}
+                        {row.vendorType}
                       </span>
                     </div>
                   </div>
@@ -150,6 +111,7 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
                 <td>
                   <span
                     className={`merchant-balance merchant-balance-${row.balanceTone}`}
+                    title={BALANCE_TONE_LABEL[row.balanceTone]}
                   >
                     <strong dir="ltr">{row.balanceLabel}</strong>
                     <span className="merchant-balance-note">
@@ -173,8 +135,8 @@ export function MerchantsDirectory({ rows, initialQuery }: MerchantsDirectoryPro
               <tr>
                 <td colSpan={7}>
                   <p className="empty-state">
-                    {query.trim()
-                      ? `لا يوجد تاجر مطابق لـ «${query.trim()}». جرّب إملاءً أقصر.`
+                    {isFiltered
+                      ? "لا يوجد تاجر مطابق للفلاتر الحالية. جرّب توسيع النطاق أو مسح الفلاتر."
                       : "لا يوجد تجار داخل نطاق مدنك بعد. استخدم زر «إضافة تاجر» لتسجيل أول تاجر."}
                   </p>
                 </td>

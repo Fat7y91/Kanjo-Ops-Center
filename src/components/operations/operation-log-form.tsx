@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { usePermission } from "@/components/auth/use-permission";
 import { Button } from "@/components/ui/button";
 import { couponTypeLabel } from "@/lib/coupons/format";
 import { pickLabel } from "@/lib/operations/optimistic";
@@ -12,6 +13,7 @@ import type {
   OperationSummary,
 } from "@/lib/operations/types";
 
+import { OrderImportModal } from "./order-import-modal";
 import { OperationLogFields, NO_COUPON } from "./operation-log-fields";
 import { OperationRecentList } from "./operation-recent-list";
 import { useOperationForm } from "./use-operation-form";
@@ -30,6 +32,10 @@ export function OperationLogForm({
   const merchantList = Array.isArray(merchants) ? merchants : [];
   const courierList = Array.isArray(couriers) ? couriers : [];
   const couponList = Array.isArray(coupons) ? coupons : [];
+
+  const { hasPermission } = usePermission();
+  const canImport = hasPermission("import_orders");
+  const [importOpen, setImportOpen] = useState(false);
 
   const {
     form,
@@ -97,10 +103,21 @@ export function OperationLogForm({
     <div className="operation-log">
       <article className="panel">
         <div className="panel-head">
-          <h2>تسجيل عملية منفذة</h2>
-          <span className="muted">
-            أدخل بيانات الطلب كما تظهر في نقطة البيع. تُحسب المستحقات آلياً.
-          </span>
+          <div>
+            <h2>تسجيل طلب منفذ</h2>
+            <span className="muted">
+              أدخل بيانات الطلب كما تظهر في نقطة البيع. تُحسب المستحقات آلياً.
+            </span>
+          </div>
+          {canImport ? (
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={() => setImportOpen(true)}
+            >
+              استيراد ملف طلبات
+            </Button>
+          ) : null}
         </div>
 
         <form className="form-stack" onSubmit={handleSubmit} noValidate>
@@ -122,12 +139,24 @@ export function OperationLogForm({
 
       <article className="panel">
         <div className="panel-head">
-          <h2>آخر العمليات</h2>
-          <span className="muted">{operations.length} عملية</span>
+          <h2>آخر الطلبات</h2>
+          <span className="muted">{operations.length} طلب</span>
         </div>
 
         <OperationRecentList operations={operations} />
       </article>
+
+      <OrderImportModal
+        open={importOpen}
+        merchants={merchantList}
+        couriers={courierList}
+        onClose={() => setImportOpen(false)}
+        onImported={(message) => {
+          setImportOpen(false);
+          window.location.reload();
+          void message;
+        }}
+      />
 
       {error ? (
         <div className="toast toast-error" role="alert" dir="rtl">

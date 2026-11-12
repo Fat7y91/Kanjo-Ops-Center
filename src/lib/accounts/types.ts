@@ -77,6 +77,12 @@ export const ledgerEntrySchema = z.object({
   accountId: z.string(),
   kind: z.enum(LEDGER_KINDS),
   label: z.string().min(1),
+  /**
+   * The other side of the posted entry — the exact source of an incoming
+   * movement or the destination of an outgoing one. Derived from the opposite
+   * journal lines so the statement explains where the money went.
+   */
+  counterparty: z.string(),
   amount: z.number().positive(),
   currency: z.enum(["EGP", "SAR"]),
   occurredAt: z.string(),

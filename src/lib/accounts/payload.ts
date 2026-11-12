@@ -41,6 +41,8 @@ export const accountsPayloadSchema = z.object({
   canRecordDeposits: z.boolean(),
   canRecordExpenses: z.boolean(),
   canAddAccount: z.boolean(),
+  /** May post a manual SAR→EGP transfer between the two bank ledgers. */
+  canTransferFx: z.boolean(),
 });
 
 export type AccountsPayload = z.infer<typeof accountsPayloadSchema>;

@@ -7,7 +7,7 @@ import {
   readJson,
 } from "@/lib/auth/api";
 import { taxonomyApproveSchema } from "@/lib/schemas/taxonomy";
-import { approveTaxonomyRequest } from "@/lib/taxonomy/store";
+import { markTaxonomyRequestAdded } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -25,7 +25,7 @@ export async function POST(
   try {
     const { id } = await context.params;
     const input = taxonomyApproveSchema.parse(await readJson(request));
-    const result = approveTaxonomyRequest(
+    const result = markTaxonomyRequestAdded(
       id,
       input.dashboardId,
       actorFromSession(session),

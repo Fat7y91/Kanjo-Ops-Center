@@ -32,6 +32,7 @@ const SOURCE_LABEL: Record<string, string> = {
   coupon_budget: "تمويل كوبون",
   capital: "إيداع رأس مال",
   manual: "حركة يدوية",
+  fx_transfer: "تحويل عملة",
   opening: "رصيد افتتاحي",
   reversal: "قيد عكسي",
 };

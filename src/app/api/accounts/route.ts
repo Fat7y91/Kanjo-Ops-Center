@@ -49,6 +49,7 @@ export async function GET() {
         canRecordDeposits: access.canRecordDeposits,
         canRecordExpenses: access.canRecordExpenses,
         canAddAccount: session.permissions.includes("add_bank_account"),
+        canTransferFx: session.permissions.includes("post_fx_transfer"),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

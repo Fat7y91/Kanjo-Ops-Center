@@ -223,6 +223,12 @@ export const settleInputSchema = z
       .optional()
       .transform((value) => (value ? value : null)),
     sizeBytes: z.coerce.number().int().min(0).optional().nullable(),
+    /**
+     * Part of the outstanding balance to settle, in major units. Absent means a
+     * full settlement; present must be a positive amount the screen has already
+     * checked against the balance. The SQL function re-bounds it regardless.
+     */
+    amount: z.number().positive().optional(),
   })
   .refine(
     (value) => (value.receiptNo ? Boolean(value.storagePath) : true),

@@ -44,7 +44,7 @@ export function ContractsIsland() {
           title="سجل العقود"
           description="جارٍ تحميل سجل العقود."
         />
-        <TableSkeleton rows={6} columns={7} />
+        <TableSkeleton rows={6} columns={6} />
       </>
     );
   }

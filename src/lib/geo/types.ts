@@ -22,30 +22,20 @@ export type EgyptGovernorate = {
   cities: EgyptCity[];
 };
 
-export type GeoMerchantBreakdown = {
-  restaurants: number;
-  cafes: number;
-  pharmacies: number;
-  groceries: number;
-  total: number;
-};
-
-export type GeoCompetitionLevel = "low" | "medium" | "high";
-
-export type GeoIntelligence = {
+/**
+ * Measured geometry for a drawn zone.
+ *
+ * Only facts derived from the polygon itself are exposed. Population, merchant
+ * headcounts and competition scores were removed: they were projections over a
+ * static dataset, and presenting them as market intelligence misled operators.
+ */
+export type GeoZoneGeometry = {
   areaKm2: number;
+  perimeterKm: number;
   centroid: { lat: number; lng: number };
   governorate: string;
   city: string;
   cityId: string;
-  population: number;
-  households: number;
-  densityPerKm2: number;
-  merchants: GeoMerchantBreakdown;
-  competition: {
-    index: number;
-    level: GeoCompetitionLevel;
-    label: string;
-  };
+  vertexCount: number;
   generatedAt: string;
 };

@@ -32,6 +32,12 @@ export function useClearinghouse(
   const [error, setError] = useState("");
   const [receiptNo, setReceiptNo] = useState<Record<string, string>>({});
   const [file, setFile] = useState<Record<string, File | null>>({});
+  /**
+   * Partial-settlement amounts keyed by account. A blank entry means "settle in
+   * full", which is the existing behaviour; a value is validated against the
+   * outstanding balance before it leaves the client, and re-bounded by SQL.
+   */
+  const [partialAmount, setPartialAmount] = useState<Record<string, string>>({});
 
   async function refresh() {
     setError("");
@@ -58,11 +64,29 @@ export function useClearinghouse(
   async function settle(account: ClearingAccountRow) {
     setBusyId(account.accountId);
     setError("");
+
+    const raw = partialAmount[account.accountId]?.trim() ?? "";
+    const outstanding = Math.abs(account.balance);
+    if (raw !== "") {
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError("أدخل مبلغاً صحيحاً للتسوية الجزئية.");
+        setBusyId("");
+        return;
+      }
+      if (Math.round(parsed * 100) > Math.round(outstanding * 100)) {
+        setError("المبلغ أكبر من الرصيد المستحق.");
+        setBusyId("");
+        return;
+      }
+    }
+
     try {
       const form = new FormData();
       form.set("accountId", account.accountId);
       const no = receiptNo[account.accountId]?.trim();
       if (no) form.set("receiptNo", no);
+      if (raw !== "") form.set("amount", raw);
       const chosen = file[account.accountId];
       if (chosen) form.set("file", chosen);
 
@@ -80,6 +104,7 @@ export function useClearinghouse(
       }
       setReceiptNo((current) => ({ ...current, [account.accountId]: "" }));
       setFile((current) => ({ ...current, [account.accountId]: null }));
+      setPartialAmount((current) => ({ ...current, [account.accountId]: "" }));
       await refresh();
     } catch {
       setError("تعذر الاتصال بالخادم.");
@@ -98,6 +123,8 @@ export function useClearinghouse(
     setReceiptNo,
     file,
     setFile,
+    partialAmount,
+    setPartialAmount,
     refresh,
     settle,
   };

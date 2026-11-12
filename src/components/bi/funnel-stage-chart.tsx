@@ -1,14 +1,5 @@
 "use client";
 
-import {
-  Funnel,
-  FunnelChart,
-  LabelList,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
-
-import { Button } from "@/components/ui/button";
 import type { FunnelStep } from "@/lib/bi/select";
 import { BI_DEAL_STAGE_META, type BiDealStage } from "@/lib/bi/types";
 
@@ -26,100 +17,76 @@ const STAGE_COLORS: Record<BiDealStage, string> = {
   signed: "#230535",
 };
 
+const STAGE_HINTS: Record<BiDealStage, string> = {
+  visited: "كل التجار المطابقين للفلاتر",
+  no_contract: "زيارة بلا اتفاق",
+  provisional: "اتفاق مبدئي مع التاجر",
+  final: "شروط نهائية قبل التوقيع",
+  signed: "عقود موقّعة",
+};
+
+const PCT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
+  style: "percent",
+  maximumFractionDigits: 1,
+});
+
 /**
- * Merchant lifecycle funnel.
+ * Merchant lifecycle distribution.
  *
- * Recharts draws the trapezoids, while the legend below stays a set of real
- * buttons: that guarantees keyboard access and a clickable target per stage
- * regardless of how thin a funnel slice gets.
+ * The visited row is the population total (100%); the four outcome stages are
+ * mutually exclusive and their shares cumulatively describe the whole base, so
+ * every bar is measured against the same denominator and reads honestly at a
+ * glance. Each row stays a real button so a stage is a keyboard-reachable drill
+ * target.
  */
 export function FunnelStageChart({
   steps,
   onSelect,
   activeStage,
 }: FunnelStageChartProps) {
-  const data = steps.map((step) => ({
-    stage: step.stage,
-    name: BI_DEAL_STAGE_META[step.stage].label,
-    count: step.count,
-    fill: STAGE_COLORS[step.stage],
-  }));
+  const visited = steps.find((step) => step.stage === "visited")?.count ?? 0;
+  const isEmpty = visited === 0;
 
-  // A funnel whose slices are all zero renders nothing, which would leave the
-  // LabelList children attached to an invisible shape. Skip Recharts entirely
-  // and show an explicit empty state instead.
-  const hasData = data.some((entry) => entry.count > 0);
+  if (isEmpty) {
+    return <p className="bi-chart-empty">لا توجد تجار في النطاق المحدد بعد.</p>;
+  }
 
   return (
-    <div className="bi-chart">
-      <div className="bi-chart-canvas">
-        {hasData ? (
-          <ResponsiveContainer width="100%" height={230}>
-            <FunnelChart>
-              <Tooltip
-                formatter={(value) => [`${value} تاجر`, "العدد"]}
-                contentStyle={{
-                  borderRadius: 10,
-                  border: "1px solid var(--line)",
-                  background: "var(--surface)",
-                  fontSize: 12,
-                }}
-              />
-              <Funnel
-                dataKey="count"
-                data={data}
-                isAnimationActive={false}
-                onClick={(entry) => {
-                  const stage = (entry as { stage?: BiDealStage }).stage;
-                  if (stage) onSelect(stage);
-                }}
-              >
-                <LabelList
-                  position="right"
-                  fill="var(--ink)"
-                  stroke="none"
-                  dataKey="name"
-                  fontSize={11}
-                />
-                <LabelList
-                  position="left"
-                  fill="var(--ink-soft)"
-                  stroke="none"
-                  dataKey="count"
-                  fontSize={11}
-                />
-              </Funnel>
-            </FunnelChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="bi-chart-empty">لا توجد تجار في النطاق المحدد بعد.</p>
-        )}
-      </div>
-
-      <ul className="bi-legend">
-        {steps.map((step) => {
-          const meta = BI_DEAL_STAGE_META[step.stage];
-          const active = activeStage === step.stage;
-          return (
-            <li key={step.stage}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`bi-legend-item w-full justify-start gap-2${active ? " is-active" : ""}`}
-                onClick={() => onSelect(step.stage)}
-                aria-label={`عرض تفاصيل مرحلة ${meta.label}`}
-              >
+    <ol className="bi-funnel">
+      {steps.map((step) => {
+        const meta = BI_DEAL_STAGE_META[step.stage];
+        const active = activeStage === step.stage;
+        return (
+          <li key={step.stage}>
+            <button
+              type="button"
+              className={`bi-funnel-step${active ? " is-active" : ""}`}
+              onClick={() => onSelect(step.stage)}
+              aria-label={`عرض تفاصيل مرحلة ${meta.label}: ${step.count} تاجر`}
+            >
+              <span className="bi-funnel-head">
                 <span
                   className="bi-legend-dot"
                   style={{ background: STAGE_COLORS[step.stage] }}
                 />
-                <span className="bi-legend-label flex-1">{meta.label}</span>
-                <strong>{step.count}</strong>
-              </Button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+                <span className="bi-funnel-label">{meta.label}</span>
+                <strong className="bi-funnel-count">{step.count}</strong>
+                <span className="bi-funnel-share">{PCT.format(step.share)}</span>
+              </span>
+              <span className="bi-funnel-track" aria-hidden="true">
+                <span
+                  className="bi-funnel-fill"
+                  style={{
+                    width: `${Math.max(step.share * 100, 1.5)}%`,
+                    background: STAGE_COLORS[step.stage],
+                  }}
+                />
+              </span>
+              <span className="bi-funnel-hint">{STAGE_HINTS[step.stage]}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

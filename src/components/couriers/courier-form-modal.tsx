@@ -163,7 +163,7 @@ export function CourierFormModal({
       <div className="courier-form-toggle">
         <ToggleField
           label="مندوب التوصيل نشط"
-          hint="مندوب التوصيل الموقوف يبقى في السجل لكن لا يُختار في تسجيل العمليات."
+          hint="مندوب التوصيل الموقوف يبقى في السجل لكن لا يُختار في الطلبات."
           checked={form.active}
           onChange={(checked) => set("active", checked)}
         />

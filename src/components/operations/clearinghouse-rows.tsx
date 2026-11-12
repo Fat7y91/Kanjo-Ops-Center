@@ -68,6 +68,14 @@ export type AccountRowsProps = {
   setFile: (
     update: (current: Record<string, File | null>) => Record<string, File | null>,
   ) => void;
+  partialAmount: Record<string, string>;
+  setPartialAmount: (
+    update: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  /** Partial releases are only offered to viewers granted the capability. */
+  canPartial: boolean;
+  /** Closing the balance outright requires its own, separate grant. */
+  canSettle: boolean;
   settle: (account: ClearingAccountRow) => void;
 };
 
@@ -77,6 +85,10 @@ export function AccountRows({
   receiptNo,
   setReceiptNo,
   setFile,
+  partialAmount,
+  setPartialAmount,
+  canPartial,
+  canSettle,
   settle,
 }: AccountRowsProps) {
   if (accounts.length === 0) {
@@ -108,6 +120,24 @@ export function AccountRows({
           </div>
 
           <div className="clearing-row-actions">
+            {canPartial ? (
+              <TextField
+                fieldClassName="clearing-receipt"
+                placeholder={`${canSettle ? "مبلغ جزئي (اختياري)" : "المبلغ"} حتى ${operationMoney(
+                  Math.abs(account.balance),
+                  account.currency,
+                )}`}
+                inputMode="decimal"
+                dir="ltr"
+                value={partialAmount[account.accountId] ?? ""}
+                onChange={(event) =>
+                  setPartialAmount((current) => ({
+                    ...current,
+                    [account.accountId]: event.target.value,
+                  }))
+                }
+              />
+            ) : null}
             <TextField
               fieldClassName="clearing-receipt"
               placeholder="رقم الإيصال (اختياري)"
@@ -133,10 +163,18 @@ export function AccountRows({
             <Button
               variant="primary"
               size="sm"
-              disabled={busyId === account.accountId}
+              disabled={
+                busyId === account.accountId ||
+                (!canSettle &&
+                  (partialAmount[account.accountId] ?? "").trim() === "")
+              }
               onClick={() => settle(account)}
             >
-              {account.balance > 0 ? "تحصيل" : "سداد"}
+              {canSettle
+                ? account.balance > 0
+                  ? "تحصيل"
+                  : "سداد"
+                : "تسديد جزئي"}
             </Button>
           </div>
         </li>

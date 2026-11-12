@@ -123,7 +123,7 @@ export async function insertContractRow(
       merchant_id: input.merchantId,
       merchant_name: input.merchantName,
       city_id: input.cityId,
-      value_minor: Math.round(input.value * 100),
+      value_minor: 0,
       currency: input.currency,
       status: "draft",
       signatory: input.signatory,

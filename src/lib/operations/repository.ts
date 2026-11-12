@@ -224,6 +224,8 @@ export async function insertOperation(write: {
   walletDiscountRef: string;
   note: string;
   loggedBy: string;
+  /** Back-dated order date; defaults to now when omitted. */
+  occurredAt?: string;
 }): Promise<OperationLog> {
   const client = getSupabaseServerClient();
   const { data, error } = await client
@@ -246,6 +248,7 @@ export async function insertOperation(write: {
       wallet_discount_ref: write.walletDiscountRef,
       note: write.note,
       logged_by: write.loggedBy,
+      ...(write.occurredAt ? { occurred_at: write.occurredAt } : {}),
     })
     .select(OPERATION_COLUMNS_NO_JOIN)
     .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS))

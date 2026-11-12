@@ -9,7 +9,11 @@ export const runtime = "edge";
 export default async function ClearinghousePage() {
   // Reading and settling are separate capabilities: a reviewer may open the
   // book without being able to release money, and a settler must still see it.
-  await requireAnyPermission(["view_clearinghouse", "settle_clearinghouse"]);
+  await requireAnyPermission([
+    "view_clearinghouse",
+    "settle_clearinghouse",
+    "settle_clearinghouse_partial",
+  ]);
 
   const board = await loadClearinghouse().catch(() => ({
     accounts: [],
@@ -22,8 +26,8 @@ export default async function ClearinghousePage() {
     <>
       <PageHeader
         eyebrow="المالية"
-        title="المقاصة"
-        description="أرصدة التجار ومناديب التوصيل المستخرجة من دفتر اليومية، والمستحقة السداد أو التحصيل."
+        title="تسديد وتحصيل"
+        description="أرصدة التجار ومناديب التوصيل المستخرجة من دفتر اليومية، مع تسديد أو تحصيل كامل أو جزئي."
       />
 
       <ClearinghouseBoard

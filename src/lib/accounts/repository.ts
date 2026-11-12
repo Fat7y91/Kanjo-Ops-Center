@@ -5,6 +5,7 @@ import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import type { BankAccount, LedgerEntry } from "./types";
+import { loadCounterparties } from "./counterparties";
 
 /**
  * Tier 4 repository for the treasury, backed by the double-entry journal.
@@ -104,7 +105,10 @@ function toAccount(row: BalanceRow): BankAccount {
   };
 }
 
-function toEntry(row: LineRow): LedgerEntry {
+function toEntry(
+  row: LineRow,
+  counterparties: Map<string, string>,
+): LedgerEntry {
   const account = first(row.accounts);
   const entry = first(row.journal_entries);
   const debit = Number(row.debit_minor);
@@ -117,6 +121,7 @@ function toEntry(row: LineRow): LedgerEntry {
     // A debit leg on a bank account is cash in; a credit leg is cash out.
     kind: debit > 0 ? "deposit" : "expense",
     label: (row.memo?.trim() || entry?.memo?.trim()) ?? "حركة بنكية",
+    counterparty: counterparties.get(row.entry_id) ?? "",
     amount: amount / 100,
     currency: account?.currency ?? "EGP",
     occurredAt: entry?.entry_date ?? entry?.created_at ?? new Date(0).toISOString(),
@@ -175,9 +180,45 @@ export async function listLedgerRows(
 
   // Entry ids are uuids, so ordering by them is meaningless. Sort on the entry
   // date the caller actually reads, newest first.
-  return ((data ?? []) as unknown as LineRow[])
-    .map(toEntry)
+  const lineRows = (data ?? []) as unknown as LineRow[];
+
+  // The counterparty of a bank leg lives on the opposite lines of the same
+  // entry, which may belong to a different account entirely. Resolve them in
+  // one extra read rather than per row.
+  const codeByAccount = new Map(
+    accounts.map((account) => [account.id, account.code]),
+  );
+  const counterparties = await loadCounterpartiesForRows(lineRows, codeByAccount);
+
+  return lineRows
+    .map((row) => toEntry(row, counterparties))
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+}
+
+/**
+ * Bank codes for the entries in a page, so `loadCounterparties` can skip the
+ * account whose own leg is being priced. Multiple bank accounts are in scope on
+ * the treasury screen, so every entry's own account code is looked up.
+ */
+async function loadCounterpartiesForRows(
+  rows: readonly LineRow[],
+  codeByAccount: Map<string, string>,
+): Promise<Map<string, string>> {
+  const byCode = new Map<string, string[]>();
+  for (const row of rows) {
+    const code = codeByAccount.get(row.account_id);
+    if (!code) continue;
+    const ids = byCode.get(code) ?? [];
+    ids.push(row.entry_id);
+    byCode.set(code, ids);
+  }
+
+  const merged = new Map<string, string>();
+  for (const [code, entryIds] of byCode) {
+    const resolved = await loadCounterparties(entryIds, code);
+    for (const [entryId, label] of resolved) merged.set(entryId, label);
+  }
+  return merged;
 }
 
 export async function findBankAccountRow(

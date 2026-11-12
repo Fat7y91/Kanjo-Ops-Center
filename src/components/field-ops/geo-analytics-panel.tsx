@@ -3,21 +3,12 @@
 import { useEffect, useState } from "react";
 
 import type { ZonePoint } from "@/components/field-ops/city-map-types";
-import type {
-  GeoCompetitionLevel,
-  GeoIntelligence,
-} from "@/lib/geo/types";
+import type { GeoZoneGeometry } from "@/lib/geo/types";
 
-const COMPETITION_TONE: Record<GeoCompetitionLevel, string> = {
-  low: "badge-green",
-  medium: "badge-purple",
-  high: "badge-red",
-};
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 0 }).format(
-    value,
-  );
+function formatNumber(value: number, digits = 0): string {
+  return new Intl.NumberFormat("ar-EG-u-nu-latn", {
+    maximumFractionDigits: digits,
+  }).format(value);
 }
 
 export type GeoAnalyticsPanelProps = {
@@ -26,18 +17,27 @@ export type GeoAnalyticsPanelProps = {
   enabled: boolean;
 };
 
+/**
+ * Zone geometry readout.
+ *
+ * Shows only measurable facts about the drawn boundary: area, perimeter, the
+ * centroid coordinates and the governorate the boundary sits inside. Nothing
+ * here estimates demand or competition, because those figures were modelled
+ * guesses rather than measured data. Real merchant counts live in the merchants
+ * directory.
+ */
 export function GeoAnalyticsPanel({
   zone,
   cityId,
   enabled,
 }: GeoAnalyticsPanelProps) {
-  const [analytics, setAnalytics] = useState<GeoIntelligence | null>(null);
+  const [geometry, setGeometry] = useState<GeoZoneGeometry | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!enabled || zone.length < 3) {
-      setAnalytics(null);
+      setGeometry(null);
       setLoading(false);
       setError("");
       return;
@@ -63,20 +63,20 @@ export function GeoAnalyticsPanel({
       })
         .then(async (response) => {
           const payload = (await response.json()) as {
-            analysis?: GeoIntelligence;
+            analysis?: GeoZoneGeometry;
             error?: string;
           };
           if (!response.ok || !payload.analysis) {
-            throw new Error(payload.error ?? "تعذر حساب تحليلات النطاق.");
+            throw new Error(payload.error ?? "تعذر حساب قياسات النطاق.");
           }
-          setAnalytics(payload.analysis);
+          setGeometry(payload.analysis);
         })
         .catch((caught: unknown) => {
           if (controller.signal.aborted) return;
           setError(
             caught instanceof Error
               ? caught.message
-              : "تعذر حساب تحليلات النطاق.",
+              : "تعذر حساب قياسات النطاق.",
           );
         })
         .finally(() => {
@@ -94,31 +94,27 @@ export function GeoAnalyticsPanel({
     <div className="geo-analytics">
       <div className="geo-analytics-head">
         <div>
-          <p className="eyebrow">تحليلات النطاق الفورية</p>
-          <h3>ذكاء السوق داخل الحدود المرسومة</h3>
+          <p className="eyebrow">قياسات النطاق</p>
+          <h3>قياسات الحدود المرسومة</h3>
         </div>
-        {analytics ? (
-          <span
-            className={`badge ${COMPETITION_TONE[analytics.competition.level]}`}
-          >
-            منافسة {analytics.competition.label}
-          </span>
+        {geometry ? (
+          <span className="badge">{geometry.governorate}</span>
         ) : null}
       </div>
 
       {!enabled ? (
         <p className="field-hint">
-          لا تملك صلاحية عرض تحليلات المدينة الحالية.
+          لا تملك صلاحية عرض قياسات المدينة الحالية.
         </p>
       ) : zone.length < 3 ? (
         <p className="field-hint">
-          ارسم ثلاثة نقاط على الأقل لعرض تقديرات السكان والتجار ومؤشر المنافسة.
+          ارسم ثلاثة نقاط على الأقل لعرض مساحة النطاق ومحيطه وإحداثيات مركزه.
         </p>
       ) : error ? (
         <p className="form-error" role="alert">
           {error}
         </p>
-      ) : loading || !analytics ? (
+      ) : loading || !geometry ? (
         <div className="geo-stats" aria-busy="true">
           {[0, 1, 2, 3].map((index) => (
             <div key={index} className="geo-stat is-loading">
@@ -132,48 +128,42 @@ export function GeoAnalyticsPanel({
         <>
           <div className="geo-stats">
             <article className="geo-stat">
-              <span className="detail-label">المساحة التقديرية</span>
+              <span className="detail-label">المساحة</span>
               <strong>
-                {new Intl.NumberFormat("ar-EG-u-nu-latn", {
-                  maximumFractionDigits: 2,
-                }).format(analytics.areaKm2)}{" "}
-                كم²
+                {formatNumber(geometry.areaKm2, 2)}
+                <small> كم²</small>
               </strong>
-              <span className="stat-hint">{analytics.city}</span>
+              <span className="stat-hint">{geometry.city}</span>
             </article>
             <article className="geo-stat">
-              <span className="detail-label">السكان المقدّرون</span>
-              <strong>{formatNumber(analytics.population)}</strong>
-              <span className="stat-hint">
-                {formatNumber(analytics.households)} أسرة تقريباً
-              </span>
-            </article>
-            <article className="geo-stat">
-              <span className="detail-label">التجار المحتملون</span>
-              <strong>{formatNumber(analytics.merchants.total)}</strong>
-              <span className="stat-hint">
-                مطاعم {formatNumber(analytics.merchants.restaurants)} · مقاهي{" "}
-                {formatNumber(analytics.merchants.cafes)} · صيدليات{" "}
-                {formatNumber(analytics.merchants.pharmacies)} · بقالة{" "}
-                {formatNumber(analytics.merchants.groceries)}
-              </span>
-            </article>
-            <article className="geo-stat">
-              <span className="detail-label">مؤشر المنافسة</span>
+              <span className="detail-label">المحيط</span>
               <strong>
-                {formatNumber(analytics.competition.index)}
-                <small> / 100</small>
+                {formatNumber(geometry.perimeterKm, 2)}
+                <small> كم</small>
               </strong>
-              <span
-                className={`badge ${COMPETITION_TONE[analytics.competition.level]}`}
-              >
-                {analytics.competition.label}
+              <span className="stat-hint">
+                {formatNumber(geometry.vertexCount)} نقطة حدود
               </span>
+            </article>
+            <article className="geo-stat">
+              <span className="detail-label">مركز النطاق</span>
+              <strong>
+                {geometry.centroid.lat.toFixed(4)},{" "}
+                {geometry.centroid.lng.toFixed(4)}
+              </strong>
+              <span className="stat-hint">
+                خط العرض, خط الطول
+              </span>
+            </article>
+            <article className="geo-stat">
+              <span className="detail-label">المحافظة</span>
+              <strong>{geometry.governorate}</strong>
+              <span className="stat-hint">{geometry.city}</span>
             </article>
           </div>
           <p className="field-hint">
-            {analytics.governorate} · كثافة تقديرية{" "}
-            {formatNumber(analytics.densityPerKm2)} نسمة/كم²
+            قياسات هندسية مباشرة للحدود المرسومة. أعداد التجار تُقرأ من دليل
+            التجار المسجّلين، وليست تقديرات.
           </p>
         </>
       )}

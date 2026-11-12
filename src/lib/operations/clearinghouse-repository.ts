@@ -113,9 +113,32 @@ export async function postSettlement(
     storagePath: string | null;
     mimeType: string | null;
     sizeBytes: number | null;
+    /**
+     * When present, settles only this amount (minor units) through the
+     * bounded partial-settlement function; when absent, zeroes the account.
+     */
+    amountMinor?: number | null;
   },
 ): Promise<string> {
   const client = getSupabaseServerClient();
+
+  if (receipt.amountMinor != null) {
+    const { data, error } = await client
+      .schema("app")
+      .rpc("post_partial_settlement", {
+        p_account_id: accountId,
+        p_amount_minor: receipt.amountMinor,
+        p_actor: actorId,
+        p_receipt_no: receipt.receiptNo,
+        p_storage_path: receipt.storagePath,
+        p_mime_type: receipt.mimeType,
+        p_size_bytes: receipt.sizeBytes,
+      });
+
+    if (error) throw error;
+    return data as string;
+  }
+
   const { data, error } = await client
     .schema("app")
     .rpc("post_settlement", {

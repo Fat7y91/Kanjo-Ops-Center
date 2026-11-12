@@ -92,7 +92,7 @@ export function CityDetailsClient({
           className={`city-tab${tab === "intelligence" ? " is-active" : ""}`}
           onClick={() => setTab("intelligence")}
         >
-          ذكاء النطاق
+          قياسات النطاق
         </button>
       </div>
 
@@ -115,13 +115,13 @@ export function CityDetailsClient({
             <section className="panel">
               <div className="panel-head">
                 <div>
-                  <p className="eyebrow">ذكاء النطاق</p>
-                  <h2>التحليلات غير متاحة</h2>
+                  <p className="eyebrow">قياسات النطاق</p>
+                  <h2>القياسات غير متاحة</h2>
                 </div>
               </div>
               <p className="panel-note">
-                تحتاج صلاحية عرض تحليلات المدينة للاطلاع على تقديرات السوق
-                داخل هذا النطاق.
+                تحتاج صلاحية عرض قياسات المدينة للاطلاع على مساحة النطاق
+                ومحيطه ومركزه.
               </p>
             </section>
           )}

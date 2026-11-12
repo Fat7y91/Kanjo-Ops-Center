@@ -1,0 +1,75 @@
+import { NextResponse } from "next/server";
+
+import { apiError, authorize } from "@/lib/auth/api";
+import { loadImportRoster } from "@/lib/operations/options-repository";
+import { importOrders } from "@/lib/operations/service";
+
+export const dynamic = "force-dynamic";
+export const runtime = "edge";
+
+/**
+ * Bulk CSV import of fulfilled orders.
+ *
+ * The browser parses the file and sends the records as JSON, so the server never
+ * trusts a rendered preview: `importOrders` re-validates every row against the
+ * live roster before posting. Gated by `import_orders`, distinct from
+ * `log_operations`, because a bulk write carries far more risk than one order.
+ */
+export async function POST(request: Request) {
+  const { session, response } = await authorize("import_orders");
+  if (!session) return response;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "طلب غير صالح.", code: "INVALID_REQUEST" },
+      { status: 422 },
+    );
+  }
+
+  const rows =
+    typeof body === "object" && body !== null && "rows" in body
+      ? (body as { rows?: unknown }).rows
+      : undefined;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return NextResponse.json(
+      { error: "الملف لا يحتوي على صفوف.", code: "EMPTY_FILE" },
+      { status: 422 },
+    );
+  }
+
+  if (rows.length > 5000) {
+    return NextResponse.json(
+      { error: "الحد الأقصى 5000 صف في الملف الواحد.", code: "TOO_MANY_ROWS" },
+      { status: 422 },
+    );
+  }
+
+  if (
+    !rows.every(
+      (row) => typeof row === "object" && row !== null && !Array.isArray(row),
+    )
+  ) {
+    return NextResponse.json(
+      { error: "صيغة الصفوف غير صالحة.", code: "INVALID_ROWS" },
+      { status: 422 },
+    );
+  }
+
+  try {
+    const roster = await loadImportRoster();
+    const result = await importOrders(
+      session.user.id,
+      rows as Record<string, unknown>[],
+      roster,
+    );
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
+}

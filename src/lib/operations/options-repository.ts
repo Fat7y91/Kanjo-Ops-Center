@@ -3,6 +3,7 @@ import "server-only";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
+import { matchKey } from "./orders-import";
 import type { CourierOption, CouponOption, MerchantOption } from "./types";
 
 const READ_TIMEOUT_MS = 6_000;
@@ -88,4 +89,37 @@ export async function listCouponOptions(): Promise<CouponOption[]> {
     couponType: row.coupon_type,
     active: row.active,
   }));
+}
+
+/**
+ * Name-keyed roster for the bulk order import.
+ *
+ * A CSV names its parties, not their ids, so the importer matches on the same
+ * normalised key it derives from the file. Merchant names are unique per book;
+ * courier display names are the only human label the export carries. A
+ * collision keeps the first row and is otherwise harmless, because the import
+ * reports any row that resolves to an unknown party instead of guessing.
+ */
+export async function loadImportRoster(): Promise<{
+  merchants: Map<string, string>;
+  couriers: Map<string, string>;
+}> {
+  const [merchants, couriers] = await Promise.all([
+    listMerchantOptions(),
+    listCouriers(),
+  ]);
+
+  const merchantMap = new Map<string, string>();
+  for (const merchant of merchants) {
+    const key = matchKey(merchant.name);
+    if (key && !merchantMap.has(key)) merchantMap.set(key, merchant.id);
+  }
+
+  const courierMap = new Map<string, string>();
+  for (const courier of couriers) {
+    const key = matchKey(courier.displayName);
+    if (key && !courierMap.has(key)) courierMap.set(key, courier.id);
+  }
+
+  return { merchants: merchantMap, couriers: courierMap };
 }

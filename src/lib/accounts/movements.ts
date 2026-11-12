@@ -151,6 +151,9 @@ export async function insertLedgerEntry(
     accountId: account.id,
     kind: input.kind,
     label: input.label,
+    // The counterparty is the contra account the SQL function picked
+    // (`3000` for a deposit, `5400` for an expense); the reload resolves it.
+    counterparty: input.kind === "deposit" ? "رأس المال" : "مصروفات تشغيلية",
     amount: input.amount,
     currency: account.currency,
     occurredAt: input.occurredAt,

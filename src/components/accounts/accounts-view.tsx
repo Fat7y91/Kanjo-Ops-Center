@@ -5,6 +5,8 @@ import { useState } from "react";
 
 import { AccountCard } from "@/components/accounts/account-card";
 import { AccountForm } from "@/components/accounts/account-form";
+import { AccountStatementModal } from "@/components/accounts/account-statement-modal";
+import { FxTransferForm } from "@/components/accounts/fx-transfer-form";
 import { LedgerEntryForm } from "@/components/accounts/ledger-entry-form";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
@@ -35,6 +37,8 @@ type AccountsViewProps = {
   canRecordDeposits: boolean;
   canRecordExpenses: boolean;
   canAddAccount: boolean;
+  /** May post a manual SAR→EGP transfer between the two bank ledgers. */
+  canTransferFx: boolean;
 };
 
 export function AccountsView({
@@ -46,11 +50,14 @@ export function AccountsView({
   canRecordDeposits,
   canRecordExpenses,
   canAddAccount,
+  canTransferFx,
   onRefresh,
 }: AccountsViewProps & { onRefresh: () => void }) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
   const [entryFor, setEntryFor] = useState<string | null>(null);
+  const [statementFor, setStatementFor] = useState<string | null>(null);
+  const [fxOpen, setFxOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const voucher = useJournalVoucher();
 
@@ -77,10 +84,23 @@ export function AccountsView({
           title="أرصدة الحسابات"
           span={12}
           badge={
-            canAddAccount ? (
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                إضافة حساب
-              </Button>
+            canAddAccount || canTransferFx ? (
+              <div className="account-card-actions">
+                {canTransferFx ? (
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    onClick={() => setFxOpen(true)}
+                  >
+                    تحويل عملة (SAR ← EGP)
+                  </Button>
+                ) : null}
+                {canAddAccount ? (
+                  <Button size="sm" onClick={() => setAddOpen(true)}>
+                    إضافة حساب
+                  </Button>
+                ) : null}
+              </div>
             ) : undefined
           }
         >
@@ -128,6 +148,9 @@ export function AccountsView({
             primary={summary.account.currency === "EGP"}
             canRecord={canRecord && summary.account.currency === "EGP"}
             onRecord={() => setEntryFor(summary.account.id)}
+            /* A statement exposes the opening and closing balance, so it is a
+             * full-book view only; a deposit clerk never sees one. */
+            onStatement={full ? () => setStatementFor(summary.account.id) : undefined}
             onOpenEntry={canViewTransactions ? voucher.openFor : undefined}
           />
         ))}
@@ -181,6 +204,37 @@ export function AccountsView({
         voucher={voucher.voucher}
         onClose={voucher.close}
         onRetry={voucher.retry}
+      />
+
+      <Modal
+        open={fxOpen}
+        title="تحويل عملة (SAR ← EGP)"
+        eyebrow="الخزينة"
+        description="سجّل مبلغ الريال المسحوب ومبلغ الجنيه المستلم من كشف التحويل الفعلي."
+        onClose={() => setFxOpen(false)}
+      >
+        <FxTransferForm
+          onDone={(message) => {
+            setNotice(message);
+            setFxOpen(false);
+            onRefresh();
+            router.refresh();
+          }}
+        />
+      </Modal>
+
+      <AccountStatementModal
+        open={statementFor !== null}
+        summary={
+          statementFor
+            ? (summaries.find(
+                (summary) => summary.account.id === statementFor,
+              ) ?? null)
+            : null
+        }
+        entries={entries}
+        onClose={() => setStatementFor(null)}
+        onOpenEntry={canViewTransactions ? voucher.openFor : undefined}
       />
     </div>
   );

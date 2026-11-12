@@ -1,5 +1,6 @@
 "use client";
 
+import { usePermission } from "@/components/auth/use-permission";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { Tabs } from "@/components/ui/tabs";
@@ -30,6 +31,10 @@ export function ClearinghouseBoard({
   initialReceivables: ClearingAccountRow[];
   initialOperations: OperationSummary[];
 }) {
+  const { hasPermission } = usePermission();
+  const canSettle = hasPermission("settle_clearinghouse");
+  const canPartial = hasPermission("settle_clearinghouse_partial");
+
   const {
     accounts,
     payables,
@@ -39,6 +44,8 @@ export function ClearinghouseBoard({
     receiptNo,
     setReceiptNo,
     setFile,
+    partialAmount,
+    setPartialAmount,
     settle,
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
@@ -53,6 +60,10 @@ export function ClearinghouseBoard({
     receiptNo,
     setReceiptNo,
     setFile,
+    partialAmount,
+    setPartialAmount,
+    canPartial,
+    canSettle,
     settle,
   };
 
@@ -96,12 +107,12 @@ export function ClearinghouseBoard({
           },
           {
             id: "accounts",
-            label: "أرصدة الأطراف",
+            label: "تسديد وتحصيل",
             content: <AccountRows {...rowsProps} />,
           },
           {
             id: "orders",
-            label: "العمليات",
+            label: "العمليات السابقة",
             badge: operations.length,
             content: (
               <OrderRows operations={operations} onOpen={breakdown.openFor} />

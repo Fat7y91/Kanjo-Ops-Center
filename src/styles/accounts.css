@@ -204,6 +204,51 @@
   gap: 8px;
 }
 
+.account-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* FX transfer entry echoes the captured pair so the operator confirms the
+ * amount that actually moved, not a derived rate. */
+.fx-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.fx-rate {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.fx-echo {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.fx-file input {
+  font-size: 0.78rem;
+}
+
 @media (max-width: 720px) {
   .accounts-totals,
   .account-form-grid,

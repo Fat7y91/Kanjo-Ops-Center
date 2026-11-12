@@ -15,22 +15,15 @@ export type TaxonomyDecisionActor = {
   name: string;
 };
 
-function dashboardIdConflict(
-  store: ReturnType<typeof getStore>,
-  kind: TaxonomyRequest["kind"],
-  dashboardId: number,
-  vendorTypeId: number | null,
-): boolean {
-  if (kind === "vendor_type") {
-    return store.vendorTypes.has(dashboardId);
-  }
-  if (kind === "category") {
-    return store.categories.has(categoryKey(vendorTypeId ?? 0, dashboardId));
-  }
-  return store.variants.has(dashboardId);
-}
-
-export function approveTaxonomyRequest(
+/**
+ * Links a pending request to a record that already exists centrally.
+ *
+ * The central dashboard sheet is the only way an entry is created. This step
+ * therefore never inserts taxonomy data: it confirms the uploaded record is
+ * present under the supplied Dashboard ID and closes the request against it.
+ * Approving before the sync lands fails loudly instead of inventing a record.
+ */
+export function markTaxonomyRequestAdded(
   requestIdValue: string,
   dashboardId: number,
   actor: TaxonomyDecisionActor,
@@ -60,34 +53,16 @@ export function approveTaxonomyRequest(
       422,
     );
   }
-  if (
-    dashboardIdConflict(
-      store,
-      request.kind,
-      dashboardId,
-      request.vendorTypeId,
-    )
-  ) {
-    throw new TaxonomyError(
-      "DASHBOARD_ID_CONFLICT",
-      "هذا المعرّف مستخدم بالفعل في التصنيف المركزي.",
-      409,
-    );
-  }
 
-  const now = isoNow();
-  let createdEntityKey: string | null = null;
-
+  let createdEntityKey: string;
   if (request.kind === "vendor_type") {
-    store.vendorTypes.set(dashboardId, {
-      id: dashboardId,
-      name_ar: request.name_ar,
-      name_en: request.name_en,
-      active: true,
-      source: "request",
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!store.vendorTypes.has(dashboardId)) {
+      throw new TaxonomyError(
+        "ENTRY_NOT_SYNCED",
+        "لا يوجد نوع تاجر بهذا المعرّف. ارفع ملف مزامنة لوحة التحكم أولاً.",
+        409,
+      );
+    }
     createdEntityKey = `vendor_type:${dashboardId}`;
   } else if (request.kind === "category") {
     const vendorTypeId = request.vendorTypeId;
@@ -100,34 +75,22 @@ export function approveTaxonomyRequest(
     }
     assertVendorTypeExists(vendorTypeId);
     const key = categoryKey(vendorTypeId, dashboardId);
-    const siblings = Array.from(store.categories.values()).filter(
-      (category) => category.vendorTypeId === vendorTypeId,
-    );
-    store.categories.set(key, {
-      key,
-      id: dashboardId,
-      vendorTypeId,
-      parentId: request.parentId,
-      name_ar: request.name_ar,
-      name_en: request.name_en,
-      sortOrder: siblings.length + 1,
-      active: true,
-      source: "request",
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!store.categories.has(key)) {
+      throw new TaxonomyError(
+        "ENTRY_NOT_SYNCED",
+        "لا يوجد تصنيف بهذا المعرّف داخل نوع التاجر. ارفع ملف مزامنة لوحة التحكم أولاً.",
+        409,
+      );
+    }
     createdEntityKey = `category:${key}`;
   } else {
-    store.variants.set(dashboardId, {
-      variant_id: dashboardId,
-      name_ar: request.name_ar,
-      name_en: request.name_en,
-      options: [],
-      active: true,
-      source: "request",
-      createdAt: now,
-      updatedAt: now,
-    });
+    if (!store.variants.has(dashboardId)) {
+      throw new TaxonomyError(
+        "ENTRY_NOT_SYNCED",
+        "لا توجد مجموعة متغيرات بهذا المعرّف. ارفع ملف مزامنة لوحة التحكم أولاً.",
+        409,
+      );
+    }
     createdEntityKey = `variant:${dashboardId}`;
   }
 
@@ -135,12 +98,13 @@ export function approveTaxonomyRequest(
   request.dashboardId = dashboardId;
   request.decidedBy = actor.id;
   request.decidedByName = actor.name;
-  request.decidedAt = now;
+  request.decidedAt = isoNow();
   request.createdEntityKey = createdEntityKey;
   bump(store);
 
   return { request: clone(request), snapshot: taxonomySnapshot() };
 }
+
 export function rejectTaxonomyRequest(
   requestIdValue: string,
   reason: string,

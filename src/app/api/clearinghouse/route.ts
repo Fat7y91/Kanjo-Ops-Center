@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { apiError, authorize, authorizeAny } from "@/lib/auth/api";
+import { apiError, authorizeAny } from "@/lib/auth/api";
 import {
   loadClearinghouse,
   settleClearingAccount,
@@ -19,6 +19,7 @@ export async function GET() {
   const { session, response } = await authorizeAny([
     "view_clearinghouse",
     "settle_clearinghouse",
+    "settle_clearinghouse_partial",
   ]);
   if (!session) return response;
 
@@ -41,7 +42,10 @@ export async function GET() {
  * `settle_clearinghouse`, deliberately distinct from `view_clearinghouse`.
  */
 export async function POST(request: Request) {
-  const { session, response } = await authorize("settle_clearinghouse");
+  const { session, response } = await authorizeAny([
+    "settle_clearinghouse",
+    "settle_clearinghouse_partial",
+  ]);
   if (!session) return response;
 
   let form: FormData;
@@ -61,6 +65,45 @@ export async function POST(request: Request) {
 
   const receiptNo = String(form.get("receiptNo") ?? "").trim() || null;
   const file = form.get("file");
+
+  /* A partial release is a distinct, riskier decision than closing the account,
+   * so it is gated by its own grant. A caller without `settle_clearinghouse`
+   * was already rejected above; here we reject a partial from a caller who may
+   * only close in full, even though they may post the endpoint. */
+  const rawAmount = String(form.get("amount") ?? "").trim();
+  const partialAmount = rawAmount === "" ? null : Number(rawAmount);
+  if (
+    partialAmount !== null &&
+    !session.permissions.includes("settle_clearinghouse_partial")
+  ) {
+    return NextResponse.json(
+      {
+        error: "لا تملك صلاحية التسوية الجزئية.",
+        code: "PARTIAL_SETTLEMENT_FORBIDDEN",
+      },
+      { status: 403 },
+    );
+  }
+  /* Closing an account is a different grant from releasing part of it: a
+   * partial-only desk must not be able to zero a balance outright. */
+  if (
+    partialAmount === null &&
+    !session.permissions.includes("settle_clearinghouse")
+  ) {
+    return NextResponse.json(
+      {
+        error: "لا تملك صلاحية التسوية الكاملة.",
+        code: "FULL_SETTLEMENT_FORBIDDEN",
+      },
+      { status: 403 },
+    );
+  }
+  if (partialAmount !== null && (!Number.isFinite(partialAmount) || partialAmount <= 0)) {
+    return NextResponse.json(
+      { error: "أدخل مبلغاً صحيحاً للتسوية الجزئية.", code: "INVALID_AMOUNT" },
+      { status: 422 },
+    );
+  }
 
   /* A stored file is only referenced when a receipt number is present, so
    * reject the combination that would leave an orphaned object in the bucket. */
@@ -96,6 +139,7 @@ export async function POST(request: Request) {
       storagePath,
       mimeType,
       sizeBytes,
+      ...(partialAmount !== null ? { amount: partialAmount } : {}),
     });
     return NextResponse.json({ entryId });
   } catch (error) {

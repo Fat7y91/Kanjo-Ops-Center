@@ -40,9 +40,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   const [merchantId, setMerchantId] = useState(
     contract?.merchantId ?? merchants[0]?.id ?? "",
   );
-  const [value, setValue] = useState(
-    contract ? String(contract.value) : "",
-  );
   const [currency, setCurrency] = useState<Contract["currency"]>(
     contract?.currency ?? "EGP",
   );
@@ -61,7 +58,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
         merchantId,
         merchantName: merchant?.name ?? contract?.merchantName ?? "",
         cityId: merchant?.cityId ?? contract?.cityId ?? null,
-        value: Number(value) || 0,
         currency,
         signatory,
         body,
@@ -101,14 +97,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
           placeholder={
             merchantOptions.length === 0 ? "لا يوجد تجار في نطاقك" : undefined
           }
-        />
-        <TextField
-          label="قيمة العقد"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          inputMode="decimal"
-          dir="ltr"
-          required
         />
         <SelectMenu
           label="العملة"

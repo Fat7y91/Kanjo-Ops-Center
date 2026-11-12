@@ -70,6 +70,7 @@ export function AccountsIsland({ description }: { description: string }) {
           canRecordDeposits={data.canRecordDeposits}
           canRecordExpenses={data.canRecordExpenses}
           canAddAccount={data.canAddAccount}
+          canTransferFx={data.canTransferFx}
           onRefresh={reload}
         />
       ) : null}
