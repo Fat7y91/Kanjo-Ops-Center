@@ -66,6 +66,25 @@ test("an unknown courier is reported", () => {
   assert.match(plan.issues[0].message, /مندوب توصيل غير معروف/);
 });
 
+test("an unknown courier is collected when the operator opted to create it", () => {
+  const plan = importer.planImport(
+    [row({ delivery_partner: "مجهول" })],
+    roster,
+    { createMissingCouriers: true },
+  );
+  assert.equal(plan.issues.length, 0);
+  assert.deepEqual(plan.missingCouriers, ["مجهول"]);
+  assert.equal(plan.candidates.length, 1);
+  assert.equal(plan.candidates[0].courierId, "");
+});
+
+test("a known courier is never reported as missing", () => {
+  const plan = importer.planImport([row()], roster, {
+    createMissingCouriers: true,
+  });
+  assert.deepEqual(plan.missingCouriers, []);
+});
+
 test("an unknown payment method is rejected", () => {
   const plan = importer.planImport(
     [row({ payment_method: "bitcoin" })],

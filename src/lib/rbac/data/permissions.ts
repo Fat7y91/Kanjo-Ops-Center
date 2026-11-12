@@ -170,6 +170,12 @@ export const PERMISSIONS = [
     group: "التجار",
   },
   {
+    key: "import_merchants",
+    label: "استيراد التجار",
+    description: "رفع ملف تجار وإضافتهم دفعة واحدة من دليل التجار.",
+    group: "التجار",
+  },
+  {
     key: "edit_merchant_socials",
     label: "تعديل عنوان وروابط التاجر",
     description: "تحديث العنوان الفعلي وروابط فيسبوك وإنستغرام والموقع.",

@@ -73,7 +73,7 @@ export function MerchantsDirectory({
               <th>المدينة</th>
               <th>الفريق المالك</th>
               <th>الحالة</th>
-              <th>نسبة العمولة</th>
+              <th className="align-center">نسبة العمولة</th>
               <th>الرصيد الحالي</th>
               <th className="align-right">إجراءات</th>
             </tr>
@@ -107,7 +107,9 @@ export function MerchantsDirectory({
                     {row.stateLabel}
                   </span>
                 </td>
-                <td dir="ltr">{row.commissionRateLabel}</td>
+                <td dir="ltr" className="align-center">
+                  {row.commissionRateLabel}
+                </td>
                 <td>
                   <span
                     className={`merchant-balance merchant-balance-${row.balanceTone}`}

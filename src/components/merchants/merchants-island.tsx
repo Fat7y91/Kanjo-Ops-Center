@@ -4,6 +4,7 @@ import type { ComponentProps } from "react";
 
 import { useEndpointData } from "@/components/data/use-endpoint-data";
 import { AddMerchantButton } from "@/components/merchants/add-merchant-button";
+import { ImportMerchantsButton } from "@/components/merchants/import-merchants-button";
 import { MerchantsDirectory } from "@/components/merchants/merchants-directory";
 import { ErrorPanel } from "@/components/ui/error-panel";
 import { PageHeader } from "@/components/ui/page-header";
@@ -31,6 +32,7 @@ type MerchantsIslandProps = {
    * table waits for the endpoint.
    */
   canCreate: boolean;
+  canImport: boolean;
   cities: AddMerchantProps["cities"];
   taxonomy: AddMerchantProps["taxonomy"];
   defaultCityId: AddMerchantProps["defaultCityId"];
@@ -47,6 +49,7 @@ type MerchantsIslandProps = {
 export function MerchantsIsland({
   initialQuery,
   canCreate,
+  canImport,
   cities,
   taxonomy,
   defaultCityId,
@@ -65,6 +68,13 @@ export function MerchantsIsland({
         actions={
           <div className="row-actions">
             {data ? <span className="badge">{data.rows.length} تاجر</span> : null}
+            {canImport ? (
+              <ImportMerchantsButton
+                cities={cities}
+                vendorTypes={taxonomy.vendorTypes}
+                defaultCityId={defaultCityId}
+              />
+            ) : null}
             {canCreate ? (
               <AddMerchantButton
                 cities={cities}

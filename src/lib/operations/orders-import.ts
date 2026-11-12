@@ -47,71 +47,33 @@ export type ImportPlan = {
   issues: ImportIssue[];
   /** Order ids already used in the file, so the first occurrence wins. */
   duplicates: ImportIssue[];
+  /**
+   * Courier display names referenced by the file but absent from the roster.
+   * The preview offers to create them; the server only writes them when the
+   * operator confirms.
+   */
+  missingCouriers: string[];
 };
 
-/** Arabic-Indic digits to Western, so a spreadsheet locale cannot break amounts. */
-export function normalizeDigits(value: string): string {
-  return value
-    .replace(/[\u0660-\u0669]/g, (digit) =>
-      String(digit.charCodeAt(0) - 0x0660),
-    )
-    .replace(/[\u06f0-\u06f9]/g, (digit) =>
-      String(digit.charCodeAt(0) - 0x06f0),
-    );
-}
+export type ImportOptions = {
+  /**
+   * Collect unknown couriers into `missingCouriers` and keep their orders as
+   * candidates with an empty `courierId`. Used by the preview and by the server
+   * once the operator has confirmed creation; the final write always runs again
+   * with this off so every row is re-validated against the real roster.
+   */
+  createMissingCouriers?: boolean;
+};
 
-/** Trims, collapses internal whitespace, and lowercases for matching. */
-export function matchKey(value: string): string {
-  return normalizeDigits(value).trim().replace(/\s+/g, " ").toLowerCase();
-}
+export {
+  normalizeDigits,
+  matchKey,
+  field,
+  parseAmount,
+  parseFee,
+} from "@/lib/import/csv";
 
-function clean(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  return "";
-}
-
-/** Reads a field by any of its accepted header spellings. */
-export function field(
-  row: Record<string, unknown>,
-  ...names: string[]
-): unknown {
-  const normalised = new Map<string, unknown>();
-  for (const [key, value] of Object.entries(row)) {
-    normalised.set(matchKey(key).replace(/[\s_-]/g, ""), value);
-  }
-  for (const name of names) {
-    const key = matchKey(name).replace(/[\s_-]/g, "");
-    if (normalised.has(key)) return normalised.get(key);
-  }
-  return undefined;
-}
-
-/**
- * Parses a money cell. Strips currency glyphs, thousands separators and Arabic
- * digits; a non-positive or unparseable amount is null so the row is reported
- * instead of being posted as zero.
- */
-export function parseAmount(value: unknown): number | null {
-  const text = normalizeDigits(clean(value))
-    .replace(/[٬,]/g, "")
-    .replace(/[^\d.-]/g, "");
-  if (text === "" || text === "-" || text === ".") return null;
-  const numeric = Number(text);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return Math.round(numeric * 100) / 100;
-}
-
-/** Accepts a non-negative fee cell; an empty cell means zero. */
-export function parseFee(value: unknown): number {
-  const text = normalizeDigits(clean(value))
-    .replace(/[٬,]/g, "")
-    .replace(/[^\d.-]/g, "");
-  if (text === "") return 0;
-  const numeric = Number(text);
-  if (!Number.isFinite(numeric) || numeric < 0) return 0;
-  return Math.round(numeric * 100) / 100;
-}
+import { clean, field, matchKey, normalizeDigits, parseAmount, parseFee } from "@/lib/import/csv";
 
 const COD_LABELS = [
   "cod",
@@ -194,11 +156,13 @@ function currencyOf(value: unknown): "EGP" | "SAR" {
 export function planImport(
   rows: readonly Record<string, unknown>[],
   roster: ImportRoster,
+  options: ImportOptions = {},
 ): ImportPlan {
   const candidates: ImportCandidate[] = [];
   const issues: ImportIssue[] = [];
   const duplicates: ImportIssue[] = [];
   const seen = new Set<string>();
+  const missing = new Set<string>();
 
   rows.forEach((row, index) => {
     const line = index + 2;
@@ -233,14 +197,19 @@ export function planImport(
       });
       return;
     }
-    if (!courierId) {
+    if (!courierId && courierName === "") {
+      issues.push({ line, message: "اسم مندوب التوصيل مفقود." });
+      return;
+    }
+    if (!courierId && !options.createMissingCouriers) {
       issues.push({
         line,
-        message: courierName
-          ? `مندوب توصيل غير معروف: ${courierName}.`
-          : "اسم مندوب التوصيل مفقود.",
+        message: `مندوب توصيل غير معروف: ${courierName}.`,
       });
       return;
+    }
+    if (!courierId) {
+      missing.add(courierName);
     }
 
     const orderValue = parseAmount(
@@ -274,7 +243,7 @@ export function planImport(
       orderId,
       merchantId,
       merchantName,
-      courierId,
+      courierId: courierId ?? "",
       courierName,
       paymentMethod,
       currency: currencyOf(field(row, "currency", "العملة")),
@@ -285,5 +254,5 @@ export function planImport(
     });
   });
 
-  return { candidates, issues, duplicates };
+  return { candidates, issues, duplicates, missingCouriers: [...missing] };
 }

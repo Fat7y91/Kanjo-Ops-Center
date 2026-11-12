@@ -16,12 +16,13 @@ import {
   isOperationsDatabaseConfigured,
   listOperations,
 } from "./repository";
-import { planImport, type ImportRoster } from "./orders-import";
 import {
   listCouponOptions,
   listCouriers,
   listMerchantOptions,
 } from "./options-repository";
+export { importOrders } from "./import-service";
+
 import {
   operationLogInputSchema,
   settleInputSchema,
@@ -153,65 +154,6 @@ export async function logOperation(
   } catch (error) {
     translate(error);
   }
-}
-
-/**
- * Bulk-imports fulfilled orders from a parsed CSV file.
- *
- * Every row is validated against the live roster before anything is written, so
- * a file with an unknown vendor is rejected as a whole rather than partially
- * posted. Each accepted order goes through the same insert path as a manual
- * entry, which means the freeze and routing triggers run per row and the
- * merchant and courier balances move exactly as they would for a manual order.
- * The result reports the imported count and the rows that were skipped, so the
- * operator can fix the spreadsheet and retry just those.
- */
-export async function importOrders(
-  loggedBy: string,
-  rows: readonly Record<string, unknown>[],
-  roster: ImportRoster,
-): Promise<{
-  imported: number;
-  skipped: { line: number; message: string }[];
-}> {
-  requireDatabase();
-
-  const plan = planImport(rows, roster);
-  const skipped = [...plan.duplicates, ...plan.issues];
-  if (plan.candidates.length === 0) {
-    return { imported: 0, skipped };
-  }
-
-  let imported = 0;
-  for (const candidate of plan.candidates) {
-    try {
-      await insertOperation({
-        orderId: candidate.orderId,
-        merchantId: candidate.merchantId,
-        courierId: candidate.courierId,
-        paymentMethod: candidate.paymentMethod,
-        currency: candidate.currency,
-        orderValueMinor: toMinorUnits(candidate.orderValue),
-        deliveryFeeMinor: toMinorUnits(candidate.deliveryFee),
-        couponId: null,
-        walletDiscountMinor: 0,
-        walletDiscountReason: "",
-        walletDiscountRef: "",
-        note: candidate.note,
-        loggedBy,
-        occurredAt: candidate.occurredAt,
-      });
-      imported += 1;
-    } catch (error) {
-      const domain = error instanceof OperationsError ? error : fromDatabaseError(error);
-      skipped.push({
-        line: candidate.line,
-        message: domain?.message ?? "تعذر تسجيل الطلب.",
-      });
-    }
-  }
-
-  return { imported, skipped };
 }
 
 /**

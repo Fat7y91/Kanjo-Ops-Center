@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
+import { CheckboxField } from "@/components/ui/form-inputs";
 import {
   matchKey,
   planImport,
@@ -42,6 +43,7 @@ export function OrderImportModal({
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [createMissing, setCreateMissing] = useState(false);
 
   // The roster is derived from the same options the logger already holds, so
   // the preview matches the parties the server can resolve by name.
@@ -57,7 +59,11 @@ export function OrderImportModal({
     return { merchants: merchantMap, couriers: courierMap };
   }, [merchants, couriers]);
 
-  const plan = useMemo(() => planImport(rows, roster), [rows, roster]);
+  const strictPlan = useMemo(() => planImport(rows, roster), [rows, roster]);
+  const plan = useMemo(
+    () => planImport(rows, roster, { createMissingCouriers: createMissing }),
+    [rows, roster, createMissing],
+  );
 
   async function choose(file: File | null) {
     if (!file) return;
@@ -77,6 +83,7 @@ export function OrderImportModal({
       );
       setRows(parsed);
       setFileName(file.name);
+      setCreateMissing(false);
     } catch {
       setError("تعذر قراءة ملف CSV.");
     }
@@ -94,7 +101,7 @@ export function OrderImportModal({
       const response = await fetch("/api/operations/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ rows, createMissingCouriers: createMissing }),
       });
       const payload = (await response.json()) as {
         imported?: number;
@@ -122,6 +129,7 @@ export function OrderImportModal({
     setFileName("");
     setSummary(null);
     setError("");
+    setCreateMissing(false);
   }
 
   return (
@@ -129,7 +137,7 @@ export function OrderImportModal({
       open={open}
       eyebrow="استيراد الطلبات"
       title="رفع ملف طلبات (CSV)"
-      description="الأعمدة المقروءة: رقم الطلب، التاجر، المندوب، طريقة الدفع، الإجمالي، أجر التوصيل، التاريخ. تُرفض الصفوف غير المطابقة للتجار والمناديب المسجلين."
+      description="الأعمدة المقروءة: رقم الطلب، التاجر، المندوب، طريقة الدفع، الإجمالي، أجر التوصيل، التاريخ. تُرفض الصفوف غير المطابقة للتجار المسجلين. المناديب غير المسجلين يمكن إنشاؤهم بعد تأكيدك."
       onClose={() => {
         if (busy) return;
         onClose();
@@ -162,6 +170,18 @@ export function OrderImportModal({
               {plan.issues.length + plan.duplicates.length} صف مستبعد
             </span>
           </div>
+        ) : null}
+
+        {strictPlan.missingCouriers.length > 0 ? (
+          <CheckboxField
+            checked={createMissing}
+            onChange={(checked) => setCreateMissing(checked)}
+            disabled={busy}
+            label={`إنشاء ${strictPlan.missingCouriers.length} مندوب غير مسجل`}
+            hint={`سيُضاف هؤلاء باسمهم فقط وبربح ثابت صفر، ثم تُستورد طلباتهم: ${strictPlan.missingCouriers
+              .slice(0, 6)
+              .join("، ")}${strictPlan.missingCouriers.length > 6 ? "…" : ""}`}
+          />
         ) : null}
 
         {plan.issues.length + plan.duplicates.length > 0 ? (

@@ -136,6 +136,35 @@ export async function insertCourier(
   return created;
 }
 
+/**
+ * Creates a placeholder roster row for a courier named in an imported file.
+ *
+ * The spreadsheet only carries the display name, so the phone stays empty, the
+ * payout block stays empty and the fixed profit starts at zero: the import can
+ * never invent an earning rate. The operator completes the record afterwards
+ * from the couriers screen.
+ */
+export async function insertImportedCourier(displayName: string): Promise<string> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("couriers")
+    .insert({
+      display_name: displayName,
+      phone: "",
+      fixed_profit_per_order_minor: 0,
+      payout_preferences: {},
+      active: true,
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new CouriersError("ROSTER_FAILED", "تعذر حفظ سجل مندوب التوصيل.", 502);
+  }
+  return (data as { id: string }).id;
+}
+
 export async function updateCourier(
   id: string,
   input: CourierUpdateInput,

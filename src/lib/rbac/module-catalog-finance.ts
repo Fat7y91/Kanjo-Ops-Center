@@ -51,16 +51,6 @@ export const FINANCE_MODULES: readonly ModuleDefinition[] = [
     icon: "operations",
   },
   {
-    // Per-employee operations ledger. This is the evidence the payroll desk
-    // reviews when it computes incentive bands; it is not a payslip itself.
-    href: "/operations/kpi",
-    label: "سجل أداء الموظفين",
-    shortLabel: "الأداء",
-    description: "عدد العمليات المسجلة لكل موظف وقيمتها الشهرية.",
-    permission: "view_operations_kpi",
-    icon: "kpi",
-  },
-  {
     // Discount catalogue. Managing and viewing are separate grants so a
     // logger can pick a coupon without being able to edit funding rules.
     href: "/coupons",

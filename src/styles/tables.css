@@ -96,6 +96,10 @@
   text-align: right !important;
 }
 
+.align-center {
+  text-align: center !important;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;

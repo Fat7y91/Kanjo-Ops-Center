@@ -57,7 +57,7 @@ export const CORE_MODULES: readonly ModuleDefinition[] = [
     shortLabel: "التجار",
     description: "دليل التجار والملكية وإجراءات دورة الحياة.",
     permission: "view_merchants",
-    alsoGrantedBy: ["view_merchant_profile", "add_merchant"],
+    alsoGrantedBy: ["view_merchant_profile", "add_merchant", "import_merchants"],
     icon: "merchants",
   },
   {

@@ -33,6 +33,11 @@ export async function POST(request: Request) {
     typeof body === "object" && body !== null && "rows" in body
       ? (body as { rows?: unknown }).rows
       : undefined;
+  const createMissingCouriers =
+    typeof body === "object" &&
+    body !== null &&
+    "createMissingCouriers" in body &&
+    (body as { createMissingCouriers?: unknown }).createMissingCouriers === true;
 
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json(
@@ -65,6 +70,7 @@ export async function POST(request: Request) {
       session.user.id,
       rows as Record<string, unknown>[],
       roster,
+      { createMissingCouriers },
     );
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },

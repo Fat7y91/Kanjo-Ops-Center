@@ -7,6 +7,11 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 import { monthLabel, recentMonthKeys } from "@/lib/kpi/calendar";
 import { formatScore } from "@/lib/kpi/format";
 import { loadKpiDataset } from "@/lib/kpi/repository";
+import { operationMoney } from "@/lib/operations/format";
+import {
+  loadOperationsKpiReport,
+  normalizeMonth,
+} from "@/lib/operations/kpi-service";
 import { buildKpiReport } from "@/lib/kpi/services/agent-kpi-service";
 import { KpiError } from "@/lib/kpi/types";
 import {
@@ -37,6 +42,15 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
 
   const filters = normalizeFilters(parseKpiFilters(params));
   const dataset = await loadKpiDataset(filters.month);
+  // The money summary stays behind the payroll evidence permission: a courier
+  // sees their own scorecard, never the commission totals the blind-entry rule
+  // keeps away from field staff.
+  const canViewOperations = session.permissions.includes("view_operations_kpi");
+  const operations = canViewOperations
+    ? await loadOperationsKpiReport(normalizeMonth(filters.month)).catch(() => ({
+        totals: { operationCount: 0, orderValueTotal: 0, commissionTotal: 0 },
+      }))
+    : null;
   const allowedCityIds = await effectiveCityIds(session);
 
   const { scope, lockedToSelf, selfAgent, cityId } = resolveKpiScope({
@@ -144,6 +158,28 @@ export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) 
           detail="المؤشرات تتكيف مع مرحلة دورة الحياة"
         />
       </section>
+
+      {operations ? (
+        <section className="stat-grid" aria-label="ملخص عمليات الشهر">
+          <StatCard
+            label="إجمالي العمليات"
+            value={String(operations.totals.operationCount)}
+            detail="عملية مسجلة في الشهر"
+          />
+          <StatCard
+            label="قيمة الطلبات"
+            value={operationMoney(operations.totals.orderValueTotal, "EGP")}
+            detail="إجمالي قيمة الطلبات المسجلة"
+            tone="gold"
+          />
+          <StatCard
+            label="إجمالي العمولات"
+            value={operationMoney(operations.totals.commissionTotal, "EGP")}
+            detail="عمولات التجار المحتسبة"
+            tone="green"
+          />
+        </section>
+      ) : null}
 
       <section className="kpi-agent-grid">
         {report.snapshots.map((snapshot) => (

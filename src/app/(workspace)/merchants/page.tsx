@@ -47,6 +47,7 @@ export default async function MerchantsPage({
       <MerchantsIsland
         initialQuery={query}
         canCreate={session.permissions.includes("add_merchant")}
+        canImport={session.permissions.includes("import_merchants")}
         cities={availableCities}
         taxonomy={{ vendorTypes: listVendorTypes() }}
         defaultCityId={defaultCityId}
