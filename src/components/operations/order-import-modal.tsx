@@ -177,7 +177,7 @@ export function OrderImportModal({
             checked={createMissing}
             onChange={(checked) => setCreateMissing(checked)}
             disabled={busy}
-            label={`إنشاء ${strictPlan.missingCouriers.length} مندوب غير مسجل`}
+            label="إنشاء المناديب غير المسجلين"
             hint={`سيُضاف هؤلاء باسمهم فقط وبربح ثابت صفر، ثم تُستورد طلباتهم: ${strictPlan.missingCouriers
               .slice(0, 6)
               .join("، ")}${strictPlan.missingCouriers.length > 6 ? "…" : ""}`}

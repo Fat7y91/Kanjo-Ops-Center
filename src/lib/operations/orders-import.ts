@@ -182,6 +182,13 @@ export function planImport(
     const merchantName = clean(
       field(row, "vendor", "vendors", "vendor_name", "merchant", "merchant_name", "merchantName", "التاجر", "اسم التاجر"),
     );
+    if (merchantName.includes(",")) {
+      issues.push({
+        line,
+        message: `طلب متعدد التجار (رقم ${orderId}): يجب إضافته يدوياً.`,
+      });
+      return;
+    }
     const courierName = clean(
       field(row, "delivery_partner", "deliveryPartner", "courier", "courier_name", "courierName", "المندوب", "اسم المندوب"),
     );
