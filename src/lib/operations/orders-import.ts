@@ -208,15 +208,18 @@ export function planImport(
       issues.push({ line, message: "اسم مندوب التوصيل مفقود." });
       return;
     }
-    if (!courierId && !options.createMissingCouriers) {
-      issues.push({
-        line,
-        message: `مندوب توصيل غير معروف: ${courierName}.`,
-      });
-      return;
-    }
     if (!courierId) {
+      // Collected even while the preview is still strict: the checkbox is
+      // offered so the operator can turn these rows into valid ones, and one
+      // bad row earlier in the file must not hide that affordance.
       missing.add(courierName);
+      if (!options.createMissingCouriers) {
+        issues.push({
+          line,
+          message: `مندوب توصيل غير معروف: ${courierName}.`,
+        });
+        return;
+      }
     }
 
     const orderValue = parseAmount(

@@ -85,6 +85,18 @@ test("a known courier is never reported as missing", () => {
   assert.deepEqual(plan.missingCouriers, []);
 });
 
+test("a bad row does not hide missing couriers from other valid rows", () => {
+  const plan = importer.planImport(
+    [
+      row({ order_id: "ORD-1", delivery_partner: "" }),
+      row({ order_id: "ORD-2", delivery_partner: "مجهول" }),
+    ],
+    roster,
+  );
+  assert.equal(plan.issues.length, 2);
+  assert.deepEqual(plan.missingCouriers, ["مجهول"]);
+});
+
 test("an unknown payment method is rejected", () => {
   const plan = importer.planImport(
     [row({ payment_method: "bitcoin" })],
