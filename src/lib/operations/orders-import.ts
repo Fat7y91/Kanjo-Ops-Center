@@ -180,7 +180,7 @@ export function planImport(
     }
 
     const merchantName = clean(
-      field(row, "vendor", "vendor_name", "merchant", "merchant_name", "merchantName", "التاجر", "اسم التاجر"),
+      field(row, "vendor", "vendors", "vendor_name", "merchant", "merchant_name", "merchantName", "التاجر", "اسم التاجر"),
     );
     const courierName = clean(
       field(row, "delivery_partner", "deliveryPartner", "courier", "courier_name", "courierName", "المندوب", "اسم المندوب"),
