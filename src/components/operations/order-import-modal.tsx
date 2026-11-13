@@ -105,8 +105,8 @@ export function OrderImportModal({
   }
 
   async function submit() {
-    if (plan.candidates.length === 0) {
-      setError("لا توجد صفوف صالحة للاستيراد.");
+    if (rows.length === 0) {
+      setError("لم يُقرأ أي صف من الملف.");
       return;
     }
     setBusy(true);
@@ -119,6 +119,8 @@ export function OrderImportModal({
         body: JSON.stringify({
           rows,
           createMissingCouriers: createMissing,
+          // Always an object: when every courier already exists the map is
+          // simply empty, and the import still posts the valid rows.
           courierProfits: Object.fromEntries(
             strictPlan.missingCouriers.map((name) => [
               name,
@@ -274,7 +276,7 @@ export function OrderImportModal({
           <Button
             variant="primary"
             onClick={submit}
-            disabled={busy || plan.candidates.length === 0}
+            disabled={busy || rows.length === 0}
           >
             {busy ? "جارٍ الاستيراد…" : "استيراد الطلبات"}
           </Button>
