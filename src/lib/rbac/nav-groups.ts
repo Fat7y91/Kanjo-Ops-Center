@@ -20,11 +20,6 @@ export type NavGroup = {
 
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
-    id: "admin",
-    label: "الإدارة",
-    hrefs: ["/cities", "/admin/permissions", "/admin/audit", "/profile"],
-  },
-  {
     id: "operations",
     label: "التشغيل",
     children: [
@@ -51,6 +46,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
+    id: "marketing",
+    label: "التسويق",
+    hrefs: ["/marketing", "/marketing/leads", "/coupons"],
+  },
+  {
     id: "finance",
     label: "المالية",
     hrefs: [
@@ -63,9 +63,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    id: "marketing",
-    label: "التسويق",
-    hrefs: ["/marketing", "/marketing/leads", "/coupons"],
+    id: "admin",
+    label: "الإدارة",
+    hrefs: ["/cities", "/admin/permissions", "/admin/audit", "/profile"],
   },
 ];
 

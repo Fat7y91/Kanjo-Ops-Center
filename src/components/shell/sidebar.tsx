@@ -104,16 +104,15 @@ export function Sidebar({
       <Button
         variant="ghost"
         size="sm"
-        className="nav-collapse-toggle"
-        aria-label={collapsed ? "توسيع القائمة" : "تصغير القائمة"}
-        aria-pressed={collapsed}
-        title={collapsed ? "توسيع القائمة" : "تصغير القائمة"}
+        className="sidebar-edge-toggle"
+        aria-label={collapsed ? "تثبيت القائمة مفتوحة" : "إخفاء القائمة"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "تثبيت القائمة مفتوحة" : "إخفاء القائمة"}
         onClick={onToggleCollapsed}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M15 6l-6 6 6 6" />
         </svg>
-        <span>تصغير القائمة</span>
       </Button>
 
       {showRoot && rootModule ? (
@@ -134,7 +133,6 @@ export function Sidebar({
         <SidebarGroups
           groups={groups}
           activeHref={activeHref}
-          collapsed={collapsed}
           onNavigate={onClose}
         />
       ) : (

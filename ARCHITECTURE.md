@@ -344,13 +344,14 @@ never occupy a primary sidebar item. The topbar bell is the entry point, and its
 `عرض كل الإشعارات` footer link opens the full inbox.
 
 The sidebar reads `src/lib/rbac/nav-groups.ts` for hierarchy only: the root
-dashboard is pinned, then five groups (الإدارة، التشغيل، المالية، التسويق) with
-التشغيل split into التعاقدات، إدخال البيانات and المبيعات sub-groups. Each href is
+dashboard is pinned, then four groups in PO priority order (التشغيل، التسويق،
+المالية، الإدارة) with التشغيل split into التعاقدات، إدخال البيانات and المبيعات
+sub-groups. Each href is
 resolved against `MODULES`, then filtered with `moduleAllows`; a group whose
 every row is revoked is dropped entirely. Group headers are Headless UI
-`Button`s with `aria-expanded`. On desktop the rail collapses to a persisted
-76px icon strip (`kanjo-nav-collapsed` in `localStorage`) with tooltips; at
-≤1023px it becomes the existing off-canvas drawer instead.
+`Button`s with `aria-expanded`. On desktop the rail defaults to a 76px icon
+strip and expands over the workspace on hover or focus; the edge chevron pins it
+open or closed. At ≤1023px it becomes the existing off-canvas drawer instead.
 
 
 ### Resilience — no white screens (T1)

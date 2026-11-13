@@ -17,7 +17,7 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [desktop, setDesktop] = useState(false);
 
   useEffect(() => {
@@ -27,14 +27,6 @@ export function AppShell({
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   }, []);
-
-  useEffect(() => {
-    setCollapsed(window.localStorage.getItem("kanjo-nav-collapsed") === "1");
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("kanjo-nav-collapsed", collapsed ? "1" : "0");
-  }, [collapsed]);
 
   useEffect(() => {
     setNavOpen(false);

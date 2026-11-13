@@ -20,7 +20,7 @@ export function CatalogSection({ catalog, onDrill }: CatalogSectionProps) {
     <Widget
       eyebrow="الكتالوج"
       title="جاهزية المنتجات"
-      span={6}
+      span={4}
       badge={<span className="badge">{count(catalog.total)} سجل</span>}
     >
       <div className="bi-stat-cluster bi-stat-cluster-row">

@@ -24,7 +24,7 @@ export function MarketingSection({ marketing, onDrill }: MarketingSectionProps) 
     <Widget
       eyebrow="التسويق"
       title="الوصول والتحويل"
-      span={12}
+      span={4}
       badge={
         <span className="badge badge-gold">
           تكلفة العميل المحتمل {money(marketing.costPerLead)}

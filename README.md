@@ -10,17 +10,17 @@ The sidebar is grouped, collapsible and filtered by the same capability
 catalogue that guards each route:
 
 - **النظرة العامة** — pinned root dashboard (`/overview`).
-- **الإدارة** — cities, system users, audit log, profile.
 - **التشغيل** — contracts sub-group (merchant applications, field operations,
   archived reports, contracts), data-entry sub-group (catalog, image review,
   taxonomy), sales sub-group (merchants, couriers, orders).
+- **التسويق** — campaigns, campaign leads, coupons.
 - **المالية** — agent KPIs, bank accounts, payroll, capital approvals,
   commission rates, clearinghouse.
-- **التسويق** — campaigns, campaign leads, coupons.
+- **الإدارة** — cities, system users, audit log, profile.
 
 A group disappears when every route inside it is revoked. On desktop the rail
-collapses to a persisted icon strip; below 1024px it becomes an off-canvas
-drawer. `/notifications` stays out of the sidebar and opens from the topbar
+starts collapsed as an icon strip and expands on hover; the edge chevron pins
+it open or closed. Below 1024px it becomes an off-canvas drawer. `/notifications` stays out of the sidebar and opens from the topbar
 bell.
 
 The overview presents a clickable summary strip (merchants, signed contracts,

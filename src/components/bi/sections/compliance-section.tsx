@@ -25,7 +25,7 @@ export function ComplianceSection({
     <Widget
       eyebrow="الامتثال"
       title="حزمة المستندات القانونية"
-      span={6}
+      span={4}
       badge={<span className="badge">{count(fullyComplete)} ملف مكتمل</span>}
     >
       <div className="bi-split bi-split-tight">

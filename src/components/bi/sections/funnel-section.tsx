@@ -34,7 +34,7 @@ export function FunnelSection({
     <Widget
       eyebrow="مسار التعاقدات مع التجار"
       title="دورة حياة التاجر"
-      span={12}
+      span={4}
       badge={<span className="badge">{count(visited)} زيارة في النطاق</span>}
     >
       <div className="bi-split">

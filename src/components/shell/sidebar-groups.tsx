@@ -18,33 +18,29 @@ export type SidebarGroup = {
 type SidebarGroupsProps = {
   groups: SidebarGroup[];
   activeHref: string;
-  collapsed: boolean;
   onNavigate: () => void;
 };
 
 function NavItem({
   module,
   active,
-  collapsed,
   onNavigate,
 }: {
   module: ModuleDefinition;
   active: boolean;
-  collapsed: boolean;
   onNavigate: () => void;
 }) {
   return (
     <Link
       href={module.href}
-      title={collapsed ? module.label : undefined}
-      aria-label={collapsed ? module.label : undefined}
+      title={module.label}
       className={`nav-link${active ? " is-active" : ""}`}
       aria-current={active ? "page" : undefined}
       onClick={onNavigate}
     >
       <ModuleIcon name={module.icon} />
       <span className="nav-link-label">{module.label}</span>
-      {collapsed ? null : <NavLinkStatus />}
+      <NavLinkStatus />
     </Link>
   );
 }
@@ -52,12 +48,10 @@ function NavItem({
 function GroupBlock({
   group,
   activeHref,
-  collapsed,
   onNavigate,
 }: {
   group: SidebarGroup;
   activeHref: string;
-  collapsed: boolean;
   onNavigate: () => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -84,7 +78,6 @@ function GroupBlock({
               key={module.href}
               module={module}
               active={module.href === activeHref}
-              collapsed={collapsed}
               onNavigate={onNavigate}
             />
           ))}
@@ -97,7 +90,6 @@ function GroupBlock({
                   key={module.href}
                   module={module}
                   active={module.href === activeHref}
-                  collapsed={collapsed}
                   onNavigate={onNavigate}
                 />
               ))}
@@ -112,36 +104,15 @@ function GroupBlock({
 /**
  * Grouped navigation list.
  *
- * Collapsed mode flattens the hierarchy to one icon strip: the group headers
- * would consume more vertical space than the rows they label, and the icon plus
- * tooltip is still a complete affordance.
+ * The full hierarchy stays in the DOM on every breakpoint. Collapsed mode is a
+ * visual contract owned by CSS: labels and group headers disappear until the
+ * rail is hovered or focused, so hover-to-expand needs no second render pass.
  */
 export function SidebarGroups({
   groups,
   activeHref,
-  collapsed,
   onNavigate,
 }: SidebarGroupsProps) {
-  if (collapsed) {
-    const modules = groups.flatMap(function flatten(group): ModuleDefinition[] {
-      return [...group.modules, ...group.children.flatMap(flatten)];
-    });
-
-    return (
-      <nav className="nav" aria-label="وحدات مساحة العمل">
-        {modules.map((module) => (
-          <NavItem
-            key={module.href}
-            module={module}
-            active={module.href === activeHref}
-            collapsed
-            onNavigate={onNavigate}
-          />
-        ))}
-      </nav>
-    );
-  }
-
   return (
     <nav className="nav" aria-label="وحدات مساحة العمل">
       {groups.map((group) => (
@@ -149,7 +120,6 @@ export function SidebarGroups({
           key={group.id}
           group={group}
           activeHref={activeHref}
-          collapsed={false}
           onNavigate={onNavigate}
         />
       ))}
