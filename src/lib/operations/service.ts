@@ -92,12 +92,27 @@ function translate(error: unknown): never {
 export async function loadOperationsBoard(): Promise<OperationsBoard> {
   requireDatabase();
 
-  const [operations, couriers, merchants, coupons] = await Promise.all([
-    listOperations(),
-    listCouriers(),
-    listMerchantOptions(),
-    listCouponOptions(),
-  ]);
+  // One failing list must not blank the whole screen, and a legacy row must not
+  // take the logger down with it. Each read settles independently and the
+  // rejection is logged so the real cause is visible in the server logs.
+  const [operationsRead, couriersRead, merchantsRead, couponsRead] =
+    await Promise.allSettled([
+      listOperations(),
+      listCouriers(),
+      listMerchantOptions(),
+      listCouponOptions(),
+    ]);
+
+  function settle<T>(result: PromiseSettledResult<T[]>, label: string): T[] {
+    if (result.status === "fulfilled") return result.value;
+    console.error(`[operations] failed to load ${label}`, result.reason);
+    return [];
+  }
+
+  const operations = settle(operationsRead, "operations");
+  const couriers = settle(couriersRead, "couriers");
+  const merchants = settle(merchantsRead, "merchants");
+  const coupons = settle(couponsRead, "coupons");
 
   return {
     operations: operations.map(toOperationSummary),

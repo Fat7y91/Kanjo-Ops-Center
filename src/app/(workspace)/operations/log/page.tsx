@@ -11,12 +11,15 @@ export default async function OperationsLogPage() {
   await requirePermission("log_operations");
 
   const [board, roster] = await Promise.all([
-    loadOperationsBoard().catch(() => ({
-      operations: [],
-      couriers: [],
-      merchants: [],
-      coupons: [],
-    })),
+    loadOperationsBoard().catch((error) => {
+      console.error("[operations] board load failed", error);
+      return {
+        operations: [],
+        couriers: [],
+        merchants: [],
+        coupons: [],
+      };
+    }),
     // The import preview needs the same name-keyed roster the server uses. If
     // the board read degrades, this still resolves independently so valid rows
     // are not reported as unknown merchants.
