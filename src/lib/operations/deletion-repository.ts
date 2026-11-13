@@ -30,7 +30,11 @@ export async function deletedOperationIds(): Promise<Set<string>> {
     .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
   if (error) {
+    // `42501` is the rollout window before the table grant lands: treat it as
+    // "no tombstones yet" so the orders board still renders instead of going
+    // blank while the migration is being applied.
     if (isMissingSchemaObject(error)) return new Set();
+    if ((error as { code?: unknown }).code === "42501") return new Set();
     throw error;
   }
   return new Set(
