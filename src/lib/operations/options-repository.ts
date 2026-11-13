@@ -52,21 +52,33 @@ export async function listCouriers(): Promise<CourierOption[]> {
 
 export async function listMerchantOptions(): Promise<MerchantOption[]> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("merchants")
-    .select("id,name")
-    .order("name", { ascending: true })
-    .limit(500)
-    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+  // The directory reads the whole book, so the import roster must too: a fixed
+  // cap would silently drop the tail of the alphabet and reject merchants the
+  // operator can plainly see on the directory screen.
+  const pageSize = 1000;
+  const all: { id: string; name: string }[] = [];
 
-  if (error && isMissingSchemaObject(error)) return [];
-  if (error) throw error;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await client
+      .schema("app")
+      .from("merchants")
+      .select("id,name")
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1)
+      .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
 
-  return ((data ?? []) as { id: string; name: string }[]).map((row) => ({
-    id: row.id,
-    name: row.name,
-  }));
+    if (error) {
+      if (isMissingSchemaObject(error)) return all;
+      throw error;
+    }
+
+    const rows = (data ?? []) as { id: string; name: string }[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+  }
+
+  return all.map((row) => ({ id: row.id, name: row.name }));
 }
 
 export async function listCouponOptions(): Promise<CouponOption[]> {

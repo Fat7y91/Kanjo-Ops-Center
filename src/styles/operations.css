@@ -217,10 +217,5 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-
-@media (min-width: 960px) {
-  .operation-log {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    align-items: start;
-  }
-}
+/* The orders screen is a single full-width table; keeping the old two-column
+ * desktop grid would compress it into the left half of the page. */
