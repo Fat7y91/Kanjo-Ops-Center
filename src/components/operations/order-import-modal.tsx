@@ -51,7 +51,7 @@ export function OrderImportModal({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [createMissing, setCreateMissing] = useState(false);
-  const [courierProfit, setCourierProfit] = useState("0");
+  const [courierProfits, setCourierProfits] = useState<Record<string, string>>({});
 
   // The roster is derived from the same options the logger already holds, so
   // the preview matches the parties the server can resolve by name.
@@ -119,7 +119,12 @@ export function OrderImportModal({
         body: JSON.stringify({
           rows,
           createMissingCouriers: createMissing,
-          courierProfit: Number(courierProfit) || 0,
+          courierProfits: Object.fromEntries(
+            strictPlan.missingCouriers.map((name) => [
+              name,
+              Number(courierProfits[name]) || 0,
+            ]),
+          ),
         }),
       });
       const payload = (await response.json()) as {
@@ -149,7 +154,7 @@ export function OrderImportModal({
     setSummary(null);
     setError("");
     setCreateMissing(false);
-    setCourierProfit("0");
+    setCourierProfits({});
   }
 
   return (
@@ -193,27 +198,37 @@ export function OrderImportModal({
         ) : null}
 
         {strictPlan.missingCouriers.length > 0 ? (
-          <div className="form-grid">
+          <div className="form-stack">
             <CheckboxField
               checked={createMissing}
               onChange={(checked) => setCreateMissing(checked)}
               disabled={busy}
-              label="إنشاء المناديب غير المسجلين"
-              hint={`سيُضاف هؤلاء بالاسم والربح الثابت المدخل، ثم تُستورد طلباتهم: ${strictPlan.missingCouriers
-                .slice(0, 6)
-                .join("، ")}${strictPlan.missingCouriers.length > 6 ? "…" : ""}`}
+              label={`إنشاء المناديب غير المسجلين (${strictPlan.missingCouriers.length})`}
+              hint="حدّد الربح الثابت لكل مندوب على حدة قبل الإنشاء. تُحفظ قيمة كل مندوب على سجله فقط."
             />
-            <TextField
-              label="الربح الثابت للطلب"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              dir="ltr"
-              value={courierProfit}
-              disabled={busy || !createMissing}
-              onChange={(event) => setCourierProfit(event.target.value)}
-            />
+            {createMissing ? (
+              <div className="form-grid">
+                {strictPlan.missingCouriers.map((name) => (
+                  <TextField
+                    key={name}
+                    label={`الربح الثابت · ${name}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    dir="ltr"
+                    value={courierProfits[name] ?? "0"}
+                    disabled={busy}
+                    onChange={(event) =>
+                      setCourierProfits((current) => ({
+                        ...current,
+                        [name]: event.target.value,
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

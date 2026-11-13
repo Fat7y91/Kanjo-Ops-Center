@@ -40,7 +40,7 @@ function requireDatabase(): void {
 async function createMissingCouriers(
   rows: readonly Record<string, unknown>[],
   roster: ImportRoster,
-  fixedProfit: number,
+  profits: Record<string, number>,
 ): Promise<ImportRoster> {
   const preview = planImport(rows, roster, { createMissingCouriers: true });
   if (preview.missingCouriers.length === 0) return roster;
@@ -48,7 +48,7 @@ async function createMissingCouriers(
   const couriers = new Map(roster.couriers);
   for (const name of preview.missingCouriers) {
     try {
-      const createdId = await insertImportedCourier(name, fixedProfit);
+      const createdId = await insertImportedCourier(name, profits[name] ?? 0);
       couriers.set(matchKey(name), createdId);
     } catch {
       // Left unresolved: the final plan turns this row into a skipped issue.
@@ -73,7 +73,10 @@ export async function importOrders(
   loggedBy: string,
   rows: readonly Record<string, unknown>[],
   roster: ImportRoster,
-  options: { createMissingCouriers?: boolean; courierProfit?: number } = {},
+  options: {
+    createMissingCouriers?: boolean;
+    courierProfits?: Record<string, number>;
+  } = {},
 ): Promise<{
   imported: number;
   skipped: { line: number; message: string }[];
@@ -81,7 +84,7 @@ export async function importOrders(
   requireDatabase();
 
   const activeRoster = options.createMissingCouriers
-    ? await createMissingCouriers(rows, roster, options.courierProfit ?? 0)
+    ? await createMissingCouriers(rows, roster, options.courierProfits ?? {})
     : roster;
 
   const plan = planImport(rows, activeRoster);

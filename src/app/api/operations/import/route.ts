@@ -38,14 +38,23 @@ export async function POST(request: Request) {
     body !== null &&
     "createMissingCouriers" in body &&
     (body as { createMissingCouriers?: unknown }).createMissingCouriers === true;
-  const courierProfitRaw =
-    typeof body === "object" && body !== null && "courierProfit" in body
-      ? Number((body as { courierProfit?: unknown }).courierProfit)
-      : 0;
-  const courierProfit =
-    Number.isFinite(courierProfitRaw) && courierProfitRaw > 0
-      ? courierProfitRaw
-      : 0;
+  const courierProfitsRaw =
+    typeof body === "object" && body !== null && "courierProfits" in body
+      ? (body as { courierProfits?: unknown }).courierProfits
+      : undefined;
+  const courierProfits: Record<string, number> = {};
+  if (
+    typeof courierProfitsRaw === "object" &&
+    courierProfitsRaw !== null &&
+    !Array.isArray(courierProfitsRaw)
+  ) {
+    for (const [name, value] of Object.entries(courierProfitsRaw)) {
+      const numeric = Number(value);
+      if (name && Number.isFinite(numeric) && numeric >= 0) {
+        courierProfits[name] = numeric;
+      }
+    }
+  }
 
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json(
@@ -78,7 +87,7 @@ export async function POST(request: Request) {
       session.user.id,
       rows as Record<string, unknown>[],
       roster,
-      { createMissingCouriers, courierProfit },
+      { createMissingCouriers, courierProfits },
     );
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },
