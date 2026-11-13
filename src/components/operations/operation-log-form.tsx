@@ -127,7 +127,12 @@ export function OperationLogForm({
 
   async function handleDelete(ids: string[]) {
     if (!canDelete || ids.length === 0) return;
-    if (!window.confirm(`حذف ${ids.length} طلب من القائمة؟`)) return;
+    if (
+      !window.confirm(
+        `حذف ${ids.length} طلب نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`,
+      )
+    )
+      return;
     setDeleting(true);
     setDeleteError("");
     try {

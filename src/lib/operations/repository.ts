@@ -4,8 +4,6 @@ import { hasSupabaseConfig } from "@/lib/db/supabase/config";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
-import { deletedOperationIds } from "./deletion-repository";
-
 import { resolvePartyNames } from "./party-lookup";
 import { embedName } from "./rows";
 
@@ -125,12 +123,9 @@ async function selectOperations(
 }
 
 export async function listOperations(limit = 100): Promise<OperationLog[]> {
-  const hidden = await deletedOperationIds();
   const primary = await selectOperations(OPERATION_COLUMNS, limit);
   if (!primary.error) {
-    return ((primary.data ?? []) as unknown as OperationRow[])
-      .filter((row) => !hidden.has(row.id))
-      .map(toOperation);
+    return ((primary.data ?? []) as unknown as OperationRow[]).map(toOperation);
   }
   if (!isMissingSchemaObject(primary.error)) throw primary.error;
 
@@ -138,9 +133,7 @@ export async function listOperations(limit = 100): Promise<OperationLog[]> {
   if (fallback.error && isMissingSchemaObject(fallback.error)) return [];
   if (fallback.error) throw fallback.error;
 
-  const rows = ((fallback.data ?? []) as unknown as OperationRow[]).filter(
-    (row) => !hidden.has(row.id),
-  );
+  const rows = (fallback.data ?? []) as unknown as OperationRow[];
   if (rows.length === 0) return [];
 
   // Without the embed, resolve the roster names in one batch so the recent list

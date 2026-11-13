@@ -54,7 +54,7 @@ export async function DELETE(request: Request) {
       typeof body === "object" && body !== null && "ids" in body
         ? (body as { ids?: unknown }).ids
         : undefined;
-    const result = await deleteOperations(session.user.id, ids);
+    const result = await deleteOperations(ids);
     return NextResponse.json(result);
   } catch (error) {
     return apiError(error);

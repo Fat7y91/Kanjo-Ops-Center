@@ -11,7 +11,7 @@ import {
   postSettlement,
 } from "./clearinghouse-repository";
 import { resolvePartyNames } from "./party-lookup";
-import { hideOperations } from "./deletion-repository";
+import { hardDeleteOperations } from "./deletion-repository";
 import {
   insertOperation,
   isOperationsDatabaseConfigured,
@@ -132,14 +132,13 @@ export async function loadOperationsBoard(): Promise<OperationsBoard> {
  * logger never needs to see one.
  */
 /**
- * Hides orders from the working lists behind the `delete_orders` capability.
+ * Permanently removes orders behind the `delete_orders` capability.
  *
- * The operation log and its ledgers stay append-only; this records tombstones
- * so the rows disappear from the orders screen and the clearinghouse without
- * breaking the audit trail or the derived balances.
+ * The row is removed for real, so a corrected CSV can reuse its `order_id`.
+ * A database trigger removes the matching journal entry in the same
+ * transaction, keeping the ledger consistent with the remaining orders.
  */
 export async function deleteOperations(
-  deletedBy: string,
   rawIds: unknown,
 ): Promise<{ deleted: number }> {
   requireDatabase();
@@ -153,7 +152,7 @@ export async function deleteOperations(
   if (ids.length === 0) {
     throw new OperationsError("INVALID_IDS", "لم يتم تحديد أي طلب.", 422);
   }
-  return { deleted: await hideOperations(ids, deletedBy) };
+  return { deleted: await hardDeleteOperations(ids) };
 }
 
 export async function logOperation(
