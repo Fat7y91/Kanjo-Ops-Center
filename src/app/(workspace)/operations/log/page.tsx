@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { OperationLogForm } from "@/components/operations/operation-log-form";
 import { requirePermission } from "@/lib/auth/guard";
+import { loadImportRoster } from "@/lib/operations/options-repository";
 import { loadOperationsBoard } from "@/lib/operations/service";
 
 export const dynamic = "force-dynamic";
@@ -9,12 +10,21 @@ export const runtime = "edge";
 export default async function OperationsLogPage() {
   await requirePermission("log_operations");
 
-  const board = await loadOperationsBoard().catch(() => ({
-    operations: [],
-    couriers: [],
-    merchants: [],
-    coupons: [],
-  }));
+  const [board, roster] = await Promise.all([
+    loadOperationsBoard().catch(() => ({
+      operations: [],
+      couriers: [],
+      merchants: [],
+      coupons: [],
+    })),
+    // The import preview needs the same name-keyed roster the server uses. If
+    // the board read degrades, this still resolves independently so valid rows
+    // are not reported as unknown merchants.
+    loadImportRoster().catch(() => ({
+      merchants: new Map<string, string>(),
+      couriers: new Map<string, string>(),
+    })),
+  ]);
 
   // The service already degrades to an empty board, but a future repository
   // could return a partial shape. Normalise here so the client never receives
@@ -37,6 +47,10 @@ export default async function OperationsLogPage() {
         merchants={merchants}
         coupons={coupons}
         initialOperations={operations}
+        importRoster={{
+          merchants: [...roster.merchants],
+          couriers: [...roster.couriers],
+        }}
       />
     </>
   );

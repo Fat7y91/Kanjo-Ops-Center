@@ -26,12 +26,19 @@ export function OrderImportModal({
   open,
   merchants,
   couriers,
+  rosterEntries,
   onClose,
   onImported,
 }: {
   open: boolean;
   merchants: MerchantOption[];
   couriers: CourierOption[];
+  /**
+   * Name-keyed roster resolved by the server. The modal no longer derives it
+   * from the page board: a degraded board read used to leave the preview with
+   * an empty roster and reject every row as an unknown merchant.
+   */
+  rosterEntries: { merchants: [string, string][]; couriers: [string, string][] };
   onClose: () => void;
   onImported: (message: string) => void;
 }) {
@@ -49,6 +56,13 @@ export function OrderImportModal({
   // The roster is derived from the same options the logger already holds, so
   // the preview matches the parties the server can resolve by name.
   const roster = useMemo<ImportRoster>(() => {
+    if (rosterEntries.merchants.length > 0 || rosterEntries.couriers.length > 0) {
+      return {
+        merchants: new Map(rosterEntries.merchants),
+        couriers: new Map(rosterEntries.couriers),
+      };
+    }
+    // Defensive fallback for callers that only hold the option lists.
     const merchantMap = new Map<string, string>();
     for (const merchant of merchants) {
       merchantMap.set(matchKey(merchant.name), merchant.id);
@@ -58,7 +72,7 @@ export function OrderImportModal({
       courierMap.set(matchKey(courier.displayName), courier.id);
     }
     return { merchants: merchantMap, couriers: courierMap };
-  }, [merchants, couriers]);
+  }, [rosterEntries, merchants, couriers]);
 
   const strictPlan = useMemo(() => planImport(rows, roster), [rows, roster]);
   const plan = useMemo(

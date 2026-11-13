@@ -25,11 +25,16 @@ export function OperationLogForm({
   merchants,
   coupons,
   initialOperations,
+  importRoster,
 }: {
   couriers: CourierOption[];
   merchants: MerchantOption[];
   coupons: CouponOption[];
   initialOperations: OperationSummary[];
+  importRoster: {
+    merchants: [string, string][];
+    couriers: [string, string][];
+  };
 }) {
   const merchantList = Array.isArray(merchants) ? merchants : [];
   const courierList = Array.isArray(couriers) ? couriers : [];
@@ -202,6 +207,7 @@ export function OperationLogForm({
         open={importOpen}
         merchants={merchantList}
         couriers={courierList}
+        rosterEntries={importRoster}
         onClose={() => setImportOpen(false)}
         onImported={(message) => {
           setImportOpen(false);
