@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { apiError, authorize, readJson } from "@/lib/auth/api";
-import { loadOperationsBoard, logOperation } from "@/lib/operations/service";
+import {
+  deleteOperations,
+  loadOperationsBoard,
+  logOperation,
+} from "@/lib/operations/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -34,6 +38,24 @@ export async function POST(request: Request) {
   try {
     const operation = await logOperation(session.user.id, await readJson(request));
     return NextResponse.json({ operation }, { status: 201 });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+/** Deletes the selected orders from the working screen. */
+export async function DELETE(request: Request) {
+  const { session, response } = await authorize("delete_orders");
+  if (!session) return response;
+
+  try {
+    const body = await readJson(request);
+    const ids =
+      typeof body === "object" && body !== null && "ids" in body
+        ? (body as { ids?: unknown }).ids
+        : undefined;
+    const result = await deleteOperations(session.user.id, ids);
+    return NextResponse.json(result);
   } catch (error) {
     return apiError(error);
   }

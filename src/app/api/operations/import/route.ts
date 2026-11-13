@@ -38,6 +38,14 @@ export async function POST(request: Request) {
     body !== null &&
     "createMissingCouriers" in body &&
     (body as { createMissingCouriers?: unknown }).createMissingCouriers === true;
+  const courierProfitRaw =
+    typeof body === "object" && body !== null && "courierProfit" in body
+      ? Number((body as { courierProfit?: unknown }).courierProfit)
+      : 0;
+  const courierProfit =
+    Number.isFinite(courierProfitRaw) && courierProfitRaw > 0
+      ? courierProfitRaw
+      : 0;
 
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json(
@@ -70,7 +78,7 @@ export async function POST(request: Request) {
       session.user.id,
       rows as Record<string, unknown>[],
       roster,
-      { createMissingCouriers },
+      { createMissingCouriers, courierProfit },
     );
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },

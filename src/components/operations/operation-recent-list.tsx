@@ -1,5 +1,8 @@
 "use client";
 
+import { Checkbox } from "@headlessui/react";
+
+import { Button } from "@/components/ui/button";
 import {
   operationDate,
   operationMethodLabel,
@@ -7,135 +10,131 @@ import {
 } from "@/lib/operations/format";
 import type { OperationSummary } from "@/lib/operations/types";
 
-/**
- * The operator's own recent entries, read like a bank statement.
- *
- * Each row answers the two questions a statement must answer without a legend:
- * *who paid whom* (source → destination) and *how much moved* (a signed,
- * colour-coded amount). The route follows the money:
- *
- *   COD     cash collected by the courier is handed to the merchant, so the
- *           movement reads "from the courier, to the merchant"
- *   ONLINE  Kanjo received the customer's payment electronically and owes the
- *           merchant, so the movement reads "from Kanjo, to the merchant"
- *
- * This is still a blind-entry surface: the row carries only what the employee
- * typed — order value, delivery fee, wallet discount — never a commission,
- * profit, split or balance.
- *
- * A row whose id still carries the `.pending-` prefix is in flight: it is shown
- * muted with a `قيد التسجيل` badge so the optimistic insert is never mistaken
- * for a stored order.
- */
-
 function netCollected(operation: OperationSummary): number {
   return (
     operation.orderValue + operation.deliveryFee - operation.walletDiscount
   );
 }
 
+const CHECKBOX_CLASS =
+  "grid size-4 shrink-0 place-items-center rounded border-0 bg-[color:var(--surface-soft)] text-white ring-1 ring-inset ring-[color:var(--kanjo-field-border)] transition duration-200 ease-out data-[checked]:bg-[color:var(--kanjo-purple-interactive)] data-[checked]:ring-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)]";
+
+/**
+ * Orders table with selection and deletion.
+ *
+ * The row still reads like a statement: who paid whom, how much moved and on
+ * which date. It never shows commission, courier profit or balances. Deleting
+ * hides the row from this screen while the append-only log keeps the evidence.
+ */
 export function OperationRecentList({
   operations,
+  canDelete,
+  selected,
+  onToggle,
+  onToggleAll,
+  onDelete,
+  deleting,
 }: {
   operations: OperationSummary[];
+  canDelete: boolean;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleAll: (checked: boolean) => void;
+  onDelete: (ids: string[]) => void;
+  deleting: boolean;
 }) {
   if (operations.length === 0) {
-    return <p className="muted">لا توجد عمليات مسجلة بعد.</p>;
+    return <p className="empty-state">لا توجد عمليات مسجلة بعد.</p>;
   }
 
+  const allSelected =
+    operations.length > 0 && operations.every((row) => selected.has(row.id));
+  const selectedIds = operations
+    .filter((row) => selected.has(row.id))
+    .map((row) => row.id);
+
   return (
-    <ul className="operation-list">
-      {operations.map((operation) => {
-        const pending = operation.id.startsWith(".pending-");
-        const cod = operation.paymentMethod === "COD";
-        const money = (value: number) =>
-          operationMoney(value, operation.currency);
-        const collected = netCollected(operation);
+    <>
+      {canDelete && selectedIds.length > 0 ? (
+        <div className="inline-note" role="status">
+          <strong>{selectedIds.length} طلب محدد</strong>
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={deleting}
+            onClick={() => onDelete(selectedIds)}
+          >
+            {deleting ? "جارٍ الحذف…" : "حذف المحدد"}
+          </Button>
+        </div>
+      ) : null}
 
-        return (
-          <li key={operation.id} data-pending={pending || undefined}>
-            <div className="operation-row-main">
-              <div className="operation-row-route">
-                <span className="operation-party">
-                  <span className="operation-party-role">من</span>
-                  <strong>
-                    {cod
-                      ? operation.courierName || "مندوب التوصيل"
-                      : "كانجو"}
-                  </strong>
-                </span>
-                <span className="operation-row-arrow" aria-hidden="true">
-                  ←
-                </span>
-                <span className="operation-party">
-                  <span className="operation-party-role">إلى</span>
-                  <strong>{operation.merchantName || "تاجر"}</strong>
-                </span>
-              </div>
-
-              <span className="operation-row-ref">
-                <span dir="ltr">{operation.orderId || "—"}</span>
-                <span className="operation-row-dot" aria-hidden="true">
-                  ·
-                </span>
-                <span>{operationMethodLabel(operation.paymentMethod)}</span>
-                {!cod && operation.courierName ? (
-                  <>
-                    <span className="operation-row-dot" aria-hidden="true">
-                      ·
-                    </span>
-                    <span>مندوب التوصيل {operation.courierName}</span>
-                  </>
-                ) : null}
-                {operation.couponCode ? (
-                  <>
-                    <span className="operation-row-dot" aria-hidden="true">
-                      ·
-                    </span>
-                    <span dir="ltr">كوبون {operation.couponCode}</span>
-                  </>
-                ) : null}
-              </span>
-
-              <span className="operation-row-breakdown">
-                <span>{money(operation.orderValue)} قيمة الطلب</span>
-                {operation.deliveryFee > 0 ? (
-                  <span>+ {money(operation.deliveryFee)} توصيل</span>
-                ) : null}
-                {operation.walletDiscount > 0 ? (
-                  <span className="operation-row-deduction">
-                    − {money(operation.walletDiscount)} خصم محفظة
-                  </span>
-                ) : null}
-              </span>
-
-              {operation.note ? (
-                <span className="muted operation-row-note">
-                  {operation.note}
-                </span>
+      <div className="table-wrap w-full overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              {canDelete ? (
+                <th className="align-center">
+                  <Checkbox
+                    aria-label="تحديد كل الطلبات"
+                    className={CHECKBOX_CLASS}
+                    checked={allSelected}
+                    onChange={onToggleAll}
+                  />
+                </th>
               ) : null}
-            </div>
-
-            <div className="operation-row-amount">
-              {pending ? (
-                <span className="badge badge-gold">قيد التسجيل</span>
-              ) : (
-                <span
-                  className={`badge ${cod ? "badge-green" : "badge-blue"}`}
-                >
-                  {cod ? "نقدي محصّل" : "دفع إلكتروني"}
-                </span>
-              )}
-              <strong className="operation-amount operation-amount-credit">
-                + {money(collected)}
-              </strong>
-              <span className="muted operation-row-date">
-                {operationDate(operation.occurredAt)}
-              </span>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+              <th>الطلب</th>
+              <th>الأطراف</th>
+              <th>القيمة</th>
+              <th>الدفع</th>
+              <th>التاريخ</th>
+              {canDelete ? <th className="align-center">حذف</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {operations.map((operation) => {
+              const cod = operation.paymentMethod === "COD";
+              return (
+                <tr key={operation.id}>
+                  {canDelete ? (
+                    <td className="align-center">
+                      <Checkbox
+                        aria-label={`تحديد الطلب ${operation.orderId}`}
+                        className={CHECKBOX_CLASS}
+                        checked={selected.has(operation.id)}
+                        onChange={() => onToggle(operation.id)}
+                      />
+                    </td>
+                  ) : null}
+                  <td dir="ltr">{operation.orderId || "—"}</td>
+                  <td>
+                    {cod
+                      ? `${operation.courierName || "مندوب"} ← ${operation.merchantName || "تاجر"}`
+                      : `كانجو ← ${operation.merchantName || "تاجر"}`}
+                  </td>
+                  <td dir="ltr">
+                    {operationMoney(netCollected(operation), operation.currency)}
+                  </td>
+                  <td>{operationMethodLabel(operation.paymentMethod)}</td>
+                  <td>{operationDate(operation.occurredAt)}</td>
+                  {canDelete ? (
+                    <td className="align-center">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={deleting}
+                        onClick={() => onDelete([operation.id])}
+                      >
+                        حذف
+                      </Button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

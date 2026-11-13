@@ -31,14 +31,16 @@ function requireDatabase(): void {
  * Creates the couriers an import references but the roster does not hold.
  *
  * Only reached after the operator explicitly confirmed the missing names in the
- * preview. Phone is left empty because the spreadsheet does not carry one, and
- * the fixed profit starts at zero so the import can never invent an earning
- * rate. A name that fails to insert stays unknown, and the final plan reports
- * its row as skipped.
+ * preview. Phone is left empty because the spreadsheet does not carry one; the
+ * fixed profit is the amount the operator entered beside the checkbox and is
+ * copied onto every new courier so the imported orders post the right ledgers.
+ * A name that fails to insert stays unknown, and the final plan reports its row
+ * as skipped.
  */
 async function createMissingCouriers(
   rows: readonly Record<string, unknown>[],
   roster: ImportRoster,
+  fixedProfit: number,
 ): Promise<ImportRoster> {
   const preview = planImport(rows, roster, { createMissingCouriers: true });
   if (preview.missingCouriers.length === 0) return roster;
@@ -46,7 +48,7 @@ async function createMissingCouriers(
   const couriers = new Map(roster.couriers);
   for (const name of preview.missingCouriers) {
     try {
-      const createdId = await insertImportedCourier(name);
+      const createdId = await insertImportedCourier(name, fixedProfit);
       couriers.set(matchKey(name), createdId);
     } catch {
       // Left unresolved: the final plan turns this row into a skipped issue.
@@ -71,7 +73,7 @@ export async function importOrders(
   loggedBy: string,
   rows: readonly Record<string, unknown>[],
   roster: ImportRoster,
-  options: { createMissingCouriers?: boolean } = {},
+  options: { createMissingCouriers?: boolean; courierProfit?: number } = {},
 ): Promise<{
   imported: number;
   skipped: { line: number; message: string }[];
@@ -79,7 +81,7 @@ export async function importOrders(
   requireDatabase();
 
   const activeRoster = options.createMissingCouriers
-    ? await createMissingCouriers(rows, roster)
+    ? await createMissingCouriers(rows, roster, options.courierProfit ?? 0)
     : roster;
 
   const plan = planImport(rows, activeRoster);

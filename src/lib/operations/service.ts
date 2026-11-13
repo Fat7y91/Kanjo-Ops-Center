@@ -11,6 +11,7 @@ import {
   postSettlement,
 } from "./clearinghouse-repository";
 import { resolvePartyNames } from "./party-lookup";
+import { hideOperations } from "./deletion-repository";
 import {
   insertOperation,
   isOperationsDatabaseConfigured,
@@ -115,6 +116,31 @@ export async function loadOperationsBoard(): Promise<OperationsBoard> {
  * the SQL trigger, so no financial figure is accepted from the form and the
  * logger never needs to see one.
  */
+/**
+ * Hides orders from the working lists behind the `delete_orders` capability.
+ *
+ * The operation log and its ledgers stay append-only; this records tombstones
+ * so the rows disappear from the orders screen and the clearinghouse without
+ * breaking the audit trail or the derived balances.
+ */
+export async function deleteOperations(
+  deletedBy: string,
+  rawIds: unknown,
+): Promise<{ deleted: number }> {
+  requireDatabase();
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
+    throw new OperationsError("INVALID_IDS", "لم يتم تحديد أي طلب.", 422);
+  }
+  if (rawIds.length > 500) {
+    throw new OperationsError("TOO_MANY_IDS", "الحد الأقصى 500 طلب في المرة.", 422);
+  }
+  const ids = [...new Set(rawIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
+  if (ids.length === 0) {
+    throw new OperationsError("INVALID_IDS", "لم يتم تحديد أي طلب.", 422);
+  }
+  return { deleted: await hideOperations(ids, deletedBy) };
+}
+
 export async function logOperation(
   loggedBy: string,
   rawInput: unknown,

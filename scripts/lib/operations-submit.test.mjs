@@ -22,6 +22,10 @@ const FORM = readFileSync(
   path.join(projectRoot, "src/components/operations/operation-log-form.tsx"),
   "utf8",
 );
+const CREATE_FORM = readFileSync(
+  path.join(projectRoot, "src/components/operations/order-create-modal.tsx"),
+  "utf8",
+);
 const HOOK = readFileSync(
   path.join(projectRoot, "src/components/operations/use-operation-form.ts"),
   "utf8",
@@ -49,12 +53,12 @@ test("the combobox still filters while typing", () => {
 });
 
 test("the form submits through onSubmit and prevents the default", () => {
-  assert.match(FORM, /<form[^>]*onSubmit=\{handleSubmit\}/);
-  assert.match(FORM, /event\.preventDefault\(\)/);
+  assert.match(CREATE_FORM, /<form[\s\S]*onSubmit=/);
+  assert.match(CREATE_FORM, /event\.preventDefault\(\)/);
 });
 
 test("the submit button is a real submit control", () => {
-  assert.match(FORM, /type="submit"/);
+  assert.match(CREATE_FORM, /type="submit"/);
 });
 
 test("the submit request is bounded by an abort timeout", () => {

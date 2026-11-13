@@ -623,6 +623,12 @@ export const PERMISSIONS = [
     group: "المقاصة والعمليات",
   },
   {
+    key: "delete_orders",
+    label: "حذف الطلبات",
+    description: "إخفاء الطلبات المحددة من شاشة الطلبات والمقاصة.",
+    group: "المقاصة والعمليات",
+  },
+  {
     key: "view_clearinghouse",
     label: "عرض المقاصة",
     description: "الاطلاع على المستحقات والمديونيات للتجار والمناديب.",

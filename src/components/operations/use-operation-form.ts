@@ -191,6 +191,11 @@ export function useOperationForm(initialOperations: OperationSummary[]) {
     }
   }
 
+  const removeOperations = useCallback((ids: readonly string[]) => {
+    const hidden = new Set(ids);
+    setOperations((current) => current.filter((row) => !hidden.has(row.id)));
+  }, []);
+
   const dismissNotice = useCallback(() => setNotice(""), []);
   const dismissError = useCallback(() => setError(""), []);
 
@@ -202,6 +207,7 @@ export function useOperationForm(initialOperations: OperationSummary[]) {
     error,
     notice,
     busy,
+    removeOperations,
     dismissNotice,
     dismissError,
   };

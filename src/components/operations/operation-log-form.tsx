@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { couponTypeLabel } from "@/lib/coupons/format";
 import { pickLabel } from "@/lib/operations/optimistic";
 import type {
@@ -13,8 +14,9 @@ import type {
   OperationSummary,
 } from "@/lib/operations/types";
 
+import { OrderCreateModal } from "./order-create-modal";
 import { OrderImportModal } from "./order-import-modal";
-import { OperationLogFields, NO_COUPON } from "./operation-log-fields";
+import { NO_COUPON } from "./operation-log-fields";
 import { OperationRecentList } from "./operation-recent-list";
 import { useOperationForm } from "./use-operation-form";
 
@@ -35,7 +37,13 @@ export function OperationLogForm({
 
   const { hasPermission } = usePermission();
   const canImport = hasPermission("import_orders");
+  const canDelete = hasPermission("delete_orders");
+
+  const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const {
     form,
@@ -45,6 +53,7 @@ export function OperationLogForm({
     error,
     notice,
     busy,
+    removeOperations,
     dismissNotice,
     dismissError,
   } = useOperationForm(initialOperations);
@@ -75,11 +84,9 @@ export function OperationLogForm({
     [couponList],
   );
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit() {
     if (busy) return;
-
-    await submit({
+    const saved = await submit({
       merchantName: pickLabel(
         merchantList,
         form.merchantId,
@@ -97,6 +104,49 @@ export function OperationLogForm({
           ? pickLabel(couponList, form.couponId, (row) => row.code, "")
           : "",
     });
+    if (saved) setCreateOpen(false);
+  }
+
+  function toggle(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll(checked: boolean) {
+    setSelected(checked ? new Set(operations.map((row) => row.id)) : new Set());
+  }
+
+  async function handleDelete(ids: string[]) {
+    if (!canDelete || ids.length === 0) return;
+    if (!window.confirm(`حذف ${ids.length} طلب من القائمة؟`)) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch("/api/operations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const payload = (await response.json()) as { deleted?: number; error?: string };
+      if (!response.ok || typeof payload.deleted !== "number") {
+        setDeleteError(payload.error ?? "تعذر حذف الطلبات.");
+        return;
+      }
+      removeOperations(ids);
+      setSelected((current) => {
+        const next = new Set(current);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    } catch {
+      setDeleteError("تعذر الاتصال بالخادم.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -104,47 +154,49 @@ export function OperationLogForm({
       <article className="panel">
         <div className="panel-head">
           <div>
-            <h2>تسجيل طلب منفذ</h2>
-            <span className="muted">
-              أدخل بيانات الطلب كما تظهر في نقطة البيع. تُحسب المستحقات آلياً.
-            </span>
+            <h2>الطلبات</h2>
+            <span className="muted">{operations.length} طلب</span>
           </div>
-          {canImport ? (
-            <Button
-              size="sm"
-              variant="quiet"
-              onClick={() => setImportOpen(true)}
-            >
-              استيراد ملف طلبات
-            </Button>
-          ) : null}
-        </div>
-
-        <form className="form-stack" onSubmit={handleSubmit} noValidate>
-          <OperationLogFields
-            form={form}
-            set={set}
-            merchantOptions={merchantOptions}
-            courierOptions={courierOptions}
-            couponOptions={couponOptions}
+          <DropdownMenu
+            label="إضافة طلبات +"
+            items={[
+              {
+                id: "new-order",
+                label: "طلب جديد",
+                onSelect: () => setCreateOpen(true),
+              },
+              {
+                id: "import-orders",
+                label: "استيراد ملف CSV",
+                onSelect: () => setImportOpen(true),
+                disabled: !canImport,
+              },
+            ]}
           />
-
-          <div className="form-actions">
-            <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? "جارٍ التسجيل…" : "تسجيل العملية"}
-            </Button>
-          </div>
-        </form>
-      </article>
-
-      <article className="panel">
-        <div className="panel-head">
-          <h2>آخر الطلبات</h2>
-          <span className="muted">{operations.length} طلب</span>
         </div>
 
-        <OperationRecentList operations={operations} />
+        <OperationRecentList
+          operations={operations}
+          canDelete={canDelete}
+          selected={selected}
+          onToggle={toggle}
+          onToggleAll={toggleAll}
+          onDelete={handleDelete}
+          deleting={deleting}
+        />
       </article>
+
+      <OrderCreateModal
+        open={createOpen}
+        form={form}
+        set={set}
+        busy={busy}
+        merchantOptions={merchantOptions}
+        courierOptions={courierOptions}
+        couponOptions={couponOptions}
+        onClose={() => setCreateOpen(false)}
+        onSubmit={handleSubmit}
+      />
 
       <OrderImportModal
         open={importOpen}
@@ -157,6 +209,21 @@ export function OperationLogForm({
           void message;
         }}
       />
+
+      {deleteError ? (
+        <div className="toast toast-error" role="alert" dir="rtl">
+          <span>{deleteError}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="toast-dismiss"
+            aria-label="إغلاق التنبيه"
+            onClick={() => setDeleteError("")}
+          >
+            ×
+          </Button>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="toast toast-error" role="alert" dir="rtl">
