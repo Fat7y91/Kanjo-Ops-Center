@@ -343,6 +343,15 @@ never dropped.
 never occupy a primary sidebar item. The topbar bell is the entry point, and its
 `عرض كل الإشعارات` footer link opens the full inbox.
 
+The sidebar reads `src/lib/rbac/nav-groups.ts` for hierarchy only: the root
+dashboard is pinned, then five groups (الإدارة، التشغيل، المالية، التسويق) with
+التشغيل split into التعاقدات، إدخال البيانات and المبيعات sub-groups. Each href is
+resolved against `MODULES`, then filtered with `moduleAllows`; a group whose
+every row is revoked is dropped entirely. Group headers are Headless UI
+`Button`s with `aria-expanded`. On desktop the rail collapses to a persisted
+76px icon strip (`kanjo-nav-collapsed` in `localStorage`) with tooltips; at
+≤1023px it becomes the existing off-canvas drawer instead.
+
 
 ### Resilience — no white screens (T1)
 
@@ -633,6 +642,18 @@ tolerates a browser that forbids `BroadcastChannel`.
 - `.bi-bento` groups the widgets: full-width funnel and marketing widgets sit on
   their own row, while finance, negotiation, catalog and compliance pair up and
   collapse to one column at ≤1100px.
+- `ExecutiveSummary` renders the first-viewport strip: merchants, signed
+  contracts, orders, net collection, campaign conversions and catalog
+  readiness. Every tile is a route link, so the headline number and its owning
+  module are one click apart.
+- `OrdersMetricsSection` adds volume, platform profit, merchant profit, courier
+  profit and discounts. Its merchant/courier/city/coupon/date filters narrow
+  the same bucket set, so all five cards always describe one slice. Buckets are
+  built server-side in `bi/order-metrics-server.ts` (daily + dimensions, max
+  20k source rows) and shipped inside `BiDataset.orders`; the pure fold lives in
+  `bi/order-metrics.ts`. Profit is derived, never stored: platform = commission
+  − platform-funded discounts, merchant = volume − commission − vendor-funded
+  discounts, courier = frozen delivery cut.
 
 ### Agent KPI (Tier 1–5)
 - UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus

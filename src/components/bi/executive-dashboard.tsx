@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { ExecutiveSummary } from "@/components/bi/executive-summary";
 import { FilterBar } from "@/components/bi/filter-bar";
 import { SlideOver } from "@/components/bi/slide-over";
 import { CatalogSection } from "@/components/bi/sections/catalog-section";
@@ -11,7 +12,9 @@ import { FinanceSection } from "@/components/bi/sections/finance-section";
 import { FunnelSection } from "@/components/bi/sections/funnel-section";
 import { MarketingSection } from "@/components/bi/sections/marketing-section";
 import { NegotiationSection } from "@/components/bi/sections/negotiation-section";
+import { OrdersMetricsSection } from "@/components/bi/sections/orders-metrics-section";
 import { resolveDrill, type DrillResolution } from "@/lib/bi/drill";
+import { summarizeOrderMetrics } from "@/lib/bi/order-metrics";
 import {
   buildCatalog,
   buildCompliance,
@@ -83,6 +86,10 @@ export function ExecutiveDashboard({
     [scoped],
   );
   const catalog = useMemo(() => buildCatalog(scoped.catalog), [scoped]);
+  const orderMetrics = useMemo(
+    () => summarizeOrderMetrics(dataset.orders),
+    [dataset.orders],
+  );
   const stageCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const step of funnel) counts[step.stage] = step.count;
@@ -126,6 +133,16 @@ export function ExecutiveDashboard({
         />
       </div>
 
+      <ExecutiveSummary
+        merchantCount={scoped.merchants.length}
+        signedCount={finance.signedCount}
+        orders={orderMetrics}
+        finance={finance}
+        marketing={marketing}
+        catalog={catalog}
+        showFinancials={canSeeFinance}
+      />
+
       <div className="bi-bento">
         {canSeeContracts ? (
           <FunnelSection
@@ -141,6 +158,14 @@ export function ExecutiveDashboard({
             finance={finance}
             treasury={dataset.treasury}
             onDrill={openDrill}
+          />
+        ) : null}
+
+        {canSeeFinance ? (
+          <OrdersMetricsSection
+            rows={dataset.orders}
+            cities={dataset.cities}
+            range={filters.range}
           />
         ) : null}
 

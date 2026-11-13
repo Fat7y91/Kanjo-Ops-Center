@@ -265,6 +265,26 @@ export const biTreasurySchema = z.object({
 });
 export type BiTreasury = z.infer<typeof biTreasurySchema>;
 
+export const biOrderMetricRowSchema = z.object({
+  date: z.string(),
+  merchantId: z.string(),
+  merchantName: z.string(),
+  cityId: z.string().nullable(),
+  courierId: z.string(),
+  courierName: z.string(),
+  couponCode: z.string(),
+  currency: z.enum(["EGP", "SAR"]),
+  orders: z.number().int().nonnegative(),
+  volume: z.number(),
+  commission: z.number(),
+  courierCut: z.number(),
+  couponDiscount: z.number(),
+  platformFunded: z.number(),
+  vendorFunded: z.number(),
+  walletDiscount: z.number(),
+});
+export type BiOrderMetricRow = z.infer<typeof biOrderMetricRowSchema>;
+
 export const biDatasetSchema = z.object({
   generatedAt: z.string(),
   cities: z.array(biCityOptionSchema),
@@ -277,6 +297,7 @@ export const biDatasetSchema = z.object({
   expenses: z.array(biExpenseRowSchema),
   marketing: z.array(biMarketingRowSchema),
   catalog: z.array(biCatalogRowSchema),
+  orders: z.array(biOrderMetricRowSchema),
   /**
    * Treasury position, computed on the server and shipped with the payload so
    * the dashboard client never imports the accounts or payroll stores. Client

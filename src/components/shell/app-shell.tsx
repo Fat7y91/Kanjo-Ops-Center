@@ -17,6 +17,24 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [desktop, setDesktop] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setDesktop(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem("kanjo-nav-collapsed") === "1");
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("kanjo-nav-collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
 
   useEffect(() => {
     setNavOpen(false);
@@ -37,9 +55,14 @@ export function AppShell({
   }, [navOpen]);
 
   return (
-    <div className={`app-shell${navOpen ? " nav-open" : ""}`}>
+    <div className={`app-shell${navOpen ? " nav-open" : ""}${desktop && collapsed ? " is-collapsed" : ""}`}>
       <RouteProgress />
-      <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
+      <Sidebar
+        open={navOpen}
+        collapsed={desktop && collapsed}
+        onClose={() => setNavOpen(false)}
+        onToggleCollapsed={() => setCollapsed((current) => !current)}
+      />
       <div className="app-main min-w-0">
         <Topbar
           navOpen={navOpen}

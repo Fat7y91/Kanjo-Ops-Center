@@ -25,7 +25,16 @@ export async function GET() {
   );
   if (!session) return response;
 
-  return NextResponse.json(await buildBiDataset(), {
+  const dataset = await buildBiDataset();
+  // Order margins are a finance surface. The dashboard already hides the
+  // orders widget without this grant; stripping the rows here keeps the
+  // numbers out of the network body too.
+  const canSeeFinancials =
+    session.permissions.includes("view_overview_finance") &&
+    session.clearanceLevel >= 3;
+  if (!canSeeFinancials) dataset.orders = [];
+
+  return NextResponse.json(dataset, {
     headers: { "Cache-Control": "no-store" },
   });
 }

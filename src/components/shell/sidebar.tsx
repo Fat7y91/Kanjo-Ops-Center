@@ -5,38 +5,79 @@ import { usePathname } from "next/navigation";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { ModuleIcon } from "@/components/shell/module-icon";
-import { NavLinkStatus } from "@/components/shell/nav-link-status";
+import {
+  SidebarGroups,
+  type SidebarGroup,
+} from "@/components/shell/sidebar-groups";
+import { Button } from "@/components/ui/button";
+import { NAV_GROUPS, NAV_ROOT_HREF, type NavGroup } from "@/lib/rbac/nav-groups";
 import {
   firstPermittedPath,
   moduleAllows,
+  moduleForPath,
   moduleInSidebar,
   MODULES,
+  type ModuleDefinition,
 } from "@/lib/rbac/modules";
 import { PERMISSION_KEYS } from "@/lib/rbac/permissions";
 
 type SidebarProps = {
   open: boolean;
+  collapsed: boolean;
   onClose: () => void;
+  onToggleCollapsed: () => void;
 };
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+const MODULE_BY_HREF = new Map<string, ModuleDefinition>(
+  MODULES.map((module) => [module.href, module]),
+);
+
+function resolveGroup(
+  group: NavGroup,
+  allowed: ReadonlySet<string>,
+): SidebarGroup | null {
+  const modules = (group.hrefs ?? [])
+    .map((href) => MODULE_BY_HREF.get(href))
+    .filter((module): module is ModuleDefinition => module !== undefined)
+    .filter((module) => allowed.has(module.href));
+
+  const children = (group.children ?? [])
+    .map((child) => resolveGroup(child, allowed))
+    .filter((child): child is SidebarGroup => child !== null);
+
+  if (modules.length === 0 && children.length === 0) return null;
+  return { id: group.id, label: group.label, modules, children };
+}
+
+export function Sidebar({
+  open,
+  collapsed,
+  onClose,
+  onToggleCollapsed,
+}: SidebarProps) {
   const pathname = usePathname() ?? "";
   const { permissions, clearanceLevel, revision } = usePermission();
+  const granted = Array.from(permissions);
 
   const visibleModules = MODULES.filter(
-    (module) =>
-      moduleInSidebar(module) &&
-      moduleAllows(module, Array.from(permissions), clearanceLevel),
+    (module) => moduleInSidebar(module) && moduleAllows(module, granted, clearanceLevel),
   );
-  const homeHref = firstPermittedPath(
-    Array.from(permissions),
-    clearanceLevel,
+  const allowed = new Set(visibleModules.map((module) => module.href));
+  const groups = NAV_GROUPS.map((group) => resolveGroup(group, allowed)).filter(
+    (group): group is SidebarGroup => group !== null,
   );
+
+  const rootModule = MODULE_BY_HREF.get(NAV_ROOT_HREF);
+  const showRoot = rootModule !== undefined && allowed.has(rootModule.href);
+  const activeHref = moduleForPath(pathname)?.href ?? "";
+  const homeHref = firstPermittedPath(granted, clearanceLevel);
+  const rootActive =
+    activeHref === NAV_ROOT_HREF || pathname === "/";
 
   return (
     <aside
       id="app-sidebar"
-      className={`sidebar${open ? " is-open" : ""}`}
+      className={`sidebar${open ? " is-open" : ""}${collapsed ? " is-collapsed" : ""}`}
       aria-label="القائمة الجانبية"
     >
       <div className="sidebar-head">
@@ -47,8 +88,9 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <span>منصة المؤسسات V2</span>
           </span>
         </Link>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           className="sidebar-close"
           aria-label="إغلاق القائمة"
           onClick={onClose}
@@ -56,43 +98,48 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
-        </button>
+        </Button>
       </div>
 
-      {/*
-        No `prefetch` on these links. Every module route is dynamic, so an
-        explicit prefetch flag makes the sidebar render and stream all 19 module
-        pages on mount — 19 Worker invocations per session for pages the user
-        may never open. Default navigation is on-demand.
-      */}
-      <nav className="nav" aria-label="وحدات مساحة العمل">
-        <p className="nav-section">مساحة العمل</p>
-        {visibleModules.map((module) => {
-          const active =
-            pathname === module.href ||
-            pathname.startsWith(`${module.href}/`);
+      <Button
+        variant="ghost"
+        size="sm"
+        className="nav-collapse-toggle"
+        aria-label={collapsed ? "توسيع القائمة" : "تصغير القائمة"}
+        aria-pressed={collapsed}
+        title={collapsed ? "توسيع القائمة" : "تصغير القائمة"}
+        onClick={onToggleCollapsed}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+        <span>تصغير القائمة</span>
+      </Button>
 
-          return (
-            <Link
-              key={module.href}
-              href={module.href}
-              className={`nav-link${active ? " is-active" : ""}`}
-              aria-current={active ? "page" : undefined}
-              onClick={onClose}
-            >
-              <ModuleIcon name={module.icon} />
-              <span>{module.label}</span>
-              <NavLinkStatus />
-            </Link>
-          );
-        })}
+      {showRoot && rootModule ? (
+        <Link
+          href={rootModule.href}
+          title={collapsed ? rootModule.label : undefined}
+          aria-label={collapsed ? rootModule.label : undefined}
+          className={`nav-link nav-root-link${rootActive ? " is-active" : ""}`}
+          aria-current={rootActive ? "page" : undefined}
+          onClick={onClose}
+        >
+          <ModuleIcon name={rootModule.icon} />
+          <span className="nav-link-label">{rootModule.label}</span>
+        </Link>
+      ) : null}
 
-        {visibleModules.length === 0 && (
-          <p className="nav-empty">
-            لا توجد وحدات ممنوحة لهذا الحساب حالياً.
-          </p>
-        )}
-      </nav>
+      {groups.length > 0 ? (
+        <SidebarGroups
+          groups={groups}
+          activeHref={activeHref}
+          collapsed={collapsed}
+          onNavigate={onClose}
+        />
+      ) : (
+        <p className="nav-empty">لا توجد وحدات ممنوحة لهذا الحساب حالياً.</p>
+      )}
 
       <div className="sidebar-foot">
         <div className="capability-meter">
