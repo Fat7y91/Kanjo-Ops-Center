@@ -138,10 +138,18 @@ export function OrderImportModal({
         setError(payload.error ?? "تعذر استيراد الطلبات.");
         return;
       }
-      setSummary({
-        imported: payload.imported,
-        skipped: payload.skipped ?? [],
-      });
+      const skipped = payload.skipped ?? [];
+      setSummary({ imported: payload.imported, skipped });
+      if (payload.imported === 0) {
+        // Never report a successful import that saved nothing: show the first
+        // database reason beside the full per-line list.
+        setError(
+          skipped.length > 0
+            ? `تعذر الحفظ: ${skipped[0].message}`
+            : "لم يُحفظ أي طلب.",
+        );
+        return;
+      }
       onImported(`تم استيراد ${payload.imported} طلب.`);
     } catch {
       setError("تعذر الاتصال بالخادم.");

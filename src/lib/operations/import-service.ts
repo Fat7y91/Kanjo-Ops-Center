@@ -17,6 +17,32 @@ import { toMinorUnits } from "./types";
  * order. The posting triggers freeze the money terms per row.
  */
 
+/**
+ * Extracts the message a database or trigger returned. Import failures used to
+ * be swallowed behind a generic Arabic sentence, so the operator saw an empty
+ * table with no explanation; the underlying reason must reach the response.
+ */
+function describeFailure(error: unknown): string {
+  if (error instanceof Error && error.message.trim() !== "") return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim() !== ""
+  ) {
+    return error.message;
+  }
+  return "تعذر حفظ الطلب.";
+}
+
+function importFailure(error: unknown): OperationsError {
+  return (
+    fromDatabaseError(error) ??
+    new OperationsError("IMPORT_FAILED", `تعذر حفظ الطلبات: ${describeFailure(error)}`, 500)
+  );
+}
+
 function requireDatabase(): void {
   if (!isOperationsDatabaseConfigured()) {
     throw new OperationsError(
@@ -50,8 +76,13 @@ async function createMissingCouriers(
     try {
       const createdId = await insertImportedCourier(name, profits[name] ?? 0);
       couriers.set(matchKey(name), createdId);
-    } catch {
-      // Left unresolved: the final plan turns this row into a skipped issue.
+    } catch (error) {
+      console.error(`[operations] failed to create courier "${name}"`, error);
+      throw new OperationsError(
+        "COURIER_CREATE_FAILED",
+        `تعذر إنشاء المندوب ${name}: ${describeFailure(error)}`,
+        502,
+      );
     }
   }
 
@@ -94,6 +125,7 @@ export async function importOrders(
   }
 
   let imported = 0;
+  const failed: { line: number; message: string }[] = [];
   for (const candidate of plan.candidates) {
     try {
       await insertOperation({
@@ -114,12 +146,26 @@ export async function importOrders(
       });
       imported += 1;
     } catch (error) {
-      const domain = error instanceof OperationsError ? error : fromDatabaseError(error);
-      skipped.push({
-        line: candidate.line,
-        message: domain?.message ?? "تعذر تسجيل الطلب.",
-      });
+      console.error(
+        `[operations] failed to import order ${candidate.orderId} (line ${candidate.line})`,
+        error,
+      );
+      const domain = importFailure(error);
+      const entry = { line: candidate.line, message: domain.message };
+      skipped.push(entry);
+      failed.push(entry);
     }
+  }
+
+  /* Every accepted row failed. Reporting `imported: 0` with an HTTP 200 made
+   * the browser announce a successful import while the table stayed empty, so
+   * bubble the first real database error instead of hiding it. */
+  if (imported === 0 && failed.length > 0) {
+    throw new OperationsError(
+      "IMPORT_FAILED",
+      `تعذر حفظ الطلبات: ${failed[0].message}`,
+      422,
+    );
   }
 
   return { imported, skipped };

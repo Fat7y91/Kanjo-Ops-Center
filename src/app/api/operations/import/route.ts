@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiError, authorize } from "@/lib/auth/api";
+import { OperationsError } from "@/lib/operations/errors";
 import { loadImportRoster } from "@/lib/operations/options-repository";
 import { importOrders } from "@/lib/operations/service";
 
@@ -93,6 +94,14 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
-    return apiError(error);
+    console.error("[operations] import request failed", error);
+    if (error instanceof OperationsError) return apiError(error);
+    const message =
+      error instanceof Error && error.message.trim() !== ""
+        ? error.message
+        : "خطأ غير معروف في قاعدة البيانات.";
+    return apiError(
+      new OperationsError("IMPORT_FAILED", `تعذر حفظ الطلبات: ${message}`, 500),
+    );
   }
 }
