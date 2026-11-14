@@ -36,6 +36,7 @@ export const MERCHANT_COLUMNS = [
   "opinions",
   "contact_updated_at",
   "last_visit_at",
+  "archived_at",
   "created_at",
   "updated_at",
 ].join(",");
@@ -87,7 +88,9 @@ export function nextMerchantProjection(
     ? "logo_url,"
     : message.includes("cover_url")
       ? "cover_url,"
-      : null;
+      : message.includes("archived_at")
+        ? "archived_at,"
+        : null;
   if (!drop || !columns.includes(drop)) return null;
   const next = columns.replace(drop, "");
   return next === columns ? null : next;
@@ -115,6 +118,7 @@ export type MerchantRow = {
   opinions: RepOpinion[] | null;
   contact_updated_at: string | null;
   last_visit_at: string | null;
+  archived_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -149,5 +153,6 @@ export function toMerchant(row: MerchantRow): Merchant {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastVisitAt: row.last_visit_at,
+    archivedAt: row.archived_at ?? null,
   };
 }

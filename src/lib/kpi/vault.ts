@@ -82,6 +82,39 @@ function toRate(row: {
   };
 }
 
+const PRODUCT_AUTHOR_PAGE_SIZE = 1000;
+
+/**
+ * PostgREST caps a single response at 1000 rows, so a month with more entries
+ * would silently under-count the data-entry KPI. Page until a short batch.
+ */
+async function loadProductAuthors(
+  client: ReturnType<typeof getSupabaseServerClient>,
+  start: string,
+  end: string,
+): Promise<{
+  data: Array<{ created_by: string | null }> | null;
+  error: unknown;
+}> {
+  const rows: Array<{ created_by: string | null }> = [];
+  for (let from = 0; ; from += PRODUCT_AUTHOR_PAGE_SIZE) {
+    const { data, error } = await client
+      .schema("app")
+      .from("catalog_products")
+      .select("created_by")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("id")
+      .range(from, from + PRODUCT_AUTHOR_PAGE_SIZE - 1);
+
+    if (error) return { data: null, error };
+    const batch = (data ?? []) as Array<{ created_by: string | null }>;
+    rows.push(...batch);
+    if (batch.length < PRODUCT_AUTHOR_PAGE_SIZE) break;
+  }
+  return { data: rows, error: null };
+}
+
 /** Live month inputs: per-rep and per-team counts plus the fee schedule. */
 export async function loadLiveMonthVault(
   month: string,
@@ -94,12 +127,7 @@ export async function loadLiveMonthVault(
   try {
     const [productsResult, activationsResult, contractsResult, ratesResult] =
       await Promise.all([
-        client
-          .schema("app")
-          .from("catalog_products")
-          .select("created_by")
-          .gte("created_at", start)
-          .lt("created_at", end),
+        loadProductAuthors(client, start, end),
         client
           .schema("app")
           .from("merchants")

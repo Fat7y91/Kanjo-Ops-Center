@@ -2,35 +2,19 @@
 
 import { useMemo, useState } from "react";
 
+import {
+  directoryFilterCounts,
+  matchesDirectoryFilter,
+  type DirectoryFilter,
+} from "@/lib/catalog/directory-filters";
 import type { CatalogMerchantCard } from "@/lib/catalog/merchants";
 import { smartTextScore } from "@/lib/search/normalize";
 
-/** Directory slices, in the order the filter tabs render them. */
-export const DIRECTORY_FILTERS = [
-  "all",
-  "live",
-  "pending",
-  "empty",
-] as const;
-
-export type DirectoryFilter = (typeof DIRECTORY_FILTERS)[number];
-
-export const DIRECTORY_FILTER_LABEL: Record<DirectoryFilter, string> = {
-  all: "كل التجار",
-  live: "منتجات منشورة",
-  pending: "بانتظار المراجعة",
-  empty: "بدون منتجات",
-};
-
-function matchesFilter(
-  card: CatalogMerchantCard,
-  filter: DirectoryFilter,
-): boolean {
-  if (filter === "live") return card.publishedCount > 0;
-  if (filter === "pending") return card.pendingCount > 0;
-  if (filter === "empty") return card.productCount === 0;
-  return true;
-}
+export {
+  DIRECTORY_FILTERS,
+  DIRECTORY_FILTER_LABEL,
+  type DirectoryFilter,
+} from "@/lib/catalog/directory-filters";
 
 /**
  * Search + tab state for the merchant directory.
@@ -42,25 +26,12 @@ export function useCatalogDirectory(cards: readonly CatalogMerchantCard[]) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DirectoryFilter>("all");
 
-  const counts = useMemo(() => {
-    const result: Record<DirectoryFilter, number> = {
-      all: cards.length,
-      live: 0,
-      pending: 0,
-      empty: 0,
-    };
-    for (const card of cards) {
-      if (card.publishedCount > 0) result.live += 1;
-      if (card.pendingCount > 0) result.pending += 1;
-      if (card.productCount === 0) result.empty += 1;
-    }
-    return result;
-  }, [cards]);
+  const counts = useMemo(() => directoryFilterCounts(cards), [cards]);
 
   const visible = useMemo(() => {
     const term = query.trim();
     return cards.filter((card) => {
-      if (!matchesFilter(card, filter)) return false;
+      if (!matchesDirectoryFilter(card, filter)) return false;
       if (!term) return true;
       const score = Math.max(
         smartTextScore(term, card.name).score,

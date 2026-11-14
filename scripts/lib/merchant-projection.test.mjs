@@ -25,6 +25,10 @@ test("column projection includes both image columns", () => {
   assert.ok(MERCHANT_COLUMNS.includes("cover_url"));
 });
 
+test("column projection includes the archive marker", () => {
+  assert.ok(MERCHANT_COLUMNS.includes("archived_at"));
+});
+
 test("dropping cover keeps logo", () => {
   assert.ok(MERCHANT_COLUMNS_WITHOUT_COVER.includes("logo_url"));
   assert.ok(!MERCHANT_COLUMNS_WITHOUT_COVER.includes("cover_url"));
@@ -54,6 +58,17 @@ test("a missing logo_url drops only logo_url", () => {
   );
   assert.ok(next.includes("cover_url"));
   assert.ok(!next.includes("logo_url"));
+});
+
+test("a missing archived_at drops only archived_at", () => {
+  const next = nextMerchantProjection(
+    MERCHANT_COLUMNS,
+    undefinedColumn("archived_at"),
+  );
+  assert.ok(next);
+  assert.ok(!next.includes("archived_at"));
+  assert.ok(next.includes("logo_url"));
+  assert.ok(next.includes("cover_url"));
 });
 
 test("stops when both image columns are already gone", () => {

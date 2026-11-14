@@ -5,7 +5,7 @@ import {
   DIRECTORY_FILTERS,
   DIRECTORY_FILTER_LABEL,
   type DirectoryFilter,
-} from "@/components/catalog/use-catalog-directory";
+} from "@/lib/catalog/directory-filters";
 
 type CatalogMerchantFiltersProps = {
   active: DirectoryFilter;

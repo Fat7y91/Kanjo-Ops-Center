@@ -77,6 +77,13 @@ type ProductRow = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * PostgREST caps a single response at 1000 rows unless the caller paginates.
+ * The catalog has ~9k products, so every read walks pages until the server
+ * returns a short page.
+ */
+const PRODUCT_PAGE_SIZE = 1000;
+
 export type CatalogProductPatch = Partial<{
   imageDataUrl: string | null;
   state: CatalogProductState;
@@ -155,22 +162,34 @@ export async function listProductRows(
   if (!isCatalogDatabaseConfigured()) return [];
 
   const client = getSupabaseServerClient();
-  let query = client
-    .schema("app")
-    .from("catalog_products")
-    .select(`${COLUMNS},merchants(name)`)
-    .order("name", { ascending: true });
-  if (merchantId) query = query.eq("merchant_id", merchantId);
+  const rows: Array<
+    ProductRow & { merchants: { name: string } | { name: string }[] | null }
+  > = [];
 
-  const { data, error } = await query;
-  if (error) {
-    if (isMissingSchemaObject(error)) return [];
-    throw error;
+  for (let from = 0; ; from += PRODUCT_PAGE_SIZE) {
+    let query = client
+      .schema("app")
+      .from("catalog_products")
+      .select(`${COLUMNS},merchants(name)`)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PRODUCT_PAGE_SIZE - 1);
+    if (merchantId) query = query.eq("merchant_id", merchantId);
+
+    const { data, error } = await query;
+    if (error) {
+      if (isMissingSchemaObject(error)) return [];
+      throw error;
+    }
+
+    const batch = (data ?? []) as unknown as Array<
+      ProductRow & { merchants: { name: string } | { name: string }[] | null }
+    >;
+    rows.push(...batch);
+    if (batch.length < PRODUCT_PAGE_SIZE) break;
   }
 
-  return ((data ?? []) as unknown as Array<
-    ProductRow & { merchants: { name: string } | { name: string }[] | null }
-  >).map((row) => {
+  return rows.map((row) => {
     const embed = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
     return toProduct(row, embed?.name ?? titleCase(row.merchant_id));
   });

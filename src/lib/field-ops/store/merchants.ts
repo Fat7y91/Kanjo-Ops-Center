@@ -27,7 +27,9 @@ import { getCityById } from "./cities";
  */
 
 export async function listMerchants(): Promise<Merchant[]> {
-  const merchants = await listMerchantRows();
+  const merchants = (await listMerchantRows()).filter(
+    (merchant) => !merchant.archivedAt,
+  );
   return merchants.sort((left, right) =>
     left.name.localeCompare(right.name, "ar"),
   );
@@ -92,6 +94,7 @@ export async function createMerchant(
     createdAt: now,
     updatedAt: now,
     lastVisitAt: null,
+    archivedAt: null,
   };
 
   return insertMerchant({ merchant, createdBy: actor.id });

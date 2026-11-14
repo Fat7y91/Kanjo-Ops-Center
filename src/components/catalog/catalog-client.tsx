@@ -44,7 +44,10 @@ export function CatalogClient({
 
   const reload = useCallback(async () => {
     try {
-      const response = await fetch("/api/catalog/products", {
+      const query = defaultMerchantId
+        ? `?merchantId=${encodeURIComponent(defaultMerchantId)}`
+        : "";
+      const response = await fetch(`/api/catalog/products${query}`, {
         cache: "no-store",
       });
       if (!response.ok) return;
@@ -55,7 +58,7 @@ export function CatalogClient({
     } catch {
       // Offline: the draft queue banner already communicates local state.
     }
-  }, []);
+  }, [defaultMerchantId]);
 
   const handleSynced = useCallback(() => {
     void reload();

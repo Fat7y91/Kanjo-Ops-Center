@@ -30,6 +30,8 @@ export type CatalogMerchantCard = CatalogMerchantSource & {
   productCount: number;
   publishedCount: number;
   pendingCount: number;
+  /** Products carrying a V1 delete-request flag. */
+  deleteRequestCount: number;
   /**
    * Banner for the tile. The operator-uploaded cover wins; when there is none we
    * fall back to the first product image so a merchant with products still shows
@@ -44,8 +46,17 @@ type MerchantTally = {
   productCount: number;
   publishedCount: number;
   pendingCount: number;
+  deleteRequestCount: number;
   firstProductImage: string | null;
 };
+
+function hasDeleteRequest(product: CatalogProduct): boolean {
+  const value =
+    product.qaMetadata?.deleteRequested ?? product.qaMetadata?.delete_request;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return Boolean(value);
+}
 
 export function buildMerchantCards(
   merchants: readonly CatalogMerchantSource[],
@@ -57,11 +68,13 @@ export function buildMerchantCards(
       productCount: 0,
       publishedCount: 0,
       pendingCount: 0,
+      deleteRequestCount: 0,
       firstProductImage: null,
     };
     tally.productCount += 1;
     if (product.state === "published") tally.publishedCount += 1;
     if (product.state === "pending_review") tally.pendingCount += 1;
+    if (hasDeleteRequest(product)) tally.deleteRequestCount += 1;
     if (!tally.firstProductImage && product.imageDataUrl) {
       tally.firstProductImage = product.imageDataUrl;
     }
@@ -76,6 +89,7 @@ export function buildMerchantCards(
         productCount: tally?.productCount ?? 0,
         publishedCount: tally?.publishedCount ?? 0,
         pendingCount: tally?.pendingCount ?? 0,
+        deleteRequestCount: tally?.deleteRequestCount ?? 0,
         coverImage: merchant.coverUrl ?? tally?.firstProductImage ?? null,
         live: (tally?.publishedCount ?? 0) > 0,
       };

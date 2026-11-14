@@ -187,6 +187,11 @@ export type Merchant = {
   updatedAt: string;
   lastVisitAt: string | null;
   /**
+   * Set when a legacy V1 merchant carried the manual "أرشيف" marker. Archived
+   * rows stay queryable by id for history, but never appear in active lists.
+   */
+  archivedAt?: string | null;
+  /**
    * CRM roll-up fields. They are derived from the visit timeline but stored on
    * the merchant so the profile card renders without replaying every report.
    */
