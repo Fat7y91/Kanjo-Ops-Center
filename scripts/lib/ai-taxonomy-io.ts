@@ -190,7 +190,9 @@ export async function applyResults(
             .schema("app")
             .from("catalog_products")
             .update({
-              taxonomy_category_id: item.taxonomy_category_id,
+              taxonomy_category_id: item.needs_human_review
+                ? null
+                : item.taxonomy_category_id,
               ai_confidence_score: item.confidence,
               ai_categorized_at: now,
               needs_human_review: item.needs_human_review,
