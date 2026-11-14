@@ -64,6 +64,13 @@
   gap: 12px;
 }
 
+.cat-directory-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-inline-start: auto;
+}
+
 .cat-directory-search {
   max-width: 280px;
 }
@@ -332,6 +339,12 @@
   .cat-directory-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .cat-directory-actions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-inline-start: 0;
   }
 
   .cat-directory-search {

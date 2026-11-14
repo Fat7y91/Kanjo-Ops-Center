@@ -76,7 +76,7 @@ export const biFiltersSchema = z.object({
 export type BiFilters = z.infer<typeof biFiltersSchema>;
 
 export const DEFAULT_BI_FILTERS: BiFilters = {
-  range: "90d",
+  range: "all",
   cityId: null,
   team: null,
   repId: null,

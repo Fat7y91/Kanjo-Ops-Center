@@ -112,16 +112,18 @@ export function useProductEntry({
 
     const attributes: Record<number, number[]> = {};
     const variantPrices: Record<string, string> = {};
-    for (const selection of payload.attributes) {
+    const mappedAttributes = payload.attributes.filter(
+      (selection) => selection.variantId != null,
+    );
+    for (const selection of mappedAttributes) {
+      const variantId = selection.variantId;
+      if (variantId == null) continue;
       for (const optionId of selection.optionIds) {
-        attributes[selection.variantId] = [
-          ...(attributes[selection.variantId] ?? []),
-          optionId,
-        ];
+        attributes[variantId] = [...(attributes[variantId] ?? []), optionId];
       }
     }
-    if (payload.attributes.length > 0) {
-      const key = payload.attributes
+    if (mappedAttributes.length > 0) {
+      const key = mappedAttributes
         .map(
           (selection) => `${selection.variantId}:${selection.optionIds[0]}`,
         )

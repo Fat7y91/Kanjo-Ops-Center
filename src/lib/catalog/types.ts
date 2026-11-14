@@ -7,7 +7,8 @@ export type CatalogProductState =
 export type CatalogProductType = "simple" | "variable";
 
 export type CatalogVariantSelection = {
-  variantId: number;
+  /** Legacy rows may carry no resolvable variant id. */
+  variantId?: number | null;
   optionIds: number[];
 };
 

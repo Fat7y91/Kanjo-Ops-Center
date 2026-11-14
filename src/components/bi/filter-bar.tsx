@@ -5,6 +5,7 @@ import { SelectMenu } from "@/components/ui/select-menus";
 import {
   BI_RANGES,
   BI_RANGE_LABELS,
+  DEFAULT_BI_FILTERS,
   type BiCityOption,
   type BiFilters,
   type BiRange,
@@ -42,7 +43,7 @@ export function FilterBar({
   onReset,
 }: FilterBarProps) {
   const dirty =
-    filters.range !== "90d" ||
+    filters.range !== DEFAULT_BI_FILTERS.range ||
     filters.cityId !== null ||
     filters.team !== null ||
     filters.repId !== null ||

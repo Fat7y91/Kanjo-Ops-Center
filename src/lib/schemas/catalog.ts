@@ -3,7 +3,7 @@ import { z } from "zod";
 export const catalogProductTypeSchema = z.enum(["simple", "variable"]);
 
 export const catalogVariantSelectionSchema = z.object({
-  variantId: z.number().int().positive(),
+  variantId: z.number().int().positive().nullable().optional(),
   optionIds: z.array(z.number().int().positive()).default([]),
 });
 

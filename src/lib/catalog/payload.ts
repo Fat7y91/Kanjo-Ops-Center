@@ -20,7 +20,10 @@ export const catalogProductSchema = z.object({
   barcode: z.string(),
   imageDataUrl: z.string().nullable(),
   attributes: z.array(
-    z.object({ variantId: z.number(), optionIds: z.array(z.number()) }),
+    z.object({
+      variantId: z.number().nullable().optional(),
+      optionIds: z.array(z.number()),
+    }),
   ),
   price: z.number(),
   state: z.enum(["pending_review", "completed", "published"]),

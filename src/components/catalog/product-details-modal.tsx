@@ -32,9 +32,12 @@ export function ProductDetailsModal({
 
   const variantRows = product.attributes
     .map((selection) => {
-      const variant = variants.find(
-        (candidate) => candidate.variant_id === selection.variantId,
-      );
+      const variant =
+        selection.variantId == null
+          ? undefined
+          : variants.find(
+              (candidate) => candidate.variant_id === selection.variantId,
+            );
       const options = selection.optionIds
         .map((optionId) =>
           variant?.options.find((option) => option.option_id === optionId),
@@ -42,8 +45,12 @@ export function ProductDetailsModal({
         .filter((option) => option !== undefined)
         .map((option) => option.option_name_ar);
       return {
-        variantId: selection.variantId,
-        name: variant?.name_ar ?? `متغير #${selection.variantId}`,
+        variantId: selection.variantId ?? null,
+        name:
+          variant?.name_ar ??
+          (selection.variantId == null
+            ? "متغير غير محدد"
+            : `متغير #${selection.variantId}`),
         options,
       };
     })
@@ -119,7 +126,7 @@ export function ProductDetailsModal({
         ) : (
           <ul>
             {variantRows.map((row) => (
-              <li key={row.variantId}>
+              <li key={row.variantId ?? "unmapped"}>
                 <strong>{row.name}</strong>
                 <span>{row.options.join(" · ")}</span>
               </li>
