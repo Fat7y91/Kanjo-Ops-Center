@@ -581,6 +581,18 @@ tolerates a browser that forbids `BroadcastChannel`.
   and `/requests` accepts the module set; `POST /requests` needs
   `review_add_requests`; `POST /entries` needs one of the three manager keys;
   approve/reject needs `manage_categories` or `review_add_requests`.
+- Data backfill: `scripts/ai-taxonomy-batch.ts` classifies uncategorized
+  products, merchants without a vendor type, and legacy variant labels through
+  DeepSeek. A product below `CONFIDENCE_THRESHOLD` (85) is stored with
+  `taxonomy_category_id = null` and `needs_human_review = true`, never a guessed
+  category; merchant and variant passes write their flagged rows to
+  `.ai-migration/review/`.
+- Zero-review pass: `scripts/ai-force-resolve-review.ts` re-prompts only the
+  flagged rows and commits the model's best valid catalogue id regardless of
+  score. Missing or invalid model output falls back to `smartTextScore`
+  (categories, merchant types) or the variant label patterns, so every resolved
+  row keeps a valid id and clears `needs_human_review`. `--commit` is required;
+  `--limit` and `--batch-size` bound a run.
 
 ### BI / Overview (Tier 1 + 3)
 - UI: `src/app/(workspace)/overview/`, `src/components/` charts.
