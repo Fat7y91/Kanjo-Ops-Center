@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { requireModuleAccess } from "@/lib/auth/guard";
+import { refreshVariantsFromDatabase } from "@/lib/taxonomy/db-variants";
 import {
   listCategories,
   listTaxonomyRequests,
@@ -14,6 +15,7 @@ export const runtime = "edge";
 
 export default async function CatalogTaxonomyPage() {
   const session = await requireModuleAccess("/catalog/taxonomy");
+  await refreshVariantsFromDatabase();
 
   const snapshot = {
     vendorTypes: listVendorTypes(),

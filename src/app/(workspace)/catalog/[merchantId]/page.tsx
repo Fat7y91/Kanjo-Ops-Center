@@ -11,6 +11,7 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 import { loadMerchantStates } from "@/lib/field-ops/state-source";
 import { getCityById, getMerchantById } from "@/lib/field-ops/store";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
+import { refreshVariantsFromDatabase } from "@/lib/taxonomy/db-variants";
 import {
   listCategories,
   listVendorTypes,
@@ -37,6 +38,7 @@ export default async function MerchantCatalogPage({
   params,
 }: MerchantCatalogPageProps) {
   const session = await requireModuleAccess("/catalog");
+  await refreshVariantsFromDatabase();
   const { merchantId } = await params;
   const merchant = await getMerchantById(merchantId);
   if (!merchant || !(await effectiveCityIds(session)).includes(merchant.cityId)) {

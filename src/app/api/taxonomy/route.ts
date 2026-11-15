@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeAny } from "@/lib/auth/api";
+import { refreshVariantsFromDatabase } from "@/lib/taxonomy/db-variants";
 import { taxonomySnapshot } from "@/lib/taxonomy/store";
 import { permissionsForModule } from "@/lib/rbac/modules";
 
@@ -13,6 +14,7 @@ export async function GET() {
   );
   if (!session) return response;
 
+  await refreshVariantsFromDatabase();
   return NextResponse.json(taxonomySnapshot(), {
     headers: { "Cache-Control": "no-store" },
   });

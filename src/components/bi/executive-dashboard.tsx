@@ -78,7 +78,13 @@ export function ExecutiveDashboard({
     [scoped],
   );
   const finance = useMemo(
-    () => buildFinance(scoped.merchants, scoped.expenses),
+    () =>
+      buildFinance(
+        scoped.merchants,
+        scoped.orders,
+        scoped.expenses,
+        scoped.partyBalances,
+      ),
     [scoped],
   );
   const marketing = useMemo(

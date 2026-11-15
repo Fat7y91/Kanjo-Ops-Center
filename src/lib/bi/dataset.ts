@@ -7,6 +7,7 @@ import { buildFounderFinancials } from "@/lib/accounts/founder";
 import { listBankAccounts, listLedgerEntries } from "@/lib/accounts/store";
 import { summarizeAll } from "@/lib/accounts/ledger";
 import { listCampaigns, listMarketingEntries } from "@/lib/marketing/store";
+import { loadPartyBalanceTotals } from "@/lib/operations/clearinghouse-repository";
 import { buildPayslips } from "@/lib/payroll/store";
 
 import { buildLiveExpenses, buildLiveMarketing } from "./live-facts";
@@ -186,13 +187,19 @@ export async function buildBiDataset(): Promise<BiDataset> {
       )?.amount ?? 0,
   }));
 
-  const [bankAccounts, ledgerEntries, campaigns, marketingEntries] =
-    await Promise.all([
-      listBankAccounts(),
-      listLedgerEntries(),
-      listCampaigns(),
-      listMarketingEntries(),
-    ]);
+  const [
+    bankAccounts,
+    ledgerEntries,
+    campaigns,
+    marketingEntries,
+    partyBalances,
+  ] = await Promise.all([
+    listBankAccounts(),
+    listLedgerEntries(),
+    listCampaigns(),
+    listMarketingEntries(),
+    loadPartyBalanceTotals(),
+  ]);
   const resolveCity = (cityId: string | null) =>
     cityId ? (cityName.get(cityId) ?? cityId) : "غير محدد";
   const accounts = summarizeAll(bankAccounts, ledgerEntries).map(
@@ -249,6 +256,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
     marketing: buildLiveMarketing(campaigns, marketingEntries, resolveCity),
     catalog: catalogRows,
     orders,
+    partyBalances,
     treasury,
     accounts,
     ledger,

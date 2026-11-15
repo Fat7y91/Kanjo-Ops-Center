@@ -8,6 +8,7 @@ import {
   type BiMarketingChannel,
   type BiMerchantRow,
 } from "./types";
+import { summarizeOrderMetrics } from "./order-metrics";
 
 const RANGE_DAYS: Record<BiFilters["range"], number | null> = {
   "30d": 30,
@@ -50,6 +51,8 @@ export type BiScopedData = {
   accounts: BiDataset["accounts"];
   ledger: BiDataset["ledger"];
   payslips: BiDataset["payslips"];
+  orders: BiDataset["orders"];
+  partyBalances: BiDataset["partyBalances"];
 };
 
 /**
@@ -71,6 +74,22 @@ export function scopeDataset(
   const repOk = (repId: string | null) => !filters.repId || repId === filters.repId;
   const vendorTypeOk = (vendorTypeId: number | null) =>
     filters.vendorTypeId === null || vendorTypeId === filters.vendorTypeId;
+
+  const merchantMeta = new Map(
+    dataset.merchants.map((row) => [
+      row.id,
+      { team: row.team, repId: row.repId },
+    ]),
+  );
+  const orderOk = (row: BiDataset["orders"][number]) => {
+    const merchant = merchantMeta.get(row.merchantId);
+    return (
+      cityOk(row.cityId ?? "") &&
+      teamOk(merchant?.team ?? "غير مسند") &&
+      repOk(merchant?.repId ?? null) &&
+      withinRange(row.date, start)
+    );
+  };
 
   return {
     merchants: dataset.merchants.filter(
@@ -99,6 +118,8 @@ export function scopeDataset(
     accounts: dataset.accounts,
     ledger: dataset.ledger,
     payslips: dataset.payslips,
+    orders: dataset.orders.filter(orderOk),
+    partyBalances: dataset.partyBalances,
   };
 }
 
@@ -187,26 +208,51 @@ function average(values: number[]): number {
 }
 
 export type FinanceSummary = {
+  /** Merchant commissions collected on the orders in scope. */
   collected: number;
-  expenses: number;
+  /** Kanjo's delivery commission from drivers, net of the courier cut. */
+  driverCommissions: number;
+  /** Absolute clearinghouse receivable, never date-filtered. */
+  receivables: number;
+  /** Absolute clearinghouse payable, never date-filtered. */
+  payables: number;
+  /** Operational collection only; corporate expenses are not subtracted. */
   net: number;
+  expenses: number;
   marginRate: number;
   monthlyRunRate: number;
   signedCount: number;
 };
 
+/**
+ * Operational collection, not corporate profit.
+ *
+ * The KPI answers “how much operational money did the network collect?”:
+ * merchant commissions plus Kanjo's share of driver delivery fees. Corporate
+ * expenses, founder capital and bank balances belong to other cards and are
+ * deliberately excluded. Receivables/payables are book positions and ignore
+ * the date filter.
+ */
 export function buildFinance(
   merchants: BiMerchantRow[],
+  orders: BiScopedData["orders"],
   expenses: BiScopedData["expenses"],
+  partyBalances: BiScopedData["partyBalances"],
 ): FinanceSummary {
-  const collected = sum(merchants.map((row) => row.collected));
+  const orderSummary = summarizeOrderMetrics(
+    orders.filter((row) => row.currency === "EGP"),
+  );
+  const egpParty = partyBalances.find((row) => row.currency === "EGP");
   const expenseTotal = sum(expenses.map((row) => row.amount));
   const monthlyValue = sum(merchants.map((row) => row.monthlyValue));
 
   return {
-    collected,
+    collected: orderSummary.merchantCommission,
+    driverCommissions: orderSummary.driverCommission,
+    receivables: egpParty?.receivables ?? 0,
+    payables: egpParty?.payables ?? 0,
+    net: Math.round(orderSummary.operationalCollection),
     expenses: expenseTotal,
-    net: Math.round(collected - expenseTotal),
     marginRate:
       monthlyValue === 0
         ? 0

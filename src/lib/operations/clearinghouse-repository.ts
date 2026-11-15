@@ -153,3 +153,55 @@ export async function postSettlement(
   if (error) throw error;
   return data as string;
 }
+
+export type PartyBalanceTotals = {
+  currency: ClearingAccountRow["currency"];
+  receivables: number;
+  payables: number;
+};
+
+/**
+ * Company-wide receivable/payable totals, split by currency.
+ *
+ * These are absolute book positions, not period flows: the dashboard must not
+ * apply its date filter to them. Only party accounts are included; control and
+ * bank accounts are excluded by the view's `party_type` column.
+ */
+export async function loadPartyBalanceTotals(): Promise<PartyBalanceTotals[]> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from(BALANCE_VIEW)
+    .select("currency,balance_minor")
+    .not("party_type", "is", null)
+    .limit(2000);
+
+  if (error) {
+    if (isMissingSchemaObject(error)) {
+      return [
+        { currency: "EGP", receivables: 0, payables: 0 },
+        { currency: "SAR", receivables: 0, payables: 0 },
+      ];
+    }
+    throw error;
+  }
+
+  const totals: Record<"EGP" | "SAR", PartyBalanceTotals> = {
+    EGP: { currency: "EGP", receivables: 0, payables: 0 },
+    SAR: { currency: "SAR", receivables: 0, payables: 0 },
+  };
+
+  for (const raw of (data ?? []) as Array<{
+    currency: "EGP" | "SAR";
+    balance_minor: number | string;
+  }>) {
+    const amount = Number(raw.balance_minor) / 100;
+    if (!Number.isFinite(amount) || amount === 0) continue;
+    const bucket = totals[raw.currency];
+    if (!bucket) continue;
+    if (amount > 0) bucket.receivables += amount;
+    else bucket.payables += -amount;
+  }
+
+  return [totals.EGP, totals.SAR];
+}

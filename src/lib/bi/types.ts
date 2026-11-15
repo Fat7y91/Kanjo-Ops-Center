@@ -276,6 +276,7 @@ export const biOrderMetricRowSchema = z.object({
   currency: z.enum(["EGP", "SAR"]),
   orders: z.number().int().nonnegative(),
   volume: z.number(),
+  deliveryFee: z.number(),
   commission: z.number(),
   courierCut: z.number(),
   couponDiscount: z.number(),
@@ -284,6 +285,20 @@ export const biOrderMetricRowSchema = z.object({
   walletDiscount: z.number(),
 });
 export type BiOrderMetricRow = z.infer<typeof biOrderMetricRowSchema>;
+
+/**
+ * Party-account totals from the double-entry clearinghouse.
+ *
+ * Receivables are positive party balances (the party owes Kanjo); payables are
+ * negative balances (Kanjo owes the party). These are book positions, not a
+ * period flow, so the dashboard never applies the date filter to them.
+ */
+export const biPartyBalanceSchema = z.object({
+  currency: z.enum(["EGP", "SAR"]),
+  receivables: z.number().nonnegative(),
+  payables: z.number().nonnegative(),
+});
+export type BiPartyBalance = z.infer<typeof biPartyBalanceSchema>;
 
 export const biDatasetSchema = z.object({
   generatedAt: z.string(),
@@ -298,6 +313,8 @@ export const biDatasetSchema = z.object({
   marketing: z.array(biMarketingRowSchema),
   catalog: z.array(biCatalogRowSchema),
   orders: z.array(biOrderMetricRowSchema),
+  /** Absolute clearinghouse positions; never narrowed by the filter bar. */
+  partyBalances: z.array(biPartyBalanceSchema),
   /**
    * Treasury position, computed on the server and shipped with the payload so
    * the dashboard client never imports the accounts or payroll stores. Client

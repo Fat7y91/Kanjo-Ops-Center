@@ -23,6 +23,16 @@ export const EMPTY_ORDER_FILTERS: OrderMetricFilters = {
 export type OrderMetricSummary = {
   orders: number;
   volume: number;
+  /** Frozen merchant commissions on the operations in scope. */
+  merchantCommission: number;
+  /**
+   * Kanjo's delivery commission from drivers: the part of the delivery fee the
+   * courier does not keep. A subsidised delivery never becomes a negative
+   * collection.
+   */
+  driverCommission: number;
+  /** Operational cash Kanjo earns before any overhead is deducted. */
+  operationalCollection: number;
   platformProfit: number;
   merchantProfit: number;
   courierProfit: number;
@@ -57,6 +67,8 @@ export function summarizeOrderMetrics(
 ): OrderMetricSummary {
   let orders = 0;
   let volume = 0;
+  let deliveryFee = 0;
+  let driverCommission = 0;
   let commission = 0;
   let courierCut = 0;
   let platformFunded = 0;
@@ -67,6 +79,8 @@ export function summarizeOrderMetrics(
   for (const row of rows) {
     orders += row.orders;
     volume += row.volume;
+    deliveryFee += row.deliveryFee;
+    driverCommission += Math.max(0, row.deliveryFee - row.courierCut);
     commission += row.commission;
     courierCut += row.courierCut;
     platformFunded += row.platformFunded;
@@ -78,6 +92,9 @@ export function summarizeOrderMetrics(
   return {
     orders,
     volume,
+    merchantCommission: commission,
+    driverCommission,
+    operationalCollection: commission + driverCommission,
     platformProfit: commission - platformFunded - walletDiscount,
     merchantProfit: volume - commission - vendorFunded,
     courierProfit: courierCut,

@@ -75,8 +75,22 @@ export function ExecutiveSummary({
         href: "/finance/clearinghouse",
         label: "صافي التحصيل",
         value: money(finance.net),
-        detail: `${money(finance.collected)} محصّل`,
+        detail: `${money(finance.collected)} تجار · ${money(finance.driverCommissions)} مناديب`,
         tone: "green",
+      },
+      {
+        href: "/finance/clearinghouse",
+        label: "مبالغ لم تحصل",
+        value: money(finance.receivables),
+        detail: "مستحقة لكانجو",
+        tone: "gold",
+      },
+      {
+        href: "/finance/clearinghouse",
+        label: "مبالغ لم تسدد",
+        value: money(finance.payables),
+        detail: "مستحقة على كانجو",
+        tone: "red",
       },
     );
   }
