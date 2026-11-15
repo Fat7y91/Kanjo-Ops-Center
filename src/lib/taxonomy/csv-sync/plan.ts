@@ -12,6 +12,7 @@ import {
   taxonomyUuid,
   type CategoryCsvRow,
   type ParsedCsv,
+  type VariantAttributeCsvRow,
 } from "./parse";
 
 export type CategoryUpsertPlan = {
@@ -95,4 +96,95 @@ export function buildCategoryPlan(
 
   rows.sort((a, b) => a.level - b.level || a.id.localeCompare(b.id));
   return { rows, duplicates, unresolvedParents };
+}
+
+export type VariantAttributeUpsert = {
+  id: number;
+  name_ar: string;
+  name_en: string;
+  updated_at: string;
+};
+
+export type VariantOptionUpsert = {
+  id: number;
+  variant_id: number;
+  name_ar: string;
+  name_en: string;
+  updated_at: string;
+};
+
+export type VariantPlanResult = {
+  attributes: VariantAttributeUpsert[];
+  options: VariantOptionUpsert[];
+  duplicates: number;
+  unresolvedGroups: number;
+};
+
+/**
+ * Builds the variant upsert plan.
+ *
+ * Variants are global, so this plan does not need vendor types or categories.
+ * Group names may be blank on a row when the export repeats a group id: the
+ * first non-blank name wins, and a known group id falls back to the seed names.
+ * Options with no resolvable group are skipped instead of violating the FK.
+ */
+export function buildVariantPlan(
+  parsed: ParsedCsv<VariantAttributeCsvRow>,
+  fallbackNames: Map<number, { nameAr: string; nameEn: string }>,
+  updatedAt: string,
+): VariantPlanResult {
+  type Group = { id: number; name_ar: string; name_en: string };
+  const groups = new Map<number, Group>();
+  const options = new Map<number, VariantAttributeCsvRow>();
+  let duplicates = 0;
+
+  for (const row of parsed.rows) {
+    const fallback = fallbackNames.get(row.variantId);
+    let group = groups.get(row.variantId);
+    if (!group) {
+      group = {
+        id: row.variantId,
+        name_ar: row.variantNameAr || fallback?.nameAr || "",
+        name_en: row.variantNameEn || fallback?.nameEn || "",
+      };
+      groups.set(row.variantId, group);
+    } else {
+      if (!group.name_ar && row.variantNameAr) group.name_ar = row.variantNameAr;
+      if (!group.name_en && row.variantNameEn) group.name_en = row.variantNameEn;
+    }
+
+    if (options.has(row.optionId)) duplicates += 1;
+    options.set(row.optionId, row);
+  }
+
+  const unresolved = [...groups.values()].filter((group) => !group.name_ar);
+  const unresolvedIds = new Set(unresolved.map((group) => group.id));
+
+  const attributes = [...groups.values()]
+    .filter((group) => !!group.name_ar)
+    .map((group) => ({
+      id: group.id,
+      name_ar: group.name_ar,
+      name_en: group.name_en,
+      updated_at: updatedAt,
+    }));
+
+  const optionRows: VariantOptionUpsert[] = [];
+  for (const row of options.values()) {
+    if (unresolvedIds.has(row.variantId)) continue;
+    optionRows.push({
+      id: row.optionId,
+      variant_id: row.variantId,
+      name_ar: row.optionNameAr,
+      name_en: row.optionNameEn,
+      updated_at: updatedAt,
+    });
+  }
+
+  return {
+    attributes,
+    options: optionRows,
+    duplicates,
+    unresolvedGroups: unresolved.length,
+  };
 }

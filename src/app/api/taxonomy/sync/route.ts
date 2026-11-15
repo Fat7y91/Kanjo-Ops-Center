@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { apiError, authorize, readJson } from "@/lib/auth/api";
-import { VENDOR_TYPE_SEED } from "@/lib/taxonomy/data.generated";
+import { VARIANT_SEED, VENDOR_TYPE_SEED } from "@/lib/taxonomy/data.generated";
 import { CsvSyncError } from "@/lib/taxonomy/csv-sync/repository";
-import { syncCategories } from "@/lib/taxonomy/csv-sync/repository";
-import { buildCategoryPlan } from "@/lib/taxonomy/csv-sync/plan";
-import { parseCategories, parseVendorTypes } from "@/lib/taxonomy/csv-sync/parse";
+import { syncCategories, syncVariants } from "@/lib/taxonomy/csv-sync/repository";
+import { buildCategoryPlan, buildVariantPlan } from "@/lib/taxonomy/csv-sync/plan";
+import {
+  parseCategories,
+  parseVariantAttributes,
+  parseVendorTypes,
+} from "@/lib/taxonomy/csv-sync/parse";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -13,10 +17,12 @@ export const runtime = "edge";
 /**
  * Applies a V1 dashboard CSV sync.
  *
- * Each file is independent: an operator may sync only `categories.csv`. The
- * client parses the CSVs and sends whatever normalised rows it has. The server
- * re-derives every uuid from the same md5 formula before writing, so a tampered
- * payload cannot choose its own ids.
+ * Each file is independent: an operator may sync only `categories.csv`, only
+ * `vendor-types.csv`, or only `variant-attributes.csv`. The client parses the
+ * CSVs and sends whatever normalised rows it has. The server re-derives every
+ * category uuid from the same md5 formula before writing, so a tampered payload
+ * cannot choose its own ids. Variants use their dashboard numeric ids directly
+ * and do not depend on vendor types or categories.
  *
  * When `vendor-types.csv` is not supplied, vendor names fall back to the
  * generated VENDOR_TYPE_SEED so `vendor_type` is still the Arabic name the seed
@@ -32,27 +38,44 @@ export async function POST(request: Request) {
     const payload = (await readJson(request)) as {
       categories?: Record<string, unknown>[];
       vendorTypes?: Record<string, unknown>[];
+      variantAttributes?: Record<string, unknown>[];
     };
 
-    const hasVendorTypes = Array.isArray(payload.vendorTypes);
-    const hasCategories = Array.isArray(payload.categories);
+    const vendorRows = Array.isArray(payload.vendorTypes) ? payload.vendorTypes : [];
+    const categoryRows = Array.isArray(payload.categories) ? payload.categories : [];
+    const variantRows = Array.isArray(payload.variantAttributes)
+      ? payload.variantAttributes
+      : [];
 
-    if (!hasVendorTypes && !hasCategories) {
+    if (vendorRows.length + categoryRows.length + variantRows.length === 0) {
       throw new CsvSyncError(
         "INVALID_INPUT",
-        "لم يتم إرسال أي ملف للمزامنة.",
+        "لم يتم إرسال أي صف للمزامنة.",
         422,
       );
     }
 
-    const vendors = parseVendorTypes(payload.vendorTypes ?? []);
+    const vendors = parseVendorTypes(vendorRows);
     const vendorNames = new Map<number, string>(
       VENDOR_TYPE_SEED.map((vendor) => [vendor.id, vendor.name_ar]),
     );
     for (const vendor of vendors.rows) vendorNames.set(vendor.numericId, vendor.nameAr);
 
-    const categories = parseCategories(payload.categories ?? []);
+    const categories = parseCategories(categoryRows);
     const planResult = buildCategoryPlan(categories, vendorNames);
+
+    const variants = parseVariantAttributes(variantRows);
+    const variantFallback = new Map(
+      VARIANT_SEED.map((group) => [
+        group.variant_id,
+        { nameAr: group.name_ar, nameEn: group.name_en },
+      ]),
+    );
+    const variantPlan = buildVariantPlan(
+      variants,
+      variantFallback,
+      new Date().toISOString(),
+    );
 
     // A vendor type that is in neither the upload nor the seed was written with
     // its numeric id as `vendor_type`; flag it so the operator can upload the
@@ -69,6 +92,8 @@ export async function POST(request: Request) {
         ? await syncCategories(planResult.rows)
         : { created: 0, updated: 0 };
 
+    const variantWrite = await syncVariants(variantPlan);
+
     return NextResponse.json({
       summary: {
         vendorTypesParsed: vendors.rows.length,
@@ -78,7 +103,15 @@ export async function POST(request: Request) {
         unknownVendors: [...unknownVendors],
         created: writeResult.created,
         updated: writeResult.updated,
-        issues: [...vendors.issues, ...categories.issues],
+        variantGroupsParsed: variantPlan.attributes.length,
+        variantOptionsParsed: variantPlan.options.length,
+        variantGroupsCreated: variantWrite.groupsCreated,
+        variantGroupsUpdated: variantWrite.groupsUpdated,
+        variantOptionsCreated: variantWrite.optionsCreated,
+        variantOptionsUpdated: variantWrite.optionsUpdated,
+        variantDuplicates: variantPlan.duplicates,
+        unresolvedVariantGroups: variantPlan.unresolvedGroups,
+        issues: [...vendors.issues, ...categories.issues, ...variants.issues],
       },
     });
   } catch (error) {

@@ -14,6 +14,14 @@ type SyncSummary = {
   unknownVendors: number[];
   created: number;
   updated: number;
+  variantGroupsParsed: number;
+  variantOptionsParsed: number;
+  variantGroupsCreated: number;
+  variantGroupsUpdated: number;
+  variantOptionsCreated: number;
+  variantOptionsUpdated: number;
+  variantDuplicates: number;
+  unresolvedVariantGroups: number;
   issues: { file: string; line: number; message: string }[];
 };
 
@@ -49,11 +57,9 @@ function parseFile(file: File): Promise<Record<string, unknown>[]> {
  * V1 dashboard CSV import.
  *
  * Parsing happens in the browser so a large export never streams through the
- * API. Only the categories rows (and vendor types, for name resolution) are
- * sent to the server, which re-derives the deterministic uuids before writing.
- * Variant attributes are parsed here for a count only: the database has no
- * variant table yet, and silently dropping them would be dishonest, so they are
- * reported as parsed-but-not-persisted.
+ * API. The normalised rows are sent to the server, which re-derives category
+ * uuids and writes categories and variant groups/options independently. A
+ * variant-attributes.csv upload does not require the other two files.
  */
 export function TaxonomySyncModal({
   open,
@@ -85,8 +91,8 @@ export function TaxonomySyncModal({
 
   // Every file is independent: an operator may sync categories alone, vendor
   // types alone (names resolve against the seed for later category imports), or
-  // variant attributes alone (parse-only today). The button unlocks as soon as
-  // any one file has rows.
+  // variant attributes alone (written to the variant tables). The button
+  // unlocks as soon as any one file has rows.
   const canSync = loadedCount > 0 && !busy;
 
   async function choose(key: FileKey, file: File | null) {
@@ -124,9 +130,15 @@ export function TaxonomySyncModal({
         throw new Error(payload.error ?? "تعذرت المزامنة.");
       }
       setSummary(payload.summary);
-      onSynced?.(
-        `تمت المزامنة: ${payload.summary.created} جديد و${payload.summary.updated} محدّث.`,
-      );
+      const created =
+        payload.summary.created +
+        payload.summary.variantGroupsCreated +
+        payload.summary.variantOptionsCreated;
+      const updated =
+        payload.summary.updated +
+        payload.summary.variantGroupsUpdated +
+        payload.summary.variantOptionsUpdated;
+      onSynced?.(`تمت المزامنة: ${created} جديد و${updated} محدّث.`);
     } catch (syncError) {
       setError(syncError instanceof Error ? syncError.message : "تعذرت المزامنة.");
     } finally {
@@ -146,7 +158,7 @@ export function TaxonomySyncModal({
       open={open}
       title="مزامنة لوحة التحكم"
       eyebrow="استيراد التصنيفات من V1"
-      description="ارفع أي ملف من ملفات CSV من لوحة V1 بشكل مستقل. تُشتق المعرّفات تلقائياً بنفس صيغة البذرة (md5 موسّع بنطاق نوع التاجر) لمنع تصادم المعرّفات بين الأنواع."
+      description="ارفع أي ملف من ملفات CSV من لوحة V1 بشكل مستقل. تُشتق معرّفات التصنيفات تلقائياً بنفس صيغة البذرة، وتُحفظ المتغيرات وخياراتها بمعرّفات اللوحة الرقمية."
       onClose={() => {
         if (busy) return;
         onClose();
@@ -170,16 +182,14 @@ export function TaxonomySyncModal({
             <span className="field-hint">
               {names[key]
                 ? `${names[key]} · ${files[key].length} صف`
-                : key === "variantAttributes"
-                  ? "اختياري: يُحلَّل للعرض فقط حالياً."
-                  : "اختياري: ارفعه عند الحاجة فقط."}
+                : "اختياري: ارفعه عند الحاجة فقط."}
             </span>
           </label>
         ))}
 
         <div className="inline-note">
-          تم تحليل {parsedCount} صفاً من {loadedCount} ملف. تُزامن التصنيفات فقط
-          مع قاعدة البيانات؛ تُستخدم أنواع التجّار لحل الأسماء.
+          تم تحليل {parsedCount} صفاً من {loadedCount} ملف. تُزامن التصنيفات
+          والمتغيرات مع قاعدة البيانات؛ تُستخدم أنواع التجّار لحل الأسماء.
         </div>
 
         {error ? (
@@ -191,15 +201,40 @@ export function TaxonomySyncModal({
         {summary ? (
           <div className="inline-note" role="status">
             <strong>اكتملت المزامنة</strong>
-            <br />
-            تم إنشاء {summary.created} وتحديث {summary.updated}. تحليل{" "}
-            {summary.categoriesParsed} تصنيفاً من أصل {summary.vendorTypesParsed} نوع
-            تاجر
-            {summary.duplicates > 0 ? `، و${summary.duplicates} صف مكرر دُمج` : ""}
-            {summary.unresolvedParents > 0
-              ? `، و${summary.unresolvedParents} أب غير موجود (اعتُبر المستوى الأول)`
-              : ""}
-            .
+            {summary.categoriesParsed > 0 || summary.vendorTypesParsed > 0 ? (
+              <>
+                <br />
+                تم إنشاء {summary.created} تصنيفاً وتحديث {summary.updated}.
+                تحليل {summary.categoriesParsed} تصنيفاً من أصل{" "}
+                {summary.vendorTypesParsed} نوع تاجر
+                {summary.duplicates > 0
+                  ? `، و${summary.duplicates} صف مكرر دُمج`
+                  : ""}
+                {summary.unresolvedParents > 0
+                  ? `، و${summary.unresolvedParents} أب غير موجود (اعتُبر المستوى الأول)`
+                  : ""}
+                .
+              </>
+            ) : null}
+            {summary.variantGroupsParsed > 0 ||
+            summary.variantOptionsParsed > 0 ? (
+              <>
+                <br />
+                تم إنشاء {summary.variantGroupsCreated} مجموعة متغيرات و
+                {summary.variantOptionsCreated} خياراً، وتحديث{" "}
+                {summary.variantGroupsUpdated} مجموعة و
+                {summary.variantOptionsUpdated} خياراً. تحليل{" "}
+                {summary.variantOptionsParsed} خياراً داخل{" "}
+                {summary.variantGroupsParsed} مجموعة
+                {summary.variantDuplicates > 0
+                  ? `، و${summary.variantDuplicates} صف مكرر دُمج`
+                  : ""}
+                {summary.unresolvedVariantGroups > 0
+                  ? `، و${summary.unresolvedVariantGroups} مجموعة بلا اسم لم تُحفظ`
+                  : ""}
+                .
+              </>
+            ) : null}
             {summary.unknownVendors.length > 0 ? (
               <>
                 <br />

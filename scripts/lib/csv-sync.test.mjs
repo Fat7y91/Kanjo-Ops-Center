@@ -107,3 +107,57 @@ test("buildCategoryPlan keeps empty name_en as an empty string", () => {
   const result = plan.buildCategoryPlan(parsed, new Map());
   assert.equal(result.rows[0].name_en, "");
 });
+
+test("parseVariantAttributes keeps standalone variant rows", () => {
+  const result = parse.parseVariantAttributes([
+    { variant_id: "1", variant_name_ar: "الحجم", option_id: "1", option_name_ar: "صغير" },
+    { variantId: "1", group_name_ar: "الحجم", optionId: "2", name_ar: "وسط" },
+    { variant_id: "1", option_id: "0", name_ar: "سيئ" },
+  ]);
+  assert.equal(result.rows.length, 2);
+  assert.equal(result.rows[0].variantId, 1);
+  assert.equal(result.rows[1].optionNameAr, "وسط");
+  assert.equal(result.issues.length, 1);
+});
+
+test("buildVariantPlan needs no vendor or category rows", () => {
+  const parsed = parse.parseVariantAttributes([
+    { variant_id: "1", variant_name_ar: "الحجم", option_id: "1", option_name_ar: "صغير", option_name_en: "Small" },
+    { variant_id: "1", variant_name_ar: "الحجم", option_id: "2", option_name_ar: "وسط" },
+    { variant_id: "2", variant_name_ar: "الطعم", option_id: "7", option_name_ar: "عادي" },
+  ]);
+  const result = plan.buildVariantPlan(parsed, new Map(), "2026-11-28T00:00:00.000Z");
+  assert.equal(result.attributes.length, 2);
+  assert.equal(result.options.length, 3);
+  assert.equal(result.unresolvedGroups, 0);
+  assert.equal(result.attributes[0].name_en, "");
+  assert.equal(result.options[0].variant_id, 1);
+  assert.equal(result.options[0].updated_at, "2026-11-28T00:00:00.000Z");
+});
+
+test("buildVariantPlan falls back to seed names and dedupes option ids", () => {
+  const parsed = parse.parseVariantAttributes([
+    { variant_id: "1", option_id: "1", option_name_ar: "صغير" },
+    { variant_id: "1", variant_name_ar: "الحجم", option_id: "1", option_name_ar: "صغير محدث" },
+  ]);
+  const result = plan.buildVariantPlan(
+    parsed,
+    new Map([[1, { nameAr: "الحجم", nameEn: "Size" }]]),
+    "2026-11-28T00:00:00.000Z",
+  );
+  assert.equal(result.attributes[0].name_ar, "الحجم");
+  assert.equal(result.attributes[0].name_en, "Size");
+  assert.equal(result.options.length, 1);
+  assert.equal(result.options[0].name_ar, "صغير محدث");
+  assert.equal(result.duplicates, 1);
+});
+
+test("buildVariantPlan skips options whose group has no name", () => {
+  const parsed = parse.parseVariantAttributes([
+    { variant_id: "99", option_id: "1", option_name_ar: "بلا مجموعة" },
+  ]);
+  const result = plan.buildVariantPlan(parsed, new Map(), "2026-11-28T00:00:00.000Z");
+  assert.equal(result.attributes.length, 0);
+  assert.equal(result.options.length, 0);
+  assert.equal(result.unresolvedGroups, 1);
+});
