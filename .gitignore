@@ -92,6 +92,7 @@ v1_data_dump.json
 v1_data_dump.json.partial
 
 # Legacy financial source workbooks (production money data; never commit)
+/financials.xlsx
 scripts/legacy-data/*.xlsx
 scripts/legacy-data/*.xls
 scripts/legacy-data/*.xlsm
