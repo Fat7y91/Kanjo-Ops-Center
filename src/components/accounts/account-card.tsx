@@ -107,13 +107,14 @@ export function AccountCard({
               </>
             );
 
-            return onOpenEntry ? (
+            const clickable = Boolean(onOpenEntry && entry.entryId);
+            return clickable ? (
               <li key={entry.id}>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="account-ledger-row"
-                  onClick={() => onOpenEntry(entry.entryId)}
+                  onClick={() => onOpenEntry?.(entry.entryId)}
                   aria-label={`عرض تفاصيل حركة ${entry.label}`}
                 >
                   {content}

@@ -6,6 +6,7 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import type { BankAccount, LedgerEntry } from "./types";
 import { loadCounterparties } from "./counterparties";
+import { loadSarBalance, loadSarEntries } from "./sar-statement";
 
 /**
  * Tier 4 repository for the treasury, backed by the double-entry journal.
@@ -150,7 +151,13 @@ async function listTreasuryBalanceRows(): Promise<BalanceRow[]> {
 }
 
 export async function listBankAccountRows(): Promise<BankAccount[]> {
-  return (await listTreasuryBalanceRows()).map(toAccount);
+  const accounts = (await listTreasuryBalanceRows()).map(toAccount);
+  const sar = accounts.find((account) => account.currency === "SAR");
+  if (sar) {
+    const balance = await loadSarBalance();
+    if (balance !== null) sar.ledgerBalance = balance;
+  }
+  return accounts;
 }
 
 export async function listLedgerRows(
@@ -159,22 +166,36 @@ export async function listLedgerRows(
   if (!isAccountsDatabaseConfigured()) return [];
 
   const accounts = await listTreasuryBalanceRows();
-  const targetIds = accountId
-    ? accounts.filter((account) => account.id === accountId).map((account) => account.id)
-    : accounts.map((account) => account.id);
+  const requested = accountId
+    ? accounts.filter((account) => account.id === accountId)
+    : accounts;
 
-  if (targetIds.length === 0) return [];
+  if (requested.length === 0) return [];
+
+  const sar = requested.find((account) => account.code === "1000-SAR");
+  const journalTargets = requested.filter((account) => account.code !== "1000-SAR");
+  const entries: LedgerEntry[] = [];
+
+  if (sar) entries.push(...(await loadSarEntries(sar.id)));
+  if (journalTargets.length === 0) {
+    return entries.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+  }
 
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
     .from("journal_lines")
     .select(LINE_COLUMNS)
-    .in("account_id", targetIds)
+    .in(
+      "account_id",
+      journalTargets.map((account) => account.id),
+    )
     .limit(2000);
 
   if (error) {
-    if (isMissingSchemaObject(error)) return [];
+    if (isMissingSchemaObject(error)) {
+      return entries.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+    }
     throw error;
   }
 
@@ -190,9 +211,8 @@ export async function listLedgerRows(
   );
   const counterparties = await loadCounterpartiesForRows(lineRows, codeByAccount);
 
-  return lineRows
-    .map((row) => toEntry(row, counterparties))
-    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+  entries.push(...lineRows.map((row) => toEntry(row, counterparties)));
+  return entries.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
 }
 
 /**
@@ -226,7 +246,6 @@ export async function findBankAccountRow(
 ): Promise<BankAccount | null> {
   if (!isAccountsDatabaseConfigured()) return null;
 
-  const accounts = await listTreasuryBalanceRows();
-  const match = accounts.find((account) => account.id === accountId);
-  return match ? toAccount(match) : null;
+  const accounts = await listBankAccountRows();
+  return accounts.find((account) => account.id === accountId) ?? null;
 }

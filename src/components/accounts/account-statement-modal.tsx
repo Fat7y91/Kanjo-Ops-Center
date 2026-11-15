@@ -97,14 +97,14 @@ export function AccountStatementModal({
                 </thead>
                 <tbody>
                   {statement.lines.map((line) => {
-                    const clickable = Boolean(onOpenEntry);
+                    const clickable = Boolean(onOpenEntry && line.entryId);
                     return (
                       <tr
                         key={line.id}
                         className={clickable ? "statement-row-clickable" : undefined}
                         onClick={
-                          onOpenEntry
-                            ? () => onOpenEntry(line.entryId)
+                          clickable
+                            ? () => onOpenEntry?.(line.entryId)
                             : undefined
                         }
                         onKeyDown={

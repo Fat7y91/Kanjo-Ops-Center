@@ -22,24 +22,27 @@ export function summarizeAccount(
   account: BankAccount,
   entries: readonly LedgerEntry[],
 ): AccountSummary {
-  let deposits = 0;
-  let expenses = 0;
+  let depositsMinor = 0;
+  let expensesMinor = 0;
   let entryCount = 0;
 
   for (const entry of entries) {
     if (entry.accountId !== account.id) continue;
     entryCount += 1;
-    if (entry.kind === "deposit") deposits += entry.amount;
-    else expenses += entry.amount;
+    const minor = Math.round(entry.amount * 100);
+    if (entry.kind === "deposit") depositsMinor += minor;
+    else expensesMinor += minor;
   }
 
   const balance =
-    account.ledgerBalance === null ? deposits - expenses : account.ledgerBalance;
+    account.ledgerBalance === null
+      ? (depositsMinor - expensesMinor) / 100
+      : account.ledgerBalance;
 
   return {
     account,
-    deposits,
-    expenses,
+    deposits: depositsMinor / 100,
+    expenses: expensesMinor / 100,
     balance,
     entryCount,
   };
@@ -69,9 +72,12 @@ export function totalByCurrency(
 
   for (const summary of summaries) {
     const bucket = totals[summary.account.currency];
-    bucket.deposits += summary.deposits;
-    bucket.expenses += summary.expenses;
-    bucket.balance += summary.balance;
+    bucket.deposits =
+      (Math.round(bucket.deposits * 100) + Math.round(summary.deposits * 100)) / 100;
+    bucket.expenses =
+      (Math.round(bucket.expenses * 100) + Math.round(summary.expenses * 100)) / 100;
+    bucket.balance =
+      (Math.round(bucket.balance * 100) + Math.round(summary.balance * 100)) / 100;
   }
 
   return totals;
