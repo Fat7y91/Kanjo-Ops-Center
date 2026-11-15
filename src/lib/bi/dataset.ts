@@ -22,6 +22,20 @@ import {
 } from "./types";
 
 /**
+ * Shows the expense context the way an accountant reads it: the category first,
+ * then the free-text detail the operator entered.
+ */
+function expenseStatementLabel(entry: {
+  label: string;
+  counterparty: string;
+}): string {
+  if (!entry.counterparty || entry.counterparty === entry.label) {
+    return entry.label;
+  }
+  return `${entry.counterparty} (${entry.label})`;
+}
+
+/**
  * Maps a stored contract state onto the funnel bucket the dashboard shows.
  * `visited` is not a contract state: it is detected from the visit timestamp.
  */
@@ -221,7 +235,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
     .map((entry) => ({
       id: entry.id,
       bankName: bankNames.get(entry.accountId) ?? "—",
-      label: entry.label,
+      label: expenseStatementLabel(entry),
       amount: entry.amount,
       currency: entry.currency,
       occurredAt: entry.occurredAt,

@@ -113,7 +113,11 @@ export function ExecutiveSummary({
   );
 
   return (
-    <nav className="exec-summary" aria-label="ملخص مؤشرات المؤسسة">
+    <nav
+      className="exec-summary"
+      data-tiles={tiles.length}
+      aria-label="ملخص مؤشرات المؤسسة"
+    >
       {tiles.map((tile) => (
         <Link
           key={tile.href}
