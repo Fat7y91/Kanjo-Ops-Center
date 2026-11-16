@@ -44,7 +44,7 @@ type StatTone = "default" | "gold" | "green" | "red" | "purple";
 
 type WidgetStatProps = {
   label: string;
-  value: string;
+  value: ReactNode;
   detail?: string;
   tone?: StatTone;
   /** 0-1 ratio rendered as a micro progress bar. Omit to hide it. */
@@ -85,7 +85,7 @@ export function WidgetStat({
         type="button"
         className={className}
         onClick={onOpen}
-        aria-label={`${label} — ${value}. عرض التفاصيل`}
+        aria-label={`${label}. عرض التفاصيل`}
       >
         {content}
       </button>

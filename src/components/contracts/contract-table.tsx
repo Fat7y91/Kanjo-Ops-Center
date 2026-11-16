@@ -14,8 +14,10 @@ const percent = new Intl.NumberFormat("ar-EG-u-nu-latn", {
 
 type ContractTableProps = {
   contracts: Contract[];
+  cityNameById: Map<string, string>;
   busyId: string | null;
   canEdit: boolean;
+  canSend: boolean;
   canSign: boolean;
   canCancel: boolean;
   canForceEdit: boolean;
@@ -25,8 +27,10 @@ type ContractTableProps = {
 
 export function ContractTable({
   contracts,
+  cityNameById,
   busyId,
   canEdit,
+  canSend,
   canSign,
   canCancel,
   canForceEdit,
@@ -51,6 +55,7 @@ export function ContractTable({
             <tr>
               <th>العقد</th>
               <th>التاجر</th>
+              <th>المدينة</th>
               <th className="align-right">العمولة</th>
               <th>الحالة</th>
               <th>الموقّع</th>
@@ -65,6 +70,9 @@ export function ContractTable({
               const open =
                 contract.status === "draft" ||
                 contract.status === "pending_signature";
+              const cityName = contract.cityId
+                ? (cityNameById.get(contract.cityId) ?? contract.cityId)
+                : "—";
 
               return (
                 <tr key={contract.id}>
@@ -72,6 +80,7 @@ export function ContractTable({
                     <strong>{contract.reference}</strong>
                   </td>
                   <td>{contract.merchantName || contract.merchantId}</td>
+                  <td className="muted">{cityName}</td>
                   <td className="align-right">
                     {commissionRateLabel(contract.commissionRate, (value) =>
                       percent.format(value),
@@ -101,7 +110,7 @@ export function ContractTable({
                         معاينة العقد
                       </Button>
 
-                      {canEdit || canForceEdit ? (
+                      {(canEdit || canForceEdit) && open ? (
                         <Button
                           as="a"
                           href={`/contracts/draft-editor?contract=${contract.id}`}
@@ -124,7 +133,7 @@ export function ContractTable({
                         </Button>
                       ) : null}
 
-                      {contract.status === "draft" ? (
+                      {canSend && contract.status === "draft" ? (
                         <Button
                           size="sm"
                           variant="quiet"
@@ -135,7 +144,7 @@ export function ContractTable({
                         </Button>
                       ) : null}
 
-                      {canSign && contract.status === "pending_signature" ? (
+                      {canSign && open ? (
                         <Button
                           size="sm"
                           disabled={busy}

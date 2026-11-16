@@ -47,4 +47,11 @@ export type ContractMerchantOption = {
   cityId: string | null;
   state: ContractState;
   vipMenu: boolean;
+  /**
+   * The negotiated rate the draft opens with: the agreed rate when one is
+   * locked, otherwise the target. Null means the merchant has neither, so the
+   * form leaves the commission blank rather than inventing a number.
+   */
+  agreedCommission: number | null;
+  targetCommission: number | null;
 };

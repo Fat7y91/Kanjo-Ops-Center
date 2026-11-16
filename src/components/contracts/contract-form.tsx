@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { TextAreaField, TextField } from "@/components/ui/form-inputs";
-import { SelectMenu } from "@/components/ui/select-menus";
+import { ComboField, SelectMenu } from "@/components/ui/select-menus";
 import type { ContractsPayload } from "@/lib/contracts/payload";
 import type { Contract } from "@/lib/contracts/types";
 import { CONTRACT_STATE_META } from "@/lib/field-ops/types";
@@ -21,11 +21,31 @@ const CURRENCIES = [
 ];
 
 /**
+ * The rate a draft should open with.
+ *
+ * A locked agreed rate wins; otherwise the merchant's target is the best
+ * available starting point. Null keeps the field empty instead of implying a
+ * zero-percent deal.
+ */
+function merchantRate(
+  merchant: ContractsPayload["merchants"][number] | undefined,
+): number | null {
+  if (!merchant) return null;
+  if (merchant.agreedCommission != null) return merchant.agreedCommission;
+  if (merchant.targetCommission != null && merchant.targetCommission > 0) {
+    return merchant.targetCommission;
+  }
+  return null;
+}
+
+/**
  * Draft / edit form.
  *
- * A draft picks a merchant from the scoped directory, which fixes its city; an
- * edit may not move the contract to another merchant, only restate terms. The
- * submit path is a create for a new contract and a PATCH for an existing one.
+ * A draft picks a merchant from a searchable directory, which fixes its city;
+ * an edit may not move the contract to another merchant, only restate terms.
+ * Selecting a merchant fills the commission from its negotiated rate, so the
+ * operator never has to look the percentage up or retype it. The submit path is
+ * a create for a new contract and a PATCH for an existing one.
  */
 export function ContractForm({ contract, merchants, onDone }: ContractFormProps) {
   const editing = Boolean(contract);
@@ -37,18 +57,31 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
       : CONTRACT_STATE_META[merchant.state].labelAr,
   }));
 
-  const [merchantId, setMerchantId] = useState(
-    contract?.merchantId ?? merchants[0]?.id ?? "",
-  );
+  const initialMerchant =
+    merchants.find((merchant) => merchant.id === contract?.merchantId) ??
+    merchants[0];
+  const [merchantId, setMerchantId] = useState(initialMerchant?.id ?? "");
   const [currency, setCurrency] = useState<Contract["currency"]>(
     contract?.currency ?? "EGP",
   );
   const [value, setValue] = useState(
     contract ? contract.value.toFixed(2) : "",
   );
+  const initialRate = contract?.commissionRate ?? merchantRate(initialMerchant);
+  const [commission, setCommission] = useState(
+    initialRate != null ? String(initialRate) : "",
+  );
   const [body, setBody] = useState(contract?.body ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function selectMerchant(nextId: string) {
+    setMerchantId(nextId);
+    const rate = merchantRate(
+      merchants.find((merchant) => merchant.id === nextId),
+    );
+    if (rate != null) setCommission(String(rate));
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,6 +89,17 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
     const numericValue = value.trim() === "" ? 0 : Number(value);
     if (!Number.isFinite(numericValue) || numericValue < 0) {
       setError("أدخل قيمة عقد صحيحة.");
+      return;
+    }
+    const numericCommission =
+      commission.trim() === "" ? null : Number(commission);
+    if (
+      numericCommission !== null &&
+      (!Number.isFinite(numericCommission) ||
+        numericCommission < 0 ||
+        numericCommission > 100)
+    ) {
+      setError("أدخل نسبة عمولة بين 0 و100.");
       return;
     }
     setSaving(true);
@@ -67,6 +111,7 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
         cityId: merchant?.cityId ?? contract?.cityId ?? null,
         value: numericValue,
         currency,
+        commissionRate: numericCommission,
         body,
       };
 
@@ -95,14 +140,16 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   return (
     <form className="account-form" onSubmit={submit}>
       <div className="account-form-grid">
-        <SelectMenu
+        <ComboField
           label="التاجر"
-          value={merchantId}
-          onChange={setMerchantId}
+          value={merchantId || null}
+          onChange={selectMerchant}
           options={merchantOptions}
           disabled={editing || merchantOptions.length === 0}
           placeholder={
-            merchantOptions.length === 0 ? "لا يوجد تجار في نطاقك" : undefined
+            merchantOptions.length === 0
+              ? "لا يوجد تجار في نطاقك"
+              : "ابحث باسم التاجر…"
           }
         />
         <SelectMenu
@@ -122,6 +169,19 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
           placeholder="0.00"
           value={value}
           onChange={(event) => setValue(event.target.value)}
+        />
+        <TextField
+          label="العمولة (%)"
+          hint="تُعبّأ تلقائياً من النسبة المتفق عليها للتاجر وتُستخدم كأساس العقد."
+          type="number"
+          inputMode="decimal"
+          min="0"
+          max="100"
+          step="0.01"
+          dir="ltr"
+          placeholder="0.00"
+          value={commission}
+          onChange={(event) => setCommission(event.target.value)}
         />
         <TextAreaField
           label="ملاحظات العقد"

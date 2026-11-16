@@ -45,19 +45,20 @@ export function ExecutiveSummary({
   catalog,
   showFinancials,
 }: ExecutiveSummaryProps) {
+  const finalAgreements = catalog.signedTotal;
   const tiles: Tile[] = [
     {
       href: "/merchants",
       label: "التجار",
       value: count(merchantCount),
-      detail: `${count(signedCount)} عقد موقّع`,
+      detail: `${count(finalAgreements)} اتفاق نهائي · ${count(signedCount)} موقّع`,
       tone: "purple",
     },
     {
       href: "/contracts",
       label: "التعاقدات المكتملة",
-      value: count(signedCount),
-      detail: "عقود موقّعة في النطاق",
+      value: count(finalAgreements),
+      detail: `${count(signedCount)} عقد موقّع · ${count(Math.max(finalAgreements - signedCount, 0))} اتفاق نهائي`,
       tone: "gold",
     },
   ];

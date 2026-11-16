@@ -69,6 +69,12 @@
   white-space: nowrap;
 }
 
+.bi-stat-detail {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .bi-stat-value {
   color: var(--ink);
   font-size: clamp(1.05rem, 1.5vw, 1.4rem);
@@ -79,10 +85,40 @@
   overflow-wrap: anywhere;
 }
 
-.bi-stat-detail {
+/* Amount and currency glyph stay on one line; the glyph is subordinate so the
+ * number keeps the headline weight. */
+.bi-money {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.bi-money-amount {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.bi-money-symbol {
   color: var(--ink-soft);
-  font-size: 0.72rem;
-  line-height: 1.35;
+  font-size: 0.6em;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Stacked treasury sections: Saudi on top, Egyptian underneath. */
+.bi-treasury + .bi-treasury {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.bi-treasury-label {
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .bi-stat-track {

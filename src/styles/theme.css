@@ -112,9 +112,9 @@
 }
 
 [data-theme="dark"] .badge-signed {
-  border-color: #7f6a2a;
-  background: #33290a;
-  color: #ffe680;
+  border-color: rgba(89, 214, 155, 0.35);
+  background: var(--green-soft);
+  color: var(--green);
 }
 
 [data-theme="dark"] .permission-callout {

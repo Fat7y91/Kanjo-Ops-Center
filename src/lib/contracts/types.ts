@@ -54,6 +54,17 @@ export const CONTRACT_DRAFT_INPUT = z.object({
   cityId: z.string().nullable().default(null),
   value: z.number().nonnegative().default(0),
   currency: z.enum(["EGP", "SAR"]).default("EGP"),
+  /**
+   * Headline commission percentage the draft opens with. Pre-filled from the
+   * merchant's agreed rate so the paperwork never starts at zero, and stored as
+   * the contract's `commission_base` override when present.
+   */
+  commissionRate: z
+    .number()
+    .nonnegative()
+    .max(100, "النسبة يجب ألا تتجاوز 100.")
+    .nullable()
+    .optional(),
   // Clause text is unbounded here: the rendered contract can be long and the
   // database column is `text`. Length is a document concern, not an input rule.
   body: z.string().trim().default(""),

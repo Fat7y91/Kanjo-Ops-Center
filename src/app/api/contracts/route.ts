@@ -26,12 +26,18 @@ const READ_CAPABILITIES = [
   "delete_contracts",
 ] as const;
 
-/** Register read: contracts plus the merchant/city options a draft form needs. */
+/**
+ * Register read: contracts plus the merchant/city options a draft form needs.
+ *
+ * The whole handler is guarded, authorization included: a session or database
+ * configuration failure must still answer with the JSON envelope the client
+ * parses, never an unhandled edge rejection (which surfaced as a bare 503).
+ */
 export async function GET() {
-  const { session, response } = await authorizeAny(READ_CAPABILITIES);
-  if (!session) return response;
-
   try {
+    const { session, response } = await authorizeAny(READ_CAPABILITIES);
+    if (!session) return response;
+
     const allowed = new Set(await effectiveCityIds(session));
     const [contracts, merchants, cities] = await Promise.all([
       listContracts(),
@@ -57,13 +63,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { session, response } = await authorizeAny([
-    "draft_contract",
-    "create_contracts",
-  ]);
-  if (!session) return response;
-
   try {
+    const { session, response } = await authorizeAny([
+      "draft_contract",
+      "create_contracts",
+    ]);
+    if (!session) return response;
+
     const input = (await readJson(request)) as ContractDraftInput;
 
     // The draft list is scoped and eligibility-filtered; re-derive it here so a

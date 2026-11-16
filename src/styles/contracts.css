@@ -1,0 +1,23 @@
+/* Contract register surfaces: search/filter toolbar above the table. */
+
+.contracts-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.contracts-toolbar-count {
+  justify-self: end;
+}
+
+@media (max-width: 720px) {
+  .contracts-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .contracts-toolbar-count {
+    justify-self: start;
+  }
+}

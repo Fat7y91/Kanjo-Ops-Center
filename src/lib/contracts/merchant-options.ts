@@ -67,6 +67,8 @@ export async function listContractDraftMerchants(
       cityId: merchant.cityId,
       state,
       vipMenu,
+      agreedCommission: merchant.agreedCommission ?? null,
+      targetCommission: merchant.targetCommission,
     });
   }
 
@@ -149,6 +151,10 @@ async function addOrphanedMerchants(input: {
       cityId,
       state,
       vipMenu,
+      // Rollup-only merchants were never migrated into `app.merchants`, so no
+      // negotiated rate exists to seed the form with.
+      agreedCommission: null,
+      targetCommission: null,
     });
   }
 }

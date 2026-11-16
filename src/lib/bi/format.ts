@@ -13,6 +13,22 @@ const COUNT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
   maximumFractionDigits: 0,
 });
 
+/** Money without its currency glyph; the widget renders the glyph separately. */
+const AMOUNT = new Intl.NumberFormat("ar-EG-u-nu-latn", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+});
+
+const SYMBOLS = { EGP: "ج.م", SAR: "ر.س" } as const;
+
+export function amount(value: number): string {
+  return AMOUNT.format(value);
+}
+
+export function currencySymbol(currency: "EGP" | "SAR"): string {
+  return SYMBOLS[currency];
+}
+
 export function money(value: number): string {
   return CURRENCY.format(value);
 }

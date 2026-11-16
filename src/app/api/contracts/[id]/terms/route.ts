@@ -49,11 +49,11 @@ function canForceEdit(session: ActiveSession): boolean {
  * in `updateContractTerms`, which re-reads the contract before writing.
  */
 export async function GET(_request: Request, { params }: RouteProps) {
-  const { id } = await params;
-  const { session, response } = await authorizeAny(READ_CAPABILITIES);
-  if (!session) return response;
-
   try {
+    const { id } = await params;
+    const { session, response } = await authorizeAny(READ_CAPABILITIES);
+    if (!session) return response;
+
     const contract = await findContractRow(id);
     if (!contract) {
       return NextResponse.json(
@@ -69,19 +69,19 @@ export async function GET(_request: Request, { params }: RouteProps) {
 }
 
 export async function PUT(request: Request, { params }: RouteProps) {
-  const { id } = await params;
-  const { session, response } = await authorizeAny(WRITE_CAPABILITIES);
-  if (!session) return response;
-
-  const body = (await readJson(request)) as { terms?: ContractTerms };
-  if (!body.terms || !Array.isArray(body.terms.clauses)) {
-    return NextResponse.json(
-      { error: "بيانات شروط العقد غير مكتملة.", code: "VALIDATION" },
-      { status: 422 },
-    );
-  }
-
   try {
+    const { id } = await params;
+    const { session, response } = await authorizeAny(WRITE_CAPABILITIES);
+    if (!session) return response;
+
+    const body = (await readJson(request)) as { terms?: ContractTerms };
+    if (!body.terms || !Array.isArray(body.terms.clauses)) {
+      return NextResponse.json(
+        { error: "بيانات شروط العقد غير مكتملة.", code: "VALIDATION" },
+        { status: 422 },
+      );
+    }
+
     const terms = await updateContractTerms(id, body.terms, {
       canForceEdit: canForceEdit(session),
     });

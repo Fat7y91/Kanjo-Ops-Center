@@ -9,6 +9,7 @@ import { FieldOpsError, isoNow, type Actor } from "./core";
 import { calculateCommission } from "./crm";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
+import { syncContractSignedFromMerchant } from "@/lib/contracts/sync";
 import {
   isMerchantStateDatabaseConfigured,
   listStateOverrideRows,
@@ -148,6 +149,29 @@ export async function setMerchantState(
       "تعذر تسجيل قرار الحالة في قاعدة البيانات.",
       503,
     );
+  }
+
+  // The merchant signing decision is the paperwork's cue. Advance (or create)
+  // the contract register in the same request; a paperwork failure is logged,
+  // never allowed to roll back the governance record the operator just made.
+  if (state === "signed_contract") {
+    try {
+      await syncContractSignedFromMerchant(
+        {
+          id: saved.id,
+          name: saved.name,
+          cityId: saved.cityId,
+          agreedCommission: lockedCommission,
+          targetCommission: saved.targetCommission,
+        },
+        actor,
+      );
+    } catch (syncError) {
+      console.error("Contract sync failed after merchant state change", {
+        merchantId: saved.id,
+        syncError,
+      });
+    }
   }
 
   return { merchant: saved, override };

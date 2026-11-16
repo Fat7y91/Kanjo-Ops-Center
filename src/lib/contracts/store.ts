@@ -8,6 +8,8 @@ import {
   type ContractEditInput,
 } from "./types";
 import { attachContractCommissionRates } from "./commission-repository";
+import { setContractBaseCommission } from "./terms-repository";
+import { syncMerchantSignedFromContract } from "./sync";
 import {
   ContractRepositoryError,
   findContractRow,
@@ -31,7 +33,9 @@ export { ContractRepositoryError as ContractError };
  */
 
 const TRANSITIONS: Record<Contract["status"], Contract["status"][]> = {
-  draft: ["pending_signature", "cancelled"],
+  /* A draft may go straight to signature: an authorised signer can execute the
+   * paperwork without the intermediate "waiting for signature" step. */
+  draft: ["pending_signature", "signed", "cancelled"],
   pending_signature: ["signed", "cancelled"],
   signed: [],
   cancelled: [],
@@ -56,7 +60,11 @@ export async function draftContract(
       parsed.error.errors[0]?.message ?? "بيانات العقد غير مكتملة.",
     );
   }
-  return insertContractRow(parsed.data, actorId);
+  const contract = await insertContractRow(parsed.data, actorId);
+  if (parsed.data.commissionRate != null) {
+    await setContractBaseCommission(contract.id, parsed.data.commissionRate);
+  }
+  return contract;
 }
 
 export async function editContract(
@@ -100,6 +108,9 @@ export async function editContract(
   );
   if (!updated) {
     throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
+  }
+  if (parsed.data.commissionRate != null) {
+    await setContractBaseCommission(id, parsed.data.commissionRate);
   }
   return updated;
 }
@@ -149,6 +160,20 @@ export async function applyContractAction(
   );
   if (!updated) {
     throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
+  }
+  if (next === "signed") {
+    // The signature is the moment the merchant becomes signed. A failure here
+    // must not hide the executed contract, so it is logged rather than thrown;
+    // the next contract read repairs the merchant state.
+    try {
+      await syncMerchantSignedFromContract(updated.merchantId);
+    } catch (syncError) {
+      console.error("Merchant state sync failed after contract signature", {
+        contractId: updated.id,
+        merchantId: updated.merchantId,
+        syncError,
+      });
+    }
   }
   return updated;
 }

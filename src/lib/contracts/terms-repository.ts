@@ -75,6 +75,38 @@ export async function findContractTerms(
   );
 }
 
+/**
+ * Writes only the headline commission override.
+ *
+ * Used when a draft is created or edited with an auto-filled rate. Touching just
+ * the `commission_base` row keeps any clauses or commission lines the editor
+ * already saved intact, unlike the replace-all `saveContractTerms`.
+ */
+export async function setContractBaseCommission(
+  contractId: string,
+  rate: number,
+): Promise<void> {
+  if (!isContractsDatabaseConfigured()) return;
+
+  const client = getSupabaseServerClient();
+  const { error } = await client
+    .schema("app")
+    .from("contract_section_overrides")
+    .upsert(
+      {
+        contract_id: contractId,
+        section_key: "commission_base",
+        content: { rate },
+      },
+      { onConflict: "contract_id,section_key" },
+    );
+
+  // A deployment without the force-edit migration has no override table; the
+  // merchant's agreed rate still resolves the headline, so this stays
+  // best-effort rather than failing the draft.
+  if (error && !isMissingSchemaObject(error)) contractWriteError(error);
+}
+
 /** Replaces all clauses, commission lines, and section overrides for a contract. */
 export async function saveContractTerms(
   contractId: string,

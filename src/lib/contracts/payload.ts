@@ -26,6 +26,8 @@ export const contractsPayloadSchema = z.object({
       cityId: z.string().nullable(),
       state: z.enum(CONTRACT_STATES),
       vipMenu: z.boolean(),
+      agreedCommission: z.number().nullable(),
+      targetCommission: z.number().nullable(),
     }),
   ),
   cities: z.array(z.object({ id: z.string(), name: z.string() })),

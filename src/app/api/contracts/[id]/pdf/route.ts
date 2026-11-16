@@ -109,11 +109,10 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
 }
 
 export async function GET(_request: Request, { params }: RouteProps) {
-  const { id } = await params;
-  const { session, response } = await authorizeAny(READ_CAPABILITIES);
-  if (!session) return response;
-
   try {
+    const { id } = await params;
+    const { session, response } = await authorizeAny(READ_CAPABILITIES);
+    if (!session) return response;
     return await renderResponse(id, false);
   } catch (error) {
     return apiError(error);
@@ -121,11 +120,10 @@ export async function GET(_request: Request, { params }: RouteProps) {
 }
 
 export async function POST(_request: Request, { params }: RouteProps) {
-  const { id } = await params;
-  const { session, response } = await authorizeAny(READ_CAPABILITIES);
-  if (!session) return response;
-
   try {
+    const { id } = await params;
+    const { session, response } = await authorizeAny(READ_CAPABILITIES);
+    if (!session) return response;
     return await renderResponse(id, true);
   } catch (error) {
     return apiError(error);

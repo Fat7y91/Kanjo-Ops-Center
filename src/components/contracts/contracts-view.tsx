@@ -3,10 +3,13 @@
 import { useState } from "react";
 
 import { ContractForm } from "@/components/contracts/contract-form";
+import { ContractsToolbar } from "@/components/contracts/contract-toolbar";
 import { ContractTable } from "@/components/contracts/contract-table";
+import { useContractFilters } from "@/components/contracts/use-contract-filters";
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { count } from "@/lib/bi/format";
 import type { ContractsPayload } from "@/lib/contracts/payload";
 import type { Contract } from "@/lib/contracts/types";
 
@@ -46,6 +49,7 @@ export function ContractsView({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const filters = useContractFilters(data.contracts, data.cities);
 
   function done(message: string) {
     setNotice(message);
@@ -68,7 +72,7 @@ export function ContractsView({
       if (!response.ok) throw new Error(payload.error ?? "تعذر تنفيذ الإجراء.");
       done(
         action === "sign"
-          ? "تم توقيع العقد."
+          ? "تم توقيع العقد وتحديث حالة التاجر."
           : action === "cancel"
             ? "تم إلغاء العقد."
             : "تم إرسال العقد للتوقيع.",
@@ -92,7 +96,9 @@ export function ContractsView({
         description="الصياغة والتعديل والتوقيع المعتمد صلاحيات منفصلة. لا تُستنتج صلاحية التوقيع من المسمى الوظيفي أبداً."
         actions={
           <div className="row-actions">
-            <span className="badge badge-gold">{data.contracts.length} عقد</span>
+            <span className="badge badge-gold">
+              {count(data.contracts.length)} عقد
+            </span>
             {canDraft ? (
               <Button size="sm" onClick={() => setDialog({ kind: "draft" })}>
                 صياغة عقد
@@ -113,10 +119,22 @@ export function ContractsView({
         </p>
       ) : null}
 
+      <ContractsToolbar
+        query={filters.query}
+        onQueryChange={filters.setQuery}
+        cityId={filters.cityId}
+        onCityChange={filters.setCityId}
+        cities={data.cities}
+        shown={filters.filtered.length}
+        total={filters.total}
+      />
+
       <ContractTable
-        contracts={data.contracts}
+        contracts={filters.filtered}
+        cityNameById={filters.cityNameById}
         busyId={busyId}
         canEdit={canEdit}
+        canSend={canDraft || canEdit}
         canSign={canSign}
         canCancel={canCancel}
         canForceEdit={canForceEdit}
