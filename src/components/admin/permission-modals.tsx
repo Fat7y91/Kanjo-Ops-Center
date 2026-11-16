@@ -17,9 +17,16 @@ import {
   type LevelOption,
 } from "@/components/admin/user-form-types";
 
+type CopySource = {
+  id: string;
+  name: string;
+  permissions: Permission[];
+};
+
 type CreateModalProps = {
   open: boolean;
   form: CreateForm;
+  copySources: CopySource[];
   levels: LevelOption[];
   cities: CityOption[];
   teams: CityTeam[];
@@ -42,6 +49,7 @@ type CreateModalProps = {
 export function CreateUserModal({
   open,
   form,
+  copySources,
   levels,
   cities,
   teams,
@@ -61,10 +69,23 @@ export function CreateUserModal({
 
   function togglePermission(permission: Permission, enabled: boolean) {
     patch({
+      // Editing a grant by hand breaks the tie to the copied template, so the
+      // dropdown must stop claiming the new user still matches that person.
+      copyFromId: "",
       permissions: enabled
         ? [...form.permissions, permission]
         : form.permissions.filter((key) => key !== permission),
     });
+  }
+
+  function copyFrom(id: string) {
+    if (!id) {
+      patch({ copyFromId: "", permissions: [] });
+      return;
+    }
+    const source = copySources.find((candidate) => candidate.id === id);
+    if (!source) return;
+    patch({ copyFromId: id, permissions: [...source.permissions] });
   }
 
   return (
@@ -167,10 +188,29 @@ export function CreateUserModal({
         ) : null}
 
         <div className="field">
+          <SelectMenu
+            label="نسخ الصلاحيات من مستخدم"
+            value={form.copyFromId}
+            onChange={copyFrom}
+            ariaLabel="نسخ الصلاحيات من مستخدم"
+            hint="اختيار مستخدم يستبدل القدرات المحددة أدناه بصلاحياته المتاحة لك."
+            options={[
+              { value: "", label: "بدون نسخ" },
+              ...copySources.map((source) => ({
+                value: source.id,
+                label: source.name,
+                hint: `${source.permissions.length} صلاحية`,
+              })),
+            ]}
+          />
+        </div>
+
+        <div className="field">
           <div className="field-head">
             <span>القدرات</span>
             <span className="field-hint">
               {form.permissions.length} صلاحية مختارة
+              {form.copyFromId ? " · منسوخة" : ""}
             </span>
           </div>
           <div className="matrix-groups">

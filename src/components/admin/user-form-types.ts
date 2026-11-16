@@ -24,6 +24,8 @@ export type CreateForm = {
   clearanceLevel: string;
   cityIds: string[];
   permissions: Permission[];
+  /** Optional roster member whose grants were copied into `permissions`. */
+  copyFromId: string;
 };
 
 export function emptyForm(
@@ -41,6 +43,7 @@ export function emptyForm(
     clearanceLevel: String(levels[levels.length - 1]?.level ?? 1),
     cityIds: cities.length === 1 ? [cities[0].id] : [],
     permissions: [],
+    copyFromId: "",
   };
 }
 

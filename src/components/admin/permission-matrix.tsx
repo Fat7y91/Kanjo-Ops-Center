@@ -34,6 +34,15 @@ type PermissionMatrixProps = {
  */
 export function PermissionMatrix(props: PermissionMatrixProps) {
   const matrix = usePermissionMatrix(props);
+  const copySources = matrix.manageableUsers
+    .map((user) => ({
+      id: user.id,
+      name: `${user.name} · ${matrix.levelLabel(user.clearanceLevel)}`,
+      permissions: user.permissions.filter((permission) =>
+        matrix.canGrant(user, permission),
+      ),
+    }))
+    .filter((source) => source.permissions.length > 0);
 
   if (!matrix.hasPermission("manage_system_users")) {
     return (
@@ -138,6 +147,7 @@ export function PermissionMatrix(props: PermissionMatrixProps) {
       <CreateUserModal
         open={matrix.createOpen}
         form={matrix.createForm}
+        copySources={copySources}
         levels={matrix.levelOptions}
         cities={props.assignableCities}
         teams={matrix.teams}
