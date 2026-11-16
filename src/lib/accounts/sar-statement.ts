@@ -59,7 +59,11 @@ function signedAmount(value: number | string): number | null {
   return Math.round(parsed * 100) / 100;
 }
 
-function toDeposit(row: DepositRow, accountId: string): LedgerEntry | null {
+function toDeposit(
+  row: DepositRow,
+  accountId: string,
+  capital: boolean,
+): LedgerEntry | null {
   const value = amount(row.amount_sar);
   if (value === null) return null;
   return {
@@ -67,8 +71,8 @@ function toDeposit(row: DepositRow, accountId: string): LedgerEntry | null {
     entryId: "",
     accountId,
     kind: "deposit",
-    label: clean(row.reason) || "إيداع رأسمالي",
-    counterparty: "رأس المال",
+    label: clean(row.reason) || (capital ? "إيداع رأسمالي" : "إيداع بنكي"),
+    counterparty: capital ? "رأس المال" : "إيداع بنكي",
     amount: value,
     currency: "SAR",
     occurredAt: row.deposit_date,
@@ -160,10 +164,10 @@ export async function loadSarEntries(accountId: string): Promise<LedgerEntry[]> 
 
   const entries = [
     ...((deposits.data ?? []) as DepositRow[])
-      .map((row) => toDeposit(row, accountId))
+      .map((row) => toDeposit(row, accountId, true))
       .filter((row): row is LedgerEntry => row !== null),
     ...((directDeposits.data ?? []) as DepositRow[])
-      .map((row) => toDeposit(row, accountId))
+      .map((row) => toDeposit(row, accountId, false))
       .filter((row): row is LedgerEntry => row !== null),
     ...((expenses.data ?? []) as ExpenseRow[])
       .map((row) => toExpense(row, accountId, categoryNames))

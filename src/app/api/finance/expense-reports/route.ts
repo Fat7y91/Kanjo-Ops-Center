@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     "view_financials",
     "view_finance",
     "manage_expenses",
+    "manage_expense_categories",
   ]);
   if (!session) return response;
 
