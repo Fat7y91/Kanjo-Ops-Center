@@ -14,6 +14,7 @@ export type CredentialField = {
   label: string;
   hint: string;
   secret?: boolean;
+  required?: boolean;
   pattern: RegExp;
   patternHint: string;
 };
@@ -42,7 +43,7 @@ export const PLATFORM_SPECS: readonly PlatformSpec[] = [
     platform: "meta",
     label: BI_MARKETING_PLATFORM_META.meta,
     instructions:
-      "أنشئ تطبيقاً في Meta for Developers، ثم ولّد رمز وصول دائم لمدير الأعمال واربطه بحساب الإعلانات.",
+      "أنشئ تطبيقاً في Meta for Developers، ثم ولّد رمز وصول دائم لمدير الأعمال واربطه بحساب الإعلانات. يحتاج الرمز إلى صلاحيات pages_show_list و pages_read_engagement و instagram_basic لقراءة المتابعين.",
     manualOnly: false,
     fields: [
       {
@@ -53,13 +54,21 @@ export const PLATFORM_SPECS: readonly PlatformSpec[] = [
         patternHint: "بصيغة act_ ثم أرقام، مثل act_1234567890.",
       },
       TOKEN("رمز وصول مدير الأعمال"),
+      {
+        key: "pageId",
+        label: "معرّف صفحة فيسبوك",
+        hint: "اختياري. أدخله إذا كان الرمز لمدير أعمال ولا يستطيع سرد الصفحات؛ اتركه فارغاً لقراءة الصفحات المرتبطة بالرمز.",
+        required: false,
+        pattern: /^\d{6,}$/,
+        patternHint: "أرقام فقط، 6 خانات على الأقل.",
+      },
     ],
   },
   {
     platform: "tiktok",
     label: BI_MARKETING_PLATFORM_META.tiktok,
     instructions:
-      "من TikTok for Business Developers أنشئ تطبيقاً، واطلب صلاحية Ads Management، ثم انسخ معرّف المعلن ورمز الوصول.",
+      "من TikTok for Business Developers أنشئ تطبيقاً، واطلب صلاحية Ads Management، ثم انسخ معرّف المعلن ورمز الوصول. لجلب متابعي الحساب يحتاج الرمز أيضاً إلى صلاحية user.info.stats؛ رموز الإعلانات وحدها لا تعرض عدد المتابعين.",
     manualOnly: false,
     fields: [
       {
@@ -100,7 +109,7 @@ export const PLATFORM_SPECS: readonly PlatformSpec[] = [
     platform: "snapchat",
     label: BI_MARKETING_PLATFORM_META.snapchat,
     instructions:
-      "من Snapchat Ads Manager أنشئ تطبيق Marketing API، ثم انسخ معرّف الحساب الإعلاني ورمز الوصول.",
+      "من Snapchat Ads Manager أنشئ تطبيق Marketing API، ثم انسخ معرّف الحساب الإعلاني ورمز الوصول. واجهة الإعلانات لا تعرض متابعي الحساب العضوي.",
     manualOnly: false,
     fields: [
       {
@@ -155,6 +164,7 @@ export function verifyPlatformCredentials(
   for (const field of spec.fields) {
     const value = (values[field.key] ?? "").trim();
     if (value === "") {
+      if (field.required === false) continue;
       return { ok: false, error: `حقل «${field.label}» مطلوب.` };
     }
     if (!field.pattern.test(value)) {
@@ -173,6 +183,9 @@ export function missingFields(
   values: Readonly<Record<string, string>>,
 ): string[] {
   return platformSpec(platform)
-    .fields.filter((field) => (values[field.key] ?? "").trim() === "")
+    .fields.filter(
+      (field) =>
+        field.required !== false && (values[field.key] ?? "").trim() === "",
+    )
     .map((field) => field.key);
 }

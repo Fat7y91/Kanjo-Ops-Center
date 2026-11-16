@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { useSocialMetrics } from "@/components/bi/use-social-metrics";
 import { ExecutiveSummary } from "@/components/bi/executive-summary";
 import { FilterBar } from "@/components/bi/filter-bar";
 import { SlideOver } from "@/components/bi/slide-over";
@@ -110,6 +111,7 @@ export function ExecutiveDashboard({
     hasPermission("view_overview_finance") && clearanceLevel >= EXECUTIVE_LEVEL;
   const canSeeMarketing =
     hasPermission("view_campaigns") && clearanceLevel >= EXECUTIVE_LEVEL;
+  const social = useSocialMetrics(canSeeMarketing);
 
   function updateFilters(patch: Partial<BiFilters>) {
     setFilters((current) => ({ ...current, ...patch }));
@@ -192,7 +194,11 @@ export function ExecutiveDashboard({
         ) : null}
 
         {canSeeMarketing ? (
-          <MarketingSection marketing={marketing} onDrill={openDrill} />
+          <MarketingSection
+            marketing={marketing}
+            social={social}
+            onDrill={openDrill}
+          />
         ) : null}
       </div>
 

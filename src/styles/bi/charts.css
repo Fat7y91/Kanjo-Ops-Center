@@ -201,3 +201,85 @@
   background: var(--purple);
 }
 
+
+/* ── Social followers ─────────────────────────────────────────────────── */
+
+.bi-social {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.bi-social-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.bi-social-total {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.bi-social-total strong {
+  font-size: 1.15rem;
+  color: var(--ink);
+}
+
+.bi-social-total span {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.bi-social-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bi-social-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  font-size: 0.74rem;
+}
+
+.bi-social-row:hover {
+  background: var(--surface-soft);
+}
+
+.bi-social-platform {
+  color: var(--ink-soft);
+}
+
+.bi-social-name {
+  overflow: hidden;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-social-delta {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  text-align: end;
+}
+
+.bi-social-delta.is-up {
+  color: #2ca36a;
+}
+
+.bi-social-delta.is-down {
+  color: #d24b4b;
+}

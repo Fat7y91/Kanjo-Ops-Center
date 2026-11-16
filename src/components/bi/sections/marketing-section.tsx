@@ -5,9 +5,13 @@ import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { compact, count, money, percent } from "@/lib/bi/format";
 import { BI_MARKETING_META } from "@/lib/bi/types";
 import type { MarketingSummary } from "@/lib/bi/select";
+import type { SocialSummary } from "@/lib/marketing/social/types";
+
+import { SocialFollowers } from "./social-followers";
 
 type MarketingSectionProps = {
   marketing: MarketingSummary;
+  social: SocialSummary | null;
   onDrill: (id: string) => void;
 };
 
@@ -19,7 +23,11 @@ function leadTrend(marketing: MarketingSummary): number[] {
   );
 }
 
-export function MarketingSection({ marketing, onDrill }: MarketingSectionProps) {
+export function MarketingSection({
+  marketing,
+  social,
+  onDrill,
+}: MarketingSectionProps) {
   return (
     <Widget
       eyebrow="التسويق"
@@ -64,6 +72,8 @@ export function MarketingSection({ marketing, onDrill }: MarketingSectionProps) 
           onOpen={() => onDrill("marketing-conversions")}
         />
       </div>
+
+      <SocialFollowers social={social} />
 
       <div className="bi-marketing-body">
         <div className="bi-trend-strip bi-trend-strip-flat">

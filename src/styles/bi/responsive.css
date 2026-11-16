@@ -101,3 +101,17 @@
     width: 100%;
   }
 }
+
+@media (max-width: 720px) {
+  .bi-social-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .bi-social-head .bi-sparkline {
+    display: none;
+  }
+
+  .bi-social-row {
+    grid-template-columns: 64px minmax(0, 1fr) auto 48px;
+  }
+}
