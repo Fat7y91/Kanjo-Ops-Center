@@ -122,7 +122,9 @@ textarea {
   position: fixed;
   inset-inline-end: 24px;
   bottom: 24px;
-  z-index: 80;
+  /* Above every modal, slide-over and portalled dropdown so a validation or
+   * failure message is never hidden behind the dialog that produced it. */
+  z-index: 9999;
   max-width: 420px;
   padding: 14px 18px;
   border: 1px solid color-mix(in srgb, var(--green) 26%, transparent);

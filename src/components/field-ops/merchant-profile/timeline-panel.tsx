@@ -50,7 +50,11 @@ export function TimelinePanel({
             if (entry.kind === "visit") {
               const reportMeta = CONTRACT_STATE_META[entry.report.outcome];
               return (
-                <li key={`visit-${entry.report.id}`} className="crm-timeline-item">
+                <li
+                  key={`visit-${entry.report.id}`}
+                  id={`report-${entry.report.id}`}
+                  className="crm-timeline-item"
+                >
                   <span className="crm-timeline-dot" data-kind="visit" />
                   <div className="crm-timeline-body">
                     <div className="crm-timeline-head">

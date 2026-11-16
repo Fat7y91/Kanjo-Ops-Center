@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/field-ops/format";
@@ -35,6 +36,7 @@ export function NotificationPanel({
   onMarkAll,
   onNavigate,
 }: NotificationPanelProps) {
+  const router = useRouter();
   const preview = items.slice(0, PREVIEW_LIMIT);
 
   return (
@@ -60,9 +62,15 @@ export function NotificationPanel({
                 <Link
                   className="notification-pop-link"
                   href={item.link || "/notifications"}
-                  onClick={() => {
+                  onClick={(event) => {
+                    // Navigate explicitly: opening the popover closes it on the
+                    // outside pointer-down, which can unmount this anchor
+                    // before the browser follows the href. The router keeps the
+                    // click working and lands on the notification target.
+                    event.preventDefault();
                     if (!item.isRead) onMarkOne(item.id);
                     onNavigate();
+                    router.push(item.link || "/notifications");
                   }}
                 >
                   <span className="notification-pop-dot" aria-hidden="true" />

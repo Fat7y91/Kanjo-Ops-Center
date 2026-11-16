@@ -18,6 +18,7 @@ import {
   storeUnavailable,
 } from "./store";
 import type { Notification } from "./types";
+import { attachDerivedLinks } from "./links";
 
 /**
  * Tier 4 reads over `app.notifications`.
@@ -133,7 +134,8 @@ export async function listInbox(userId: string): Promise<Notification[]> {
     .filter((id) => id.length > 0);
 
   const acks = await readAcks(userId, broadcastIds);
-  return sortByRecency(mapNotificationRows(rows, acks));
+  const items = await attachDerivedLinks(mapNotificationRows(rows, acks));
+  return sortByRecency(items);
 }
 
 /** Unread count for the topbar bell. Degrades to 0, never throws a page. */
