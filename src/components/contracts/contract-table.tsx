@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { shortDate } from "@/lib/accounts/format";
+import { currencyMoney, shortDate } from "@/lib/accounts/format";
 import {
   CONTRACT_STATUS_META,
   type Contract,
@@ -46,6 +46,7 @@ export function ContractTable({
             <tr>
               <th>العقد</th>
               <th>التاجر</th>
+              <th className="align-right">قيمة العقد</th>
               <th>الحالة</th>
               <th>الموقّع</th>
               <th>آخر تحديث</th>
@@ -66,6 +67,9 @@ export function ContractTable({
                     <strong>{contract.reference}</strong>
                   </td>
                   <td>{contract.merchantName || contract.merchantId}</td>
+                  <td className="align-right" dir="ltr">
+                    {currencyMoney(contract.value, contract.currency)}
+                  </td>
                   <td>
                     <span className={`badge ${meta.tone}`}>{meta.label}</span>
                   </td>

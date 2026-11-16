@@ -43,6 +43,9 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   const [currency, setCurrency] = useState<Contract["currency"]>(
     contract?.currency ?? "EGP",
   );
+  const [value, setValue] = useState(
+    contract ? contract.value.toFixed(2) : "",
+  );
   const [signatory, setSignatory] = useState(contract?.signatory ?? "");
   const [body, setBody] = useState(contract?.body ?? "");
   const [error, setError] = useState("");
@@ -51,6 +54,11 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    const numericValue = value.trim() === "" ? 0 : Number(value);
+    if (!Number.isFinite(numericValue) || numericValue < 0) {
+      setError("أدخل قيمة عقد صحيحة.");
+      return;
+    }
     setSaving(true);
     try {
       const merchant = merchants.find((item) => item.id === merchantId);
@@ -58,6 +66,7 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
         merchantId,
         merchantName: merchant?.name ?? contract?.merchantName ?? "",
         cityId: merchant?.cityId ?? contract?.cityId ?? null,
+        value: numericValue,
         currency,
         signatory,
         body,
@@ -103,6 +112,18 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
           value={currency}
           onChange={setCurrency}
           options={CURRENCIES}
+        />
+        <TextField
+          label="قيمة العقد"
+          hint="القيمة الإجمالية للعقد."
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          dir="ltr"
+          placeholder="0.00"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
         />
         <TextField
           label="الجهة الموقّعة"

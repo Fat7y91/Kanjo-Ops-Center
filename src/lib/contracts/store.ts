@@ -88,6 +88,10 @@ export async function editContract(
     {
       merchantName: parsed.data.merchantName,
       cityId: parsed.data.cityId,
+      valueMinor:
+        parsed.data.value === undefined
+          ? undefined
+          : Math.round(parsed.data.value * 100),
       currency: parsed.data.currency,
       signatory: parsed.data.signatory,
       body: parsed.data.body,

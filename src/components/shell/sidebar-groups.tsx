@@ -54,7 +54,7 @@ function GroupBlock({
   activeHref: string;
   onNavigate: () => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className={`nav-group${open ? " is-open" : ""}`}>

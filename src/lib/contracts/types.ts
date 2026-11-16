@@ -50,6 +50,7 @@ export const CONTRACT_DRAFT_INPUT = z.object({
   merchantId: z.string().trim().min(1, "اختر تاجراً."),
   merchantName: z.string().trim().default(""),
   cityId: z.string().nullable().default(null),
+  value: z.number().nonnegative().default(0),
   currency: z.enum(["EGP", "SAR"]).default("EGP"),
   signatory: z.string().trim().max(120).default(""),
   // Clause text is unbounded here: the rendered contract can be long and the
