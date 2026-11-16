@@ -106,9 +106,9 @@ export function ExecutiveSummary({
     {
       href: "/catalog",
       label: "جاهزية الكتالوج",
-      value: percent(catalog.merchantReadiness),
-      detail: `${count(catalog.liveMerchants)} من ${count(catalog.merchantTotal)} كتالوج منشور`,
-      tone: catalog.merchantReadiness >= 0.8 ? "green" : "red",
+      value: percent(catalog.signedReadiness),
+      detail: `${count(catalog.liveMerchants)} من ${count(catalog.signedTotal)} عقد موقّع`,
+      tone: catalog.signedReadiness >= 0.8 ? "green" : "red",
     },
   );
 

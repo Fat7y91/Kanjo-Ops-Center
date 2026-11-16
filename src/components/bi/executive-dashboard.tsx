@@ -92,7 +92,10 @@ export function ExecutiveDashboard({
     () => buildMarketing(scoped.marketing),
     [scoped],
   );
-  const catalog = useMemo(() => buildCatalog(scoped.catalog), [scoped]);
+  const catalog = useMemo(
+    () => buildCatalog(scoped.catalog, finance.signedCount),
+    [scoped, finance.signedCount],
+  );
   const orderMetrics = useMemo(
     () => summarizeOrderMetrics(dataset.orders),
     [dataset.orders],

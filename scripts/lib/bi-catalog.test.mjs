@@ -26,25 +26,54 @@ function row(overrides = {}) {
 }
 
 test("counts a merchant as live only when published on the app with products", () => {
-  const catalog = buildCatalog([
-    row({ id: "P1", merchantId: "M1", appPublished: true }),
-    row({ id: "P2", merchantId: "M1", appPublished: true }),
-    row({ id: "P3", merchantId: "M2" }),
-    row({ id: "catalog-missing-M3", merchantId: "M3", appPublished: true }),
-  ]);
+  const catalog = buildCatalog(
+    [
+      row({ id: "P1", merchantId: "M1", appPublished: true }),
+      row({ id: "P2", merchantId: "M1", appPublished: true }),
+      row({ id: "P3", merchantId: "M2" }),
+      row({ id: "catalog-missing-M3", merchantId: "M3", appPublished: true }),
+    ],
+    10,
+  );
 
   assert.equal(catalog.liveMerchants, 1);
-  assert.equal(catalog.merchantTotal, 3);
-  assert.equal(catalog.merchantReadiness, 1 / 3);
+  assert.equal(catalog.signedTotal, 10);
+  assert.equal(catalog.signedReadiness, 1 / 10);
   assert.equal(catalog.total, 4);
   assert.equal(catalog.readiness, 0);
 });
 
+test("readiness divides live merchants by signed contracts, not all merchants", () => {
+  const catalog = buildCatalog(
+    [
+      row({ id: "P1", merchantId: "M1", appPublished: true }),
+      row({ id: "P2", merchantId: "M2" }),
+      row({ id: "P3", merchantId: "M3" }),
+      row({ id: "P4", merchantId: "M4" }),
+    ],
+    2,
+  );
+
+  assert.equal(catalog.liveMerchants, 1);
+  assert.equal(catalog.signedTotal, 2);
+  assert.equal(catalog.signedReadiness, 0.5);
+});
+
+test("does not divide by zero when no contract is signed", () => {
+  const catalog = buildCatalog([row({ appPublished: true })], 0);
+
+  assert.equal(catalog.signedTotal, 0);
+  assert.equal(catalog.signedReadiness, 0);
+});
+
 test("product counters still describe product rows", () => {
-  const catalog = buildCatalog([
-    row({ id: "P1", state: "published" }),
-    row({ id: "P2", state: "missing" }),
-  ]);
+  const catalog = buildCatalog(
+    [
+      row({ id: "P1", state: "published" }),
+      row({ id: "P2", state: "missing" }),
+    ],
+    1,
+  );
 
   assert.deepEqual(catalog.published, 1);
   assert.deepEqual(catalog.missing, 1);
