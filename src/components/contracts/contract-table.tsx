@@ -68,7 +68,9 @@ export function ContractTable({
                   </td>
                   <td>{contract.merchantName || contract.merchantId}</td>
                   <td className="align-right" dir="ltr">
-                    {currencyMoney(contract.value, contract.currency)}
+                    {contract.value > 0
+                      ? currencyMoney(contract.value, contract.currency)
+                      : "—"}
                   </td>
                   <td>
                     <span className={`badge ${meta.tone}`}>{meta.label}</span>
