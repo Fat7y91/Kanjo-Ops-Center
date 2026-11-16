@@ -71,6 +71,16 @@ export const FINANCE_MODULES: readonly ModuleDefinition[] = [
     icon: "clearinghouse",
   },
   {
+    href: "/finance/expense-reports",
+    label: "تقارير المصروفات",
+    shortLabel: "المصروفات",
+    description:
+      "إجمالي المصروفات موزّعاً على البنود التحليلية، بالجنيه والريال، مع تصفية بالفترة والبند.",
+    permission: "view_financials",
+    alsoGrantedBy: ["view_finance", "manage_expenses", "manage_expense_categories"],
+    icon: "finance",
+  },
+  {
     href: "/admin/permissions",
     label: "مستخدمين النظام",
     shortLabel: "المستخدمون",

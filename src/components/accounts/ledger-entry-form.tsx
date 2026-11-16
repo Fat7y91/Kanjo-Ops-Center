@@ -3,17 +3,23 @@
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ExpenseCategory, LedgerKind } from "@/lib/accounts/types";
 
 type EntryFormProps = {
   accountId: string;
+  currency: "EGP" | "SAR";
   defaultKind: LedgerKind;
-  /** Deposit-only viewers never see the expense switch. */
+  /** Allows the deposit side of the movement. */
+  allowDeposit: boolean;
+  /** Allows the expense side and reveals the category picker. */
   allowExpense: boolean;
   /** Active analytical buckets; an expense cannot be saved without one. */
   expenseCategories: ExpenseCategory[];
+  /** Shows the inline "add category" workflow. */
+  canManageCategories: boolean;
+  onCategoriesChanged?: () => void;
   onDone: (message: string) => void;
 };
 
@@ -23,18 +29,69 @@ function todayInput(): string {
 
 export function LedgerEntryForm({
   accountId,
+  currency,
   defaultKind,
+  allowDeposit,
   allowExpense,
   expenseCategories,
+  canManageCategories,
+  onCategoriesChanged,
   onDone,
 }: EntryFormProps) {
   const [kind, setKind] = useState<LedgerKind>(defaultKind);
+  const [categories, setCategories] = useState(expenseCategories);
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newNameAr, setNewNameAr] = useState("");
+  const [newNameEn, setNewNameEn] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
   const [occurredAt, setOccurredAt] = useState(todayInput);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setCategories(expenseCategories);
+  }, [expenseCategories]);
+
+  async function addCategory() {
+    setCategoryError("");
+    setSavingCategory(true);
+    try {
+      const response = await fetch("/api/accounts/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nameAr: newNameAr, nameEn: newNameEn }),
+      });
+      const payload = (await response.json()) as {
+        category?: ExpenseCategory;
+        error?: string;
+      };
+      if (!response.ok || !payload.category) {
+        throw new Error(payload.error ?? "تعذر إضافة البند.");
+      }
+      setCategories((current) =>
+        [...current, payload.category!].sort((left, right) =>
+          left.nameAr.localeCompare(right.nameAr, "ar"),
+        ),
+      );
+      setCategoryId(payload.category.id);
+      setNewNameAr("");
+      setNewNameEn("");
+      setAdding(false);
+      onCategoriesChanged?.();
+    } catch (submitError) {
+      setCategoryError(
+        submitError instanceof Error
+          ? submitError.message
+          : "تعذر إضافة البند.",
+      );
+    } finally {
+      setSavingCategory(false);
+    }
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +137,11 @@ export function LedgerEntryForm({
 
   return (
     <form className="ledger-form" onSubmit={submit}>
-      {allowExpense ? (
+      <p className="field-hint">
+        {currency === "SAR" ? "البنك السعودي · ريال" : "البنك المصري · جنيه"}
+      </p>
+
+      {allowDeposit && allowExpense ? (
         <div className="ledger-kind" role="group" aria-label="نوع الحركة">
           <Button
             type="button"
@@ -102,24 +163,69 @@ export function LedgerEntryForm({
       ) : null}
 
       {kind === "expense" ? (
-        <SelectMenu
-          label="البند الرئيسي"
-          required
-          value={categoryId}
-          onChange={setCategoryId}
-          placeholder="اختر بند المصروف"
-          hint="يُستخدم في تقارير المصروفات."
-          options={expenseCategories.map((category) => ({
-            value: category.id,
-            label: category.nameAr,
-            hint: category.nameEn || undefined,
-          }))}
-        />
+        <div className="ledger-category">
+          <SelectMenu
+            label="البند الرئيسي"
+            required
+            value={categoryId}
+            onChange={setCategoryId}
+            placeholder="اختر بند المصروف"
+            hint="يُستخدم في تقارير المصروفات."
+            options={categories.map((category) => ({
+              value: category.id,
+              label: category.nameAr,
+              hint: category.nameEn || undefined,
+            }))}
+          />
+
+          {canManageCategories ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="quiet"
+              onClick={() => setAdding((current) => !current)}
+            >
+              {adding ? "إغلاق" : "+ إضافة بند جديد"}
+            </Button>
+          ) : null}
+
+          {adding ? (
+            <div className="ledger-category-create">
+              <TextField
+                label="اسم البند"
+                value={newNameAr}
+                onChange={(event) => setNewNameAr(event.target.value)}
+                placeholder="مثال: مصروفات نقل"
+                required
+              />
+              <TextField
+                label="الاسم بالإنجليزية"
+                hint="اختياري."
+                value={newNameEn}
+                onChange={(event) => setNewNameEn(event.target.value)}
+                dir="ltr"
+              />
+              {categoryError ? (
+                <p className="form-error" role="alert">
+                  {categoryError}
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={savingCategory || newNameAr.trim().length < 2}
+                onClick={() => void addCategory()}
+              >
+                {savingCategory ? "جارٍ الإضافة…" : "حفظ البند"}
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
-      {kind === "expense" && expenseCategories.length === 0 ? (
+      {kind === "expense" && categories.length === 0 ? (
         <p className="field-hint">
-          لا توجد بنود مصروفات نشطة. أضف بنداً من إعدادات البنود أولاً.
+          لا توجد بنود مصروفات نشطة. أضف بنداً جديداً للمتابعة.
         </p>
       ) : null}
 
@@ -153,7 +259,7 @@ export function LedgerEntryForm({
 
       <Button
         type="submit"
-        disabled={saving || (kind === "expense" && expenseCategories.length === 0)}
+        disabled={saving || (kind === "expense" && categories.length === 0)}
       >
         {saving ? "جارٍ التسجيل…" : "تسجيل الحركة"}
       </Button>

@@ -14,6 +14,7 @@ import {
   listLedgerRows,
 } from "./repository";
 import { insertBankAccount, insertLedgerEntry } from "./movements";
+import { insertSarDeposit, insertSarExpense } from "./sar-movements";
 
 export { AccountsError };
 
@@ -98,6 +99,12 @@ export async function appendLedgerEntry(
   const account = await findBankAccountRow(parsed.data.accountId);
   if (!account) {
     throw new AccountsError("ACCOUNT_NOT_FOUND", "الحساب البنكي غير موجود.", 404);
+  }
+
+  if (account.currency === "SAR") {
+    return parsed.data.kind === "expense"
+      ? insertSarExpense(account, parsed.data, recordedBy)
+      : insertSarDeposit(account, parsed.data, recordedBy);
   }
 
   return insertLedgerEntry(account, parsed.data, recordedBy);

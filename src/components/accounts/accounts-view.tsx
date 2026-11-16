@@ -37,6 +37,10 @@ type AccountsViewProps = {
   canViewTransactions: boolean;
   canRecordDeposits: boolean;
   canRecordExpenses: boolean;
+  /** May post directly to the Saudi bank ledger. */
+  canOperateSar: boolean;
+  /** May create analytical expense categories. */
+  canManageCategories: boolean;
   canAddAccount: boolean;
   /** May post a manual SAR→EGP transfer between the two bank ledgers. */
   canTransferFx: boolean;
@@ -51,6 +55,8 @@ export function AccountsView({
   canViewTransactions,
   canRecordDeposits,
   canRecordExpenses,
+  canOperateSar,
+  canManageCategories,
   canAddAccount,
   canTransferFx,
   onRefresh,
@@ -70,7 +76,12 @@ export function AccountsView({
     const rank = (currency: string) => (currency === "EGP" ? 0 : 1);
     return rank(left.account.currency) - rank(right.account.currency);
   });
-  const canRecord = canRecordDeposits || canRecordExpenses;
+  const allowsDeposit = (account: { currency: string }) =>
+    canRecordDeposits && (account.currency !== "SAR" || canOperateSar);
+  const allowsExpense = (account: { currency: string }) =>
+    canRecordExpenses && (account.currency !== "SAR" || canOperateSar);
+  const entryAccount =
+    summaries.find((summary) => summary.account.id === entryFor)?.account ?? null;
 
   return (
     <div className="accounts-view">
@@ -148,7 +159,9 @@ export function AccountsView({
             entries={entries}
             full={full}
             primary={summary.account.currency === "EGP"}
-            canRecord={canRecord && summary.account.currency === "EGP"}
+            canRecord={
+              allowsDeposit(summary.account) || allowsExpense(summary.account)
+            }
             onRecord={() => setEntryFor(summary.account.id)}
             /* A statement exposes the opening and closing balance, so it is a
              * full-book view only; a deposit clerk never sees one. */
@@ -183,9 +196,15 @@ export function AccountsView({
         {entryFor ? (
           <LedgerEntryForm
             accountId={entryFor}
-            defaultKind="deposit"
-            allowExpense={canRecordExpenses}
+            currency={entryAccount?.currency ?? "EGP"}
+            defaultKind={
+              entryAccount && allowsDeposit(entryAccount) ? "deposit" : "expense"
+            }
+            allowDeposit={entryAccount ? allowsDeposit(entryAccount) : false}
+            allowExpense={entryAccount ? allowsExpense(entryAccount) : false}
             expenseCategories={expenseCategories}
+            canManageCategories={canManageCategories}
+            onCategoriesChanged={onRefresh}
             onDone={(message) => {
               setNotice(message);
               setEntryFor(null);

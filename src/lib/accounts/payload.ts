@@ -46,6 +46,8 @@ export const accountsPayloadSchema = z.object({
   canViewTransactions: z.boolean(),
   canRecordDeposits: z.boolean(),
   canRecordExpenses: z.boolean(),
+  /** May post deposits/expenses directly to the Saudi bank ledger. */
+  canOperateSar: z.boolean().default(false),
   canAddAccount: z.boolean(),
   /** May post a manual SAR→EGP transfer between the two bank ledgers. */
   canTransferFx: z.boolean(),

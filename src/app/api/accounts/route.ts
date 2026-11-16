@@ -51,6 +51,7 @@ export async function GET() {
         canViewTransactions: access.canViewTransactions,
         canRecordDeposits: access.canRecordDeposits,
         canRecordExpenses: access.canRecordExpenses,
+        canOperateSar: access.canOperateSar,
         canAddAccount: session.permissions.includes("add_bank_account"),
         canTransferFx: session.permissions.includes("post_fx_transfer"),
         canManageCategories: session.permissions.includes(

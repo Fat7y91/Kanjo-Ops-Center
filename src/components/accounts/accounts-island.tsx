@@ -70,6 +70,8 @@ export function AccountsIsland({ description }: { description: string }) {
           canViewTransactions={data.canViewTransactions}
           canRecordDeposits={data.canRecordDeposits}
           canRecordExpenses={data.canRecordExpenses}
+          canOperateSar={data.canOperateSar}
+          canManageCategories={data.canManageCategories}
           canAddAccount={data.canAddAccount}
           canTransferFx={data.canTransferFx}
           onRefresh={reload}

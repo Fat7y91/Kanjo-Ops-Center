@@ -13,13 +13,16 @@ import type { ExpenseCategory } from "./types";
  * blocks submission and explains why, rather than posting an unclassified
  * movement the reporting tree cannot place.
  */
-export async function listExpenseCategories(): Promise<ExpenseCategory[]> {
+export async function listExpenseCategories(
+  options: { includeInactive?: boolean } = {},
+): Promise<ExpenseCategory[]> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
+  let query = client
     .schema("app")
     .from("expense_categories")
-    .select("id,name_ar,name_en,active")
-    .eq("active", true)
+    .select("id,name_ar,name_en,active");
+  if (!options.includeInactive) query = query.eq("active", true);
+  const { data, error } = await query
     .order("name_ar", { ascending: true })
     .abortSignal(AbortSignal.timeout(6_000));
 

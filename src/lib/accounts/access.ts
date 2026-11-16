@@ -23,6 +23,8 @@ export type TreasuryAccess = {
   canRecordDeposits: boolean;
   /** May append expenses. Implies full. */
   canRecordExpenses: boolean;
+  /** May post directly to the Saudi bank ledger. */
+  canOperateSar: boolean;
   /** May open the treasury module at all. */
   canView: boolean;
 };
@@ -44,6 +46,7 @@ export function resolveTreasuryAccess(
     canView: canViewTransactions || held.has("record_bank_transaction"),
     canRecordDeposits: full || held.has("record_bank_transaction"),
     canRecordExpenses: full,
+    canOperateSar: held.has("operate_sar_bank"),
   };
 }
 
@@ -96,8 +99,8 @@ export function assertCanRecord(
   if (kind === "deposit" && !access.canRecordDeposits) {
     return "لا تملك صلاحية تسجيل الإيداعات.";
   }
-  if (!access.full && account.country !== "EG") {
-    return "لا تملك صلاحية العمل على هذا الحساب.";
+  if (account.currency === "SAR" && !access.canOperateSar) {
+    return "لا تملك صلاحية تشغيل البنك السعودي.";
   }
   return null;
 }

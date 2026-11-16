@@ -129,7 +129,7 @@ export async function loadSarBalance(): Promise<number | null> {
 export async function loadSarEntries(accountId: string): Promise<LedgerEntry[]> {
   const client = getSupabaseServerClient();
 
-  const [deposits, expenses, categories] = await Promise.all([
+  const [deposits, directDeposits, expenses, categories] = await Promise.all([
     client
       .schema("app")
       .from("capital_deposits")
@@ -138,12 +138,16 @@ export async function loadSarEntries(accountId: string): Promise<LedgerEntry[]> 
       .neq("status", "rejected"),
     client
       .schema("app")
+      .from("sar_bank_deposits")
+      .select("id,amount_sar,deposit_date,created_at,reference_number,reason"),
+    client
+      .schema("app")
       .from("expenses")
       .select("id,amount_sar,expense_date,created_at,reference_number,details,category_id"),
     client.schema("app").from("expense_categories").select("id,name_ar"),
   ]);
 
-  for (const result of [deposits, expenses, categories]) {
+  for (const result of [deposits, directDeposits, expenses, categories]) {
     if (result.error) {
       if (isMissingSchemaObject(result.error)) return [];
       throw result.error;
@@ -156,6 +160,9 @@ export async function loadSarEntries(accountId: string): Promise<LedgerEntry[]> 
 
   const entries = [
     ...((deposits.data ?? []) as DepositRow[])
+      .map((row) => toDeposit(row, accountId))
+      .filter((row): row is LedgerEntry => row !== null),
+    ...((directDeposits.data ?? []) as DepositRow[])
       .map((row) => toDeposit(row, accountId))
       .filter((row): row is LedgerEntry => row !== null),
     ...((expenses.data ?? []) as ExpenseRow[])
