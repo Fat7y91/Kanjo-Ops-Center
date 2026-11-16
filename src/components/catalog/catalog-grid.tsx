@@ -7,8 +7,11 @@ import { LightboxModal } from "@/components/catalog/lightbox-modal";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ProductDetailsModal } from "@/components/catalog/product-details-modal";
 import { useImageQa } from "@/components/catalog/use-image-qa";
+import { TextField } from "@/components/ui/form-inputs";
+import { useDebouncedValue } from "@/components/ui/use-debounced-value";
 import {
   filterProducts,
+  filterProductsBySearch,
   type CatalogFilter,
 } from "@/lib/catalog/filters";
 import type { CatalogProduct } from "@/lib/catalog/types";
@@ -37,18 +40,24 @@ export function CatalogGrid({
   onProductsChange,
 }: CatalogGridProps) {
   const [filter, setFilter] = useState<CatalogFilter>("all");
+  const [query, setQuery] = useState("");
   const [details, setDetails] = useState<CatalogProduct | null>(null);
   const [lightbox, setLightbox] = useState<CatalogProduct | null>(null);
-
-  const visible = useMemo(
-    () => filterProducts(products, filter),
-    [products, filter],
-  );
+  const debouncedQuery = useDebouncedValue(query);
 
   const categoryNames = useMemo(
     () => new Map(categories.map((category) => [category.key, category.name_ar])),
     [categories],
   );
+
+  const visible = useMemo(() => {
+    const searched = filterProductsBySearch(
+      products,
+      debouncedQuery,
+      categoryNames,
+    );
+    return filterProducts(searched, filter);
+  }, [products, filter, debouncedQuery, categoryNames]);
 
   const handleUpdated = useCallback(
     (updated: CatalogProduct) => {
@@ -79,6 +88,14 @@ export function CatalogGrid({
           active={filter}
           onChange={setFilter}
         />
+        <TextField
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="ابحث باسم المنتج أو التصنيف…"
+          aria-label="بحث المنتجات"
+          className="cat-product-search"
+        />
       </section>
 
       {qa.error ? (
@@ -107,7 +124,9 @@ export function CatalogGrid({
           <p className="empty-state">
             {products.length === 0
               ? "لا توجد منتجات في الكتالوج بعد."
-              : "لا توجد منتجات مطابقة لهذا الفلتر."}
+              : debouncedQuery.trim()
+                ? "لا توجد منتجات مطابقة لهذا البحث."
+                : "لا توجد منتجات مطابقة لهذا الفلتر."}
           </p>
         ) : null}
       </section>

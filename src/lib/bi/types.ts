@@ -209,6 +209,8 @@ export const biCatalogRowSchema = z.object({
   cityName: z.string(),
   team: z.string(),
   state: z.enum(BI_CATALOG_STATES),
+  /** Merchant-level publish flag from `app.merchant_v1_profiles`. */
+  appPublished: z.boolean(),
   price: z.number().nonnegative(),
   updatedAt: z.string(),
 });

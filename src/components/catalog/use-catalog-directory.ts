@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import { useDebouncedValue } from "@/components/ui/use-debounced-value";
+
 import {
   directoryFilterCounts,
   matchesDirectoryFilter,
@@ -26,6 +28,7 @@ export function useCatalogDirectory(cards: readonly CatalogMerchantCard[]) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DirectoryFilter>("all");
   const [showEmpty, setShowEmpty] = useState(false);
+  const debouncedQuery = useDebouncedValue(query);
 
   const counts = useMemo(() => {
     const raw = directoryFilterCounts(cards);
@@ -34,7 +37,7 @@ export function useCatalogDirectory(cards: readonly CatalogMerchantCard[]) {
   }, [cards, showEmpty]);
 
   const visible = useMemo(() => {
-    const term = query.trim();
+    const term = debouncedQuery.trim();
     return cards.filter((card) => {
       if (!showEmpty && card.productCount === 0) return false;
       if (!matchesDirectoryFilter(card, filter)) return false;
@@ -46,7 +49,7 @@ export function useCatalogDirectory(cards: readonly CatalogMerchantCard[]) {
       );
       return score > 0;
     });
-  }, [cards, filter, query, showEmpty]);
+  }, [cards, filter, debouncedQuery, showEmpty]);
 
   const selectFilter = (next: DirectoryFilter) => {
     if (next === "empty") setShowEmpty(true);

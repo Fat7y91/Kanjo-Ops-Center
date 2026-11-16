@@ -91,7 +91,8 @@ export function buildMerchantCards(
         pendingCount: tally?.pendingCount ?? 0,
         deleteRequestCount: tally?.deleteRequestCount ?? 0,
         coverImage: merchant.coverUrl ?? tally?.firstProductImage ?? null,
-        live: (tally?.publishedCount ?? 0) > 0,
+        live:
+          merchant.appPublished === true && (tally?.productCount ?? 0) > 0,
       };
     })
     .sort((left, right) => {

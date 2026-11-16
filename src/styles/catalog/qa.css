@@ -7,6 +7,12 @@
 
 .cat-toolbar {
   align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.cat-product-search {
+  width: min(300px, 100%);
+  margin-inline-start: auto;
 }
 
 /* ── Clickable card affordance ────────────────────────────────────────── */

@@ -5,10 +5,10 @@ import {
   type BiDealStage,
   type BiDocumentKey,
   type BiFilters,
-  type BiMarketingChannel,
   type BiMerchantRow,
 } from "./types";
 import { summarizeOrderMetrics } from "./order-metrics";
+import { sum } from "./aggregate";
 
 const RANGE_DAYS: Record<BiFilters["range"], number | null> = {
   "30d": 30,
@@ -264,83 +264,6 @@ export function buildFinance(
   };
 }
 
-export type MarketingSummary = {
-  reach: number;
-  impressions: number;
-  leads: number;
-  conversions: number;
-  spend: number;
-  costPerLead: number;
-  conversionRate: number;
-  byChannel: Array<{
-    channel: BiMarketingChannel;
-    reach: number;
-    leads: number;
-    spend: number;
-  }>;
-};
-
-export function buildMarketing(
-  rows: BiScopedData["marketing"],
-): MarketingSummary {
-  const reach = sum(rows.map((row) => row.reach));
-  const leads = sum(rows.map((row) => row.leads));
-  const spend = sum(rows.map((row) => row.spend));
-  const conversions = sum(rows.map((row) => row.conversions));
-
-  const channelMap = new Map<
-    BiMarketingChannel,
-    { reach: number; leads: number; spend: number }
-  >();
-  for (const row of rows) {
-    const current = channelMap.get(row.channel) ?? {
-      reach: 0,
-      leads: 0,
-      spend: 0,
-    };
-    channelMap.set(row.channel, {
-      reach: current.reach + row.reach,
-      leads: current.leads + row.leads,
-      spend: current.spend + row.spend,
-    });
-  }
-
-  return {
-    reach,
-    impressions: sum(rows.map((row) => row.impressions)),
-    leads,
-    conversions,
-    spend,
-    costPerLead: leads === 0 ? 0 : Math.round(spend / leads),
-    conversionRate: leads === 0 ? 0 : conversions / leads,
-    byChannel: Array.from(channelMap.entries()).map(([channel, value]) => ({
-      channel,
-      ...value,
-    })),
-  };
-}
-
-export type CatalogSummary = {
-  published: number;
-  missing: number;
-  total: number;
-  readiness: number;
-};
-
-export function buildCatalog(
-  rows: BiScopedData["catalog"],
-): CatalogSummary {
-  const published = rows.filter((row) => row.state === "published").length;
-  const missing = rows.filter((row) => row.state === "missing").length;
-  const total = published + missing;
-  return {
-    published,
-    missing,
-    total,
-    readiness: total === 0 ? 0 : published / total,
-  };
-}
-
-export function sum(values: number[]): number {
-  return values.reduce((total, value) => total + value, 0);
-}
+export { buildCatalog, type CatalogSummary } from "./catalog";
+export { buildMarketing, type MarketingSummary } from "./marketing";
+export { sum } from "./aggregate";

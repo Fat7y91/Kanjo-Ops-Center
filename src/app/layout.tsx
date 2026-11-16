@@ -20,8 +20,7 @@ const cairo = Cairo({
 
 export const metadata: Metadata = {
   title: "كانجو | Kanjo Enterprise V2",
-  description:
-    "منصة العمليات المؤسسية القائمة على الصلاحيات الديناميكية، بدون أدوار ثابتة.",
+  description: "إدارة شركة كاند جوو للتجارة والتوصيل",
 };
 
 export default async function RootLayout({

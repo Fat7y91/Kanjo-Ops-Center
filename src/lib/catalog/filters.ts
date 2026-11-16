@@ -1,3 +1,4 @@
+import { normalizeSearchText } from "@/lib/search/normalize";
 import type { CatalogProduct, CatalogProductState } from "@/lib/catalog/types";
 
 /** Filter tab identity: every state plus an "all" pseudo-state. */
@@ -30,4 +31,33 @@ export function filterProducts(
 ): CatalogProduct[] {
   if (filter === "all") return [...products];
   return products.filter((product) => product.state === filter);
+}
+
+/**
+ * Free-text filter for the merchant product grid.
+ *
+ * Matches the product name and its category name (or raw category key) so a
+ * reviewer can type "مخبوزات" or part of the product name. Both sides go
+ * through the shared Arabic normaliser, so hamza/alef variants and diacritics
+ * do not hide a match.
+ */
+export function filterProductsBySearch(
+  products: readonly CatalogProduct[],
+  query: string,
+  categoryNames: ReadonlyMap<string, string> = new Map(),
+): CatalogProduct[] {
+  const term = normalizeSearchText(query);
+  if (!term) return [...products];
+
+  return products.filter((product) => {
+    const category = product.categoryKey
+      ? categoryNames.get(product.categoryKey) ?? product.categoryKey
+      : "";
+    const categoryKey = product.categoryKey ?? "";
+    return (
+      normalizeSearchText(product.name).includes(term) ||
+      normalizeSearchText(category).includes(term) ||
+      normalizeSearchText(categoryKey).includes(term)
+    );
+  });
 }

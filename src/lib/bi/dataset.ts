@@ -1,6 +1,7 @@
 import { listCities, listMerchants } from "@/lib/field-ops/store";
 import { listVendorTypes } from "@/lib/taxonomy/store";
 import { listProducts } from "@/lib/catalog/store";
+import { listMerchantV1Flags } from "@/lib/field-ops/merchant-profile-repository";
 import type { Merchant } from "@/lib/field-ops/types";
 
 import { buildFounderFinancials } from "@/lib/accounts/founder";
@@ -136,6 +137,9 @@ export async function buildBiDataset(): Promise<BiDataset> {
   });
 
   const merchantById = new Map(merchants.map((merchant) => [merchant.id, merchant]));
+  const flags = await listMerchantV1Flags();
+  const isAppPublished = (merchantId: string) =>
+    flags.get(merchantId)?.appPublished ?? false;
 
   const catalogRows: BiCatalogRow[] = [
     ...products.map<BiCatalogRow>((product) => {
@@ -152,6 +156,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
         // into "missing" so the dashboard keeps one binary catalog-health
         // signal.
         state: product.state === "published" ? "published" : "missing",
+        appPublished: isAppPublished(product.merchantId),
         price: product.price,
         updatedAt: product.updatedAt,
       };
@@ -167,6 +172,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
         cityName: cityName.get(merchant.cityId) ?? merchant.cityId,
         team: merchant.team ?? "غير مسند",
         state: "missing",
+        appPublished: isAppPublished(merchant.id),
         price: 0,
         updatedAt: merchant.updatedAt,
       })),

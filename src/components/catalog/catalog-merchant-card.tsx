@@ -68,9 +68,9 @@ export function CatalogMerchantCard({
         <span
           className={`cat-merchant-flag${card.live ? " is-live" : ""}`}
         >
-          {card.appPublished
+          {card.live
             ? "منشور على التطبيق"
-            : card.live
+            : card.productCount > 0
               ? "الكتالوج جاهز، غير منشور على التطبيق"
               : "بانتظار أول منتج"}
         </span>
