@@ -9,6 +9,8 @@ import type { Permission } from "./permissions";
 export type AppUser = {
   id: string;
   name: string;
+  /** Canonical E.164 mobile number; the primary login credential. */
+  phone: string;
   email: string;
   title: string;
   /** Deprecated free-text label; `teamId` is authoritative. */

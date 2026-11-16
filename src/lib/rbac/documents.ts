@@ -17,6 +17,7 @@ export type OperatorDocument = {
   user: {
     id: string;
     name: string;
+    phone?: string | null;
     email: string | null;
     title: string;
     team: string | null;
@@ -36,6 +37,7 @@ export function toOperator(document: OperatorDocument): AppUser {
   return {
     id: profile.id,
     name: profile.name,
+    phone: profile.phone ?? "",
     email: profile.email ?? "",
     title: profile.title,
     team: profile.team ?? "",

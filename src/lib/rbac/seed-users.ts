@@ -24,7 +24,9 @@ const REP_SET: Permission[] = [
  * Rows are declarative; `SEED_USERS` below normalises them, so an L4 row can
  * never be seeded with a partial grant set.
  */
-const SEED_ROSTER: AppUser[] = [
+type SeedUser = Omit<AppUser, "phone">;
+
+const SEED_ROSTER: SeedUser[] = [
   {
     id: "u-owner",
     name: "Nour El-Sayed",
@@ -250,9 +252,11 @@ const SEED_ROSTER: AppUser[] = [
  * read the catalogue from `permissions.ts`, which is why this is a projection
  * and not a second copy of 49 keys.
  */
-function withSupremeCatalogue(user: AppUser): AppUser {
+function withSupremeCatalogue(user: SeedUser): SeedUser {
   if (user.clearanceLevel < MAX_CLEARANCE_LEVEL) return user;
   return { ...user, permissions: [...ALL_PERMISSIONS] };
 }
 
-export const SEED_USERS: AppUser[] = SEED_ROSTER.map(withSupremeCatalogue);
+export const SEED_USERS: AppUser[] = SEED_ROSTER.map(withSupremeCatalogue).map(
+  (user) => ({ ...user, phone: "" }),
+);

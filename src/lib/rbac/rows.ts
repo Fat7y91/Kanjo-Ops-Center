@@ -21,6 +21,7 @@ export type TeamRefRow = {
 
 export type UserRow = {
   id: string;
+  phone: string | null;
   email: string | null;
   full_name: string;
   title: string;
@@ -57,15 +58,15 @@ export type ScopeRow = {
  * an operator without a team still comes back, with a null embed.
  */
 export const USER_COLUMNS =
-  "id,email,full_name,title,team,team_id,field_teams!team_id(name),clearance_level,global_scope,active,updated_at";
+  "id,phone,email,full_name,title,team,team_id,field_teams!team_id(name),clearance_level,global_scope,active,updated_at";
 
 /** Projection when the relationship is unavailable but `team_id` exists. */
 export const USER_COLUMNS_NO_TEAM_REF =
-  "id,email,full_name,title,team,team_id,clearance_level,global_scope,active,updated_at";
+  "id,phone,email,full_name,title,team,team_id,clearance_level,global_scope,active,updated_at";
 
 /** Projection that predates `app.users.team_id`. */
 export const USER_COLUMNS_LEGACY =
-  "id,email,full_name,title,team,clearance_level,global_scope,active,updated_at";
+  "id,phone,email,full_name,title,team,clearance_level,global_scope,active,updated_at";
 
 /* Shared PostgREST error triage; the canonical implementation lives beside the
  * Supabase client so every repository reads the same codes from one place. */
@@ -106,6 +107,7 @@ export function toAppUser(
   return {
     id: row.id,
     name: row.full_name,
+    phone: row.phone ?? "",
     email: row.email ?? "",
     title: row.title,
     // Legacy free-text label. It stays the comparison key for merchant

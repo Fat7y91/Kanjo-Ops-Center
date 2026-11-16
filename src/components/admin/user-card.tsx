@@ -66,7 +66,7 @@ function UserCardBase({
     false;
 
   return (
-    <article className="matrix-card">
+    <article className={`matrix-card${isSelf ? " matrix-card-is-self" : ""}`}>
       <header className="matrix-card-head">
         <span className="account-avatar account-avatar-small">
           {initials(user.name)}
@@ -91,7 +91,7 @@ function UserCardBase({
         <div>
           <dt>الدخول</dt>
           <dd className="account-email" dir="ltr">
-            {user.email}
+            {user.phone || user.email || "—"}
           </dd>
         </div>
         <div>

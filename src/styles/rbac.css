@@ -49,6 +49,18 @@
   border-color: var(--line-strong);
 }
 
+/* The viewer's own card is pinned first in the grid, so it also carries a
+ * visible tint and border instead of relying on the small "حسابك" badge. */
+.matrix-card-is-self {
+  border-color: color-mix(in srgb, var(--purple) 55%, var(--line));
+  background: color-mix(in srgb, var(--purple) 7%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--purple) 38%, transparent);
+}
+
+.matrix-card-is-self:hover {
+  border-color: var(--purple);
+}
+
 .matrix-card-head {
   display: flex;
   align-items: center;

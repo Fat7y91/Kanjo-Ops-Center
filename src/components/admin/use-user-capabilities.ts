@@ -110,10 +110,16 @@ export function useUserCapabilities({
     [actor],
   );
 
-  const manageableUsers = useMemo(
-    () => users.filter(withinViewer),
-    [users, withinViewer],
-  );
+  const manageableUsers = useMemo(() => {
+    const filtered = users.filter(withinViewer);
+    const selfIndex = filtered.findIndex((user) => user.id === viewerId);
+    if (selfIndex <= 0) return filtered;
+    return [
+      filtered[selfIndex],
+      ...filtered.slice(0, selfIndex),
+      ...filtered.slice(selfIndex + 1),
+    ];
+  }, [users, withinViewer, viewerId]);
 
   const ensureChannel = useCallback((): BroadcastChannel | null => {
     if (typeof BroadcastChannel === "undefined") return null;

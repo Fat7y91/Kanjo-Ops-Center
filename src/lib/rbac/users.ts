@@ -143,6 +143,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const created: AppUser = {
     id,
     name: input.name.trim(),
+    phone: "",
     email,
     title: input.title.trim(),
     team: input.team.trim(),
