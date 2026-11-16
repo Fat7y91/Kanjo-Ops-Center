@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { resolveTreasuryAccess, visibleAccounts, visibleEntries } from "@/lib/accounts/access";
+import { listExpenseCategories } from "@/lib/accounts/categories";
 import { summarizeAll, totalByCurrency } from "@/lib/accounts/ledger";
 import {
   createBankAccount,
@@ -31,9 +32,10 @@ export async function GET() {
 
   try {
     const access = resolveTreasuryAccess(session);
-    const [allAccounts, allEntries] = await Promise.all([
+    const [allAccounts, allEntries, expenseCategories] = await Promise.all([
       listBankAccounts(),
       listLedgerEntries(),
+      listExpenseCategories(),
     ]);
     const accounts = visibleAccounts(allAccounts, access);
     const entries = visibleEntries(allEntries, access);
@@ -43,6 +45,7 @@ export async function GET() {
       {
         accounts: summaries,
         entries,
+        expenseCategories,
         totals: totalByCurrency(summaries),
         full: access.full,
         canViewTransactions: access.canViewTransactions,
@@ -50,6 +53,9 @@ export async function GET() {
         canRecordExpenses: access.canRecordExpenses,
         canAddAccount: session.permissions.includes("add_bank_account"),
         canTransferFx: session.permissions.includes("post_fx_transfer"),
+        canManageCategories: session.permissions.includes(
+          "manage_expense_categories",
+        ),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

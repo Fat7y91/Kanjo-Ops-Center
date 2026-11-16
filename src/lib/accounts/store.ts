@@ -89,6 +89,12 @@ export async function appendLedgerEntry(
       "بيانات الحركة المالية غير مكتملة أو غير صالحة.",
     );
   }
+  if (parsed.data.kind === "expense" && !parsed.data.categoryId) {
+    throw new AccountsError(
+      "INVALID_ENTRY",
+      "اختر البند الرئيسي للمصروف قبل التسجيل.",
+    );
+  }
   const account = await findBankAccountRow(parsed.data.accountId);
   if (!account) {
     throw new AccountsError("ACCOUNT_NOT_FOUND", "الحساب البنكي غير موجود.", 404);

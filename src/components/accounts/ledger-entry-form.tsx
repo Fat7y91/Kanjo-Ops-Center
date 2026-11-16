@@ -2,15 +2,18 @@
 
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/form-inputs";
+import { SelectMenu } from "@/components/ui/select-menus";
 import { useState } from "react";
 
-import type { LedgerKind } from "@/lib/accounts/types";
+import type { ExpenseCategory, LedgerKind } from "@/lib/accounts/types";
 
 type EntryFormProps = {
   accountId: string;
   defaultKind: LedgerKind;
   /** Deposit-only viewers never see the expense switch. */
   allowExpense: boolean;
+  /** Active analytical buckets; an expense cannot be saved without one. */
+  expenseCategories: ExpenseCategory[];
   onDone: (message: string) => void;
 };
 
@@ -22,9 +25,11 @@ export function LedgerEntryForm({
   accountId,
   defaultKind,
   allowExpense,
+  expenseCategories,
   onDone,
 }: EntryFormProps) {
   const [kind, setKind] = useState<LedgerKind>(defaultKind);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
   const [occurredAt, setOccurredAt] = useState(todayInput);
@@ -36,6 +41,10 @@ export function LedgerEntryForm({
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setError("أدخل مبلغاً أكبر من صفر.");
+      return;
+    }
+    if (kind === "expense" && !categoryId) {
+      setError("اختر البند الرئيسي للمصروف.");
       return;
     }
     setError("");
@@ -50,6 +59,7 @@ export function LedgerEntryForm({
           label,
           amount: parsed,
           occurredAt: new Date(`${occurredAt}T12:00:00.000Z`).toISOString(),
+          categoryId: kind === "expense" ? categoryId : undefined,
         }),
       });
       const payload = (await response.json()) as { error?: string };
@@ -91,6 +101,28 @@ export function LedgerEntryForm({
         </div>
       ) : null}
 
+      {kind === "expense" ? (
+        <SelectMenu
+          label="البند الرئيسي"
+          required
+          value={categoryId}
+          onChange={setCategoryId}
+          placeholder="اختر بند المصروف"
+          hint="يُستخدم في تقارير المصروفات."
+          options={expenseCategories.map((category) => ({
+            value: category.id,
+            label: category.nameAr,
+            hint: category.nameEn || undefined,
+          }))}
+        />
+      ) : null}
+
+      {kind === "expense" && expenseCategories.length === 0 ? (
+        <p className="field-hint">
+          لا توجد بنود مصروفات نشطة. أضف بنداً من إعدادات البنود أولاً.
+        </p>
+      ) : null}
+
       <TextField
         label="البيان"
         value={label}
@@ -119,7 +151,10 @@ export function LedgerEntryForm({
         </p>
       ) : null}
 
-      <Button type="submit" disabled={saving}>
+      <Button
+        type="submit"
+        disabled={saving || (kind === "expense" && expenseCategories.length === 0)}
+      >
         {saving ? "جارٍ التسجيل…" : "تسجيل الحركة"}
       </Button>
     </form>

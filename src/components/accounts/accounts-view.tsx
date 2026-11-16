@@ -16,11 +16,12 @@ import { Widget, WidgetDivider, WidgetStat } from "@/components/bi/widget";
 import { currencyMoney } from "@/lib/accounts/format";
 import type { LedgerTotals } from "@/lib/accounts/ledger";
 import type { AccountSummary } from "@/lib/accounts/ledger";
-import type { LedgerEntry } from "@/lib/accounts/types";
+import type { ExpenseCategory, LedgerEntry } from "@/lib/accounts/types";
 
 type AccountsViewProps = {
   summaries: AccountSummary[];
   entries: LedgerEntry[];
+  expenseCategories: ExpenseCategory[];
   totals: Record<"EGP" | "SAR", LedgerTotals>;
   /**
    * Full viewers see the derived balance and expense totals. Deposit-only
@@ -44,6 +45,7 @@ type AccountsViewProps = {
 export function AccountsView({
   summaries,
   entries,
+  expenseCategories,
   totals,
   full,
   canViewTransactions,
@@ -183,6 +185,7 @@ export function AccountsView({
             accountId={entryFor}
             defaultKind="deposit"
             allowExpense={canRecordExpenses}
+            expenseCategories={expenseCategories}
             onDone={(message) => {
               setNotice(message);
               setEntryFor(null);

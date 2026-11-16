@@ -744,4 +744,16 @@ export const PERMISSIONS = [
     description: "تسجيل قيود محاسبية يدوية متوازنة.",
     group: "المالية",
   },
+  {
+    key: "manage_expense_categories",
+    label: "إدارة البنود",
+    description: "إضافة بنود المصروفات وتعديلها في شجرة البنود التحليلية.",
+    group: "المالية",
+  },
+  {
+    key: "operate_sar_bank",
+    label: "تشغيل البنك السعودي",
+    description: "تسجيل الإيداعات والمصروفات على حساب البنك السعودي (ريال).",
+    group: "الحسابات البنكية",
+  },
 ] as const;

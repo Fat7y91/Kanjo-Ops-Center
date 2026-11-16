@@ -55,6 +55,14 @@ export type BankAccountInput = z.infer<typeof BANK_ACCOUNT_INPUT>;
  * Entries are never edited or deleted: a correction is a new opposing entry, so
  * the balance is always reproducible from the append-only history.
  */
+export const expenseCategorySchema = z.object({
+  id: z.string(),
+  nameAr: z.string().min(1),
+  nameEn: z.string().default(""),
+  active: z.boolean().default(true),
+});
+export type ExpenseCategory = z.infer<typeof expenseCategorySchema>;
+
 export const LEDGER_KINDS = ["deposit", "expense"] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 
@@ -97,5 +105,10 @@ export const LEDGER_ENTRY_INPUT = z.object({
   label: z.string().min(2),
   amount: z.number().positive(),
   occurredAt: z.string().min(1),
+  /**
+   * Mandatory for an expense: the analytical bucket the expense is reported
+   * under. Ignored for a deposit, which has no cost centre.
+   */
+  categoryId: z.string().uuid().nullish(),
 });
 export type LedgerEntryInput = z.infer<typeof LEDGER_ENTRY_INPUT>;

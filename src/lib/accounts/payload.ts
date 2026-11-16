@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { bankAccountSchema, ledgerEntrySchema } from "./types";
+import {
+  bankAccountSchema,
+  expenseCategorySchema,
+  ledgerEntrySchema,
+} from "./types";
 
 /**
  * Wire contract for `GET /api/accounts`.
@@ -35,6 +39,8 @@ export const accountSummarySchema = z.object({
 export const accountsPayloadSchema = z.object({
   accounts: z.array(accountSummarySchema),
   entries: z.array(ledgerEntrySchema),
+  /** Analytical buckets the expense form requires. */
+  expenseCategories: z.array(expenseCategorySchema).default([]),
   totals: z.object({ EGP: ledgerTotalsSchema, SAR: ledgerTotalsSchema }),
   full: z.boolean(),
   canViewTransactions: z.boolean(),
@@ -43,6 +49,8 @@ export const accountsPayloadSchema = z.object({
   canAddAccount: z.boolean(),
   /** May post a manual SAR→EGP transfer between the two bank ledgers. */
   canTransferFx: z.boolean(),
+  /** May create or rename the analytical expense buckets. */
+  canManageCategories: z.boolean().default(false),
 });
 
 export type AccountsPayload = z.infer<typeof accountsPayloadSchema>;

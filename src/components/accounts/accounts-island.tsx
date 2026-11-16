@@ -64,6 +64,7 @@ export function AccountsIsland({ description }: { description: string }) {
         <AccountsView
           summaries={data.accounts}
           entries={data.entries}
+          expenseCategories={data.expenseCategories}
           totals={data.totals}
           full={data.full}
           canViewTransactions={data.canViewTransactions}

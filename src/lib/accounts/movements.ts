@@ -127,6 +127,7 @@ export async function insertLedgerEntry(
       p_amount_minor: amountMinor,
       p_occurred_at: input.occurredAt,
       p_actor: actorIdOrNull(recordedBy),
+      p_category_id: input.kind === "expense" ? (input.categoryId ?? null) : null,
     });
 
   if (error) {
