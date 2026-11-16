@@ -148,3 +148,20 @@ test("non-EGP orders do not leak into the EGP collection KPI", () => {
   assert.equal(finance.net, 0);
   assert.equal(finance.collected, 0);
 });
+
+test("signed contracts total counts final and signed merchants only", () => {
+  const finance = buildFinance(
+    [
+      merchant({ id: "m1", stage: "signed" }),
+      merchant({ id: "m2", stage: "final" }),
+      merchant({ id: "m3", stage: "provisional" }),
+      merchant({ id: "m4", stage: "no_contract" }),
+    ],
+    [],
+    [],
+    dataset().partyBalances,
+  );
+
+  assert.equal(finance.signedCount, 1);
+  assert.equal(finance.signedContracts, 2);
+});

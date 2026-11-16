@@ -222,6 +222,12 @@ export type FinanceSummary = {
   marginRate: number;
   monthlyRunRate: number;
   signedCount: number;
+  /**
+   * Total signed contracts in scope. V1's `isSigned` merchants — the
+   * "إجمالي العقود" book — land as `final_contract` plus `signed_contract` in
+   * V2, so the catalog KPI divides by this, not by the narrower `signedCount`.
+   */
+  signedContracts: number;
 };
 
 /**
@@ -261,6 +267,9 @@ export function buildFinance(
           100,
     monthlyRunRate: Math.round(monthlyValue),
     signedCount: merchants.filter((row) => row.stage === "signed").length,
+    signedContracts: merchants.filter(
+      (row) => row.stage === "signed" || row.stage === "final",
+    ).length,
   };
 }
 
