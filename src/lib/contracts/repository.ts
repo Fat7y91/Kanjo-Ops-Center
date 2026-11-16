@@ -126,7 +126,6 @@ export async function insertContractRow(
       value_minor: Math.round(input.value * 100),
       currency: input.currency,
       status: "draft",
-      signatory: input.signatory,
       body: input.body,
       drafted_by: actorIdOrNull(actorId),
     })
@@ -158,7 +157,6 @@ export type ContractPatch = Partial<{
   cityId: string | null;
   valueMinor: number;
   currency: Contract["currency"];
-  signatory: string;
   body: string;
 }>;
 

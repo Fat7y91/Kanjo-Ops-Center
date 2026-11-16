@@ -1,11 +1,16 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { currencyMoney, shortDate } from "@/lib/accounts/format";
+import { shortDate } from "@/lib/accounts/format";
+import { commissionRateLabel } from "@/lib/field-ops/merchant-balance-format";
 import {
   CONTRACT_STATUS_META,
   type Contract,
 } from "@/lib/contracts/types";
+
+const percent = new Intl.NumberFormat("ar-EG-u-nu-latn", {
+  maximumFractionDigits: 2,
+});
 
 type ContractTableProps = {
   contracts: Contract[];
@@ -46,7 +51,7 @@ export function ContractTable({
             <tr>
               <th>العقد</th>
               <th>التاجر</th>
-              <th className="align-right">قيمة العقد</th>
+              <th className="align-right">العمولة</th>
               <th>الحالة</th>
               <th>الموقّع</th>
               <th>آخر تحديث</th>
@@ -67,10 +72,10 @@ export function ContractTable({
                     <strong>{contract.reference}</strong>
                   </td>
                   <td>{contract.merchantName || contract.merchantId}</td>
-                  <td className="align-right" dir="ltr">
-                    {contract.value > 0
-                      ? currencyMoney(contract.value, contract.currency)
-                      : "—"}
+                  <td className="align-right">
+                    {commissionRateLabel(contract.commissionRate, (value) =>
+                      percent.format(value),
+                    )}
                   </td>
                   <td>
                     <span className={`badge ${meta.tone}`}>{meta.label}</span>

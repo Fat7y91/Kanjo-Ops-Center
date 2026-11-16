@@ -39,7 +39,7 @@ export async function PATCH(request: Request, { params }: ContractRouteProps) {
       const contract = await applyContractAction(
         id,
         { ...body, action },
-        session.user.id,
+        { id: session.user.id, name: session.user.name },
       );
       return NextResponse.json({ contract });
     } catch (error) {

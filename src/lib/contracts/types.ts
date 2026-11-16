@@ -35,6 +35,8 @@ export const contractSchema = z.object({
   value: z.number().nonnegative(),
   currency: z.enum(["EGP", "SAR"]),
   status: z.enum(CONTRACT_STATUSES),
+  /** Headline commission rate in force, or null when no rate is known yet. */
+  commissionRate: z.number().nonnegative().nullable().default(null),
   signatory: z.string(),
   body: z.string(),
   storagePath: z.string().nullable(),
@@ -52,7 +54,6 @@ export const CONTRACT_DRAFT_INPUT = z.object({
   cityId: z.string().nullable().default(null),
   value: z.number().nonnegative().default(0),
   currency: z.enum(["EGP", "SAR"]).default("EGP"),
-  signatory: z.string().trim().max(120).default(""),
   // Clause text is unbounded here: the rendered contract can be long and the
   // database column is `text`. Length is a document concern, not an input rule.
   body: z.string().trim().default(""),
@@ -60,7 +61,6 @@ export const CONTRACT_DRAFT_INPUT = z.object({
 export type ContractDraftInput = z.infer<typeof CONTRACT_DRAFT_INPUT>;
 
 export const CONTRACT_EDIT_INPUT = CONTRACT_DRAFT_INPUT.partial().extend({
-  signatory: z.string().trim().max(120).optional(),
   body: z.string().trim().optional(),
 });
 export type ContractEditInput = z.infer<typeof CONTRACT_EDIT_INPUT>;
@@ -112,7 +112,6 @@ export type ContractCommissionLineInput = z.infer<
 
 export const CONTRACT_ACTION_INPUT = z.object({
   action: z.enum(["send", "sign", "cancel"]),
-  signatory: z.string().trim().max(120).optional(),
   note: z.string().trim().max(500).optional(),
 });
 export type ContractActionInput = z.infer<typeof CONTRACT_ACTION_INPUT>;

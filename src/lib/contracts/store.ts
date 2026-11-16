@@ -7,6 +7,7 @@ import {
   type ContractDraftInput,
   type ContractEditInput,
 } from "./types";
+import { attachContractCommissionRates } from "./commission-repository";
 import {
   ContractRepositoryError,
   findContractRow,
@@ -41,7 +42,7 @@ export function isContractsConfigured(): boolean {
 }
 
 export async function listContracts(): Promise<Contract[]> {
-  return listContractRows();
+  return attachContractCommissionRates(await listContractRows());
 }
 
 export async function draftContract(
@@ -93,7 +94,6 @@ export async function editContract(
           ? undefined
           : Math.round(parsed.data.value * 100),
       currency: parsed.data.currency,
-      signatory: parsed.data.signatory,
       body: parsed.data.body,
     },
     actorId,
@@ -107,7 +107,7 @@ export async function editContract(
 export async function applyContractAction(
   id: string,
   input: ContractActionInput,
-  actorId: string | null,
+  actor: { id: string; name: string },
 ): Promise<Contract> {
   const parsed = CONTRACT_ACTION_INPUT.safeParse(input);
   if (!parsed.success) {
@@ -133,13 +133,9 @@ export async function applyContractAction(
       409,
     );
   }
-  if (next === "signed" && !current.signatory && !parsed.data.signatory) {
-    throw new ContractRepositoryError(
-      "SIGNATORY_REQUIRED",
-      "حدّد الجهة الموقّعة قبل التوقيع.",
-      422,
-    );
-  }
+  // Signing is the click itself: the authenticated operator is the signatory,
+  // so the stored name can never drift from the account that advanced the row.
+  const signatory = actor.name.trim().slice(0, 120) || actor.id;
 
   // Guard the write on the state we just read. If another operator (or a second
   // click) advanced the row first, the update matches no row and we answer 409
@@ -147,8 +143,8 @@ export async function applyContractAction(
   const updated = await setContractStatusRow(
     id,
     next,
-    actorId,
-    parsed.data.signatory,
+    actor.id,
+    next === "signed" ? signatory : undefined,
     current.status,
   );
   if (!updated) {

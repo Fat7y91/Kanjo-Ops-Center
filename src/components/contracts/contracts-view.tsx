@@ -54,17 +54,15 @@ export function ContractsView({
     onReload();
   }
 
-  async function act(contract: Contract, action: "send" | "sign" | "cancel") {    setBusyId(contract.id);
+  async function act(contract: Contract, action: "send" | "sign" | "cancel") {
+    setBusyId(contract.id);
     setNotice("");
     setError("");
     try {
       const response = await fetch(`/api/contracts/${contract.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          signatory: action === "sign" ? contract.signatory : undefined,
-        }),
+        body: JSON.stringify({ action }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "تعذر تنفيذ الإجراء.");
@@ -133,7 +131,7 @@ export function ContractsView({
         description={
           dialog.kind === "edit"
             ? `تعديل ${dialog.contract.reference}`
-            : "اختر التاجر وأدخل قيمة العقد والجهة الموقّعة."
+            : "اختر التاجر وأدخل قيمة العقد."
         }
         onClose={() => setDialog({ kind: "closed" })}
         wide

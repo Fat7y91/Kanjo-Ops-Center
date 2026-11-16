@@ -46,7 +46,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
   const [value, setValue] = useState(
     contract ? contract.value.toFixed(2) : "",
   );
-  const [signatory, setSignatory] = useState(contract?.signatory ?? "");
   const [body, setBody] = useState(contract?.body ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -68,7 +67,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
         cityId: merchant?.cityId ?? contract?.cityId ?? null,
         value: numericValue,
         currency,
-        signatory,
         body,
       };
 
@@ -124,12 +122,6 @@ export function ContractForm({ contract, merchants, onDone }: ContractFormProps)
           placeholder="0.00"
           value={value}
           onChange={(event) => setValue(event.target.value)}
-        />
-        <TextField
-          label="الجهة الموقّعة"
-          hint="اتركه فارغاً إن لم تُحدَّد بعد."
-          value={signatory}
-          onChange={(event) => setSignatory(event.target.value)}
         />
         <TextAreaField
           label="ملاحظات العقد"

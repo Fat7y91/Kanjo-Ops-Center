@@ -83,6 +83,7 @@ export function toContract(row: ContractRow): Contract {
     value: Number(row.value_minor) / 100,
     currency: row.currency,
     status: row.status,
+    commissionRate: null,
     signatory: row.signatory,
     body: row.body,
     storagePath: row.storage_path ?? null,
