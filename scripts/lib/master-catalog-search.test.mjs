@@ -68,6 +68,17 @@ test("normalises Arabic spelling variants and hamza forms", () => {
   );
 });
 
+test("typed spelling outranks a synonym prefix collision", () => {
+  const items = [
+    item({ id: "Kj-0009", name: "شاهين بن سادة غامق" }),
+    item({ id: "Kj-0010", name: "شاي ليبتون - 100 جم" }),
+  ];
+  assert.deepEqual(
+    search(items, "شاي").map((row) => row.id),
+    ["Kj-0010", "Kj-0009"],
+  );
+});
+
 test("every token must match the name or category haystack", () => {
   const items = [item({ name: "قهوة تركي سادة" })];
   assert.deepEqual(

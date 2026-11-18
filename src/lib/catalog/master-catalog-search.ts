@@ -79,10 +79,16 @@ export function masterCatalogScore(
     if (!aliases.some((alias) => item.haystack.includes(alias))) return 0;
     if (aliases.some((alias) => item.nameKey === alias)) {
       score += 100;
-    } else if (aliases.some((alias) => item.nameKey.startsWith(alias))) {
+    } else if (item.nameKey.startsWith(token)) {
       score += 40;
-    } else if (aliases.some((alias) => item.nameKey.includes(alias))) {
+    } else if (aliases.some((alias) => item.nameKey.startsWith(alias))) {
+      // A synonym prefix (شاهي → شاهين) is weaker than the typed word so real
+      // matches for the rep's spelling win the tie.
+      score += 32;
+    } else if (item.nameKey.includes(token)) {
       score += 20;
+    } else if (aliases.some((alias) => item.nameKey.includes(alias))) {
+      score += 16;
     } else {
       score += 8;
     }
