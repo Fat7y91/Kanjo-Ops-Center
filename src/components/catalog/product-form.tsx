@@ -3,10 +3,12 @@
 import { BarcodeScanner } from "@/components/catalog/barcode-scanner";
 import { Button } from "@/components/ui/button";
 import { CascadingTaxonomy } from "@/components/catalog/cascading-taxonomy";
+import { MasterCatalogCombo } from "@/components/catalog/master-catalog-combo";
 import { MerchantPicker, type CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import { ProductImageField } from "@/components/catalog/product-image-field";
 import { VariantMatrix } from "@/components/catalog/variant-matrix";
 import { useVariantMatrix } from "@/components/catalog/use-variant-matrix";
+import type { MasterCatalogItem } from "@/lib/catalog/master-catalog-search";
 import {
   TextAreaField,
   TextField,
@@ -76,6 +78,7 @@ export function ProductForm({
 }: ProductFormProps) {
   const locked = disabled || submitting;
   const isVariable = values.productType === "variable";
+  const isSupermarket = values.merchant?.vendorTypeId === 4;
   const matrix = useVariantMatrix({
     enabled: isVariable,
     baseName: values.name,
@@ -85,6 +88,29 @@ export function ProductForm({
     vendorTypeId: values.merchant?.vendorTypeId ?? null,
     variants,
   });
+
+  function applyMasterCatalogItem(item: MasterCatalogItem) {
+    const categoryKey =
+      item.categoryKey &&
+      !values.categoryKey &&
+      categories.some(
+        (category) => category.key === item.categoryKey && category.active,
+      )
+        ? item.categoryKey
+        : "";
+
+    onChange({
+      name: item.name,
+      description: values.description.trim()
+        ? values.description
+        : item.name,
+      price: String(item.price),
+      imageDataUrl: item.driveFileId
+        ? `https://lh3.googleusercontent.com/d/${item.driveFileId}=w1600`
+        : item.imageUrl || null,
+      ...(categoryKey ? { categoryKey } : {}),
+    });
+  }
 
   return (
     <form
@@ -107,16 +133,26 @@ export function ProductForm({
       </section>
 
       <section className="cat-block">
-        <TextField
-          id="cat-name"
-          label="اسم المنتج"
-          required
-          value={values.name}
-          onChange={(event) => onChange({ name: event.target.value })}
-          placeholder="مثال: زيت زيتون عضوي 1 لتر"
-          maxLength={140}
-          disabled={locked}
-        />
+        {isSupermarket ? (
+          <MasterCatalogCombo
+            id="cat-name"
+            value={values.name}
+            onChange={(name) => onChange({ name })}
+            onSelect={applyMasterCatalogItem}
+            disabled={locked}
+          />
+        ) : (
+          <TextField
+            id="cat-name"
+            label="اسم المنتج"
+            required
+            value={values.name}
+            onChange={(event) => onChange({ name: event.target.value })}
+            placeholder="مثال: زيت زيتون عضوي 1 لتر"
+            maxLength={140}
+            disabled={locked}
+          />
+        )}
 
         <TextAreaField
           id="cat-description"

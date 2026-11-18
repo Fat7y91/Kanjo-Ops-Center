@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { CatalogImage } from "@/components/catalog/catalog-image";
 import { formatBytes, prepareImage } from "@/lib/catalog/image";
 
 type ProductImageFieldProps = {
@@ -49,8 +50,7 @@ export function ProductImageField({
       <div className="cat-image-body">
         <div className="cat-image-preview">
           {value ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="معاينة صورة المنتج" />
+            <CatalogImage src={value} alt="معاينة صورة المنتج" />
           ) : (
             <span aria-hidden="true">لا توجد صورة</span>
           )}

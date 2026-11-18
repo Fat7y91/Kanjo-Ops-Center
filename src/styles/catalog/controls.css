@@ -97,3 +97,17 @@
   font-size: 0.7rem;
 }
 
+.cat-combo-thumb,
+.cat-combo-empty {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.cat-combo-thumb {
+  object-fit: cover;
+}
+
