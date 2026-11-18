@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CatalogImage } from "@/components/catalog/catalog-image";
@@ -27,6 +27,12 @@ export function ProductImageField({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [bytes, setBytes] = useState(0);
+
+  // A catalog reference arrives as a URL, so the upload-size label from an
+  // earlier local capture no longer describes the preview.
+  useEffect(() => {
+    if (!value || !value.startsWith("data:")) setBytes(0);
+  }, [value]);
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
