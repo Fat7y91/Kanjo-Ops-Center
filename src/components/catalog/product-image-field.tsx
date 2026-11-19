@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CatalogImage } from "@/components/catalog/catalog-image";
 import { formatBytes, prepareImage } from "@/lib/catalog/image";
+import { uploadCatalogImage } from "@/lib/catalog/images/upload";
 
 type ProductImageFieldProps = {
   value: string | null;
@@ -41,7 +42,16 @@ export function ProductImageField({
     try {
       const prepared = await prepareImage(file);
       setBytes(prepared.bytes);
-      onChange(prepared.dataUrl);
+      // Online capture stores the photo once and keeps only its URL. If the
+      // upload cannot reach the server, the prepared data URL stays in the
+      // draft and the server converts it when the product is written.
+      let next = prepared.dataUrl;
+      try {
+        next = await uploadCatalogImage(prepared.dataUrl);
+      } catch {
+        next = prepared.dataUrl;
+      }
+      onChange(next);
     } catch {
       setError("تعذر معالجة الصورة. جرّب صورة أخرى.");
     } finally {

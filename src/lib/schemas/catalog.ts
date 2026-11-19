@@ -83,3 +83,19 @@ export const productUpdateSchema = z.object({
 });
 
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+export const catalogImageUploadSchema = z.object({
+  dataUrl: z
+    .string()
+    .min(32)
+    .max(3_000_000)
+    .regex(
+      /^data:image\/(?:jpeg|png|webp);base64,/i,
+      "صيغة الصورة غير مدعومة.",
+    ),
+  merchantId: z.string().trim().max(80).nullable().optional(),
+});
+
+export type CatalogImageUploadInput = z.infer<
+  typeof catalogImageUploadSchema
+>;

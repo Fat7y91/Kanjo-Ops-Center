@@ -8,6 +8,8 @@ import {
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 import { normalizeSearchText } from "@/lib/search/normalize";
 
+import { persistImageReference } from "./images/store";
+
 import type {
   CatalogProduct,
   CatalogProductQaMetadata,
@@ -305,6 +307,11 @@ export async function insertProduct(
     );
   }
 
+  const imageDataUrl = await persistImageReference(
+    product.imageDataUrl,
+    product.merchantId,
+  );
+
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
@@ -320,7 +327,7 @@ export async function insertProduct(
       product_type: product.productType,
       sku: product.sku || null,
       barcode: product.barcode || null,
-      image_data_url: product.imageDataUrl,
+      image_data_url: imageDataUrl,
       attributes: product.attributes,
       price_minor: Math.round(product.price * 100),
       state: product.state,
@@ -398,7 +405,9 @@ export async function updateProductRow(
   if (patch.categoryKey !== undefined) row.category_key = patch.categoryKey;
   if (patch.sku !== undefined) row.sku = patch.sku || null;
   if (patch.barcode !== undefined) row.barcode = patch.barcode || null;
-  if (patch.imageDataUrl !== undefined) row.image_data_url = patch.imageDataUrl;
+  if (patch.imageDataUrl !== undefined) {
+    row.image_data_url = await persistImageReference(patch.imageDataUrl);
+  }
   if (patch.price !== undefined) row.price_minor = Math.round(patch.price * 100);
   if (patch.state !== undefined) row.state = patch.state;
   if (patch.reviewNote !== undefined) row.review_note = patch.reviewNote;
