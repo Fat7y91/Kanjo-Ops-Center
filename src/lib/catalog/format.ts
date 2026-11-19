@@ -47,6 +47,10 @@ export function resolveDisplayImageUrl(
   const raw = value?.trim();
   if (!raw) return null;
   if (/^data:/i.test(raw)) return raw;
+  if (raw.startsWith("/api/image?")) {
+    const target = new URLSearchParams(raw.split("?")[1]).get("url");
+    if (target) return resolveDisplayImageUrl(target);
+  }
 
   const host = hostOf(raw);
   if (host === "lh3.googleusercontent.com") return raw;

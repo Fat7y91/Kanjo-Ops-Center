@@ -79,13 +79,16 @@ test("typed spelling outranks a synonym prefix collision", () => {
   );
 });
 
-test("every token must match the name or category haystack", () => {
+test("OR token overlap keeps noisy or partial names as candidates", () => {
   const items = [item({ name: "قهوة تركي سادة" })];
   assert.deepEqual(
     search(items, "قهوة تركي").map((row) => row.id),
     ["Kj-0001"],
   );
-  assert.deepEqual(search(items, "قهوة حليب"), []);
+  assert.deepEqual(
+    search(items, "قهوة حليب").map((row) => row.id),
+    ["Kj-0001"],
+  );
 });
 
 test("category-only matches are returned but rank below name hits", () => {

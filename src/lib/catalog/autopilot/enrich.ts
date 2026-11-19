@@ -8,7 +8,6 @@ import {
 } from "./categories";
 import { callDeepSeekEnrichment, type DeepSeekRequestItem } from "./deepseek";
 import { existingImagesByBarcode } from "./existing-images";
-import { signImageProxyUrl } from "./image-proxy";
 import {
   getMasterCatalogItemsByIds,
   searchMasterCatalogProducts,
@@ -110,8 +109,8 @@ export async function enrichAutopilotItems(
     }
 
     const query = [input.name, input.unit].filter(Boolean).join(" ");
-    const candidates = await searchMasterCatalogProducts(query || input.name, 8);
-    const exact = exactMasterMatch(candidates, query);
+    const candidates = await searchMasterCatalogProducts(query || input.name, 15);
+    const exact = exactMasterMatch(candidates, input.name);
     if (!exact) {
       pending.push({ input, candidates });
       continue;
@@ -176,8 +175,7 @@ export async function enrichAutopilotItems(
       name: input.name,
       unit: input.unit,
     });
-    const signed = web ? await signImageProxyUrl(web.url) : null;
-    const image = signed ?? web?.url ?? null;
+    const image = web?.url ?? null;
     return {
       id: input.id,
       imageDataUrl: image,

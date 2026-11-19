@@ -34,6 +34,9 @@ export function CatalogImage({ src, onError, ...rest }: CatalogImageProps) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
       {...rest}
       src={current}
       onError={(event) => {
