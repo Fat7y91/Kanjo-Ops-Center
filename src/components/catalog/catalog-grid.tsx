@@ -6,6 +6,7 @@ import { CatalogFilterTabs } from "@/components/catalog/catalog-filter-tabs";
 import { LightboxModal } from "@/components/catalog/lightbox-modal";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ProductDetailsModal } from "@/components/catalog/product-details-modal";
+import { ProductEditModal } from "@/components/catalog/product-edit-modal";
 import { useImageQa } from "@/components/catalog/use-image-qa";
 import { TextField } from "@/components/ui/form-inputs";
 import { useDebouncedValue } from "@/components/ui/use-debounced-value";
@@ -18,12 +19,14 @@ import type { CatalogProduct } from "@/lib/catalog/types";
 import type {
   TaxonomyCategory,
   TaxonomyVariant,
+  TaxonomyVendorType,
 } from "@/lib/taxonomy/types";
 
 type CatalogGridProps = {
   products: CatalogProduct[];
   categories: TaxonomyCategory[];
   variants: TaxonomyVariant[];
+  vendorTypes: TaxonomyVendorType[];
   onProductsChange: (products: CatalogProduct[]) => void;
 };
 
@@ -37,11 +40,13 @@ export function CatalogGrid({
   products,
   categories,
   variants,
+  vendorTypes,
   onProductsChange,
 }: CatalogGridProps) {
   const [filter, setFilter] = useState<CatalogFilter>("all");
   const [query, setQuery] = useState("");
   const [details, setDetails] = useState<CatalogProduct | null>(null);
+  const [editing, setEditing] = useState<CatalogProduct | null>(null);
   const [lightbox, setLightbox] = useState<CatalogProduct | null>(null);
   const debouncedQuery = useDebouncedValue(query);
 
@@ -111,6 +116,7 @@ export function CatalogGrid({
             product={product}
             qaBusy={qa.busyId === product.id}
             onOpenDetails={setDetails}
+            onEdit={setEditing}
             onOpenImage={setLightbox}
             onDownloadOriginal={qa.downloadOriginal}
             onApprove={(target) => void qa.approve(target)}
@@ -140,9 +146,19 @@ export function CatalogGrid({
             : ""
         }
         onClose={() => setDetails(null)}
+        onEdit={() => setEditing(details)}
         onOpenImage={() => {
           if (details?.imageDataUrl) setLightbox(details);
         }}
+      />
+
+      <ProductEditModal
+        product={editing}
+        vendorTypes={vendorTypes}
+        categories={categories}
+        variants={variants}
+        onClose={() => setEditing(null)}
+        onSaved={handleUpdated}
       />
 
       <LightboxModal

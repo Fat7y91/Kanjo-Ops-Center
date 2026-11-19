@@ -54,7 +54,7 @@ export function catalogRevision(): number {
   return revision;
 }
 
-function bumpRevision(): void {
+export function bumpRevision(): void {
   revision += 1;
 }
 

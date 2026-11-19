@@ -57,3 +57,29 @@ export const catalogSyncSchema = z.object({
 
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type CatalogSyncInput = z.infer<typeof catalogSyncSchema>;
+
+export const productUpdateSchema = z.object({
+  name: z.string().trim().min(2, "اسم المنتج مطلوب.").max(140),
+  description: z.string().trim().max(2000).default(""),
+  categoryId: z
+    .number({ required_error: "التصنيف مطلوب." })
+    .int()
+    .positive("التصنيف مطلوب."),
+  sku: z.string().trim().max(64).default(""),
+  barcode: z
+    .string()
+    .trim()
+    .max(64)
+    .refine(
+      (value) => value === "" || /^\d{1,64}$/.test(value),
+      "الباركود يجب أن يحتوي أرقاماً فقط.",
+    )
+    .default(""),
+  imageDataUrl: z.string().max(3_000_000).nullable().optional(),
+  price: z.coerce
+    .number()
+    .min(0, "السعر لا يمكن أن يكون سالباً.")
+    .max(100_000_000),
+});
+
+export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;

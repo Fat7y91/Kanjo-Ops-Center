@@ -145,6 +145,7 @@ export function CatalogClient({
         products={products}
         categories={categories}
         variants={variants}
+        vendorTypes={vendorTypes}
         onProductsChange={setProducts}
       />
     </>

@@ -1,7 +1,9 @@
 "use client";
 
+import { Protect } from "@/components/auth/protect";
 import { CatalogImage } from "@/components/catalog/catalog-image";
 import { Modal } from "@/components/field-ops/modal";
+import { Button } from "@/components/ui/button";
 import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
 import {
   PRODUCT_STATE_META,
@@ -15,6 +17,7 @@ type ProductDetailsModalProps = {
   variants: TaxonomyVariant[];
   categoryName: string;
   onClose: () => void;
+  onEdit: () => void;
   onOpenImage: () => void;
 };
 
@@ -24,6 +27,7 @@ export function ProductDetailsModal({
   variants,
   categoryName,
   onClose,
+  onEdit,
   onOpenImage,
 }: ProductDetailsModalProps) {
   if (!product) return null;
@@ -81,6 +85,11 @@ export function ProductDetailsModal({
             )}
           </button>
           <span className={`badge ${meta.tone}`}>{meta.label}</span>
+          <Protect require={["edit_catalog", "add_catalog"]} mode="any">
+            <Button size="sm" variant="quiet" onClick={onEdit}>
+              تعديل
+            </Button>
+          </Protect>
         </div>
 
         <dl className="prod-detail-grid">

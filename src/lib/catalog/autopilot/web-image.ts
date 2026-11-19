@@ -1,3 +1,5 @@
+import { normalizeSearchText } from "@/lib/search/normalize";
+
 export type SerperImage = {
   imageUrl?: string;
   thumbnailUrl?: string;
@@ -75,20 +77,76 @@ function isUsableImage(url: string): string | null {
   return parsed.toString();
 }
 
+const GENERIC_TOKENS = new Set([
+  "منتج",
+  "صنف",
+  "عبوه",
+  "كيس",
+  "كيلو",
+  "كجم",
+  "جرام",
+  "جم",
+  "قطعه",
+  "عدد",
+  "حجم",
+  "كبير",
+  "صغير",
+  "وسط",
+  "مصر",
+  "ماركه",
+  "اصلي",
+  "product",
+  "pack",
+  "piece",
+  "size",
+  "egypt",
+]);
+
+function queryTokens(query: string): string[] {
+  return normalizeSearchText(query)
+    .split(" ")
+    .filter((token) => token.length >= 3 && !GENERIC_TOKENS.has(token))
+    .slice(0, 8);
+}
+
+function matchesQuery(
+  image: SerperImage,
+  url: string,
+  tokens: string[],
+  normalizedQuery: string,
+): boolean {
+  if (tokens.length === 0) return false;
+  const title = normalizeSearchText(image.title ?? "");
+  const link = normalizeSearchText(image.link ?? image.source ?? url);
+  if (!title && !link) return false;
+  if (normalizedQuery.length >= 3 && title.includes(normalizedQuery)) return true;
+
+  const hits = tokens.filter(
+    (token) => title.includes(token) || link.includes(token),
+  ).length;
+  const required = Math.min(2, tokens.length);
+  return hits >= required;
+}
+
 /**
  * Picks the best product photo from Serper's image results: HTTPS only,
- * watermark/stock hosts removed, high-resolution and shop domains preferred.
+ * watermark/stock hosts removed, high-resolution and shop domains preferred,
+ * and the result title/link must share key tokens with the searched product.
  * Pure so the selection rule can be tested without calling Serper.
  */
 export function selectProductImage(
   images: SerperImage[],
+  query = "",
 ): { url: string; title: string } | null {
+  const tokens = queryTokens(query);
+  const normalizedQuery = normalizeSearchText(query);
   const scored: { url: string; title: string; score: number; index: number }[] = [];
 
   images.forEach((image, index) => {
     const raw = image.imageUrl ?? "";
     const url = isUsableImage(raw);
     if (!url) return;
+    if (!matchesQuery(image, url, tokens, normalizedQuery)) return;
 
     const width = Number(image.imageWidth) || 0;
     const height = Number(image.imageHeight) || 0;

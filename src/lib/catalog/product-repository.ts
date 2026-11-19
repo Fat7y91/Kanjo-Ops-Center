@@ -85,7 +85,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRODUCT_PAGE_SIZE = 1000;
 
 export type CatalogProductPatch = Partial<{
+  name: string;
+  description: string;
+  categoryKey: string;
+  sku: string | null;
+  barcode: string | null;
   imageDataUrl: string | null;
+  price: number;
   state: CatalogProductState;
   reviewNote: string;
 }>;
@@ -383,8 +389,17 @@ export async function updateProductRow(
     );
   }
 
-  const row: Record<string, unknown> = {};
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.name !== undefined) {
+    row.name = patch.name;
+    row.normalized_name = normalizeSearchText(patch.name);
+  }
+  if (patch.description !== undefined) row.description = patch.description;
+  if (patch.categoryKey !== undefined) row.category_key = patch.categoryKey;
+  if (patch.sku !== undefined) row.sku = patch.sku || null;
+  if (patch.barcode !== undefined) row.barcode = patch.barcode || null;
   if (patch.imageDataUrl !== undefined) row.image_data_url = patch.imageDataUrl;
+  if (patch.price !== undefined) row.price_minor = Math.round(patch.price * 100);
   if (patch.state !== undefined) row.state = patch.state;
   if (patch.reviewNote !== undefined) row.review_note = patch.reviewNote;
 
@@ -397,7 +412,27 @@ export async function updateProductRow(
     .select(`${COLUMNS},merchants(name)`)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    if (
+      violates(error, "catalog_products_merchant_barcode_key") ||
+      violates(error, "catalog_products_barcode_key")
+    ) {
+      throw new CatalogRepositoryError(
+        "BARCODE_EXISTS",
+        "الباركود مستخدم لمنتج آخر لدى نفس التاجر.",
+        409,
+      );
+    }
+    if (violates(error, "catalog_products_sku_key")) {
+      throw new CatalogRepositoryError(
+        "SKU_EXISTS",
+        "رمز SKU مستخدم بالفعل.",
+        409,
+      );
+    }
+    throw error;
+  }
+
   if (!data) return null;
   const record = data as unknown as ProductRow & {
     merchants: { name: string } | { name: string }[] | null;

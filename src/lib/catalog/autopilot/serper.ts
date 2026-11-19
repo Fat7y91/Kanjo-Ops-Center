@@ -12,10 +12,6 @@ export type WebImageMatch = {
   query: string;
 };
 
-function validBarcode(value: string): boolean {
-  return /^\d{8,14}$/.test(value.trim());
-}
-
 async function searchImages(query: string): Promise<SerperImage[]> {
   const key = process.env.SERPER_API_KEY;
   if (!key || !query.trim()) return [];
@@ -55,8 +51,9 @@ async function searchImages(query: string): Promise<SerperImage[]> {
 }
 
 /**
- * Tier 3: exact barcode first, then DeepSeek's clean query, then a locally
- * cleaned name. Returns the first high-confidence product photo.
+ * Tier 3: DeepSeek's clean Arabic name/brand query, then a locally cleaned
+ * name. Barcodes are never searched: an EAN prefix can match an unrelated
+ * brand, and local scale codes are not globally unique.
  */
 export async function findWebProductImage(input: {
   barcode: string;
@@ -67,21 +64,20 @@ export async function findWebProductImage(input: {
   if (!process.env.SERPER_API_KEY) return null;
 
   const queries: string[] = [];
-  if (validBarcode(input.barcode)) queries.push(input.barcode.trim());
-
   const cleaned =
     (input.query ?? "").trim() ||
     cleanImageQuery(input.name, input.unit);
   if (cleaned.length >= 3) queries.push(cleaned);
-  if (!queries.includes(input.name) && input.name.trim().length >= 3) {
-    queries.push(input.name.trim());
+  const localQuery = cleanImageQuery(input.name, input.unit);
+  if (localQuery.length >= 3 && !queries.includes(localQuery)) {
+    queries.push(localQuery);
   }
 
   // At most two searches per item: a 20-item batch stays under the edge
   // runtime's outbound subrequest ceiling.
   for (const query of queries.slice(0, 2)) {
     const images = await searchImages(query);
-    const selected = selectProductImage(images);
+    const selected = selectProductImage(images, query);
     if (selected) return { ...selected, query };
   }
   return null;
