@@ -62,8 +62,10 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
-export async function listProducts(): Promise<CatalogProduct[]> {
-  const products = await listProductRows();
+export async function listProducts(
+  merchantId?: string,
+): Promise<CatalogProduct[]> {
+  const products = await listProductRows(merchantId);
   return products.sort((left, right) =>
     left.name.localeCompare(right.name, "ar"),
   );

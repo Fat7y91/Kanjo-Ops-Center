@@ -41,11 +41,12 @@ export async function GET(request: Request) {
   const merchantCity = new Map(
     (await listMerchants()).map((merchant) => [merchant.id, merchant.cityId]),
   );
-  const products = (await listProducts()).filter((product) => {
-    if (merchantId && product.merchantId !== merchantId) return false;
-    const merchant = merchantCity.get(product.merchantId);
-    return merchant ? allowed.has(merchant) : false;
-  });
+  const products = (await listProducts(merchantId ?? undefined)).filter(
+    (product) => {
+      const merchant = merchantCity.get(product.merchantId);
+      return merchant ? allowed.has(merchant) : false;
+    },
+  );
 
   return NextResponse.json(
     { products, revision: catalogRevision() },

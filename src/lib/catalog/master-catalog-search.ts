@@ -22,6 +22,8 @@ export type MasterCatalogItem = {
 export type PreparedMasterCatalogItem = MasterCatalogItem & {
   nameKey: string;
   haystack: string;
+  nameWords: Set<string>;
+  haystackWords: Set<string>;
 };
 
 const SYNONYM_GROUPS: string[][] = [
@@ -95,10 +97,8 @@ function bareWord(word: string): string {
   return word.startsWith("ال") && word.length > 3 ? word.slice(2) : word;
 }
 
-function containsWord(text: string, term: string): boolean {
-  if (!term) return false;
-  const target = bareWord(term);
-  return text.split(" ").some((word) => bareWord(word) === target);
+function wordSet(text: string): Set<string> {
+  return new Set(text.split(" ").filter(Boolean).map(bareWord));
 }
 
 function trigrams(value: string): Set<string> {
@@ -137,12 +137,16 @@ const SYNONYMS = (() => {
 export function prepareMasterCatalogItem(
   item: MasterCatalogItem,
 ): PreparedMasterCatalogItem {
+  const nameKey = normalizeProductText(item.name);
+  const haystack = normalizeProductText(
+    [item.name, item.categoryLabel, item.id].join(" "),
+  );
   return {
     ...item,
-    nameKey: normalizeProductText(item.name),
-    haystack: normalizeProductText(
-      [item.name, item.categoryLabel, item.id].join(" "),
-    ),
+    nameKey,
+    haystack,
+    nameWords: wordSet(nameKey),
+    haystackWords: wordSet(haystack),
   };
 }
 
@@ -180,15 +184,14 @@ export function masterCatalogScore(
       // A synonym prefix (شاهي → شاهين) is weaker than the typed word so real
       // matches for the rep's spelling win the tie.
       hit = 32;
-    } else if (containsWord(item.nameKey, token)) {
+    } else if (item.nameWords.has(bareWord(token))) {
       hit = 20;
-    } else if (aliases.some((alias) => containsWord(item.nameKey, alias))) {
+    } else if (aliases.some((alias) => item.nameWords.has(bareWord(alias)))) {
       hit = 16;
-    } else if (aliases.some((alias) => containsWord(item.haystack, alias))) {
+    } else if (
+      aliases.some((alias) => item.haystackWords.has(bareWord(alias)))
+    ) {
       hit = 8;
-    } else {
-      const similarity = trigramSimilarity(item.nameKey, token);
-      if (similarity >= 0.55) hit = Math.round(similarity * 24);
     }
     if (hit > 0) {
       matchedWeight += weight;

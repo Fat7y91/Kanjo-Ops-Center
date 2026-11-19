@@ -10,7 +10,7 @@ const itemBase = {
 
 export const autopilotEnrichRequestSchema = z.object({
   merchantId: z.string().trim().min(1).max(80),
-  items: z.array(z.object(itemBase)).min(1).max(25),
+  items: z.array(z.object(itemBase)).min(1).max(8),
 });
 
 export const autopilotSaveRequestSchema = z.object({
