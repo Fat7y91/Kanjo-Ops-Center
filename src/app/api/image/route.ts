@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getServerSession } from "@/lib/auth/server-session";
+import { verifyImageProxySignature } from "@/lib/catalog/autopilot/image-proxy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -57,8 +58,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "يلزم تسجيل الدخول." }, { status: 401 });
   }
 
-  const target = new URL(request.url).searchParams.get("url");
-  const upstream = target ? upstreamUrl(target) : null;
+  const params = new URL(request.url).searchParams;
+  const target = params.get("url");
+  const signature = params.get("sig");
+
+  // Signed URLs come from the autopilot image search; the HMAC plus the public
+  // target guard keep the route from becoming an arbitrary fetch relay.
+  let upstream: string | null = null;
+  if (signature) {
+    if (!target || !(await verifyImageProxySignature(target, signature))) {
+      return NextResponse.json({ error: "توقيع صورة غير صالح." }, { status: 403 });
+    }
+    upstream = target;
+  } else {
+    upstream = target ? upstreamUrl(target) : null;
+  }
   if (!upstream) {
     return NextResponse.json({ error: "رابط صورة غير صالح." }, { status: 400 });
   }

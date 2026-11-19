@@ -32,6 +32,7 @@
     "recharts": "^3.10.1",
     "server-only": "^0.0.1",
     "wrangler": "^4.30.0",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {

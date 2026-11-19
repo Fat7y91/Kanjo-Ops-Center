@@ -344,10 +344,13 @@ export async function insertProduct(
         409,
       );
     }
-    if (violates(error, "catalog_products_barcode_key")) {
+    if (
+      violates(error, "catalog_products_merchant_barcode_key") ||
+      violates(error, "catalog_products_barcode_key")
+    ) {
       throw new CatalogRepositoryError(
         "BARCODE_EXISTS",
-        "الباركود مستخدم لمنتج آخر بالفعل.",
+        "الباركود مستخدم لمنتج آخر لدى نفس التاجر.",
         409,
       );
     }

@@ -83,3 +83,18 @@ export async function searchMasterCatalogProducts(
   const items = await loadMasterCatalog();
   return searchMasterCatalog(items, query, limit);
 }
+
+/** Resolves DeepSeek's chosen ids against the same cached reference snapshot. */
+export async function getMasterCatalogItemsByIds(
+  ids: readonly string[],
+): Promise<Map<string, MasterCatalogItem>> {
+  const wanted = new Set(ids.filter(Boolean));
+  const result = new Map<string, MasterCatalogItem>();
+  if (wanted.size === 0) return result;
+
+  const items = await loadMasterCatalog();
+  for (const item of items) {
+    if (wanted.has(item.id)) result.set(item.id, item);
+  }
+  return result;
+}

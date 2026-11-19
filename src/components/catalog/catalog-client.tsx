@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 
 import { Protect } from "@/components/auth/protect";
+import { AutopilotModal } from "@/components/catalog/autopilot-modal";
 import { CatalogGrid } from "@/components/catalog/catalog-grid";
 import { ProductEntry } from "@/components/catalog/product-entry";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export function CatalogClient({
 }: CatalogClientProps) {
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
   const [open, setOpen] = useState(false);
+  const [autopilotOpen, setAutopilotOpen] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -80,9 +82,26 @@ export function CatalogClient({
             >
               إضافة منتج
             </Button>
+            {defaultMerchantId && merchants.length > 0 ? (
+              <Button
+                variant="accent"
+                onClick={() => setAutopilotOpen(true)}
+              >
+                الاستيراد التلقائي
+              </Button>
+            ) : null}
           </Protect>
         </div>
       </section>
+
+      {defaultMerchantId ? (
+        <AutopilotModal
+          open={autopilotOpen}
+          merchantId={defaultMerchantId}
+          onClose={() => setAutopilotOpen(false)}
+          onSaved={handleSynced}
+        />
+      ) : null}
 
       <ProductEntry
         open={open}
