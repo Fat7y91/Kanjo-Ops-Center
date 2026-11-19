@@ -1,7 +1,9 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+
+import { lockBodyScroll, unlockBodyScroll } from "@/lib/ui/scroll-lock";
 
 import { CatalogImage } from "@/components/catalog/catalog-image";
 import { resolveDisplayImageUrl } from "@/lib/catalog/format";
@@ -14,19 +16,24 @@ type LightboxModalProps = {
 
 /** Full-resolution image viewer. Click the backdrop or press Escape to close. */
 export function LightboxModal({ src, alt, onClose }: LightboxModalProps) {
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!src) return;
+    lockBodyScroll();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") closeRef.current();
     };
     document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
+      unlockBodyScroll();
     };
-  }, [src, onClose]);
+  }, [src]);
 
   if (!src || typeof document === "undefined") return null;
 

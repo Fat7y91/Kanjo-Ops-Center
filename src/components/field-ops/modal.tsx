@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+
+import { lockBodyScroll, unlockBodyScroll } from "@/lib/ui/scroll-lock";
 
 /**
  * Dialogs can open on top of one another (a voucher opened from a statement).
@@ -37,25 +39,29 @@ export function Modal({
   closeOnBackdrop = false,
 }: ModalProps) {
   const modalId = useId();
+  const closeRef = useRef(onClose);
+
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     openStack.push(modalId);
+    lockBodyScroll();
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (openStack[openStack.length - 1] !== modalId) return;
-      onClose();
+      closeRef.current();
     };
     document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
       const index = openStack.lastIndexOf(modalId);
       if (index !== -1) openStack.splice(index, 1);
-      document.body.style.overflow = previous;
+      unlockBodyScroll();
     };
-  }, [open, onClose, modalId]);
+  }, [open, modalId]);
 
   if (!open) return null;
 

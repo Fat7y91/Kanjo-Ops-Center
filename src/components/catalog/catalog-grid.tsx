@@ -146,7 +146,10 @@ export function CatalogGrid({
             : ""
         }
         onClose={() => setDetails(null)}
-        onEdit={() => setEditing(details)}
+        onEdit={() => {
+          setEditing(details);
+          setDetails(null);
+        }}
         onOpenImage={() => {
           if (details?.imageDataUrl) setLightbox(details);
         }}
