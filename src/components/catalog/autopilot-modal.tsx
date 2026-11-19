@@ -54,6 +54,7 @@ export function AutopilotModal({
           hint="xls أو xlsx أو csv، بحد أقصى 20 ميجابايت."
         >
           <InputControl
+            key={`${autopilot.fileName}:${autopilot.stage}`}
             type="file"
             accept=".xls,.xlsx,.csv"
             disabled={running || autopilot.stage === "parsing"}
