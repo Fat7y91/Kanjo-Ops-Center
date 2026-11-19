@@ -52,6 +52,7 @@ export function AutopilotProgressPanel({
         <Stat label="تحديثات" value={progress.updated} />
         <Stat label="صور من الكتالوج" value={progress.matchedMaster} />
         <Stat label="صور من الويب" value={progress.enrichedWeb} />
+        <Stat label="موجود مسبقاً" value={progress.reused} />
         <Stat label="بدون صورة" value={progress.noImage} />
         <Stat label="تعذر حفظها" value={progress.failed} />
       </div>

@@ -22,7 +22,9 @@ export async function POST(request: Request) {
     const scoped = await resolveAutopilotMerchant(session, input.merchantId);
     if (!scoped.merchant) return scoped.response;
 
-    const result = await enrichAutopilotItems(input.items);
+    const result = await enrichAutopilotItems(input.items, {
+      merchantId: input.merchantId,
+    });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },
     });

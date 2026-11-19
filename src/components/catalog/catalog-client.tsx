@@ -6,6 +6,7 @@ import { Protect } from "@/components/auth/protect";
 import { AutopilotModal } from "@/components/catalog/autopilot-modal";
 import { CatalogGrid } from "@/components/catalog/catalog-grid";
 import { ProductEntry } from "@/components/catalog/product-entry";
+import { useCatalogExport } from "@/components/catalog/use-catalog-export";
 import { Button } from "@/components/ui/button";
 import type { CatalogMerchantOption } from "@/components/catalog/merchant-picker";
 import type { CatalogProduct } from "@/lib/catalog/types";
@@ -43,6 +44,10 @@ export function CatalogClient({
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
   const [open, setOpen] = useState(false);
   const [autopilotOpen, setAutopilotOpen] = useState(false);
+  const excel = useCatalogExport();
+  const merchantName =
+    merchants.find((merchant) => merchant.id === defaultMerchantId)?.name ??
+    "catalog";
 
   const reload = useCallback(async () => {
     try {
@@ -91,8 +96,29 @@ export function CatalogClient({
               </Button>
             ) : null}
           </Protect>
+          {defaultMerchantId && products.length > 0 ? (
+            <Button
+              variant="quiet"
+              disabled={excel.busy}
+              onClick={() =>
+                void excel.exportCatalog({
+                  products,
+                  categories,
+                  merchantName,
+                })
+              }
+            >
+              {excel.busy ? "جاري التصدير…" : "تصدير Excel"}
+            </Button>
+          ) : null}
         </div>
       </section>
+
+      {excel.error ? (
+        <p className="form-error" role="alert">
+          {excel.error}
+        </p>
+      ) : null}
 
       {defaultMerchantId ? (
         <AutopilotModal

@@ -25,6 +25,7 @@ export type AutopilotProgress = {
   failed: number;
   matchedMaster: number;
   enrichedWeb: number;
+  reused: number;
   noImage: number;
 };
 
@@ -44,7 +45,11 @@ type SaveResult = {
   failures?: { name: string; message: string }[];
 };
 
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 8;
+const BATCH_DELAY_MS = 300;
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 2000;
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
 const FALLBACK_CATEGORY = "4-32";
 
 const emptyProgress: AutopilotProgress = {
@@ -55,23 +60,64 @@ const emptyProgress: AutopilotProgress = {
   failed: 0,
   matchedMaster: 0,
   enrichedWeb: 0,
+  reused: 0,
   noImage: 0,
 };
 
+class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof RequestError)) return false;
+  return error.status === undefined || RETRYABLE_STATUS.has(error.status);
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    throw new RequestError("تعذر الاتصال بالخادم. أعد المحاولة.");
+  }
+
   const payload = (await response.json().catch(() => ({}))) as {
     error?: string;
   };
   if (!response.ok) {
-    throw new Error(payload.error ?? "تعذر إكمال طلب الاستيراد.");
+    throw new RequestError(
+      payload.error ?? "تعذر إكمال طلب الاستيراد.",
+      response.status,
+    );
   }
   return payload as T;
+}
+
+/** Retries transient 502/503/504 and dropped connections with 2s backoff. */
+async function postWithRetry<T>(url: string, body: unknown): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await postJson<T>(url, body);
+    } catch (error) {
+      if (attempt >= MAX_RETRIES || !isRetryable(error)) throw error;
+      await sleep(RETRY_BASE_MS * (attempt + 1));
+    }
+  }
 }
 
 /**
@@ -153,7 +199,7 @@ export function useAutopilot(
     try {
       for (let offset = 0; offset < inputs.length; offset += BATCH_SIZE) {
         const batch = inputs.slice(offset, offset + BATCH_SIZE);
-        const enriched = await postJson<{ items: EnrichedItem[] }>(
+        const enriched = await postWithRetry<{ items: EnrichedItem[] }>(
           "/api/catalog/autopilot/enrich",
           { merchantId, items: batch },
         );
@@ -171,7 +217,7 @@ export function useAutopilot(
           };
         });
 
-        const saved = await postJson<SaveResult>(
+        const saved = await postWithRetry<SaveResult>(
           "/api/catalog/autopilot/save",
           { merchantId, items: saveItems },
         );
@@ -180,6 +226,7 @@ export function useAutopilot(
         for (const item of saveItems) {
           next.matchedMaster += item.masterCatalogId ? 1 : 0;
           if (item.imageSource === "web_search") next.enrichedWeb += 1;
+          if (item.imageSource === "existing") next.reused += 1;
           if (item.imageSource === "no_image") next.noImage += 1;
         }
         next.inserted += saved.inserted;
@@ -188,6 +235,9 @@ export function useAutopilot(
         if (saved.failures) failures.push(...saved.failures);
         next.processed += batch.length;
         setProgress({ ...next });
+        if (offset + BATCH_SIZE < inputs.length) {
+          await sleep(BATCH_DELAY_MS);
+        }
       }
 
       setSummary({

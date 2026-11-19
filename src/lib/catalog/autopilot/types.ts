@@ -26,7 +26,11 @@ export type ParsedPosSheet = {
   sheetName: string;
 };
 
-export type EnrichmentSource = "master_catalog" | "web_search" | "no_image";
+export type EnrichmentSource =
+  | "master_catalog"
+  | "web_search"
+  | "existing"
+  | "no_image";
 
 export type AutopilotEnrichmentInput = {
   id: string;

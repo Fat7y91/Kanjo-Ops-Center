@@ -7,6 +7,7 @@ import {
   supermarketCategories,
 } from "./categories";
 import { callDeepSeekEnrichment, type DeepSeekRequestItem } from "./deepseek";
+import { existingImagesByBarcode } from "./existing-images";
 import { signImageProxyUrl } from "./image-proxy";
 import {
   getMasterCatalogItemsByIds,
@@ -69,18 +70,45 @@ function exactMasterMatch(
  * Runs the three enrichment tiers for up to 25 immutable merchant rows.
  * Name, barcode and price are never rewritten here; the response only carries
  * image/category metadata for the save step.
+ *
+ * Rows whose barcode already has an image for this merchant are settled as
+ * `existing` so a resumed import does not re-spend DeepSeek or Serper credits.
  */
 export async function enrichAutopilotItems(
   inputs: AutopilotEnrichmentInput[],
+  options: { merchantId?: string } = {},
 ): Promise<EnrichResponse> {
   const categories = supermarketCategories();
   const categoryKeys = new Set(categories.map((category) => category.key));
   const fallbackCategory = defaultSupermarketCategoryKey();
+  const resumed = options.merchantId
+    ? await existingImagesByBarcode(
+        options.merchantId,
+        inputs.map((input) => input.barcode),
+      )
+    : new Map<string, { categoryKey: string | null }>();
 
   const settled = new Map<string, AutopilotEnrichment>();
   const pending: { input: AutopilotEnrichmentInput; candidates: MasterCatalogItem[] }[] = [];
 
   for (const input of inputs) {
+    const exists = input.barcode ? resumed.get(input.barcode) : undefined;
+    if (exists) {
+      settled.set(input.id, {
+        id: input.id,
+        imageDataUrl: null,
+        imageUrlRaw: null,
+        imageSource: "existing",
+        categoryKey:
+          exists.categoryKey && categoryKeys.has(exists.categoryKey)
+            ? exists.categoryKey
+            : fallbackCategory,
+        masterCatalogId: null,
+        searchQuery: null,
+      });
+      continue;
+    }
+
     const query = [input.name, input.unit].filter(Boolean).join(" ");
     const candidates = await searchMasterCatalogProducts(query || input.name, 8);
     const exact = exactMasterMatch(candidates, query);

@@ -21,6 +21,7 @@ type ExistingRow = {
   barcode: string | null;
   normalized_name: string;
   image_data_url: string | null;
+  price_minor: number | string;
   taxonomy_category_id: string | null;
   qa_metadata: Record<string, unknown> | null;
 };
@@ -105,7 +106,7 @@ async function existingRows(
 ): Promise<ExistingRow[]> {
   const client = getSupabaseServerClient();
   const columns =
-    "id,barcode,normalized_name,image_data_url,taxonomy_category_id,qa_metadata";
+    "id,barcode,normalized_name,image_data_url,price_minor,taxonomy_category_id,qa_metadata";
   const rows: ExistingRow[] = [];
 
   if (barcodes.length > 0) {
@@ -182,6 +183,24 @@ export async function saveAutopilotItems(
 
     try {
       if (existing) {
+        // Resumed rows already have an image: keep every enriched field and
+        // only correct the sheet price when it actually changed.
+        if (item.imageSource === "existing" && existing.image_data_url) {
+          if (Number(existing.price_minor) !== item.priceMinor) {
+            const { error } = await client
+              .schema("app")
+              .from("catalog_products")
+              .update({ price_minor: item.priceMinor, updated_at: now })
+              .eq("id", existing.id)
+              .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS));
+            if (error) throw error;
+            updated += 1;
+            existing.price_minor = item.priceMinor;
+          }
+          byName.set(normalized, existing);
+          continue;
+        }
+
         const patch: Record<string, unknown> = {
           price_minor: item.priceMinor,
           category_key: categoryKey,
@@ -246,6 +265,7 @@ export async function saveAutopilotItems(
         barcode: item.barcode || null,
         normalized_name: normalized,
         image_data_url: item.imageDataUrl,
+        price_minor: item.priceMinor,
         taxonomy_category_id: categoryIds.get(categoryKey) ?? null,
         qa_metadata: newQa(item, now),
       };
