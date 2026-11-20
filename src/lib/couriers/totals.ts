@@ -4,6 +4,13 @@ import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import { summarizeCourierOperations } from "./monthly";
+import {
+  computeCourierPay,
+  type AttendanceStatus,
+  type CourierAttendance,
+  type CourierDelivery,
+  type CourierPaySummary,
+} from "./tiered-pay";
 
 /**
  * Tier 4 aggregates for the couriers roster.
@@ -15,12 +22,14 @@ import { summarizeCourierOperations } from "./monthly";
  *
  * The monthly figures answer a different question — "how did this partner
  * perform this month?" — and are scoped to the current calendar month (UTC).
- * The arithmetic lives in `monthly.ts` so it is unit-testable; this module only
- * reads and converts.
+ * The daily pay summary folds the same operations plus manual attendance
+ * overrides through the pure tiered engine; the arithmetic lives in
+ * `tiered-pay.ts` so it is unit-testable, this module only reads.
  */
 
 export type CourierTotals = ReturnType<typeof summarizeCourierOperations> & {
   balances: Map<string, number>;
+  pay: Map<string, CourierPaySummary>;
 };
 
 type OperationRow = {
@@ -29,6 +38,13 @@ type OperationRow = {
   order_value_minor: number;
   delivery_fee_minor: number;
   occurred_at: string;
+  delivered_at: string | null;
+};
+
+type AttendanceRow = {
+  courier_id: string;
+  attendance_date: string;
+  status: AttendanceStatus;
 };
 
 type BalanceRow = {
@@ -44,7 +60,7 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
     .schema("app")
     .from("operation_logs")
     .select(
-      "courier_id,courier_cut_minor,order_value_minor,delivery_fee_minor,occurred_at",
+      "courier_id,courier_cut_minor,order_value_minor,delivery_fee_minor,occurred_at,delivered_at",
     )
     .limit(5000);
 
@@ -66,6 +82,39 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
     new Date(),
   );
 
+  const attendanceQuery = await client
+    .schema("app")
+    .from("courier_attendance")
+    .select("courier_id,attendance_date,status")
+    .limit(5000);
+
+  let attendance: CourierAttendance[] = [];
+  if (!attendanceQuery.error) {
+    attendance = ((attendanceQuery.data ?? []) as AttendanceRow[]).map((row) => ({
+      courierId: row.courier_id,
+      day: row.attendance_date,
+      status: row.status,
+    }));
+  } else if (!isMissingSchemaObject(attendanceQuery.error)) {
+    throw attendanceQuery.error;
+  }
+
+  const deliveries: CourierDelivery[] = operationRows.map((row) => ({
+    courierId: row.courier_id,
+    /* `delivered_at` is the export's delivery day; `occurred_at` is the
+     * fallback for rows that never carried one. */
+    deliveredAt: row.delivered_at ?? row.occurred_at,
+  }));
+
+  const courierIds = new Set<string>();
+  for (const delivery of deliveries) courierIds.add(delivery.courierId);
+  for (const row of attendance) courierIds.add(row.courierId);
+
+  const pay = new Map<string, CourierPaySummary>();
+  for (const id of courierIds) {
+    pay.set(id, computeCourierPay(id, deliveries, attendance));
+  }
+
   const journal = await client
     .schema("app")
     .from("journal_account_balances")
@@ -83,5 +132,5 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
     throw journal.error;
   }
 
-  return { ...totals, balances };
+  return { ...totals, balances, pay };
 }

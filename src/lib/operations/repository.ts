@@ -353,3 +353,37 @@ export async function insertImportedOperation(
   if (error) throw error;
   return ((data ?? []) as { id: string }[]).length > 0;
 }
+
+/**
+ * Returns the subset of `orderIds` that already exist in the operations log.
+ *
+ * The importer asks this before writing so a re-uploaded sheet skips its
+ * existing orders up front and reports an exact "duplicates skipped" count,
+ * rather than relying on the unique index to silently drop them. Chunked so a
+ * large file never exceeds the request URL limit.
+ */
+export async function findExistingOrderIds(
+  orderIds: readonly string[],
+): Promise<Set<string>> {
+  const existing = new Set<string>();
+  const unique = [...new Set(orderIds)];
+  const chunkSize = 200;
+  const client = getSupabaseServerClient();
+
+  for (let start = 0; start < unique.length; start += chunkSize) {
+    const chunk = unique.slice(start, start + chunkSize);
+    const { data, error } = await client
+      .schema("app")
+      .from("operation_logs")
+      .select("order_id")
+      .in("order_id", chunk)
+      .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS));
+
+    if (error) throw error;
+    for (const row of (data ?? []) as { order_id: string }[]) {
+      existing.add(row.order_id);
+    }
+  }
+
+  return existing;
+}

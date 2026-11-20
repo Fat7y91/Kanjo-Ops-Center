@@ -6,11 +6,14 @@ import { PAYOUT_METHOD_LABEL, type PayoutPreferences } from "@/lib/couriers/payo
 import { courierDate, courierMoney, courierStatusLabel } from "@/lib/couriers/format";
 import type { Courier } from "@/lib/couriers/types";
 
+import { CourierAttendanceControl } from "./courier-attendance-control";
+
 type CourierDetailsModalProps = {
   courier: Courier | null;
   canManage: boolean;
   onClose: () => void;
   onEdit: (courier: Courier) => void;
+  onChanged: () => void;
 };
 
 function payoutDetail(value: PayoutPreferences | null): string {
@@ -32,6 +35,7 @@ export function CourierDetailsModal({
   canManage,
   onClose,
   onEdit,
+  onChanged,
 }: CourierDetailsModalProps) {
   return (
     <Modal
@@ -94,6 +98,66 @@ export function CourierDetailsModal({
                 <dd dir="ltr">{courierMoney(courier.monthlyProfit, "EGP")}</dd>
               </div>
             </dl>
+          </section>
+
+          <section className="courier-performance">
+            <h3>مستحقات التوصيل اليومية</h3>
+            <p className="muted">
+              الثابت اليومي وأجر الطلبات حسب الشرائح، بعد خصم عمولة التحصيل.
+            </p>
+            <dl className="courier-performance-grid">
+              <div>
+                <dt>أيام الحضور</dt>
+                <dd dir="ltr">{courier.pay.attendanceDays}</dd>
+              </div>
+              <div>
+                <dt>الثابت اليومي (165 ج.م)</dt>
+                <dd dir="ltr">
+                  {courierMoney(courier.pay.baseMinor / 100, "EGP")}
+                </dd>
+              </div>
+              <div>
+                <dt>طلبات الشريحة الأولى (× 7 ج.م)</dt>
+                <dd dir="ltr">
+                  {courier.pay.tier1Orders} طلب ·{" "}
+                  {courierMoney(courier.pay.tier1Minor / 100, "EGP")}
+                </dd>
+              </div>
+              <div>
+                <dt>طلبات فوق التارجت (× 15 ج.م)</dt>
+                <dd dir="ltr">
+                  {courier.pay.tier2Orders} طلب ·{" "}
+                  {courierMoney(courier.pay.tier2Minor / 100, "EGP")}
+                </dd>
+              </div>
+              <div>
+                <dt>إجمالي مستحق السواق</dt>
+                <dd dir="ltr">
+                  {courierMoney(courier.pay.totalMinor / 100, "EGP")}
+                </dd>
+              </div>
+              <div>
+                <dt>صافي التسوية النهائي (ليك / عليك)</dt>
+                <dd dir="ltr">{courierMoney(courier.balance, "EGP")}</dd>
+              </div>
+            </dl>
+
+            {courier.pay.days.length > 0 ? (
+              <ul className="coupon-import-issues">
+                {courier.pay.days.slice(0, 30).map((day) => (
+                  <li key={day.day} dir="ltr">
+                    {day.day} · {day.deliveredOrders} طلب ·{" "}
+                    {courierMoney(day.totalMinor / 100, "EGP")}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <CourierAttendanceControl
+              courier={courier}
+              canManage={canManage}
+              onChanged={onChanged}
+            />
           </section>
 
           {canManage ? (

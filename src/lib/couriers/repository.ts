@@ -10,6 +10,7 @@ import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import { CouriersError } from "./errors";
 import { parsePayoutPreferences } from "./payout";
+import { computeCourierPay } from "./tiered-pay";
 import { loadCourierTotals, type CourierTotals } from "./totals";
 import type { Courier, CourierCreateInput, CourierUpdateInput } from "./types";
 
@@ -56,6 +57,7 @@ function toCourier(row: CourierRow, totals: CourierTotals): Courier {
     balance: totals.balances.get(row.id) ?? 0,
     monthlyDeliveryAmount: totals.monthlyDeliveryAmount.get(row.id) ?? 0,
     monthlyProfit: totals.monthlyProfit.get(row.id) ?? 0,
+    pay: totals.pay.get(row.id) ?? computeCourierPay(row.id, [], []),
   };
 }
 

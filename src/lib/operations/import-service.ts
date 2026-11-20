@@ -6,6 +6,7 @@ import { matchKey } from "@/lib/import/csv";
 import { OperationsError, fromDatabaseError } from "./errors";
 import { planImport, type ImportRoster } from "./orders-import";
 import {
+  findExistingOrderIds,
   insertImportedOperation,
   insertOperationBatch,
   isOperationsDatabaseConfigured,
@@ -116,6 +117,8 @@ export async function importOrders(
 ): Promise<{
   imported: number;
   skipped: { line: number; message: string }[];
+  /** Rows skipped because their `order_id` already exists (in the file or DB). */
+  duplicates: number;
 }> {
   requireDatabase();
 
@@ -124,12 +127,25 @@ export async function importOrders(
     : roster;
 
   const plan = planImport(rows, activeRoster);
-  const skipped = [...plan.duplicates, ...plan.issues];
-  if (plan.candidates.length === 0) {
-    return { imported: 0, skipped };
+  const skipped = [...plan.issues];
+
+  /* An order that already exists must be skipped completely: re-posting it
+   * would double the ledger and the courier target. Drop those rows before the
+   * write and report them separately from validation failures. */
+  const existing = await findExistingOrderIds(
+    plan.candidates.map((candidate) => candidate.orderId),
+  );
+  const fresh = plan.candidates.filter(
+    (candidate) => !existing.has(candidate.orderId),
+  );
+  const duplicates =
+    plan.duplicates.length + (plan.candidates.length - fresh.length);
+
+  if (fresh.length === 0) {
+    return { imported: 0, skipped, duplicates };
   }
 
-  function toWrite(candidate: (typeof plan.candidates)[number]): OperationWrite {
+  function toWrite(candidate: (typeof fresh)[number]): OperationWrite {
     return {
       orderId: candidate.orderId,
       merchantId: candidate.merchantId,
@@ -164,8 +180,8 @@ export async function importOrders(
   const failed: { line: number; message: string }[] = [];
   const chunkSize = 100;
 
-  for (let start = 0; start < plan.candidates.length; start += chunkSize) {
-    const chunk = plan.candidates.slice(start, start + chunkSize);
+  for (let start = 0; start < fresh.length; start += chunkSize) {
+    const chunk = fresh.slice(start, start + chunkSize);
     try {
       imported += await insertOperationBatch(chunk.map(toWrite));
       continue;
@@ -203,5 +219,5 @@ export async function importOrders(
     );
   }
 
-  return { imported, skipped };
+  return { imported, skipped, duplicates };
 }

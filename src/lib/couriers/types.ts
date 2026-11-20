@@ -5,6 +5,7 @@ import {
   payoutPreferencesSchema,
   type PayoutPreferences,
 } from "./payout";
+import type { CourierPaySummary } from "./tiered-pay";
 
 /**
  * Delivery-partner (courier) domain types.
@@ -42,6 +43,8 @@ export type Courier = {
   monthlyDeliveryAmount: number;
   /** Fixed profit earned in the current calendar month (major units). */
   monthlyProfit: number;
+  /** Daily tiered pay breakdown for the current period (major units, minor units inside). */
+  pay: CourierPaySummary;
 };
 
 /** Identity portion shared by create and update. */

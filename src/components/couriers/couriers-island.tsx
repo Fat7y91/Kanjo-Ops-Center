@@ -82,6 +82,7 @@ export function CouriersIsland({ initialCouriers, canManage }: CouriersIslandPro
         canManage={canManage}
         onClose={() => state.setViewing(null)}
         onEdit={edit}
+        onChanged={state.refresh}
       />
 
       {state.toast ? (

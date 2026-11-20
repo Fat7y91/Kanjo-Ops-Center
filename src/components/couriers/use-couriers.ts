@@ -63,6 +63,25 @@ export function useCouriers(initialCouriers: Courier[]) {
     setToast(message);
   }, []);
 
+  /** Re-reads the board so derived pay summaries pick up an attendance change. */
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/couriers", { cache: "no-store" });
+      const body = (await response.json().catch(() => ({}))) as {
+        couriers?: Courier[];
+      };
+      if (!Array.isArray(body.couriers)) return;
+      setCouriers(body.couriers);
+      setViewing((current) =>
+        current
+          ? body.couriers!.find((row) => row.id === current.id) ?? current
+          : current,
+      );
+    } catch {
+      /* A failed refresh leaves the last good board in place. */
+    }
+  }, []);
+
   async function remove(courier: Courier) {
     setError("");
     try {
@@ -98,6 +117,7 @@ export function useCouriers(initialCouriers: Courier[]) {
     error,
     dismissToast,
     applySaved,
+    refresh,
     remove,
   };
 }

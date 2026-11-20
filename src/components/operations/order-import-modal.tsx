@@ -47,6 +47,7 @@ export function OrderImportModal({
   const [summary, setSummary] = useState<{
     imported: number;
     skipped: { line: number; message: string }[];
+    duplicates: number;
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -132,6 +133,7 @@ export function OrderImportModal({
       const payload = (await response.json()) as {
         imported?: number;
         skipped?: { line: number; message: string }[];
+        duplicates?: number;
         error?: string;
       };
       if (!response.ok || typeof payload.imported !== "number") {
@@ -139,7 +141,11 @@ export function OrderImportModal({
         return;
       }
       const skipped = payload.skipped ?? [];
-      setSummary({ imported: payload.imported, skipped });
+      setSummary({
+        imported: payload.imported,
+        skipped,
+        duplicates: payload.duplicates ?? 0,
+      });
       if (payload.imported === 0) {
         // Never report a successful import that saved nothing: show the first
         // database reason beside the full per-line list.
@@ -261,7 +267,8 @@ export function OrderImportModal({
         {summary ? (
           <div className="inline-note" role="status">
             <strong>اكتمل الاستيراد</strong>
-            <span>تم استيراد {summary.imported} طلب.</span>
+            <span>طلبات جديدة مستوردة: {summary.imported}</span>
+            <span>طلبات مكررة تم تخطيها: {summary.duplicates}</span>
             {summary.skipped.length > 0 ? (
               <>
                 <span>{summary.skipped.length} صفاً لم يُستورد:</span>
