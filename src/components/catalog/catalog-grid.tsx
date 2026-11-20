@@ -28,6 +28,9 @@ type CatalogGridProps = {
   variants: TaxonomyVariant[];
   vendorTypes: TaxonomyVendorType[];
   onProductsChange: (products: CatalogProduct[]) => void;
+  /** A product the mirror dialog asked to repair, opened once then cleared. */
+  editRequestId?: string | null;
+  onEditRequestHandled?: () => void;
 };
 
 /**
@@ -42,6 +45,8 @@ export function CatalogGrid({
   variants,
   vendorTypes,
   onProductsChange,
+  editRequestId,
+  onEditRequestHandled,
 }: CatalogGridProps) {
   const [filter, setFilter] = useState<CatalogFilter>("all");
   const [query, setQuery] = useState("");
@@ -80,6 +85,13 @@ export function CatalogGrid({
   );
 
   const qa = useImageQa({ onUpdated: handleUpdated });
+
+  useEffect(() => {
+    if (!editRequestId) return;
+    const target = products.find((product) => product.id === editRequestId);
+    if (target) setEditing(target);
+    onEditRequestHandled?.();
+  }, [editRequestId, products, onEditRequestHandled]);
 
   const handleDelete = useCallback(
     async (product: CatalogProduct) => {

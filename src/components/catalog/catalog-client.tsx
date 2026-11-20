@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { Protect } from "@/components/auth/protect";
 import { AutopilotModal } from "@/components/catalog/autopilot-modal";
 import { CatalogGrid } from "@/components/catalog/catalog-grid";
+import { MirrorImagesModal } from "@/components/catalog/mirror-images-modal";
 import { ProductEntry } from "@/components/catalog/product-entry";
 import { useCatalogExport } from "@/components/catalog/use-catalog-export";
 import { Button } from "@/components/ui/button";
@@ -44,10 +45,22 @@ export function CatalogClient({
   const [products, setProducts] = useState<CatalogProduct[]>(initialProducts);
   const [open, setOpen] = useState(false);
   const [autopilotOpen, setAutopilotOpen] = useState(false);
+  const [mirrorOpen, setMirrorOpen] = useState(false);
+  const [editRequestId, setEditRequestId] = useState<string | null>(null);
   const excel = useCatalogExport();
   const merchantName =
     merchants.find((merchant) => merchant.id === defaultMerchantId)?.name ??
     "catalog";
+
+  const handleMirrored = useCallback((productId: string, url: string) => {
+    setProducts((current) =>
+      current.map((product) =>
+        product.id === productId
+          ? { ...product, imageDataUrl: url }
+          : product,
+      ),
+    );
+  }, []);
 
   const reload = useCallback(async () => {
     try {
@@ -97,19 +110,30 @@ export function CatalogClient({
             ) : null}
           </Protect>
           {defaultMerchantId && products.length > 0 ? (
-            <Button
-              variant="quiet"
-              disabled={excel.busy}
-              onClick={() =>
-                void excel.exportCatalog({
-                  products,
-                  categories,
-                  merchantName,
-                })
-              }
-            >
-              {excel.busy ? "جاري التصدير…" : "تصدير Excel"}
-            </Button>
+            <>
+              <Protect require={["add_catalog", "edit_catalog"]} mode="any">
+                <Button
+                  variant="accent"
+                  onClick={() => setMirrorOpen(true)}
+                  disabled={excel.busy}
+                >
+                  توطين الصور على السيرفر
+                </Button>
+              </Protect>
+              <Button
+                variant="quiet"
+                disabled={excel.busy}
+                onClick={() =>
+                  void excel.exportCatalog({
+                    products,
+                    categories,
+                    merchantName,
+                  })
+                }
+              >
+                {excel.busy ? "جاري التصدير…" : "تصدير Excel"}
+              </Button>
+            </>
           ) : null}
         </div>
       </section>
@@ -120,12 +144,29 @@ export function CatalogClient({
         </p>
       ) : null}
 
+      {excel.warning ? (
+        <p className="inline-note" role="status">
+          {excel.warning}
+        </p>
+      ) : null}
+
       {defaultMerchantId ? (
         <AutopilotModal
           open={autopilotOpen}
           merchantId={defaultMerchantId}
           onClose={() => setAutopilotOpen(false)}
           onSaved={handleSynced}
+        />
+      ) : null}
+
+      {defaultMerchantId ? (
+        <MirrorImagesModal
+          open={mirrorOpen}
+          merchantId={defaultMerchantId}
+          products={products}
+          onClose={() => setMirrorOpen(false)}
+          onMirrored={handleMirrored}
+          onEditProduct={setEditRequestId}
         />
       ) : null}
 
@@ -147,6 +188,8 @@ export function CatalogClient({
         variants={variants}
         vendorTypes={vendorTypes}
         onProductsChange={setProducts}
+        editRequestId={editRequestId}
+        onEditRequestHandled={() => setEditRequestId(null)}
       />
     </>
   );

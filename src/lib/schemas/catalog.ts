@@ -99,3 +99,20 @@ export const catalogImageUploadSchema = z.object({
 export type CatalogImageUploadInput = z.infer<
   typeof catalogImageUploadSchema
 >;
+
+/**
+ * One mirror batch. Five or six products per request keeps each Worker
+ * invocation inside its subrequest and CPU budget while still making visible
+ * progress on a large catalog.
+ */
+export const catalogMirrorImagesSchema = z.object({
+  merchantId: z.string().trim().min(1, "التاجر مطلوب.").max(80),
+  productIds: z
+    .array(z.string().trim().min(1).max(80))
+    .min(1, "لا توجد منتجات للتوطين.")
+    .max(6, "الحد الأقصى 6 منتجات في الدفعة الواحدة."),
+});
+
+export type CatalogMirrorImagesInput = z.infer<
+  typeof catalogMirrorImagesSchema
+>;

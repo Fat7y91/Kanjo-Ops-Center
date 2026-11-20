@@ -2,6 +2,8 @@ import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
+import { toImageDataUrl } from "./base64";
+
 /**
  * Content-addressed store for product photos captured by operators.
  *
@@ -89,6 +91,41 @@ export async function storeCatalogImage(
     throw new Error(`IMAGE_STORE_FAILED:${error.message}`);
   }
   return { id, url: catalogImageUrl(id) };
+}
+
+/**
+ * Stores already-downloaded bytes under a caller-chosen id.
+ *
+ * The mirror workflow derives the id from the *source* reference, so repeating
+ * a batch is idempotent: the same id is upserted and the same public URL is
+ * returned. Rows keep only that URL, never the bytes.
+ */
+export async function storeCatalogImageBytes(
+  id: string,
+  bytes: Uint8Array,
+  contentType: string,
+  merchantId: string | null = null,
+): Promise<string> {
+  const dataUrl = toImageDataUrl(contentType, bytes);
+  const client = getSupabaseServerClient();
+  const { error } = await client
+    .schema("app")
+    .from("catalog_image_blobs")
+    .upsert(
+      {
+        id,
+        merchant_id: merchantId,
+        content_type: contentType,
+        data_url: dataUrl,
+        byte_size: bytes.byteLength,
+      },
+      { onConflict: "id", ignoreDuplicates: true },
+    );
+
+  if (error) {
+    throw new Error(`IMAGE_STORE_FAILED:${error.message}`);
+  }
+  return catalogImageUrl(id);
 }
 
 /**

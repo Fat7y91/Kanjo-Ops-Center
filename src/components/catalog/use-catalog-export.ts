@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 
 import { PRODUCT_STATE_META, type CatalogProduct } from "@/lib/catalog/types";
 import { resolveDisplayImageUrl } from "@/lib/catalog/format";
+import { needsMirroring } from "@/lib/catalog/images/hosted";
 import type { TaxonomyCategory } from "@/lib/taxonomy/types";
 
 type ExportInput = {
@@ -28,13 +29,30 @@ function fileName(merchantName: string): string {
 export function useCatalogExport() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [warning, setWarning] = useState("");
 
   const exportCatalog = useCallback(async (input: ExportInput) => {
     if (input.products.length === 0) return;
     setBusy(true);
     setError("");
+    setWarning("");
 
     try {
+      // An external image URL still works, but it can rot or start refusing
+      // hotlinks. Point the operator at the mirror action so the exported
+      // workbook keeps a permanent link.
+      const unmirrored = input.products.filter((product) => {
+        const source = resolveDisplayImageUrl(product.imageDataUrl);
+        return Boolean(
+          source && /^https?:\/\//i.test(source) && needsMirroring(source),
+        );
+      }).length;
+      setWarning(
+        unmirrored > 0
+          ? `يوجد ${unmirrored.toLocaleString("ar-EG")} صورة بروابط خارجية غير موطنة. شغّل «توطين الصور على السيرفر» ليظهر الرابط الثابت في الملف.`
+          : "",
+      );
+
       const XLSX = await import("xlsx");
       const names = new Map(
         input.categories.map((category) => [category.key, category.name_ar]),
@@ -86,5 +104,5 @@ export function useCatalogExport() {
     }
   }, []);
 
-  return { busy, error, exportCatalog };
+  return { busy, error, warning, exportCatalog };
 }

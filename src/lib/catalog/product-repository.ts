@@ -453,6 +453,38 @@ export async function updateProductRow(
 }
 
 /**
+ * Rewrites only the image reference, leaving every identity field untouched.
+ *
+ * The mirror workflow owns the copy, not the product: name, barcode, SKU and
+ * price must never move because a photo was copied to the server. Returns false
+ * when the row no longer exists.
+ */
+export async function updateProductImageUrl(
+  id: string,
+  url: string,
+): Promise<boolean> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .update({ image_data_url: url, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
  * Permanently removes a product row.
  *
  * Catalog rows carry no foreign-key references from order or accounting tables,
