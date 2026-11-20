@@ -25,8 +25,8 @@ export type MerchantPatch = Partial<{
   cityId: string;
   targetCommission: number;
   strategicNotes: string;
-  phone: string | null;
-  address: string | null;
+  phone: string;
+  address: string;
   team: string | null;
   contractState: ContractState;
   commissionAmount: number;

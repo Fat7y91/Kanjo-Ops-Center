@@ -89,8 +89,8 @@ export async function createMerchant(
     cityId: input.cityId,
     logoUrl: null,
     coverUrl: null,
-    phone: null,
-    address: null,
+    phone: "",
+    address: "",
     targetCommission: input.targetCommission,
     monthlyValue: input.estimatedMonthlyValue,
     strategicNotes: input.strategicNotes.trim(),
@@ -163,10 +163,10 @@ export async function updateMerchantDetails(
     patch.strategicNotes = input.strategicNotes.trim();
   }
   if (input.phone !== undefined) {
-    patch.phone = input.phone.trim() === "" ? null : input.phone.trim();
+    patch.phone = input.phone.trim();
   }
   if (input.address !== undefined) {
-    patch.address = input.address.trim() === "" ? null : input.address.trim();
+    patch.address = input.address.trim();
   }
 
   const updated = await updateMerchantRow(merchantId, patch);

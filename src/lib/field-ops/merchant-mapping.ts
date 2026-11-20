@@ -115,8 +115,8 @@ export type MerchantRow = {
   strategic_notes: string;
   logo_url?: string | null;
   cover_url?: string | null;
-  phone: string | null;
-  address: string | null;
+  phone: string;
+  address: string;
   contract_state: ContractState;
   commission_amount: number | string;
   agreed_commission: number | string | null;
@@ -146,8 +146,8 @@ export function toMerchant(row: MerchantRow): Merchant {
     cityId: row.city_id,
     logoUrl: row.logo_url ?? null,
     coverUrl: row.cover_url ?? null,
-    phone: row.phone ?? null,
-    address: row.address ?? null,
+    phone: row.phone ?? "",
+    address: row.address ?? "",
     targetCommission: Number(row.target_commission),
     monthlyValue: Number(row.monthly_value_minor) / 100,
     strategicNotes: row.strategic_notes,
