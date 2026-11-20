@@ -40,31 +40,53 @@ export function PartyBook({
 }: PartyBookProps) {
   if (accounts.length === 0) return <p className="muted">{emptyLabel}</p>;
 
+  const total = accounts.reduce(
+    (sum, account) => sum + Math.abs(account.balance),
+    0,
+  );
+  const currency = accounts[0]?.currency ?? "EGP";
+
   return (
-    <ul className="clearing-parties">
-      {accounts.map((account) => (
-        <li key={account.accountId}>
-          <div className="clearing-party-id">
-            <strong>{account.partyName}</strong>
-            <RoleBadge partyType={account.partyType} />
-          </div>
-          <strong
-            className={
-              account.balance > 0 ? "clearing-positive" : "clearing-negative"
-            }
-          >
-            {operationMoney(Math.abs(account.balance), account.currency)}
-          </strong>
-          <Button
-            variant="quiet"
-            size="sm"
-            onClick={() => onOpenStatement(account.accountId)}
-          >
-            كشف حساب
-          </Button>
-        </li>
-      ))}
-    </ul>
+    <div className="clearing-party-table">
+      <div className="clearing-party-head" aria-hidden="true">
+        <span>الطرف</span>
+        <span className="clearing-party-amount">المبلغ</span>
+        <span />
+      </div>
+
+      <ul className="clearing-parties">
+        {accounts.map((account) => (
+          <li key={account.accountId} className="clearing-party-row">
+            <div className="clearing-party-id">
+              <strong title={account.partyName}>{account.partyName}</strong>
+              <RoleBadge partyType={account.partyType} />
+            </div>
+            <strong
+              className={`clearing-party-amount ${
+                account.balance > 0 ? "clearing-positive" : "clearing-negative"
+              }`}
+            >
+              {operationMoney(Math.abs(account.balance), account.currency)}
+            </strong>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => onOpenStatement(account.accountId)}
+            >
+              كشف حساب
+            </Button>
+          </li>
+        ))}
+      </ul>
+
+      <div className="clearing-party-total">
+        <strong>الإجمالي</strong>
+        <strong className="clearing-party-amount">
+          {operationMoney(total, currency)}
+        </strong>
+        <span />
+      </div>
+    </div>
   );
 }
 

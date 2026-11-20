@@ -4,6 +4,7 @@ import { usePermission } from "@/components/auth/use-permission";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { Tabs } from "@/components/ui/tabs";
+import { operationMoney } from "@/lib/operations/format";
 import type {
   ClearingAccountRow,
   OperationSummary,
@@ -54,6 +55,18 @@ export function ClearinghouseBoard({
   const voucher = useJournalVoucher();
   const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
+  const receivablesTotal = receivables.reduce(
+    (sum, account) => sum + Math.abs(account.balance),
+    0,
+  );
+  const payablesTotal = payables.reduce(
+    (sum, account) => sum + Math.abs(account.balance),
+    0,
+  );
+  const netTotal = receivablesTotal - payablesTotal;
+  const summaryCurrency =
+    receivables[0]?.currency ?? payables[0]?.currency ?? "EGP";
+
   const rowsProps = {
     accounts,
     busyId,
@@ -78,31 +91,63 @@ export function ClearinghouseBoard({
             label: "المستحقات",
             badge: accounts.length,
             content: (
-              <div className="clearing-book">
-                <article className="panel">
-                  <div className="panel-head">
-                    <h2>مستحق لهم</h2>
-                    <span className="muted">مبالغ على كانجو سدادها</span>
+              <>
+                <div className="clearing-kpis">
+                  <div className="clearing-kpi clearing-kpi-positive">
+                    <span>إجمالي مستحق لنا</span>
+                    <strong dir="ltr">
+                      {operationMoney(receivablesTotal, summaryCurrency)}
+                    </strong>
                   </div>
-                  <PartyBook
-                    accounts={payables}
-                    emptyLabel="لا توجد مبالغ مستحقة السداد."
-                    onOpenStatement={statement.openFor}
-                  />
-                </article>
+                  <div className="clearing-kpi clearing-kpi-negative">
+                    <span>إجمالي مستحق لهم</span>
+                    <strong dir="ltr">
+                      {operationMoney(payablesTotal, summaryCurrency)}
+                    </strong>
+                  </div>
+                  <div
+                    className={`clearing-kpi ${
+                      netTotal >= 0
+                        ? "clearing-kpi-positive"
+                        : "clearing-kpi-negative"
+                    }`}
+                  >
+                    <span>
+                      الصافي النهائي{" "}
+                      {netTotal >= 0 ? "(مستحق لنا)" : "(مستحق لهم)"}
+                    </span>
+                    <strong dir="ltr">
+                      {operationMoney(Math.abs(netTotal), summaryCurrency)}
+                    </strong>
+                  </div>
+                </div>
 
-                <article className="panel">
-                  <div className="panel-head">
-                    <h2>مستحق لنا</h2>
-                    <span className="muted">مبالغ على التجار ومناديب التوصيل تحصيلها</span>
-                  </div>
-                  <PartyBook
-                    accounts={receivables}
-                    emptyLabel="لا توجد مبالغ مستحقة التحصيل."
-                    onOpenStatement={statement.openFor}
-                  />
-                </article>
-              </div>
+                <div className="clearing-book">
+                  <article className="panel">
+                    <div className="panel-head">
+                      <h2>مستحق لهم</h2>
+                      <span className="muted">مبالغ على كانجو سدادها</span>
+                    </div>
+                    <PartyBook
+                      accounts={payables}
+                      emptyLabel="لا توجد مبالغ مستحقة السداد."
+                      onOpenStatement={statement.openFor}
+                    />
+                  </article>
+
+                  <article className="panel">
+                    <div className="panel-head">
+                      <h2>مستحق لنا</h2>
+                      <span className="muted">مبالغ على التجار ومناديب التوصيل تحصيلها</span>
+                    </div>
+                    <PartyBook
+                      accounts={receivables}
+                      emptyLabel="لا توجد مبالغ مستحقة التحصيل."
+                      onOpenStatement={statement.openFor}
+                    />
+                  </article>
+                </div>
+              </>
             ),
           },
           {
