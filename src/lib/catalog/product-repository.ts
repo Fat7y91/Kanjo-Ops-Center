@@ -452,6 +452,35 @@ export async function updateProductRow(
   return toProduct(record, embed?.name ?? titleCase(record.merchant_id));
 }
 
+/**
+ * Permanently removes a product row.
+ *
+ * Catalog rows carry no foreign-key references from order or accounting tables,
+ * so a hard delete cannot orphan history. Returns `true` when a row was
+ * removed, `false` when the id no longer exists.
+ */
+export async function deleteProductRow(id: string): Promise<boolean> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
 function titleCase(value: string): string {
   return value
     .split(/[-_\s]+/)

@@ -18,6 +18,7 @@ type ProductDetailsModalProps = {
   categoryName: string;
   onClose: () => void;
   onEdit: () => void;
+  onDelete: () => void;
   onOpenImage: () => void;
 };
 
@@ -28,6 +29,7 @@ export function ProductDetailsModal({
   categoryName,
   onClose,
   onEdit,
+  onDelete,
   onOpenImage,
 }: ProductDetailsModalProps) {
   if (!product) return null;
@@ -88,6 +90,11 @@ export function ProductDetailsModal({
           <Protect require={["edit_catalog", "add_catalog"]} mode="any">
             <Button size="sm" variant="quiet" onClick={onEdit}>
               تعديل
+            </Button>
+          </Protect>
+          <Protect require={["delete_products"]}>
+            <Button size="sm" variant="quiet" onClick={onDelete}>
+              حذف
             </Button>
           </Protect>
         </div>

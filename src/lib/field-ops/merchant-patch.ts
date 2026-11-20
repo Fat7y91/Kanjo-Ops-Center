@@ -18,6 +18,15 @@ import type {
  * call sites stay in domain terms; the mapping to snake_case lives here only.
  */
 export type MerchantPatch = Partial<{
+  name: string;
+  normalizedName: string;
+  vendorTypeId: number;
+  vendorType: string;
+  cityId: string;
+  targetCommission: number;
+  strategicNotes: string;
+  phone: string | null;
+  address: string | null;
   team: string | null;
   contractState: ContractState;
   commissionAmount: number;
@@ -36,6 +45,21 @@ export function toPatchColumns(
   patch: MerchantPatch,
 ): Record<string, unknown> {
   const row: Record<string, unknown> = {};
+  if (patch.name !== undefined) row.name = patch.name;
+  if (patch.normalizedName !== undefined) {
+    row.normalized_name = patch.normalizedName;
+  }
+  if (patch.vendorTypeId !== undefined) row.vendor_type_id = patch.vendorTypeId;
+  if (patch.vendorType !== undefined) row.vendor_type = patch.vendorType;
+  if (patch.cityId !== undefined) row.city_id = patch.cityId;
+  if (patch.targetCommission !== undefined) {
+    row.target_commission = patch.targetCommission;
+  }
+  if (patch.strategicNotes !== undefined) {
+    row.strategic_notes = patch.strategicNotes;
+  }
+  if (patch.phone !== undefined) row.phone = patch.phone;
+  if (patch.address !== undefined) row.address = patch.address;
   if (patch.team !== undefined) row.team = patch.team;
   if (patch.contractState !== undefined) {
     row.contract_state = patch.contractState;

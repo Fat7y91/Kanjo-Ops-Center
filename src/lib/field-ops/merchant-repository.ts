@@ -81,7 +81,7 @@ async function withImageColumnFallback(
 ): Promise<RowsResponse> {
   let columns = COLUMNS;
   let result = await run(columns);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const next = nextMerchantProjection(columns, result.error);
     if (!next) break;
     columns = next;

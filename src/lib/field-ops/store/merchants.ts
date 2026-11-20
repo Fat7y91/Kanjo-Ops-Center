@@ -1,6 +1,9 @@
 import { merchantSearchKey } from "@/lib/search/merchant-search";
 import type { Merchant } from "@/lib/field-ops/types";
-import type { MerchantCreateInput } from "@/lib/schemas/field-ops";
+import type {
+  MerchantCreateInput,
+  MerchantUpdateInput,
+} from "@/lib/schemas/field-ops";
 import { assertVendorTypeExists } from "@/lib/taxonomy/store";
 
 import {
@@ -13,7 +16,9 @@ import {
   getMerchantRow,
   insertMerchant,
   listMerchantRows,
+  updateMerchantRow,
 } from "../merchant-repository";
+import type { MerchantPatch } from "../merchant-patch";
 import { getCityById } from "./cities";
 
 /**
@@ -84,6 +89,8 @@ export async function createMerchant(
     cityId: input.cityId,
     logoUrl: null,
     coverUrl: null,
+    phone: null,
+    address: null,
     targetCommission: input.targetCommission,
     monthlyValue: input.estimatedMonthlyValue,
     strategicNotes: input.strategicNotes.trim(),
@@ -98,4 +105,73 @@ export async function createMerchant(
   };
 
   return insertMerchant({ merchant, createdBy: actor.id });
+}
+
+/**
+ * Applies a manual correction to a merchant's core details.
+ *
+ * Name, phone, address, vendor type, city, target commission and strategic
+ * notes are the fields an operator repairs from the profile. Contract state is
+ * intentionally excluded: it transitions through the audited state workflow so
+ * the append-only override trail stays complete.
+ */
+export async function updateMerchantDetails(
+  merchantId: string,
+  input: MerchantUpdateInput,
+): Promise<Merchant> {
+  const current = await requireMerchant(merchantId);
+
+  const patch: MerchantPatch = {};
+
+  if (input.name !== undefined && input.name !== current.name) {
+    const normalizedName = merchantSearchKey(input.name);
+    const existing = await findMerchantByNormalizedName(normalizedName);
+    if (existing && existing.id !== merchantId) {
+      throw new FieldOpsError(
+        "MERCHANT_EXISTS",
+        existing.cityId === (input.cityId ?? current.cityId)
+          ? "يوجد تاجر بهذا الاسم في المدينة بالفعل."
+          : "يوجد تاجر بهذا الاسم في مدينة أخرى. استخدم اسماً مميزاً.",
+        409,
+      );
+    }
+    patch.name = input.name.trim();
+    patch.normalizedName = normalizedName;
+  }
+
+  if (input.cityId !== undefined && input.cityId !== current.cityId) {
+    const city = await getCityById(input.cityId);
+    if (!city) {
+      throw new FieldOpsError("CITY_NOT_FOUND", "المدينة غير موجودة.", 404);
+    }
+    patch.cityId = input.cityId;
+  }
+
+  if (
+    input.vendorTypeId !== undefined &&
+    input.vendorTypeId !== current.vendorTypeId
+  ) {
+    const vendorType = assertVendorTypeExists(input.vendorTypeId);
+    patch.vendorTypeId = input.vendorTypeId;
+    patch.vendorType = vendorType.name_ar;
+  }
+
+  if (input.targetCommission !== undefined) {
+    patch.targetCommission = input.targetCommission;
+  }
+  if (input.strategicNotes !== undefined) {
+    patch.strategicNotes = input.strategicNotes.trim();
+  }
+  if (input.phone !== undefined) {
+    patch.phone = input.phone.trim() === "" ? null : input.phone.trim();
+  }
+  if (input.address !== undefined) {
+    patch.address = input.address.trim() === "" ? null : input.address.trim();
+  }
+
+  const updated = await updateMerchantRow(merchantId, patch);
+  if (!updated) {
+    throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
+  }
+  return updated;
 }

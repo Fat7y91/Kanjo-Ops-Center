@@ -69,6 +69,29 @@ export const merchantCreateSchema = z.object({
   strategicNotes: z.string().trim().max(2000).default(""),
 });
 
+export const merchantUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120).optional(),
+    phone: z.string().trim().max(30, "رقم الهاتف طويل جداً.").optional(),
+    address: z.string().trim().max(240, "العنوان طويل جداً.").optional(),
+    vendorTypeId: z.coerce
+      .number()
+      .int("نوع التاجر يجب أن يكون معرّفاً رقمياً.")
+      .positive("اختر نوع التاجر من التصنيف المركزي.")
+      .max(9_999_999)
+      .optional(),
+    cityId: z.string().trim().min(1, "اختر المدينة.").optional(),
+    targetCommission: z.coerce
+      .number()
+      .min(0, "العمولة لا يمكن أن تكون سالبة.")
+      .max(100, "العمولة لا يمكن أن تتجاوز 100%.")
+      .optional(),
+    strategicNotes: z.string().trim().max(2000).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "لا توجد حقول للتحديث.",
+  });
+
 export const taskAssignSchema = z.object({
   merchantId: z.string().trim().min(1, "اختر التاجر."),
   team: z.enum(FIELD_TEAMS),
@@ -162,6 +185,7 @@ export const merchantV1ProfileSchema = z.object({
 export type CityCreateInput = z.infer<typeof cityCreateSchema>;export type CityManagerAssignInput = z.infer<typeof cityManagerAssignSchema>;
 export type CityManagerRevokeInput = z.infer<typeof cityManagerRevokeSchema>;
 export type MerchantCreateInput = z.infer<typeof merchantCreateSchema>;
+export type MerchantUpdateInput = z.infer<typeof merchantUpdateSchema>;
 export type TaskAssignInput = z.infer<typeof taskAssignSchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type TransferRequestInput = z.infer<typeof transferRequestSchema>;

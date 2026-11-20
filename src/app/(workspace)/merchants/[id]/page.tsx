@@ -7,6 +7,7 @@ import { effectiveCityIds } from "@/lib/city-scope-query";
 import {
   getCityById,
   getMerchantById,
+  listCities,
   listFollowUpTasks,
   listStateOverrides,
   listTasks,
@@ -17,6 +18,7 @@ import {
 import { getMerchantV1Profile } from "@/lib/field-ops/merchant-profile-repository";
 import { loadMerchantRollup } from "@/lib/field-ops/state-source";
 import { teamLabel } from "@/lib/field-ops/types";
+import { listVendorTypes } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -34,9 +36,16 @@ export default async function MerchantProfilePage({
   // Merchant profiles follow the merchant directory's scope: any city the
   // viewer can operate in, not just cities they have the `view_active_cities`
   // dashboard permission for.
-  if (!merchant || !(await effectiveCityIds(session)).includes(merchant.cityId)) {
+  const cityScope = await effectiveCityIds(session);
+  if (!merchant || !cityScope.includes(merchant.cityId)) {
     notFound();
   }
+
+  const allowedCities = new Set(cityScope);
+  const cities = (await listCities())
+    .filter((city) => allowedCities.has(city.id))
+    .map((city) => ({ id: city.id, name: city.name, stage: city.stage }));
+  const vendorTypes = listVendorTypes();
 
   const permissions = session.permissions;
   const [city, reports, v1Profile, overrides, allTasks, followUps] =
@@ -73,7 +82,10 @@ export default async function MerchantProfilePage({
         summary={await merchantCrmSummary(merchant.id, reports, rollup)}
         visitCount={rollup?.visitCount ?? reports.length}
         viewerTeam={session.user.team}
+        cities={cities}
+        vendorTypes={vendorTypes}
         canEditMerchants={permissions.includes("view_merchant_profile")}
+        canEditMerchantDetails={permissions.includes("edit_merchants")}
         canRequestTransfers={permissions.includes("request_ownership_transfer")}
         canManageState={permissions.includes("edit_contract")}
         canViewFieldOps={permissions.includes("view_all_teams_visits")}

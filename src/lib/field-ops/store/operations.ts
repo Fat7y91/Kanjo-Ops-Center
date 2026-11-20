@@ -13,6 +13,7 @@ export {
   createMerchant,
   getMerchantById,
   listMerchants,
+  updateMerchantDetails,
 } from "./merchants";
 
 export {

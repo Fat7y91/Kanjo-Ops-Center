@@ -4,6 +4,7 @@ import { normalizeCode } from "@/lib/catalog/sku";
 import { getMerchantById } from "@/lib/field-ops/store";
 
 import {
+  deleteProductRow,
   getProductRow,
   updateProductRow,
 } from "./product-repository";
@@ -56,4 +57,23 @@ export async function updateProduct(
     throw new CatalogError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
   }
   return stored;
+}
+
+/**
+ * Permanently removes a catalog product.
+ *
+ * Fails with a typed 404 when the row is gone (a double submit or a stale
+ * screen), so the UI never reports a silent success.
+ */
+export async function deleteProduct(productId: string): Promise<void> {
+  const existing = await getProductRow(productId);
+  if (!existing) {
+    throw new CatalogError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
+  }
+
+  const deleted = await deleteProductRow(productId);
+  if (!deleted) {
+    throw new CatalogError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
+  }
+  bumpRevision();
 }

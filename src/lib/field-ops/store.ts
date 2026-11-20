@@ -32,6 +32,7 @@ export {
   tasksForViewer,
   today,
   updateCity,
+  updateMerchantDetails,
   visitCountFor,
   yesterday,
   type MerchantCrmSummary,

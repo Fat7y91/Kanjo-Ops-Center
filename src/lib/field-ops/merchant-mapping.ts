@@ -27,6 +27,8 @@ export const MERCHANT_COLUMNS = [
   "strategic_notes",
   "logo_url",
   "cover_url",
+  "phone",
+  "address",
   "contract_state",
   "commission_amount",
   "agreed_commission",
@@ -88,9 +90,13 @@ export function nextMerchantProjection(
     ? "logo_url,"
     : message.includes("cover_url")
       ? "cover_url,"
-      : message.includes("archived_at")
-        ? "archived_at,"
-        : null;
+      : message.includes("phone")
+        ? "phone,"
+        : message.includes("address")
+          ? "address,"
+          : message.includes("archived_at")
+            ? "archived_at,"
+            : null;
   if (!drop || !columns.includes(drop)) return null;
   const next = columns.replace(drop, "");
   return next === columns ? null : next;
@@ -109,6 +115,8 @@ export type MerchantRow = {
   strategic_notes: string;
   logo_url?: string | null;
   cover_url?: string | null;
+  phone: string | null;
+  address: string | null;
   contract_state: ContractState;
   commission_amount: number | string;
   agreed_commission: number | string | null;
@@ -138,6 +146,8 @@ export function toMerchant(row: MerchantRow): Merchant {
     cityId: row.city_id,
     logoUrl: row.logo_url ?? null,
     coverUrl: row.cover_url ?? null,
+    phone: row.phone ?? null,
+    address: row.address ?? null,
     targetCommission: Number(row.target_commission),
     monthlyValue: Number(row.monthly_value_minor) / 100,
     strategicNotes: row.strategic_notes,

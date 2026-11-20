@@ -18,9 +18,11 @@ type ProfileHeroProps = {
   canViewFieldOpsPage: boolean;
   canRequestTransfers: boolean;
   canManageState: boolean;
+  canEditDetails: boolean;
   onStartVisit: () => void;
   onRequestTransfer: () => void;
   onOverrideState: () => void;
+  onEditDetails: () => void;
 };
 
 export function ProfileHero({
@@ -34,9 +36,11 @@ export function ProfileHero({
   canViewFieldOpsPage,
   canRequestTransfers,
   canManageState,
+  canEditDetails,
   onStartVisit,
   onRequestTransfer,
   onOverrideState,
+  onEditDetails,
 }: ProfileHeroProps) {
   const meta = CONTRACT_STATE_META[state];
 
@@ -66,6 +70,15 @@ export function ProfileHero({
         ) : null}
       </div>
       <div className="profile-actions">
+        {canEditDetails ? (
+          <button
+            type="button"
+            className="button button-quiet"
+            onClick={onEditDetails}
+          >
+            تعديل بيانات التاجر
+          </button>
+        ) : null}
         {canStartVisit ? (
           <button
             type="button"

@@ -12,6 +12,8 @@ import {
   VisitEngine,
   type VisitEngineTarget,
 } from "@/components/field-ops/visit-engine";
+import type { MerchantCityOption } from "@/components/merchants/create-merchant-modal";
+import { EditMerchantModal } from "@/components/merchants/edit-merchant-modal";
 import type {
   MerchantCrmSummary,
   MerchantTimelineEntry,
@@ -24,6 +26,7 @@ import type {
   StateOverride,
   VisitReport,
 } from "@/lib/field-ops/types";
+import type { TaxonomyVendorType } from "@/lib/taxonomy/types";
 
 import { CrmMetrics } from "./merchant-profile/crm-metrics";
 import { DocumentsPanel } from "./merchant-profile/documents-panel";
@@ -47,7 +50,10 @@ type MerchantProfileClientProps = {
   summary: MerchantCrmSummary;
   visitCount: number;
   viewerTeam: string;
+  cities: MerchantCityOption[];
+  vendorTypes: TaxonomyVendorType[];
   canEditMerchants: boolean;
+  canEditMerchantDetails: boolean;
   canRequestTransfers: boolean;
   canManageState: boolean;
   canViewFieldOps: boolean;
@@ -71,7 +77,10 @@ export function MerchantProfileClient({
   summary,
   visitCount,
   viewerTeam,
+  cities,
+  vendorTypes,
   canEditMerchants,
+  canEditMerchantDetails,
   canRequestTransfers,
   canManageState,
   canViewFieldOps,
@@ -85,6 +94,7 @@ export function MerchantProfileClient({
   const router = useRouter();
   const [transferOpen, setTransferOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editDetailsOpen, setEditDetailsOpen] = useState(false);
   const [stateOpen, setStateOpen] = useState(false);
   const [signOpen, setSignOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -125,9 +135,11 @@ export function MerchantProfileClient({
         canViewFieldOpsPage={canViewFieldOpsPage}
         canRequestTransfers={canRequestTransfers}
         canManageState={canManageState}
+        canEditDetails={canEditMerchantDetails}
         onStartVisit={openVisit}
         onRequestTransfer={() => setTransferOpen(true)}
         onOverrideState={() => setStateOpen(true)}
+        onEditDetails={() => setEditDetailsOpen(true)}
       />
 
       <CrmMetrics summary={summary} followUps={followUps} />
@@ -248,6 +260,15 @@ export function MerchantProfileClient({
         suggestedCommission={merchant.targetCommission}
         endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
         onClose={() => setSignOpen(false)}
+        onDone={refreshWith}
+      />
+
+      <EditMerchantModal
+        open={editDetailsOpen}
+        merchant={merchant}
+        cities={cities}
+        vendorTypes={vendorTypes}
+        onClose={() => setEditDetailsOpen(false)}
         onDone={refreshWith}
       />
 

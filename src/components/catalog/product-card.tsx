@@ -18,6 +18,7 @@ type ProductCardProps = {
   qaBusy: boolean;
   onOpenDetails: (product: CatalogProduct) => void;
   onEdit: (product: CatalogProduct) => void;
+  onDelete: (product: CatalogProduct) => void;
   onOpenImage: (product: CatalogProduct) => void;
   onDownloadOriginal: (product: CatalogProduct) => void;
   onApprove: (product: CatalogProduct) => void;
@@ -33,6 +34,7 @@ export function ProductCard({
   qaBusy,
   onOpenDetails,
   onEdit,
+  onDelete,
   onOpenImage,
   onDownloadOriginal,
   onApprove,
@@ -136,6 +138,15 @@ export function ProductCard({
           <Protect require={["edit_catalog", "add_catalog"]} mode="any">
             <Button size="sm" variant="quiet" onClick={() => onEdit(product)}>
               تعديل
+            </Button>
+          </Protect>
+          <Protect require={["delete_products"]}>
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={() => onDelete(product)}
+            >
+              حذف
             </Button>
           </Protect>
         </div>

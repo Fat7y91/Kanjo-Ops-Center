@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { apiError, authorizeAny, readJson } from "@/lib/auth/api";
 import { findCatalogRecord } from "@/lib/catalog/repository";
 import { CatalogError, catalogRevision } from "@/lib/catalog/store";
-import { updateProduct } from "@/lib/catalog/product-update";
+import { deleteProduct, updateProduct } from "@/lib/catalog/product-update";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { productUpdateSchema } from "@/lib/schemas/catalog";
 
@@ -45,6 +45,42 @@ export async function PATCH(
     });
     return NextResponse.json(
       { product, revision: catalogRevision() },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+/**
+ * Deletes a catalog product.
+ *
+ * Gated by `delete_products`; the product's merchant city must fall inside the
+ * viewer's city scope so a delete cannot cross a scope boundary.
+ */
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const { session, response } = await authorizeAny(["delete_products"]);
+  if (!session) return response;
+
+  try {
+    const { id } = await context.params;
+
+    const record = await findCatalogRecord(id);
+    const cityScope = await effectiveCityIds(session);
+    if (
+      !record ||
+      record.cityId === null ||
+      !cityScope.includes(record.cityId)
+    ) {
+      throw new CatalogError("PRODUCT_NOT_FOUND", "المنتج غير موجود.", 404);
+    }
+
+    await deleteProduct(id);
+    return NextResponse.json(
+      { revision: catalogRevision() },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

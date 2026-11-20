@@ -171,6 +171,10 @@ export type Merchant = {
   logoUrl: string | null;
   /** Wide cover/banner image URL shown behind the logo on the catalog tile. */
   coverUrl: string | null;
+  /** Primary merchant phone number, editable from the merchant profile. */
+  phone: string | null;
+  /** Physical business address, editable from the merchant profile. */
+  address: string | null;
   targetCommission: number;
   monthlyValue: number;
   strategicNotes: string;
