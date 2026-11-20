@@ -210,7 +210,7 @@ export async function findOperation(
   });
 }
 
-export async function insertOperation(write: {
+export type OperationWrite = {
   orderId: string;
   merchantId: string;
   courierId: string;
@@ -218,6 +218,8 @@ export async function insertOperation(write: {
   currency: OperationLog["currency"];
   orderValueMinor: number;
   deliveryFeeMinor: number;
+  /** Courier's own earning; only set for settlement-driven imports. */
+  courierFeeMinor?: number;
   couponId: string | null;
   walletDiscountMinor: number;
   walletDiscountReason: string;
@@ -226,34 +228,128 @@ export async function insertOperation(write: {
   loggedBy: string;
   /** Back-dated order date; defaults to now when omitted. */
   occurredAt?: string;
-}): Promise<OperationLog> {
+  /**
+   * Raw settlement terms. When `settlementDriven` is true the posting trigger
+   * builds a balanced COD entry from these figures instead of the legacy
+   * rate-only entry. Left undefined for manual and legacy exports.
+   */
+  settlementDriven?: boolean;
+  discountMinor?: number;
+  rewardDiscountMinor?: number;
+  shippingDiscountMinor?: number;
+  tipMinor?: number;
+  walletAmountMinor?: number;
+  expectedTotalMinor?: number;
+  amountDueMinor?: number;
+  codCollectedMinor?: number;
+  netDuePlatformMinor?: number;
+  deliveredAt?: string;
+};
+
+const BATCH_WRITE_TIMEOUT_MS = 20_000;
+
+function insertRow(write: OperationWrite): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    order_id: write.orderId,
+    merchant_id: write.merchantId,
+    courier_id: write.courierId,
+    payment_method: write.paymentMethod,
+    currency: write.currency,
+    order_value_minor: write.orderValueMinor,
+    delivery_fee_minor: write.deliveryFeeMinor,
+    /* Courier profit is never entered by the logger: the freeze trigger
+     * resolves it from the courier's fixed profit. Sending zero keeps the
+     * employee blind to the amount while the database stays authoritative. */
+    coupon_id: write.couponId,
+    wallet_discount_minor: write.walletDiscountMinor,
+    wallet_discount_reason: write.walletDiscountReason,
+    wallet_discount_ref: write.walletDiscountRef,
+    note: write.note,
+    logged_by: write.loggedBy,
+    ...(write.occurredAt ? { occurred_at: write.occurredAt } : {}),
+  };
+
+  /* Settlement-driven rows carry the raw CSV terms. They are omitted for
+   * manual/legacy writes so those keep the trigger's rate-only behaviour. */
+  if (write.settlementDriven) {
+    row.settlement_driven = true;
+    row.courier_cut_minor = write.courierFeeMinor ?? 0;
+    row.discount_minor = write.discountMinor ?? 0;
+    row.reward_discount_minor = write.rewardDiscountMinor ?? 0;
+    row.shipping_discount_minor = write.shippingDiscountMinor ?? 0;
+    row.tip_minor = write.tipMinor ?? 0;
+    row.wallet_amount_minor = write.walletAmountMinor ?? 0;
+    row.expected_total_minor = write.expectedTotalMinor ?? 0;
+    row.amount_due_minor = write.amountDueMinor ?? 0;
+    row.cod_collected_minor = write.codCollectedMinor ?? 0;
+    row.net_due_platform_minor = write.netDuePlatformMinor ?? 0;
+    row.delivered_at = write.deliveredAt ?? null;
+  }
+
+  return row;
+}
+
+export async function insertOperation(
+  write: OperationWrite,
+): Promise<OperationLog> {
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
     .from("operation_logs")
-    .insert({
-      order_id: write.orderId,
-      merchant_id: write.merchantId,
-      courier_id: write.courierId,
-      payment_method: write.paymentMethod,
-      currency: write.currency,
-      order_value_minor: write.orderValueMinor,
-      delivery_fee_minor: write.deliveryFeeMinor,
-      /* Courier profit is never entered by the logger: the freeze trigger
-       * resolves it from the courier's fixed profit. Sending zero keeps the
-       * employee blind to the amount while the database stays authoritative. */
-      coupon_id: write.couponId,
-      wallet_discount_minor: write.walletDiscountMinor,
-      wallet_discount_reason: write.walletDiscountReason,
-      wallet_discount_ref: write.walletDiscountRef,
-      note: write.note,
-      logged_by: write.loggedBy,
-      ...(write.occurredAt ? { occurred_at: write.occurredAt } : {}),
-    })
+    .insert(insertRow(write))
     .select(OPERATION_COLUMNS_NO_JOIN)
     .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS))
     .single();
 
   if (error) throw error;
   return toOperation(data as unknown as OperationRow);
+}
+
+/**
+ * Bulk insert for the CSV importer.
+ *
+ * One statement per chunk instead of one round trip per order. The posting and
+ * freeze triggers still run per row, so money terms stay identical to a manual
+ * entry. The caller falls back to a per-row retry when a chunk is rejected,
+ * which keeps the original per-line error reporting.
+ *
+ * `order_id` is unique, so the insert is idempotent: re-running the same file
+ * inserts nothing new. `operation_logs` is update-immutable, so a conflict is
+ * ignored rather than overwritten — history is never rewritten.
+ */
+export async function insertOperationBatch(
+  writes: readonly OperationWrite[],
+): Promise<number> {
+  if (writes.length === 0) return 0;
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("operation_logs")
+    .upsert(writes.map(insertRow), { onConflict: "order_id", ignoreDuplicates: true })
+    .select("id")
+    .abortSignal(AbortSignal.timeout(BATCH_WRITE_TIMEOUT_MS));
+
+  if (error) throw error;
+  return ((data ?? []) as { id: string }[]).length;
+}
+
+/**
+ * Per-row idempotent insert for the importer's retry path.
+ *
+ * Returns true when the row was new, false when its `order_id` already exists.
+ * Throws on any other database error so the caller can report the exact line.
+ */
+export async function insertImportedOperation(
+  write: OperationWrite,
+): Promise<boolean> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("operation_logs")
+    .upsert(insertRow(write), { onConflict: "order_id", ignoreDuplicates: true })
+    .select("id")
+    .abortSignal(AbortSignal.timeout(WRITE_TIMEOUT_MS));
+
+  if (error) throw error;
+  return ((data ?? []) as { id: string }[]).length > 0;
 }

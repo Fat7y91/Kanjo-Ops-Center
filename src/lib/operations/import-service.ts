@@ -5,7 +5,12 @@ import { matchKey } from "@/lib/import/csv";
 
 import { OperationsError, fromDatabaseError } from "./errors";
 import { planImport, type ImportRoster } from "./orders-import";
-import { insertOperation, isOperationsDatabaseConfigured } from "./repository";
+import {
+  insertImportedOperation,
+  insertOperationBatch,
+  isOperationsDatabaseConfigured,
+  type OperationWrite,
+} from "./repository";
 import { toMinorUnits } from "./types";
 
 /**
@@ -124,36 +129,66 @@ export async function importOrders(
     return { imported: 0, skipped };
   }
 
+  function toWrite(candidate: (typeof plan.candidates)[number]): OperationWrite {
+    return {
+      orderId: candidate.orderId,
+      merchantId: candidate.merchantId,
+      courierId: candidate.courierId,
+      paymentMethod: candidate.paymentMethod,
+      currency: candidate.currency,
+      orderValueMinor: toMinorUnits(candidate.orderValue),
+      deliveryFeeMinor: toMinorUnits(candidate.deliveryFee),
+      courierFeeMinor: toMinorUnits(candidate.courierFee),
+      couponId: null,
+      walletDiscountMinor: 0,
+      walletDiscountReason: "",
+      walletDiscountRef: "",
+      note: candidate.note,
+      loggedBy,
+      occurredAt: candidate.occurredAt,
+      settlementDriven: candidate.settlementDriven,
+      discountMinor: toMinorUnits(candidate.discount),
+      rewardDiscountMinor: toMinorUnits(candidate.rewardDiscount),
+      shippingDiscountMinor: toMinorUnits(candidate.shippingDiscount),
+      tipMinor: toMinorUnits(candidate.tip),
+      walletAmountMinor: toMinorUnits(candidate.walletAmount),
+      expectedTotalMinor: toMinorUnits(candidate.expectedTotal),
+      amountDueMinor: toMinorUnits(candidate.amountDue),
+      codCollectedMinor: toMinorUnits(candidate.codCollected),
+      netDuePlatformMinor: toMinorUnits(candidate.netDuePlatform),
+      deliveredAt: candidate.deliveredAt,
+    };
+  }
+
   let imported = 0;
   const failed: { line: number; message: string }[] = [];
-  for (const candidate of plan.candidates) {
+  const chunkSize = 100;
+
+  for (let start = 0; start < plan.candidates.length; start += chunkSize) {
+    const chunk = plan.candidates.slice(start, start + chunkSize);
     try {
-      await insertOperation({
-        orderId: candidate.orderId,
-        merchantId: candidate.merchantId,
-        courierId: candidate.courierId,
-        paymentMethod: candidate.paymentMethod,
-        currency: candidate.currency,
-        orderValueMinor: toMinorUnits(candidate.orderValue),
-        deliveryFeeMinor: toMinorUnits(candidate.deliveryFee),
-        couponId: null,
-        walletDiscountMinor: 0,
-        walletDiscountReason: "",
-        walletDiscountRef: "",
-        note: candidate.note,
-        loggedBy,
-        occurredAt: candidate.occurredAt,
-      });
-      imported += 1;
-    } catch (error) {
-      console.error(
-        `[operations] failed to import order ${candidate.orderId} (line ${candidate.line})`,
-        error,
-      );
-      const domain = importFailure(error);
-      const entry = { line: candidate.line, message: domain.message };
-      skipped.push(entry);
-      failed.push(entry);
+      imported += await insertOperationBatch(chunk.map(toWrite));
+      continue;
+    } catch (batchError) {
+      /* The chunk can fail because of one duplicate or constraint violation.
+       * Retry it row by row so the operator still gets the exact line and
+       * message instead of losing the whole batch. */
+      console.error("[operations] import chunk rejected; retrying rows", batchError);
+    }
+
+    for (const candidate of chunk) {
+      try {
+        if (await insertImportedOperation(toWrite(candidate))) imported += 1;
+      } catch (error) {
+        console.error(
+          `[operations] failed to import order ${candidate.orderId} (line ${candidate.line})`,
+          error,
+        );
+        const domain = importFailure(error);
+        const entry = { line: candidate.line, message: domain.message };
+        skipped.push(entry);
+        failed.push(entry);
+      }
     }
   }
 

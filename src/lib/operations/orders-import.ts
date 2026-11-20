@@ -26,13 +26,45 @@ export type ImportCandidate = {
   courierName: string;
   paymentMethod: PaymentMethod;
   currency: "EGP" | "SAR";
+  /**
+   * Merchant goods value (subtotal). This is the commission base, not the cash
+   * the customer paid: discounts and shipping are tracked separately.
+   */
   orderValue: number;
   /**
-   * The delivery fee charged on the order. The courier's own share is never
-   * imported: it is derived from the courier's fixed profit by the posting
-   * trigger, so the file cannot dictate a financial split.
+   * Shipping charged to the customer (`shipping_cost`), falling back to
+   * `courier_fee` for legacy exports that only carry one fee column.
    */
   deliveryFee: number;
+  /** The courier's own earning for the order (`courier_fee`). */
+  courierFee: number;
+  /**
+   * True when the row carries raw settlement columns (`cod_collected_total`
+   * or `subtotal`). Settlement-driven rows post a dedicated, balanced COD
+   * journal from these raw amounts instead of the legacy rate-only entry.
+   */
+  settlementDriven: boolean;
+  subtotal: number;
+  discount: number;
+  rewardDiscount: number;
+  shippingDiscount: number;
+  tip: number;
+  walletAmount: number;
+  /** `subtotal − discounts + shipping + tip`, recomputed, never trusted. */
+  expectedTotal: number;
+  /** `expectedTotal − walletAmount`. */
+  amountDue: number;
+  /** Cash actually collected on delivery; defaults to `amountDue`. */
+  codCollected: number;
+  /**
+   * Signed platform position: `codCollected − subtotal − courierFee`.
+   * Positive means the platform is owed; negative means it owes. Never clamped.
+   */
+  netDuePlatform: number;
+  /** Signed cash the courier must remit: `codCollected − courierFee − tip`. */
+  courierRemittance: number;
+  /** Delivery timestamp when the export carries one, else `occurredAt`. */
+  deliveredAt: string;
   note: string;
   occurredAt: string;
 };
@@ -123,6 +155,19 @@ const DATE_HEADERS = [
   "التاريخ",
   "تاريخ الطلب",
 ];
+
+const DELIVERED_HEADERS = [
+  "delivered_at",
+  "deliveredAt",
+  "delivery_date",
+  "deliveryDate",
+  "تاريخ التسليم",
+];
+
+/** Rounds a major-unit money value to two decimals without float drift. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 function parseDate(value: unknown): string | null {
   const text = normalizeDigits(clean(value));
@@ -222,13 +267,83 @@ export function planImport(
       }
     }
 
-    const orderValue = parseAmount(
-      field(row, "total", "order_total", "orderTotal", "amount", "order_value", "orderValue", "الإجمالي", "القيمة"),
+    const subtotalRaw = field(
+      row,
+      "subtotal",
+      "sub_total",
+      "subTotal",
+      "goods_total",
+      "goodsValue",
+      "قيمة السلع",
+      "الإجمالي الفرعي",
     );
-    if (orderValue === null) {
+    const totalRaw = field(row, "total", "order_total", "orderTotal", "amount", "order_value", "orderValue", "الإجمالي", "القيمة");
+
+    const discount = parseFee(field(row, "discount_amount", "discountAmount", "discount", "الخصم"));
+    const rewardDiscount = parseFee(
+      field(row, "reward_discount_amount", "rewardDiscountAmount", "reward_discount", "خصم المكافآت"),
+    );
+    const shippingDiscount = parseFee(
+      field(row, "shipping_discount", "shippingDiscount", "خصم الشحن"),
+    );
+    const tip = parseFee(field(row, "tip", "tip_amount", "tipAmount", "البقشيش"));
+    const walletAmount = parseFee(
+      field(row, "wallet_amount", "walletAmount", "wallet", "المحفظة"),
+    );
+    const codRaw = field(
+      row,
+      "cod_collected_total",
+      "codCollectedTotal",
+      "cod_collected",
+      "codCollected",
+      "المحصل",
+      "المبلغ المحصل",
+    );
+    const subtotalProvided = clean(subtotalRaw) !== "";
+    const codProvided = clean(codRaw) !== "";
+    const settlementDriven = subtotalProvided || codProvided;
+
+    const shippingRaw = field(
+      row,
+      "shipping_cost",
+      "shippingCost",
+      "shipping",
+      "delivery_fee",
+      "deliveryFee",
+      "تكلفة الشحن",
+      "أجر التوصيل",
+    );
+    const shippingProvided = clean(shippingRaw) !== "";
+    const courierFee = parseFee(
+      field(row, "courier_fee", "courierFee", "courier_earning", "أجر المندوب"),
+    );
+
+    const subtotalInput = parseAmount(subtotalRaw);
+    const totalInput = parseAmount(totalRaw);
+    /* A settlement row needs the goods value. When only the gross total is
+     * present, invert the total formula instead of treating the gross as goods,
+     * which would count shipping and discounts twice. */
+    const derivedSubtotal = (() => {
+      if (subtotalInput !== null) return subtotalInput;
+      if (!settlementDriven || totalInput === null || !shippingProvided) {
+        return totalInput;
+      }
+      return round2(
+        totalInput + discount + rewardDiscount - parseFee(shippingRaw) + shippingDiscount - tip,
+      );
+    })();
+
+    if (derivedSubtotal === null || derivedSubtotal <= 0) {
       issues.push({ line, message: "إجمالي الطلب مفقود أو غير صالح." });
       return;
     }
+    const orderValue = derivedSubtotal;
+
+    /* Shipping is its own column on settlement rows; legacy exports only carry
+     * a single fee column, whose value became the delivery fee historically. */
+    const deliveryFee = shippingProvided
+      ? parseFee(shippingRaw)
+      : parseFee(field(row, "courier_fee", "courierFee", "delivery_fee", "deliveryFee", "أجر التوصيل"));
 
     const paymentMethod = parsePaymentMethod(
       field(row, "payment_method", "paymentMethod", "payment", "طريقة الدفع"),
@@ -238,14 +353,24 @@ export function planImport(
       return;
     }
 
-    const deliveryFee = parseFee(
-      field(row, "courier_fee", "courierFee", "delivery_fee", "deliveryFee", "أجر التوصيل"),
-    );
     const occurredAt = parseDate(field(row, ...DATE_HEADERS));
     if (occurredAt === null) {
       issues.push({ line, message: "تاريخ الطلب مفقود أو غير صالح." });
       return;
     }
+    const deliveredAt = parseDate(field(row, ...DELIVERED_HEADERS)) ?? occurredAt;
+
+    const expectedTotal = settlementDriven
+      ? round2(orderValue - discount - rewardDiscount + deliveryFee - shippingDiscount + tip)
+      : orderValue;
+    const amountDue = settlementDriven ? round2(expectedTotal - walletAmount) : expectedTotal;
+    const codCollected = codProvided ? parseFee(codRaw) : amountDue;
+    const netDuePlatform = settlementDriven
+      ? round2(codCollected - orderValue - courierFee)
+      : 0;
+    const courierRemittance = settlementDriven
+      ? round2(codCollected - courierFee - tip)
+      : 0;
 
     seen.add(orderId);
     candidates.push({
@@ -259,6 +384,20 @@ export function planImport(
       currency: currencyOf(field(row, "currency", "العملة")),
       orderValue,
       deliveryFee,
+      courierFee,
+      settlementDriven,
+      subtotal: orderValue,
+      discount,
+      rewardDiscount,
+      shippingDiscount,
+      tip,
+      walletAmount,
+      expectedTotal,
+      amountDue,
+      codCollected,
+      netDuePlatform,
+      courierRemittance,
+      deliveredAt,
       note: clean(field(row, "note", "notes", "ملاحظات")),
       occurredAt,
     });

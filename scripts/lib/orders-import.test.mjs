@@ -169,3 +169,96 @@ test("the data line number accounts for the header row", () => {
   );
   assert.equal(plan.issues[0].line, 3);
 });
+
+/**
+ * Settlement-driven rows carry the real COD money terms. These tests pin the
+ * recomputed totals and the signed platform position, which must never be
+ * zero-clamped.
+ */
+
+function settlementRow(overrides = {}) {
+  return {
+    order_id: "COD-1",
+    vendor: "مطعم النور",
+    delivery_partner: "أحمد سيد",
+    payment_method: "COD",
+    subtotal: "1996.99",
+    discount_amount: "257.00",
+    shipping_cost: "171.00",
+    courier_fee: "63.00",
+    cod_collected_total: "1910.99",
+    date: "2026-11-11",
+    ...overrides,
+  };
+}
+
+test("a settlement row recomputes the total and the signed platform net", () => {
+  const plan = importer.planImport([settlementRow()], roster);
+  assert.equal(plan.candidates.length, 1);
+  const c = plan.candidates[0];
+  assert.equal(c.settlementDriven, true);
+  assert.equal(c.orderValue, 1996.99);
+  assert.equal(c.deliveryFee, 171);
+  assert.equal(c.courierFee, 63);
+  assert.equal(c.expectedTotal, 1910.99);
+  assert.equal(c.amountDue, 1910.99);
+  assert.equal(c.codCollected, 1910.99);
+  assert.equal(c.netDuePlatform, -149);
+  assert.equal(c.courierRemittance, 1847.99);
+});
+
+test("the platform net is signed, never clamped to zero", () => {
+  const plan = importer.planImport(
+    [settlementRow({ subtotal: "100", discount_amount: "0", shipping_cost: "0", courier_fee: "200", cod_collected_total: "100" })],
+    roster,
+  );
+  assert.equal(plan.candidates[0].netDuePlatform, -200);
+});
+
+test("a supplied cod_amount_due_platform is ignored in favour of the recomputed due", () => {
+  const plan = importer.planImport(
+    [settlementRow({ cod_amount_due_platform: "999999" })],
+    roster,
+  );
+  assert.equal(plan.candidates[0].amountDue, 1910.99);
+});
+
+test("delivered_at wins when present and falls back to the order date otherwise", () => {
+  const withDelivery = importer.planImport(
+    [settlementRow({ delivered_at: "2026-11-13" })],
+    roster,
+  );
+  assert.equal(withDelivery.candidates[0].deliveredAt, "2026-11-13");
+  const withoutDelivery = importer.planImport([settlementRow()], roster);
+  assert.equal(withoutDelivery.candidates[0].deliveredAt, "2026-11-11");
+});
+
+test("camelCase settlement headers are accepted", () => {
+  const plan = importer.planImport(
+    [
+      {
+        orderId: "COD-2",
+        merchant: "كافيه روما",
+        courier: "محمد علي",
+        paymentMethod: "COD",
+        subtotal: "500",
+        discountAmount: "50",
+        shippingCost: "20",
+        courierFee: "10",
+        codCollectedTotal: "470",
+        date: "2026-11-11",
+      },
+    ],
+    roster,
+  );
+  const c = plan.candidates[0];
+  assert.equal(c.settlementDriven, true);
+  assert.equal(c.expectedTotal, 470);
+  assert.equal(c.netDuePlatform, 470 - 500 - 10);
+});
+
+test("a legacy row without settlement columns is not settlement-driven", () => {
+  const plan = importer.planImport([row()], roster);
+  assert.equal(plan.candidates[0].settlementDriven, false);
+  assert.equal(plan.candidates[0].netDuePlatform, 0);
+});
