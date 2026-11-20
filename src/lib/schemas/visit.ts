@@ -60,8 +60,8 @@ export const visitReportSchema = z.object({
   opinions: z.array(repOpinionSchema).max(12).default([]),
   agreedCommission: z.coerce
     .number()
-    .min(1, "النسبة المتفق عليها يجب أن تكون بين 1% و100%.")
-    .max(100, "النسبة المتفق عليها يجب أن تكون بين 1% و100%.")
+    .min(0, "النسبة المتفق عليها يجب أن تكون بين 0% و100%.")
+    .max(100, "النسبة المتفق عليها يجب أن تكون بين 0% و100%.")
     .nullable()
     .optional(),
   followUpAt: z
@@ -115,7 +115,7 @@ export const visitReportSchema = z.object({
     // A negotiated outcome must always carry the number that was agreed on.
     if (
       COMMISSION_OUTCOMES.includes(value.outcome) &&
-      (value.agreedCommission == null || value.agreedCommission <= 0)
+      (value.agreedCommission == null || value.agreedCommission < 0)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

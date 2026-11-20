@@ -112,15 +112,15 @@ export const merchantStateSchema = z
       .max(1000),
     agreedCommission: z.coerce
       .number()
-      .min(1, "النسبة النهائية يجب أن تكون بين 1% و100%.")
-      .max(100, "النسبة النهائية يجب أن تكون بين 1% و100%.")
+      .min(0, "النسبة النهائية يجب أن تكون بين 0% و100%.")
+      .max(100, "النسبة النهائية يجب أن تكون بين 0% و100%.")
       .nullable()
       .optional(),
   })
   .superRefine((value, context) => {
     if (
       value.state === "signed_contract" &&
-      (value.agreedCommission == null || value.agreedCommission <= 0)
+      (value.agreedCommission == null || value.agreedCommission < 0)
     ) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

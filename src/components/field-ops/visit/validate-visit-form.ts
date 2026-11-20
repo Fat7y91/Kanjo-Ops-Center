@@ -98,13 +98,13 @@ export function validateVisitForm(values: VisitFormValues): VisitFormResult {
     needsCommission &&
     (!agreedCommission.trim() ||
       !Number.isFinite(commission) ||
-      commission <= 0 ||
+      commission < 0 ||
       commission > 100)
   ) {
     return {
       ok: false,
       field: "agreedCommission",
-      error: "أدخل النسبة المتفق عليها بين 1% و100%.",
+      error: "أدخل النسبة المتفق عليها بين 0% و100%.",
     };
   }
 

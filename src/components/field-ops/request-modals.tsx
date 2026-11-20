@@ -403,13 +403,13 @@ export function SignContractModal({
 
   const numeric = Number(commission);
   const validCommission =
-    commission.trim() !== "" && Number.isFinite(numeric) && numeric > 0 && numeric <= 100;
+    commission.trim() !== "" && Number.isFinite(numeric) && numeric >= 0 && numeric <= 100;
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     if (!validCommission) {
-      setError("أدخل النسبة النهائية بين 1% و100%.");
+      setError("أدخل النسبة النهائية بين 0% و100%.");
       return;
     }
     if (note.trim().length < 5) {

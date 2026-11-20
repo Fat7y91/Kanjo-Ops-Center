@@ -140,7 +140,7 @@ export async function createVisitReport(
 
   if (
     COMMISSION_OUTCOMES.includes(outcome) &&
-    (input.agreedCommission == null || input.agreedCommission <= 0)
+    (input.agreedCommission == null || input.agreedCommission < 0)
   ) {
     throw new FieldOpsError(
       "COMMISSION_REQUIRED",

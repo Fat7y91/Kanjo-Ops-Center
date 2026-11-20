@@ -69,7 +69,7 @@ export async function setMerchantState(
   // percentage. It is recorded on the merchant permanently and drives the
   // earned commission amount.
   if (state === "signed_contract") {
-    if (agreedCommission == null || agreedCommission <= 0) {
+    if (agreedCommission == null || agreedCommission < 0) {
       throw new FieldOpsError(
         "COMMISSION_REQUIRED",
         "النسبة النهائية المقفلة مطلوبة عند اعتماد توقيع العقد.",
