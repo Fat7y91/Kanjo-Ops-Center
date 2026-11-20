@@ -43,6 +43,14 @@ export function CourierAttendanceControl({
 
   if (!canManage) return null;
 
+  function selectDay(nextDay: string) {
+    setDay(nextDay);
+    /* Reflect the day's derived status so an existing override is visible
+     * before the manager decides to change it. */
+    const existing = courier.pay.days.find((row) => row.day === nextDay);
+    if (existing) setStatus(existing.status);
+  }
+
   async function save() {
     setBusy(true);
     setError("");
@@ -79,7 +87,7 @@ export function CourierAttendanceControl({
           dir="ltr"
           value={day}
           disabled={busy}
-          onChange={(event) => setDay(event.target.value)}
+          onChange={(event) => selectDay(event.target.value)}
         />
         <SelectMenu
           label="حالة الحضور"

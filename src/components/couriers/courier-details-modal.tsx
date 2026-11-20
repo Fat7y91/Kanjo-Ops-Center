@@ -138,7 +138,12 @@ export function CourierDetailsModal({
               </div>
               <div>
                 <dt>صافي التسوية النهائي (ليك / عليك)</dt>
-                <dd dir="ltr">{courierMoney(courier.balance, "EGP")}</dd>
+                <dd dir="ltr">
+                  {courierMoney(courier.balance, "EGP")}{" "}
+                  <span className="muted">
+                    {courier.balance >= 0 ? "لك" : "عليك"}
+                  </span>
+                </dd>
               </div>
             </dl>
 
