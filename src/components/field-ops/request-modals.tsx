@@ -457,7 +457,7 @@ export function SignContractModal({
           <span>النسبة النهائية المقفلة (%)</span>
           <input
             type="number"
-            min={1}
+            min={0}
             max={100}
             step={0.5}
             inputMode="decimal"
