@@ -70,6 +70,16 @@
   min-width: 0;
 }
 
+/* Party name and role must never run together in Arabic; a small gap plus a
+ * pill keeps the type readable at a glance. */
+.clearing-party-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .operation-list li > div:last-child,
 .clearing-row-amount {
   align-items: flex-end;

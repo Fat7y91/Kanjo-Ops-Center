@@ -165,13 +165,45 @@
   gap: 16px;
 }
 
-.statement-table td:nth-child(1),
-.statement-table th:nth-child(1) {
+.statement-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Dates sit on the right (start in RTL) and never wrap. */
+.statement-table th:nth-child(1),
+.statement-table td:nth-child(1) {
+  width: 92px;
+  text-align: right;
   white-space: nowrap;
 }
 
+/* The reference carries order ids and breakdown memos, so it is the one column
+ * allowed to wrap; both header and cell stay start-aligned. */
+.statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
   line-height: 1.5;
+}
+
+/* Amounts are LTR numerals flushed to the outer edge; header and cell share the
+ * same alignment so the columns never drift. */
+.statement-table th:nth-child(3),
+.statement-table td:nth-child(3),
+.statement-table th:nth-child(4),
+.statement-table td:nth-child(4),
+.statement-table th:nth-child(5),
+.statement-table td:nth-child(5) {
+  width: 112px;
+  text-align: left;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-table td:nth-child(5) {
+  font-weight: 700;
 }
 
 /* Statement rows open the voucher for their journal entry. */

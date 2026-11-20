@@ -15,6 +15,18 @@ import type {
  * component and the board only wires state and modals around them.
  */
 
+function RoleBadge({ partyType }: { partyType: ClearingAccountRow["partyType"] }) {
+  return (
+    <span
+      className={
+        partyType === "merchant" ? "badge badge-blue" : "badge badge-orange"
+      }
+    >
+      {partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
+    </span>
+  );
+}
+
 type PartyBookProps = {
   accounts: ClearingAccountRow[];
   emptyLabel: string;
@@ -32,11 +44,9 @@ export function PartyBook({
     <ul className="clearing-parties">
       {accounts.map((account) => (
         <li key={account.accountId}>
-          <div>
+          <div className="clearing-party-id">
             <strong>{account.partyName}</strong>
-            <span className="muted">
-              {account.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
-            </span>
+            <RoleBadge partyType={account.partyType} />
           </div>
           <strong
             className={
@@ -101,9 +111,7 @@ export function AccountRows({
         <li key={account.accountId}>
           <div className="clearing-row-main">
             <strong>{account.partyName}</strong>
-            <span>
-              {account.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
-            </span>
+            <RoleBadge partyType={account.partyType} />
           </div>
 
           <div className="clearing-row-amount">

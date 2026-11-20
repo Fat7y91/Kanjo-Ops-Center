@@ -61,7 +61,13 @@ export function PartyStatementModal({
         <div className="statement" dir="rtl">
           <header className="breakdown-head">
             <div>
-              <span className="badge badge-gold">
+              <span
+                className={
+                  statement.partyType === "merchant"
+                    ? "badge badge-blue"
+                    : "badge badge-orange"
+                }
+              >
                 {statement.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
               </span>
               <h4>{statement.partyName}</h4>
