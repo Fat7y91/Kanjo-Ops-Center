@@ -5,6 +5,7 @@ import {
   attributeConflict,
   extractPharmacyAttributes,
   type AttributeConflict,
+  type PharmacyAttributes,
 } from "./pharmacy-attributes";
 
 /**
@@ -22,6 +23,8 @@ export type ReferenceProduct = {
   categoryKey: string | null;
   imageUrl: string | null;
   description?: string;
+  /** Precomputed once by the loader; falls back to parsing the name. */
+  attributes?: PharmacyAttributes;
 };
 
 export type PharmacyMatchInput = {
@@ -114,26 +117,29 @@ function companyBonus(input: PharmacyMatchInput, product: ReferenceProduct): num
 function pairScore(
   input: PharmacyMatchInput,
   product: ReferenceProduct,
+  queryOverride?: string,
 ): number {
   const nameScore = smartTextScore(
-    coreName(input.name) || input.name,
+    coreName(queryOverride ?? input.name) || queryOverride || input.name,
     coreName(product.name) || product.name,
   ).score;
   return Math.min(100, nameScore + companyBonus(input, product));
 }
 
-function rank(
+/** Ranks candidates; an optional English query lets bilingual retrieval work. */
+export function rankReferenceCandidates(
   input: PharmacyMatchInput,
   products: ReferenceProduct[],
+  queryOverride?: string,
 ): PharmacyCandidate[] {
   const source = extractPharmacyAttributes(input.name);
   return products
     .map((product) => ({
       product,
-      score: pairScore(input, product),
+      score: pairScore(input, product, queryOverride),
       conflict: attributeConflict(
         source,
-        extractPharmacyAttributes(product.name),
+        product.attributes ?? extractPharmacyAttributes(product.name),
       ),
     }))
     .sort(
@@ -159,7 +165,7 @@ export function matchPharmacyItem(
 ): PharmacyMatchResult {
   const byBarcode = products.filter((product) => barcodeMatches(input, product));
   if (byBarcode.length > 0) {
-    const ranked = rank(input, byBarcode);
+    const ranked = rankReferenceCandidates(input, byBarcode);
     const top = ranked[0];
     if (top.conflict) {
       return {
@@ -179,10 +185,11 @@ export function matchPharmacyItem(
     };
   }
 
-  const ranked = rank(input, products);
+  const ranked = rankReferenceCandidates(input, products);
   const compatible = ranked.filter((candidate) => !candidate.conflict);
   const pool = compatible.length > 0 ? compatible : ranked;
   const candidates = pool
+    .filter((candidate) => candidate.score > 0)
     .slice(0, MAX_CANDIDATES)
     .map((candidate) => candidate.product);
 
@@ -242,7 +249,7 @@ export function confirmCandidate(
   if (!product) return { product: null, conflict: null };
   const conflict = attributeConflict(
     extractPharmacyAttributes(input.name),
-    extractPharmacyAttributes(product.name),
+    product.attributes ?? extractPharmacyAttributes(product.name),
   );
   return { product: conflict ? null : product, conflict };
 }

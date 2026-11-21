@@ -93,6 +93,9 @@ function mergeQa(row: ExistingRow, item: AutopilotSaveItem, now: string) {
     autopilot_company: item.company ?? null,
     autopilot_quantity: item.quantity ?? null,
     autopilot_master_catalog_id: item.masterCatalogId,
+    autopilot_reference_product_id: item.referenceProductId ?? null,
+    autopilot_matched_name: item.matchedName ?? null,
+    autopilot_needs_review: item.needsReview ?? false,
     autopilot_image_url: item.imageUrlRaw ?? null,
     autopilot_imported_at: now,
   };
@@ -105,6 +108,9 @@ function newQa(item: AutopilotSaveItem, now: string) {
     autopilot_company: item.company ?? null,
     autopilot_quantity: item.quantity ?? null,
     autopilot_master_catalog_id: item.masterCatalogId,
+    autopilot_reference_product_id: item.referenceProductId ?? null,
+    autopilot_matched_name: item.matchedName ?? null,
+    autopilot_needs_review: item.needsReview ?? false,
     autopilot_image_url: item.imageUrlRaw ?? null,
     autopilot_imported_at: now,
   };
@@ -225,6 +231,13 @@ export async function saveAutopilotItems(
         const categoryId = categoryIds.get(categoryKey);
         if (categoryId) patch.taxonomy_category_id = categoryId;
         if (item.imageDataUrl) patch.image_data_url = item.imageDataUrl;
+        if (item.description?.trim()) patch.description = item.description.trim();
+        if (item.needsReview !== undefined) {
+          patch.state = item.needsReview ? "pending_review" : "completed";
+          patch.review_note = item.needsReview
+            ? "يحتاج مراجعة صيدلي"
+            : "استيراد تلقائي";
+        }
 
         const { error } = await client
           .schema("app")
@@ -251,7 +264,7 @@ export async function saveAutopilotItems(
           merchant_id: merchantId,
           name: item.name,
           normalized_name: normalized,
-          description: "",
+          description: item.description?.trim() ?? "",
           vendor_type_id: vendorTypeId,
           category_key: categoryKey,
           taxonomy_category_id: categoryIds.get(categoryKey) ?? null,
@@ -261,8 +274,10 @@ export async function saveAutopilotItems(
           image_data_url: item.imageDataUrl,
           attributes: [],
           price_minor: item.priceMinor,
-          state: "completed",
-          review_note: "استيراد تلقائي",
+          state: item.needsReview ? "pending_review" : "completed",
+          review_note: item.needsReview
+            ? "يحتاج مراجعة صيدلي"
+            : "استيراد تلقائي",
           entered_by_name: actor?.name ?? null,
           client_product_id: null,
           qa_metadata: newQa(item, now),

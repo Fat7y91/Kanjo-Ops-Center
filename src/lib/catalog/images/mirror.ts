@@ -138,3 +138,38 @@ export async function mirrorProductImage(
     url,
   };
 }
+
+/**
+ * Mirrors a remote reference image and returns a hosted URL.
+ *
+ * Used by the pharmacy importer so a POS row never stores the reference
+ * merchant's third-party URL. Failures return null instead of throwing: an
+ * unmirrorable photo must not block a valid product match.
+ */
+export async function mirrorRemoteImage(
+  source: string | null | undefined,
+  merchantId: string,
+): Promise<string | null> {
+  const raw = source?.trim() ?? "";
+  if (!raw) return null;
+  if (isHostedImageUrl(raw)) return raw;
+
+  const resolved = resolveDisplayImageUrl(raw) ?? raw;
+  if (!/^https?:\/\//i.test(resolved)) return null;
+
+  const downloaded = await downloadImage(resolved);
+  if (!downloaded.ok) return null;
+
+  try {
+    const sourceHash = await sha256Hex(resolved);
+    return await hostImage(
+      sourceHash,
+      downloaded.bytes,
+      downloaded.contentType,
+      merchantId,
+    );
+  } catch (error) {
+    console.error("[autopilot] image mirror failed", error);
+    return null;
+  }
+}

@@ -5,7 +5,9 @@ import { normalizeSearchText } from "@/lib/search/normalize";
 import {
   autopilotCategories,
   defaultAutopilotCategoryKey,
+  PHARMACY_VENDOR_TYPE_ID,
 } from "./categories";
+import { enrichPharmacyItems } from "./enrich-pharmacy";
 import { callDeepSeekEnrichment, type DeepSeekRequestItem } from "./deepseek";
 import { existingImagesByBarcode } from "./existing-images";
 import {
@@ -17,15 +19,11 @@ import { findWebProductImage } from "./serper";
 import type {
   AutopilotEnrichment,
   AutopilotEnrichmentInput,
+  AutopilotEnrichResponse,
 } from "./types";
 import type { DeepSeekEnrichmentResult } from "./deepseek-parse";
 
-export type EnrichResponse = {
-  items: AutopilotEnrichment[];
-  tier2: boolean;
-  tier3: boolean;
-  imageProxy: boolean;
-};
+export type EnrichResponse = AutopilotEnrichResponse;
 
 function masterImage(item: MasterCatalogItem): string | null {
   if (item.driveFileId) {
@@ -73,7 +71,7 @@ function exactMasterMatch(
  * Rows whose barcode already has an image for this merchant are settled as
  * `existing` so a resumed import does not re-spend DeepSeek or Serper credits.
  */
-export async function enrichAutopilotItems(
+async function enrichSupermarketItems(
   inputs: AutopilotEnrichmentInput[],
   options: { merchantId?: string; vendorTypeId: number },
 ): Promise<EnrichResponse> {
@@ -208,4 +206,18 @@ export async function enrichAutopilotItems(
       process.env.IMAGE_PROXY_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY,
     ),
   };
+}
+
+/**
+ * Vendor-aware entry point. Pharmacy runs the bilingual reference pipeline;
+ * supermarkets keep the existing master-catalog/web image tiers.
+ */
+export async function enrichAutopilotItems(
+  inputs: AutopilotEnrichmentInput[],
+  options: { merchantId: string; vendorTypeId: number },
+): Promise<EnrichResponse> {
+  if (options.vendorTypeId === PHARMACY_VENDOR_TYPE_ID) {
+    return enrichPharmacyItems(inputs, { merchantId: options.merchantId });
+  }
+  return enrichSupermarketItems(inputs, options);
 }

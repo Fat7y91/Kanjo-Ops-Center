@@ -25,12 +25,17 @@ export const autopilotSaveRequestSchema = z.object({
         imageDataUrl: z.string().trim().max(4000).nullable().default(null),
         imageSource: z.enum([
           "master_catalog",
+          "reference",
           "web_search",
           "existing",
           "no_image",
         ]),
         imageUrlRaw: z.string().trim().max(3000).nullable().optional(),
         masterCatalogId: z.string().trim().max(80).nullable().default(null),
+        referenceProductId: z.string().trim().max(80).nullable().optional(),
+        matchedName: z.string().trim().max(300).nullable().optional(),
+        description: z.string().trim().max(600).nullable().optional(),
+        needsReview: z.boolean().optional(),
       }),
     )
     .min(1)

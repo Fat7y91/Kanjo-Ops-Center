@@ -50,6 +50,7 @@ export type ParsedPosSheet = {
 
 export type EnrichmentSource =
   | "master_catalog"
+  | "reference"
   | "web_search"
   | "existing"
   | "no_image";
@@ -73,6 +74,21 @@ export type AutopilotEnrichment = {
   categoryKey: string;
   masterCatalogId: string | null;
   searchQuery: string | null;
+  /** Pharmacy reference row this item was matched to, when applicable. */
+  referenceProductId?: string | null;
+  /** Reference name kept so a reviewer can compare it with the POS name. */
+  matchedName?: string | null;
+  /** Validated description to copy onto the product, or null to keep it. */
+  description?: string | null;
+  /** True when the reference text/image failed the quality gate. */
+  needsReview?: boolean;
+};
+
+export type AutopilotEnrichResponse = {
+  items: AutopilotEnrichment[];
+  tier2: boolean;
+  tier3: boolean;
+  imageProxy: boolean;
 };
 
 export type AutopilotSaveItem = AutopilotEnrichmentInput & {
@@ -81,6 +97,10 @@ export type AutopilotSaveItem = AutopilotEnrichmentInput & {
   imageUrlRaw?: string | null;
   imageSource: EnrichmentSource;
   masterCatalogId: string | null;
+  referenceProductId?: string | null;
+  matchedName?: string | null;
+  description?: string | null;
+  needsReview?: boolean;
 };
 
 export type AutopilotSaveResult = {

@@ -29,9 +29,11 @@ export type AutopilotProgress = {
   updated: number;
   failed: number;
   matchedMaster: number;
+  matchedReference: number;
   enrichedWeb: number;
   reused: number;
   noImage: number;
+  needsReview: number;
 };
 
 type EnrichedItem = {
@@ -41,6 +43,10 @@ type EnrichedItem = {
   imageSource: EnrichmentSource;
   categoryKey: string;
   masterCatalogId: string | null;
+  referenceProductId?: string | null;
+  matchedName?: string | null;
+  description?: string | null;
+  needsReview?: boolean;
 };
 
 type SaveResult = {
@@ -62,9 +68,11 @@ const emptyProgress: AutopilotProgress = {
   updated: 0,
   failed: 0,
   matchedMaster: 0,
+  matchedReference: 0,
   enrichedWeb: 0,
   reused: 0,
   noImage: 0,
+  needsReview: 0,
 };
 
 function sleep(ms: number): Promise<void> {
@@ -194,6 +202,10 @@ export function useAutopilot(
             imageUrlRaw: enrichment?.imageUrlRaw ?? null,
             imageSource: enrichment?.imageSource ?? ("no_image" as const),
             masterCatalogId: enrichment?.masterCatalogId ?? null,
+            referenceProductId: enrichment?.referenceProductId ?? null,
+            matchedName: enrichment?.matchedName ?? null,
+            description: enrichment?.description ?? null,
+            needsReview: enrichment?.needsReview ?? false,
           };
         });
 
@@ -205,9 +217,11 @@ export function useAutopilot(
 
         for (const item of saveItems) {
           next.matchedMaster += item.masterCatalogId ? 1 : 0;
+          if (item.imageSource === "reference") next.matchedReference += 1;
           if (item.imageSource === "web_search") next.enrichedWeb += 1;
           if (item.imageSource === "existing") next.reused += 1;
           if (item.imageSource === "no_image") next.noImage += 1;
+          if (item.needsReview) next.needsReview += 1;
         }
         next.inserted += saved.inserted;
         next.updated += saved.updated;

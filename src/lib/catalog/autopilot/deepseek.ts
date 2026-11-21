@@ -3,6 +3,7 @@ import "server-only";
 import type { MasterCatalogItem } from "@/lib/catalog/master-catalog-search";
 import type { TaxonomyCategory } from "@/lib/taxonomy/types";
 
+import { fetchDeepSeekContent } from "./deepseek-client";
 import {
   parseDeepSeekEnrichment,
   type DeepSeekEnrichmentResult,
@@ -72,60 +73,20 @@ function userPrompt(
 }
 
 /**
- * Tier 2 comprehension. Returns null when the key is absent or the upstream
- * call fails, so the importer can still finish with local categories and
- * Tier 3 images instead of losing the batch.
+ * Tier 2 comprehension. Returns null when the key is absent, the upstream call
+ * fails or the payload cannot be parsed, so the importer can still finish with
+ * local categories and Tier 3 images instead of losing the batch.
  */
 export async function callDeepSeekEnrichment(
   items: DeepSeekRequestItem[],
   categories: TaxonomyCategory[],
 ): Promise<Map<string, DeepSeekEnrichmentResult> | null> {
-  const key = process.env.DEEPSEEK_API_KEY;
-  if (!key || items.length === 0) return null;
+  if (items.length === 0) return null;
 
-  const base = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com")
-    .replace(/\/+$/, "");
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-chat";
-
-  let response: Response;
-  try {
-    response = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: 4096,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt(categories, items) },
-        ],
-      }),
-      signal: AbortSignal.timeout(35_000),
-    });
-  } catch (error) {
-    console.error("[autopilot] deepseek request failed", error);
-    return null;
-  }
-
-  if (!response.ok) {
-    console.error(`[autopilot] deepseek status ${response.status}`);
-    return null;
-  }
-
-  let content = "";
-  try {
-    const payload = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    content = payload.choices?.[0]?.message?.content ?? "";
-  } catch {
-    return null;
-  }
+  const content = await fetchDeepSeekContent(
+    SYSTEM_PROMPT,
+    userPrompt(categories, items),
+  );
   if (!content) return null;
 
   const allowedItems = new Set(items.map((item) => item.id));
