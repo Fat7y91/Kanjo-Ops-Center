@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +14,7 @@ import type {
 } from "@/lib/riders/types";
 
 import { CustodyItemsEditor } from "./custody-items-editor";
+import { CustodyRiderFields } from "./custody-rider-fields";
 import { CustodySummary } from "./custody-summary";
 import { useIssueCustody } from "./use-issue-custody";
 
@@ -111,99 +110,25 @@ export function IssueCustodyModal({
           </div>
         </section>
 
-        <section className="riders-form-section">
-          <h3>بيانات المندوب</h3>
-          <div className="riders-form-grid">
-            <TextField
-              label="الاسم الكامل"
-              value={state.fullName}
-              onChange={(event) => state.setFullName(event.target.value)}
-              placeholder="اسم مندوب التوصيل"
-              required
-              maxLength={80}
-            />
-            <div className="rider-lookup-field">
-              <TextField
-                label="الرقم القومي"
-                value={state.nationalId}
-                onChange={(event) => state.changeNationalId(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void state.checkRider();
-                  }
-                }}
-                placeholder="14 رقماً"
-                hint="اضغط تحقق بعد إدخال الرقم بالكامل."
-                inputMode="numeric"
-                maxLength={14}
-                dir="ltr"
-                disabled={state.locked}
-                required
-              />
-              <Button
-                variant="quiet"
-                size="sm"
-                onClick={() => void state.checkRider()}
-                disabled={state.lookupState === "loading" || state.locked}
-              >
-                {state.lookupState === "loading" ? "جارٍ التحقق…" : "تحقق"}
-              </Button>
-            </div>
-            <TextField
-              label="الهاتف"
-              value={state.phone}
-              onChange={(event) => state.setPhone(event.target.value)}
-              placeholder="01012345678"
-              inputMode="tel"
-              dir="ltr"
-              required
-            />
-            <TextField
-              label="منطقة العمل"
-              value={state.workArea}
-              onChange={(event) => state.setWorkArea(event.target.value)}
-              placeholder="المدينة أو نطاق التوصيل"
-              maxLength={80}
-            />
-            <TextField
-              label="تاريخ التسليم"
-              type="date"
-              value={state.deliveryDate}
-              onChange={(event) => state.setDeliveryDate(event.target.value)}
-              required
-            />
-            <TextField
-              label="مسؤول التسليم"
-              value={state.handoverOfficer}
-              onChange={(event) => state.setHandoverOfficer(event.target.value)}
-              maxLength={80}
-              required
-            />
-          </div>
-
-          {state.lookup ? (
-            <div
-              className={`rider-lookup-note${
-                state.hasBlockingLookup ? " is-blocked" : ""
-              }`}
-            >
-              <strong>{state.lookup.fullName}</strong>
-              <span dir="ltr">{state.lookup.riderCode}</span>
-              {state.lookup.hasCustody && state.lookup.custodyId ? (
-                <Link
-                  href={`/riders/custody/${state.lookup.custodyId}/print`}
-                  target="_blank"
-                  className="riders-link"
-                >
-                  طباعة الإيصال الحالي
-                </Link>
-              ) : null}
-            </div>
-          ) : state.lookupState === "new" ? (
-            <p className="rider-lookup-note">مندوب جديد، سيُسجل عند الإصدار.</p>
-          ) : null}
-        </section>
+        <CustodyRiderFields
+          fullName={state.fullName}
+          nationalId={state.nationalId}
+          phone={state.phone}
+          workArea={state.workArea}
+          deliveryDate={state.deliveryDate}
+          handoverOfficer={state.handoverOfficer}
+          locked={state.locked}
+          lookup={state.lookup}
+          lookupState={state.lookupState}
+          hasBlockingLookup={state.hasBlockingLookup}
+          onFullName={state.setFullName}
+          onNationalId={state.changeNationalId}
+          onPhone={state.setPhone}
+          onWorkArea={state.setWorkArea}
+          onDeliveryDate={state.setDeliveryDate}
+          onHandoverOfficer={state.setHandoverOfficer}
+          onCheck={() => void state.checkRider()}
+        />
 
         <section className="riders-form-section">
           <h3>بنود العهدة</h3>
