@@ -80,6 +80,7 @@ const ATTRIBUTE_TOKENS = new Set([
 
 function coreName(value: string): string {
   return normalizeSearchText(toLatinDigits(value))
+    .replace(/(\d)([a-z])/g, "$1 $2")
     .split(" ")
     .filter(
       (token) =>

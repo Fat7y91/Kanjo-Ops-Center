@@ -171,3 +171,43 @@ test("cleans HTML out of a reused description and builds neutral copy", () => {
     "أموكسيسيلين — جلاكسو",
   );
 });
+
+test("parses real reference-style abbreviations (tabs, caps, drps, films)", () => {
+  const asmakast = attributes.extractPharmacyAttributes("ASMAKAST 10MG 30TABS");
+  assert.deepEqual(asmakast.strengths.map((s) => s.value), [10]);
+  assert.deepEqual(asmakast.forms, ["tablet"]);
+  assert.equal(asmakast.pack.count, 30);
+
+  const omepak = attributes.extractPharmacyAttributes("OMEPAK 20MG 14CAPS");
+  assert.deepEqual(omepak.forms, ["capsule"]);
+  assert.equal(omepak.pack.count, 14);
+
+  const optidex = attributes.extractPharmacyAttributes("OPTIDEX T 5ML EYE DRPS");
+  assert.deepEqual(optidex.forms, ["drops"]);
+  assert.equal(optidex.pack.volumeMl, 5);
+
+  const ond = attributes.extractPharmacyAttributes("ONDALENZ 4MG 5FILMS");
+  assert.deepEqual(ond.forms, ["film"]);
+  assert.equal(ond.pack.count, 5);
+});
+
+test("retrieves an English reference from a translated Arabic query", () => {
+  const reference = [
+    product({ id: "r1", name: "AUGMENTIN 1GM 14TABS" }),
+    product({ id: "r2", name: "AUGMENTIN 625MG 14TABS" }),
+    product({ id: "r3", name: "PANADOL 500MG 20TABS" }),
+  ];
+
+  const ranked = match.rankReferenceCandidates(
+    { name: "أوجمنتين 1 جم أقراص" },
+    reference,
+    "Augmentin 1g tablets",
+  );
+
+  assert.equal(ranked[0].product.id, "r1");
+  assert.equal(ranked[0].conflict, null);
+  assert.equal(
+    ranked.find((candidate) => candidate.product.id === "r2").conflict.kind,
+    "strength",
+  );
+});

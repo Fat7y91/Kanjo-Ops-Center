@@ -43,7 +43,7 @@ const FORM_ALIASES: { canonical: string; aliases: string[] }[] = [
   { canonical: "suppository", aliases: ["suppository", "supp", "suppositories", "لبوس", "تحاميل", "تحميله"] },
   { canonical: "cream", aliases: ["cream", "كريم", "دهان"] },
   { canonical: "ointment", aliases: ["ointment", "oint", "مرهم"] },
-  { canonical: "drops", aliases: ["drops", "drop", "قطره", "قطرات"] },
+  { canonical: "drops", aliases: ["drops", "drop", "drps", "drp", "قطره", "قطرات", "نقط"] },
   { canonical: "injection", aliases: ["injection", "inj", "ampoule", "ampoule", "vial", "حقن", "امبول", "امبولات", "امبول", "فيال"] },
   { canonical: "spray", aliases: ["spray", "بخاخ", "سبراي"] },
   { canonical: "sachet", aliases: ["sachet", "sachets", "packet", "اكياس", "اكياس", "كيس"] },
@@ -53,13 +53,16 @@ const FORM_ALIASES: { canonical: string; aliases: string[] }[] = [
   { canonical: "solution", aliases: ["solution", "محلول"] },
   { canonical: "emulsion", aliases: ["emulsion", "مستحلب"] },
   { canonical: "powder", aliases: ["powder", "مسحوق", "بودره"] },
+  { canonical: "film", aliases: ["film", "films", "orpatch", "لاصقه", "فيلم"] },
+  { canonical: "patch", aliases: ["patch", "patches", "لاصق", "لاصقه", "لصقه"] },
+  { canonical: "inhaler", aliases: ["inhaler", "inhalers", "بخاخه", "استنشاق"] },
 ];
 
 const STRENGTH_PATTERN =
   /(\d+(?:[.,]\d+)?)\s*(mg|mcg|microgram|micrograms|g|gm|gram|grams|iu|i\.u\.?|units?|%|ملجم|مجم|مج|جم|جرام|غرام|ميكروجرام)(?![a-z\u0600-\u06ff])/gi;
 
 const COUNT_PATTERN =
-  /(\d+)\s*(?:x\s*(\d+)\s*)?(?:قرص|اقراص|أقراص|حبه|حبة|حبات|tab|tabs|tablet|tablets|كبسوله|كبسولات|caps|capsule|capsules|امبول|أمبول|امبولات|أمبولات|amp|amps|ampoule|ampoules|vial|vials|sachet|sachets|اكياس|أكياس|كيس|شريط|شرائط|strip|strips)(?![a-z\u0600-\u06ff])/gi;
+  /(\d+)\s*(?:x\s*(\d+)\s*)?(?:قرص|اقراص|أقراص|حبه|حبة|حبات|tab|tabs|tablet|tablets|كبسوله|كبسولات|caps|capsule|capsules|امبول|أمبول|امبولات|أمبولات|amp|amps|ampoule|ampoules|vial|vials|sachet|sachets|اكياس|أكياس|كيس|شريط|شرائط|strip|strips|film|films|patch|patches)(?![a-z\u0600-\u06ff])/gi;
 
 const VOLUME_PATTERN =
   /(\d+(?:[.,]\d+)?)\s*(ml|milliliter|milliliters|مل|l|liter|liters|لتر|ليتر)(?![a-z\u0600-\u06ff])/gi;
@@ -105,7 +108,9 @@ function extractStrengths(text: string): Strength[] {
 }
 
 function extractForms(text: string): string[] {
-  const tokens = new Set(normalized(text).split(" ").filter(Boolean));
+  // "30TABS" must read as "30 tabs" even though the POS omits the space.
+  const spaced = normalized(text).replace(/(\d)([a-z])/g, "$1 $2");
+  const tokens = new Set(spaced.split(" ").filter(Boolean));
   const forms: string[] = [];
   for (const { canonical, aliases } of FORM_ALIASES) {
     if (aliases.some((alias) => tokens.has(normalized(alias)))) forms.push(canonical);
