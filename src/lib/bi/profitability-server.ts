@@ -84,6 +84,7 @@ async function loadAttendance(from: string | null, to: string | null) {
     .select("debit_minor,journal_entries!inner(entry_date,source_id,source_type),accounts!inner(code)")
     .eq("accounts.code", "5100")
     .eq("journal_entries.source_type", "courier_attendance")
+    .eq("journal_entries.status", "posted")
     .limit(ROW_LIMIT)
     .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
 
