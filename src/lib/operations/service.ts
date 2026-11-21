@@ -13,6 +13,10 @@ import {
 import { resolvePartyNames } from "./party-lookup";
 import { hardDeleteOperations } from "./deletion-repository";
 import {
+  repostOrderCommission,
+  type CommissionEditResult,
+} from "./commission-repository";
+import {
   insertOperation,
   isOperationsDatabaseConfigured,
   listOperations,
@@ -26,6 +30,7 @@ export { importOrders } from "./import-service";
 
 import {
   operationLogInputSchema,
+  orderCommissionInputSchema,
   settleInputSchema,
   toMinorUnits,
   toOperationSummary,
@@ -152,7 +157,38 @@ export async function deleteOperations(
   if (ids.length === 0) {
     throw new OperationsError("INVALID_IDS", "لم يتم تحديد أي طلب.", 422);
   }
-  return { deleted: await hardDeleteOperations(ids) };
+  try {
+    return { deleted: await hardDeleteOperations(ids) };
+  } catch (error) {
+    // A settled order raises the trigger's ORDER_LOCKED_IN_SETTLEMENT marker;
+    // translate turns that into a 409 instead of an opaque 500.
+    translate(error);
+  }
+}
+
+/**
+ * Overrides the commission on one order and re-posts only that order's entry.
+ *
+ * Merchant contract changes never rewrite history; this is the explicit,
+ * audited escape hatch for a single row.
+ */
+export async function editOperationCommission(
+  identifier: string,
+  rawInput: unknown,
+  actorId: string,
+): Promise<CommissionEditResult> {
+  requireDatabase();
+  const input = orderCommissionInputSchema.parse(rawInput);
+
+  try {
+    return await repostOrderCommission(
+      identifier,
+      input.commissionRate,
+      actorId,
+    );
+  } catch (error) {
+    translate(error);
+  }
 }
 
 export async function logOperation(

@@ -60,12 +60,23 @@ type OperationRow = {
   note: string;
   occurred_at: string;
   created_at: string;
-  merchants: { name: string } | { name: string }[] | null;
+  merchants:
+    | {
+        name: string;
+        agreed_commission?: number | string | null;
+        target_commission?: number | string | null;
+      }
+    | {
+        name: string;
+        agreed_commission?: number | string | null;
+        target_commission?: number | string | null;
+      }[]
+    | null;
   couriers: { display_name: string } | { display_name: string }[] | null;
 };
 
 const OPERATION_COLUMNS =
-  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at,merchants(name),couriers(display_name)";
+  "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at,merchants(name,agreed_commission,target_commission),couriers(display_name)";
 
 const OPERATION_COLUMNS_NO_JOIN =
   "id,order_id,merchant_id,courier_id,payment_method,currency,order_value_minor,delivery_fee_minor,commission_percent,commission_minor,courier_cut_percent,courier_cut_minor,coupon_code,coupon_discount_minor,coupon_shipping_minor,coupon_cashback_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,wallet_discount_reason,wallet_discount_ref,note,occurred_at,created_at";
@@ -74,6 +85,8 @@ const OPERATION_COLUMNS_NO_JOIN =
 /* ── Mappers ────────────────────────────────────────────────────────────── */
 
 function toOperation(row: OperationRow): OperationLog {
+  const merchant = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
+  const contractRate = merchant?.agreed_commission ?? merchant?.target_commission;
   return {
     id: row.id,
     orderId: row.order_id,
@@ -87,6 +100,8 @@ function toOperation(row: OperationRow): OperationLog {
     deliveryFee: Number(row.delivery_fee_minor) / 100,
     commissionPercent: Number(row.commission_percent),
     commission: Number(row.commission_minor) / 100,
+    merchantCommissionPercent:
+      contractRate == null ? Number(row.commission_percent) : Number(contractRate),
     courierCutPercent: Number(row.courier_cut_percent),
     courierCut: Number(row.courier_cut_minor) / 100,
     couponCode: row.coupon_code ?? "",

@@ -4,9 +4,8 @@ import type { OperationSummary, PaymentMethod } from "./types";
  * Optimistic-row helpers for the operations logger.
  *
  * The logger shows the operator their own entry the instant they submit, then
- * reconciles it with the stored row. A provisional row is a *view* fact: it
- * carries only the fields the employee typed, never a commission, profit or
- * balance, so an in-flight row cannot leak a financial figure either.
+ * reconciles it with the stored row. Commission is resolved by the database, so
+ * the provisional row carries zeroes until the stored row replaces it.
  */
 
 export type ProvisionalOperationInput = {
@@ -43,6 +42,9 @@ export function buildProvisionalOperation(
     currency: input.currency,
     orderValue: input.orderValue,
     deliveryFee: input.deliveryFee,
+    commissionPercent: 0,
+    commission: 0,
+    merchantCommissionPercent: 0,
     couponCode: input.couponCode,
     walletDiscount: input.walletDiscount,
     note: input.note,

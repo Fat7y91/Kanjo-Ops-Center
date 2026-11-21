@@ -16,6 +16,10 @@ import type {
 
 import { OrderCreateModal } from "./order-create-modal";
 import { OrderImportModal } from "./order-import-modal";
+import {
+  CommissionEditModal,
+  type CommissionSaveResult,
+} from "./commission-edit-modal";
 import { NO_COUPON } from "./operation-log-fields";
 import { OperationRecentList } from "./operation-recent-list";
 import { useOperationForm } from "./use-operation-form";
@@ -43,12 +47,15 @@ export function OperationLogForm({
   const { hasPermission } = usePermission();
   const canImport = hasPermission("import_orders");
   const canDelete = hasPermission("delete_orders");
+  const canEditCommission = hasPermission("manage_commission_rates");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [editingCommission, setEditingCommission] =
+    useState<OperationSummary | null>(null);
 
   const {
     form,
@@ -59,6 +66,8 @@ export function OperationLogForm({
     notice,
     busy,
     removeOperations,
+    replaceOperation,
+    notify,
     dismissNotice,
     dismissError,
   } = useOperationForm(initialOperations);
@@ -159,6 +168,42 @@ export function OperationLogForm({
     }
   }
 
+  async function handleCommissionSave(
+    operation: OperationSummary,
+    rate: number,
+  ): Promise<CommissionSaveResult> {
+    try {
+      const response = await fetch(
+        `/api/operations/${operation.id}/commission`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ commissionRate: rate }),
+        },
+      );
+      const payload = (await response.json()) as {
+        operation?: { commissionPercent: number; commission: number };
+        error?: string;
+      };
+      if (!response.ok || !payload.operation) {
+        return {
+          ok: false,
+          error: payload.error ?? "تعذر تعديل العمولة.",
+        };
+      }
+      const updated: OperationSummary = {
+        ...operation,
+        commissionPercent: payload.operation.commissionPercent,
+        commission: payload.operation.commission,
+      };
+      replaceOperation(updated);
+      notify(`تم تحديث عمولة الطلب ${operation.orderId}.`);
+      return { ok: true, operation: updated };
+    } catch {
+      return { ok: false, error: "تعذر الاتصال بالخادم." };
+    }
+  }
+
   return (
     <div className="operation-log">
       <article className="panel">
@@ -188,13 +233,22 @@ export function OperationLogForm({
         <OperationRecentList
           operations={operations}
           canDelete={canDelete}
+          canEditCommission={canEditCommission}
           selected={selected}
           onToggle={toggle}
           onToggleAll={toggleAll}
           onDelete={handleDelete}
+          onEditCommission={setEditingCommission}
           deleting={deleting}
         />
       </article>
+
+      <CommissionEditModal
+        open={editingCommission !== null}
+        operation={editingCommission}
+        onClose={() => setEditingCommission(null)}
+        onSubmit={handleCommissionSave}
+      />
 
       <OrderCreateModal
         open={createOpen}

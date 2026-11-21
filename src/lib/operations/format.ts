@@ -28,12 +28,17 @@ export function operationMoney(value: unknown, currency: unknown): string {
   return currencyMoney(amount, code);
 }
 
-export function operationMethodLabel(value: unknown): string {
-  return (
+export function operationMethodLabel(value: unknown): string {  return (
     PAYMENT_METHOD_LABEL[value as PaymentMethod] ?? "طريقة غير معروفة"
   );
 }
 
 export function operationDate(value: unknown): string {
   return typeof value === "string" && value !== "" ? shortDate(value) : "—";
+}
+
+export function operationPercent(value: unknown): string {
+  const percent = Number(value);
+  if (!Number.isFinite(percent)) return "—";
+  return `${Number.isInteger(percent) ? percent.toFixed(0) : percent.toFixed(2)}%`;
 }

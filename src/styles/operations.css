@@ -361,3 +361,26 @@
 
 /* The orders screen is a single full-width table; keeping the old two-column
  * desktop grid would compress it into the left half of the page. */
+
+/* Per-order commission cell: applied rate + amount, with an amber flag when a
+ * zero was frozen while the merchant's contract asks for more. */
+.commission-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.commission-applied {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.commission-flag {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--gold-deep, var(--gold));
+  background: color-mix(in srgb, var(--kanjo-gold-warm) 26%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}

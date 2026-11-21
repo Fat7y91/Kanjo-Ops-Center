@@ -7,9 +7,9 @@ import { loadTsModule, projectRoot } from "./load-ts.mjs";
 const ops = loadTsModule(path.join(projectRoot, "src/lib/operations/types.ts"));
 
 /**
- * The operations logger is a blind-entry surface: the employee must not be able
- * to read commission, courier profit, balances or the coupon funding split.
- * `toOperationSummary` is the boundary that guarantees it, so these tests pin
+ * The operations table shows the commission frozen onto each order so a silent
+ * zero is visible. Courier profit, balances and the coupon funding split stay
+ * off the summary. `toOperationSummary` is the boundary, so these tests pin
  * exactly which fields may cross it.
  */
 
@@ -26,6 +26,7 @@ const FULL_OPERATION = {
   deliveryFee: 20,
   commissionPercent: 12,
   commission: 30,
+  merchantCommissionPercent: 15,
   courierCutPercent: 0,
   courierCut: 15,
   couponCode: "WELCOME10",
@@ -42,14 +43,17 @@ const FULL_OPERATION = {
   createdAt: "2026-11-10T09:00:00Z",
 };
 
-test("summary keeps only what the employee typed", () => {
+test("summary carries the applied commission beside the typed fields", () => {
   const summary = ops.toOperationSummary(FULL_OPERATION);
   assert.deepEqual(Object.keys(summary).sort(), [
+    "commission",
+    "commissionPercent",
     "couponCode",
     "courierName",
     "currency",
     "deliveryFee",
     "id",
+    "merchantCommissionPercent",
     "merchantName",
     "note",
     "occurredAt",
@@ -60,11 +64,9 @@ test("summary keeps only what the employee typed", () => {
   ]);
 });
 
-test("summary never carries commission or courier profit", () => {
+test("summary never carries courier profit or the coupon split", () => {
   const summary = ops.toOperationSummary(FULL_OPERATION);
   for (const hidden of [
-    "commission",
-    "commissionPercent",
     "courierCut",
     "courierCutPercent",
     "couponPlatformFunded",
@@ -74,6 +76,13 @@ test("summary never carries commission or courier profit", () => {
   ]) {
     assert.equal(hidden in summary, false, hidden);
   }
+});
+
+test("summary carries the commission values through unchanged", () => {
+  const summary = ops.toOperationSummary(FULL_OPERATION);
+  assert.equal(summary.commissionPercent, 12);
+  assert.equal(summary.commission, 30);
+  assert.equal(summary.merchantCommissionPercent, 15);
 });
 
 test("summary carries the values through unchanged", () => {
@@ -110,5 +119,25 @@ test("the log input rejects a negative wallet discount", () => {
       orderValue: 100,
       walletDiscount: -5,
     }),
+  );
+});
+
+test("the commission override accepts zero and decimals", () => {
+  assert.equal(
+    ops.orderCommissionInputSchema.parse({ commissionRate: 0 }).commissionRate,
+    0,
+  );
+  assert.equal(
+    ops.orderCommissionInputSchema.parse({ commissionRate: 12.5 }).commissionRate,
+    12.5,
+  );
+});
+
+test("the commission override rejects negative and above-100 rates", () => {
+  assert.throws(() =>
+    ops.orderCommissionInputSchema.parse({ commissionRate: -1 }),
+  );
+  assert.throws(() =>
+    ops.orderCommissionInputSchema.parse({ commissionRate: 101 }),
   );
 });

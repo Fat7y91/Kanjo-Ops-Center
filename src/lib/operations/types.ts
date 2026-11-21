@@ -38,6 +38,8 @@ export type OperationLog = {
   deliveryFee: number;
   commissionPercent: number;
   commission: number;
+  /** Merchant's current contract rate, for the stale-zero warning. */
+  merchantCommissionPercent: number;
   courierCutPercent: number;
   courierCut: number;
   /** Coupon code frozen onto the row, or empty when none was applied. */
@@ -66,13 +68,11 @@ export type CouponOption = {
 };
 
 /**
- * The blind-entry view of an operation.
+ * The row shape the operations table renders.
  *
- * This is the only operation shape the logging surface (page, API and client)
- * may carry. It deliberately omits commission, courier profit, balances and the
- * coupon funding split: an employee entering orders must not be able to read a
- * financial figure they did not type. Those fields stay in `OperationLog` for
- * the ledger, KPI and repository layers.
+ * It carries the frozen commission so a row can be audited at a glance, and the
+ * merchant's current contract rate so a zero can be flagged amber. Balances and
+ * the coupon funding split stay off this shape.
  */
 export type OperationSummary = {
   id: string;
@@ -83,6 +83,11 @@ export type OperationSummary = {
   currency: "EGP" | "SAR";
   orderValue: number;
   deliveryFee: number;
+  /** Commission frozen onto this order when it was posted. */
+  commissionPercent: number;
+  commission: number;
+  /** Merchant's active contract rate, used for the missing-commission flag. */
+  merchantCommissionPercent: number;
   couponCode: string;
   walletDiscount: number;
   note: string;
@@ -99,6 +104,9 @@ export function toOperationSummary(operation: OperationLog): OperationSummary {
     currency: operation.currency,
     orderValue: operation.orderValue,
     deliveryFee: operation.deliveryFee,
+    commissionPercent: operation.commissionPercent,
+    commission: operation.commission,
+    merchantCommissionPercent: operation.merchantCommissionPercent,
     couponCode: operation.couponCode,
     walletDiscount: operation.walletDiscount,
     note: operation.note,
@@ -243,3 +251,19 @@ export const settleInputSchema = z
       path: ["storagePath"],
     },
   );
+
+/**
+ * Per-order commission override.
+ *
+ * `commissionRate` is a percentage and accepts decimals, including `0` for an
+ * intentional zero-commission (VIP) order. The database recomputes the amount
+ * as `order_value × rate / 100`, so the client never sends a money figure.
+ */
+export const orderCommissionInputSchema = z.object({
+  commissionRate: z.coerce
+    .number()
+    .min(0, "نسبة العمولة لا تكون سالبة.")
+    .max(100, "نسبة العمولة لا تتجاوز 100%."),
+});
+
+export type OrderCommissionInput = z.infer<typeof orderCommissionInputSchema>;

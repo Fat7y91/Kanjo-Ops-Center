@@ -54,7 +54,7 @@ test("the abort message warns the operator to verify before retrying", () => {
   assert.match(message, /رقم الطلب/);
 });
 
-test("a provisional row carries only what the employee typed", () => {
+test("a provisional row carries the typed fields plus zero commission", () => {
   const row = optimistic.buildProvisionalOperation({
     orderId: "ORD-1",
     merchantName: "مطعم النيل",
@@ -69,11 +69,14 @@ test("a provisional row carries only what the employee typed", () => {
   });
 
   assert.deepEqual(Object.keys(row).sort(), [
+    "commission",
+    "commissionPercent",
     "couponCode",
     "courierName",
     "currency",
     "deliveryFee",
     "id",
+    "merchantCommissionPercent",
     "merchantName",
     "note",
     "occurredAt",
@@ -82,6 +85,8 @@ test("a provisional row carries only what the employee typed", () => {
     "paymentMethod",
     "walletDiscount",
   ]);
+  assert.equal(row.commission, 0);
+  assert.equal(row.commissionPercent, 0);
 });
 
 test("every provisional id is unique so a rollback removes one row", () => {

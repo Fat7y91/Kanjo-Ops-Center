@@ -196,6 +196,12 @@ export function useOperationForm(initialOperations: OperationSummary[]) {
     setOperations((current) => current.filter((row) => !hidden.has(row.id)));
   }, []);
 
+  const replaceOperation = useCallback((updated: OperationSummary) => {
+    setOperations((current) =>
+      current.map((row) => (row.id === updated.id ? updated : row)),
+    );
+  }, []);
+
   const dismissNotice = useCallback(() => setNotice(""), []);
   const dismissError = useCallback(() => setError(""), []);
 
@@ -208,6 +214,8 @@ export function useOperationForm(initialOperations: OperationSummary[]) {
     notice,
     busy,
     removeOperations,
+    replaceOperation,
+    notify: setNotice,
     dismissNotice,
     dismissError,
   };
