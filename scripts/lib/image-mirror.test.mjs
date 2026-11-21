@@ -248,3 +248,14 @@ test("a proxy result above the 1 MB ceiling is rejected", async () => {
   assert.equal(result.ok, false);
   assert.match(result.reason, /حجم/);
 });
+
+test("resize URLs encode the source and never enlarge", () => {
+  const url = download.resizeImageUrl("https://example.com/a b.jpg?x=1&y=2");
+  assert.match(
+    url,
+    /[?&]url=https%3A%2F%2Fexample.com%2Fa%20b.jpg%3Fx%3D1%26y%3D2(&|$)/,
+  );
+  assert.match(url, /[?&]we(&|$)/);
+  assert.match(url, /[?&]w=800(&|$)/);
+  assert.match(url, /[?&]q=82(&|$)/);
+});
