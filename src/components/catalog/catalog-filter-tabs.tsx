@@ -17,6 +17,8 @@ type CatalogFilterTabsProps = {
 const FILTER_LABEL: Record<CatalogFilter, string> = {
   all: "الكل",
   pending_review: PRODUCT_STATE_META.pending_review.label,
+  no_image: "بدون صورة",
+  needs_review: "تحتاج مراجعة صيدلي",
   completed: PRODUCT_STATE_META.completed.label,
   published: PRODUCT_STATE_META.published.label,
 };

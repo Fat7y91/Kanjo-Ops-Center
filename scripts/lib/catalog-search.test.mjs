@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { loadTsModule, projectRoot } from "./load-ts.mjs";
 
-const { filterProductsBySearch } = loadTsModule(
+const { filterProductsBySearch, filterProducts, catalogFilterCounts } = loadTsModule(
   path.join(projectRoot, "src/lib/catalog/filters.ts"),
 );
 
@@ -66,4 +66,31 @@ test("matches the category name and raw key", () => {
 test("an empty query keeps every product", () => {
   const products = [product(), product({ id: "P2", name: "قهوة" })];
   assert.equal(filterProductsBySearch(products, "   ").length, 2);
+});
+
+test("filters image-less and pharmacy-review rows across lifecycle states", () => {
+  const products = [
+    product({ id: "P1", imageDataUrl: "https://cdn.example.com/1.jpg" }),
+    product({ id: "P2", imageDataUrl: null }),
+    product({
+      id: "P3",
+      imageDataUrl: "https://cdn.example.com/3.jpg",
+      qaMetadata: { autopilot_needs_review: true },
+    }),
+  ];
+
+  assert.deepEqual(
+    filterProducts(products, "no_image").map((row) => row.id),
+    ["P2"],
+  );
+  assert.deepEqual(
+    filterProducts(products, "needs_review").map((row) => row.id),
+    ["P3"],
+  );
+  assert.equal(filterProducts(products, "all").length, 3);
+
+  const counts = catalogFilterCounts(products);
+  assert.equal(counts.no_image, 1);
+  assert.equal(counts.needs_review, 1);
+  assert.equal(counts.completed, 3);
 });
