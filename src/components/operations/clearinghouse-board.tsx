@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { useProfitability } from "@/components/bi/use-profitability";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { Tabs } from "@/components/ui/tabs";
@@ -17,6 +18,7 @@ import { PartyBook } from "./clearinghouse-party-book";
 import { AccountRows, OrderRows } from "./clearinghouse-rows";
 import { ClearinghouseToolbar } from "./clearinghouse-toolbar";
 import { PartyStatementModal } from "./party-statement-modal";
+import { ProfitabilityPanel } from "./profitability-panel";
 import { QuickSettleModal } from "./quick-settle-modal";
 import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
@@ -53,6 +55,12 @@ export function ClearinghouseBoard({
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
   const view = useClearinghouseView(accounts);
+  const [profitCityId, setProfitCityId] = useState<string | null>(null);
+  const profitability = useProfitability(
+    view.range.from,
+    view.range.to,
+    profitCityId,
+  );
   const breakdown = useBreakdown();
   const statement = usePartyStatement();
   const voucher = useJournalVoucher();
@@ -99,6 +107,8 @@ export function ClearinghouseBoard({
       },
       receivables: view.receivables,
       payables: view.payables,
+      profitability:
+        profitability.status === "ready" ? profitability.data : null,
     });
   }
 
@@ -122,6 +132,13 @@ export function ClearinghouseBoard({
                   onExport={handleExport}
                   exportBusy={exporter.busy}
                   exportError={exporter.error}
+                />
+
+                <ProfitabilityPanel
+                  state={profitability}
+                  cityId={profitCityId}
+                  onCityChange={setProfitCityId}
+                  periodLabel={view.label}
                 />
 
                 <div className="clearing-kpis">
