@@ -3,7 +3,10 @@
 import { useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
-import { useProfitability } from "@/components/bi/use-profitability";
+import {
+  fetchProfitability,
+  useProfitability,
+} from "@/components/bi/use-profitability";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { Tabs } from "@/components/ui/tabs";
@@ -95,7 +98,16 @@ export function ClearinghouseBoard({
     settle,
   };
 
-  function handleExport() {
+  async function handleExport() {
+    const summary =
+      profitability.status === "ready"
+        ? profitability.data
+        : await fetchProfitability(
+            view.range.from,
+            view.range.to,
+            profitCityId,
+          );
+
     void exporter.exportBook({
       periodLabel: view.label,
       generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
@@ -107,8 +119,7 @@ export function ClearinghouseBoard({
       },
       receivables: view.receivables,
       payables: view.payables,
-      profitability:
-        profitability.status === "ready" ? profitability.data : null,
+      profitability: summary,
     });
   }
 

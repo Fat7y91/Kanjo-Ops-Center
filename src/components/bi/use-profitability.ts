@@ -10,6 +10,20 @@ import {
 const parseSummary = (input: unknown): ProfitabilitySummary =>
   profitabilitySummarySchema.parse(input);
 
+/** One URL builder shared by the live card and the export fallback. */
+export function profitabilityUrl(
+  from: string | null,
+  to: string | null,
+  cityId: string | null,
+): string {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (cityId) params.set("cityId", cityId);
+  const query = params.toString();
+  return `/api/bi/profitability${query ? `?${query}` : ""}`;
+}
+
 /**
  * Loads the order P&L waterfall for one range/city slice.
  *
@@ -22,14 +36,29 @@ export function useProfitability(
   to: string | null,
   cityId: string | null,
 ) {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (cityId) params.set("cityId", cityId);
-  const query = params.toString();
+  return useEndpointData(profitabilityUrl(from, to, cityId), parseSummary);
+}
 
-  return useEndpointData(
-    `/api/bi/profitability${query ? `?${query}` : ""}`,
-    parseSummary,
-  );
+/**
+ * Export-time fetch.
+ *
+ * The workbook must always carry the P&L sheet, even if the operator hits
+ * export before the card's first request finishes. A failed fetch returns null
+ * so the settlement sheets still download.
+ */
+export async function fetchProfitability(
+  from: string | null,
+  to: string | null,
+  cityId: string | null,
+): Promise<ProfitabilitySummary | null> {
+  try {
+    const response = await fetch(profitabilityUrl(from, to, cityId), {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response.ok) return null;
+    return parseSummary(await response.json());
+  } catch {
+    return null;
+  }
 }
