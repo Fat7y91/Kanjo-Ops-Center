@@ -1,6 +1,22 @@
-export type PosColumnField = "name" | "price" | "barcode" | "unit";
+export type PosColumnField =
+  | "name"
+  | "price"
+  | "barcode"
+  | "unit"
+  | "company"
+  | "quantity";
 
 export type PosColumnMap = Record<PosColumnField, number | null>;
+
+/** Ordered list used by detectors so matching/fallbacks stay deterministic. */
+export const POS_COLUMN_FIELDS: PosColumnField[] = [
+  "name",
+  "price",
+  "barcode",
+  "unit",
+  "company",
+  "quantity",
+];
 
 export type ParsedPosItem = {
   row: number;
@@ -10,6 +26,10 @@ export type ParsedPosItem = {
   /** Exact digits, never scientific notation. Empty when absent/invalid. */
   barcode: string;
   unit: string;
+  /** Manufacturer / agent as printed by the POS, preserved verbatim. */
+  company: string;
+  /** Remaining stock at export time, or null when the sheet has no quantity. */
+  quantity: number | null;
 };
 
 export type SkippedPosRow = {
@@ -24,6 +44,8 @@ export type ParsedPosSheet = {
   columns: PosColumnMap;
   headerRow: number | null;
   sheetName: string;
+  /** Rows merged into an earlier item by code/name during deduplication. */
+  mergedDuplicates: number;
 };
 
 export type EnrichmentSource =
@@ -38,6 +60,8 @@ export type AutopilotEnrichmentInput = {
   unit: string;
   barcode: string;
   priceMinor: number;
+  company?: string;
+  quantity?: number | null;
 };
 
 export type AutopilotEnrichment = {

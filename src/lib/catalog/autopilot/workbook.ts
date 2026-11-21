@@ -1,6 +1,6 @@
 "use client";
 
-import { parsePosMatrix, PosParseError } from "./parse-pos";
+import { parsePosMatrix, PosParseError, type PosParseOptions } from "./parse-pos";
 import type { ParsedPosSheet } from "./types";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -46,7 +46,10 @@ async function csvText(file: File): Promise<string> {
  * dependency on the edge runtime and lets the operator see the detection result
  * before starting the enrichment batches.
  */
-export async function parsePosFile(file: File): Promise<ParsedPosSheet> {
+export async function parsePosFile(
+  file: File,
+  options: PosParseOptions = {},
+): Promise<ParsedPosSheet> {
   if (file.size === 0) {
     throw new PosParseError("EMPTY_FILE", "الملف فارغ.");
   }
@@ -86,7 +89,7 @@ export async function parsePosFile(file: File): Promise<ParsedPosSheet> {
     if (!sheet) continue;
     const matrix = matrixFromSheet(XLSX, sheet);
     if (matrix.every((row) => row.every((value) => !value))) continue;
-    return parsePosMatrix(matrix, sheetName);
+    return parsePosMatrix(matrix, sheetName, options);
   }
 
   throw new PosParseError("EMPTY_FILE", "الملف لا يحتوي على أوراق بها بيانات.");

@@ -1,7 +1,12 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
+import { postWithRetry } from "@/components/catalog/autopilot-http";
+import {
+  hasStockData,
+  inStockItems,
+} from "@/lib/catalog/autopilot/parse-pharmacy";
 import { parsePosFile } from "@/lib/catalog/autopilot/workbook";
 import type {
   AutopilotSummary,
@@ -47,9 +52,7 @@ type SaveResult = {
 
 const BATCH_SIZE = 8;
 const BATCH_DELAY_MS = 300;
-const MAX_RETRIES = 2;
-const RETRY_BASE_MS = 2000;
-const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const PHARMACY_VENDOR_TYPE_ID = 3;
 const FALLBACK_CATEGORY = "4-32";
 
 const emptyProgress: AutopilotProgress = {
@@ -64,69 +67,21 @@ const emptyProgress: AutopilotProgress = {
   noImage: 0,
 };
 
-class RequestError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
-    super(message);
-  }
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isRetryable(error: unknown): boolean {
-  if (!(error instanceof RequestError)) return false;
-  return error.status === undefined || RETRYABLE_STATUS.has(error.status);
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch {
-    throw new RequestError("تعذر الاتصال بالخادم. أعد المحاولة.");
-  }
-
-  const payload = (await response.json().catch(() => ({}))) as {
-    error?: string;
-  };
-  if (!response.ok) {
-    throw new RequestError(
-      payload.error ?? "تعذر إكمال طلب الاستيراد.",
-      response.status,
-    );
-  }
-  return payload as T;
-}
-
-/** Retries transient 502/503/504 and dropped connections with 2s backoff. */
-async function postWithRetry<T>(url: string, body: unknown): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await postJson<T>(url, body);
-    } catch (error) {
-      if (attempt >= MAX_RETRIES || !isRetryable(error)) throw error;
-      await sleep(RETRY_BASE_MS * (attempt + 1));
-    }
-  }
 }
 
 /**
  * Drives the client-side autopilot run: parse the workbook locally, send
  * small batches through enrichment, then persist each batch. Progress is kept
  * in React state so the modal can narrate `250 / 1745` while it works.
+ *
+ * Pharmacy workbooks are deduplicated by code/name because a POS repeats the
+ * same drug once per batch/expiry, and the operator can drop zero-stock rows.
  */
 export function useAutopilot(
   merchantId: string,
+  vendorTypeId: number,
   onSaved: () => void,
 ): {
   stage: AutopilotStage;
@@ -135,6 +90,9 @@ export function useAutopilot(
   error: string;
   progress: AutopilotProgress;
   summary: AutopilotSummary | null;
+  hasStock: boolean;
+  stockOnly: boolean;
+  setStockOnly: (value: boolean) => void;
   loadFile: (file: File) => Promise<void>;
   start: () => Promise<void>;
   reset: () => void;
@@ -145,7 +103,13 @@ export function useAutopilot(
   const [error, setError] = useState("");
   const [progress, setProgress] = useState<AutopilotProgress>(emptyProgress);
   const [summary, setSummary] = useState<AutopilotSummary | null>(null);
+  const [stockOnly, setStockOnly] = useState(false);
   const running = useRef(false);
+
+  const hasStock = useMemo(
+    () => (sheet ? hasStockData(sheet.items) : false),
+    [sheet],
+  );
 
   const reset = useCallback(() => {
     if (running.current) return;
@@ -155,28 +119,34 @@ export function useAutopilot(
     setError("");
     setProgress(emptyProgress);
     setSummary(null);
+    setStockOnly(false);
   }, []);
 
-  const loadFile = useCallback(async (file: File) => {
-    setError("");
-    setSummary(null);
-    setSheet(null);
-    setFileName(file.name);
-    setStage("parsing");
-    try {
-      const parsed = await parsePosFile(file);
-      setSheet(parsed);
-      setProgress({ ...emptyProgress, total: parsed.items.length });
-      setStage("ready");
-    } catch (parseError) {
-      setError(
-        parseError instanceof Error
-          ? parseError.message
-          : "تعذر قراءة ملف نقاط البيع.",
-      );
-      setStage("failed");
-    }
-  }, []);
+  const loadFile = useCallback(
+    async (file: File) => {
+      setError("");
+      setSummary(null);
+      setSheet(null);
+      setFileName(file.name);
+      setStage("parsing");
+      try {
+        const parsed = await parsePosFile(file, {
+          dedupe: vendorTypeId === PHARMACY_VENDOR_TYPE_ID,
+        });
+        setSheet(parsed);
+        setProgress({ ...emptyProgress, total: parsed.items.length });
+        setStage("ready");
+      } catch (parseError) {
+        setError(
+          parseError instanceof Error
+            ? parseError.message
+            : "تعذر قراءة ملف نقاط البيع.",
+        );
+        setStage("failed");
+      }
+    },
+    [vendorTypeId],
+  );
 
   const start = useCallback(async () => {
     if (!sheet || sheet.items.length === 0 || running.current) return;
@@ -184,12 +154,22 @@ export function useAutopilot(
     setError("");
     setStage("running");
 
-    const inputs = sheet.items.map((item, index) => ({
+    const sourceItems = stockOnly ? inStockItems(sheet.items) : sheet.items;
+    if (sourceItems.length === 0) {
+      setError("لا توجد أصناف متوفرة في المخزون لاستيرادها.");
+      setStage("failed");
+      running.current = false;
+      return;
+    }
+
+    const inputs = sourceItems.map((item, index) => ({
       id: `it-${index + 1}`,
       name: item.name,
       unit: item.unit,
       barcode: item.barcode,
       priceMinor: item.priceMinor,
+      company: item.company,
+      quantity: item.quantity,
     }));
     const next: AutopilotProgress = { ...emptyProgress, total: inputs.length };
     setProgress({ ...next });
@@ -263,7 +243,7 @@ export function useAutopilot(
       running.current = false;
       if (wrote) onSaved();
     }
-  }, [merchantId, onSaved, sheet]);
+  }, [merchantId, onSaved, sheet, stockOnly]);
 
   return {
     stage,
@@ -272,6 +252,9 @@ export function useAutopilot(
     error,
     progress,
     summary,
+    hasStock,
+    stockOnly,
+    setStockOnly,
     loadFile,
     start,
     reset,

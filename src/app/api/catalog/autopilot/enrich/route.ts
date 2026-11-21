@@ -24,6 +24,7 @@ export async function POST(request: Request) {
 
     const result = await enrichAutopilotItems(input.items, {
       merchantId: input.merchantId,
+      vendorTypeId: scoped.merchant.vendorTypeId,
     });
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },

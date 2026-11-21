@@ -131,6 +131,32 @@ export function looksLikeUnit(value: unknown): boolean {
   return text.length > 0 && text.length <= 24 && UNIT_PATTERN.test(text);
 }
 
+const MAX_QUANTITY = 10_000_000;
+
+/**
+ * Remaining stock as a non-negative integer. Accepts Arabic-Indic digits and a
+ * harmless `.0` suffix, and rejects anything with letters or a sign so a price
+ * or barcode is never mistaken for stock.
+ */
+export function parseQuantity(value: unknown): number | null {
+  const text = toLatinDigits(cellText(value))
+    .replace(/[\s,]/g, "")
+    .trim();
+  if (!text || !/^\d+(?:\.0+)?$/.test(text)) return null;
+  const quantity = Number(text);
+  if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > MAX_QUANTITY) {
+    return null;
+  }
+  return quantity;
+}
+
+/** True for a short integer cell, used to spot a stock column without a header. */
+export function looksLikeQuantity(value: unknown): boolean {
+  const quantity = parseQuantity(value);
+  return quantity !== null && quantity <= 9999;
+}
+
+
 const SUMMARY_PATTERNS = [
   "اجمالى الموقع",
   "اجمالي الموقع",

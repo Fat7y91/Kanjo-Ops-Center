@@ -1,10 +1,12 @@
 import { detectPosColumns } from "./parse-columns";
+import { dedupePosItems } from "./parse-pharmacy";
 import {
   cleanCellText,
   isSummaryRow,
   looksLikeHeaderRow,
   parseBarcode,
   parsePriceMinor,
+  parseQuantity,
   parseUnit,
 } from "./parse-values";
 import type {
@@ -12,6 +14,11 @@ import type {
   ParsedPosSheet,
   SkippedPosRow,
 } from "./types";
+
+export type PosParseOptions = {
+  /** Merge repeated codes/batches instead of importing them twice. */
+  dedupe?: boolean;
+};
 
 export class PosParseError extends Error {
   readonly code: string;
@@ -35,13 +42,14 @@ function isBlankRow(row: unknown[]): boolean {
 export function parsePosMatrix(
   matrix: unknown[][],
   sheetName = "",
+  options: PosParseOptions = {},
 ): ParsedPosSheet {
   if (matrix.length === 0) {
     throw new PosParseError("EMPTY_FILE", "الملف لا يحتوي على صفوف.");
   }
 
   const detection = detectPosColumns(matrix);
-  const { name, price, barcode, unit } = detection.columns;
+  const { name, price, barcode, unit, company, quantity } = detection.columns;
   if (name === null || price === null) {
     throw new PosParseError(
       "COLUMNS_NOT_FOUND",
@@ -105,6 +113,8 @@ export function parsePosMatrix(
       priceMinor,
       barcode: barcode === null ? "" : parseBarcode(row[barcode]),
       unit: unit === null ? "" : parseUnit(row[unit]),
+      company: company === null ? "" : cleanCellText(row[company]).slice(0, 160),
+      quantity: quantity === null ? null : parseQuantity(row[quantity]),
     });
   }
 
@@ -115,12 +125,15 @@ export function parsePosMatrix(
     );
   }
 
+  const deduped = options.dedupe ? dedupePosItems(items) : null;
+
   return {
-    items,
+    items: deduped?.items ?? items,
     skipped,
     columns: detection.columns,
     headerRow:
       detection.headerRow === null ? null : detection.headerRow + 1,
     sheetName,
+    mergedDuplicates: deduped?.merged ?? 0,
   };
 }

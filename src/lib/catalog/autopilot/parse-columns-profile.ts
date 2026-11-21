@@ -3,6 +3,7 @@ import {
   isSummaryRow,
   looksLikeBarcode,
   looksLikeHeaderRow,
+  looksLikeQuantity,
   looksLikeUnit,
   parsePriceMinor,
 } from "./parse-values";
@@ -25,7 +26,14 @@ export type ColumnDetection = {
 };
 
 export function emptyColumns(): PosColumnMap {
-  return { name: null, price: null, barcode: null, unit: null };
+  return {
+    name: null,
+    price: null,
+    barcode: null,
+    unit: null,
+    company: null,
+    quantity: null,
+  };
 }
 
 type ColumnProfile = {
@@ -34,6 +42,7 @@ type ColumnProfile = {
   price: number;
   barcode: number;
   unit: number;
+  quantity: number;
   text: number;
   uniqueCodes: Set<string>;
   uniqueAll: Set<string>;
@@ -47,6 +56,7 @@ function profileColumns(matrix: unknown[][], startRow: number): ColumnProfile[] 
     price: 0,
     barcode: 0,
     unit: 0,
+    quantity: 0,
     text: 0,
     uniqueCodes: new Set<string>(),
     uniqueAll: new Set<string>(),
@@ -73,6 +83,7 @@ function profileColumns(matrix: unknown[][], startRow: number): ColumnProfile[] 
       } else if (parsePriceMinor(value) !== null) {
         profile.price += 1;
       }
+      if (looksLikeQuantity(value)) profile.quantity += 1;
       if (looksLikeUnit(value)) profile.unit += 1;
       else if (/\p{L}/u.test(text) && text.length >= 2 && text.length <= 160) {
         profile.text += 1;
@@ -158,6 +169,31 @@ export function detectByProfile(matrix: unknown[][]): ColumnDetection | null {
     unitProfile && ratio(unitProfile.unit, unitProfile.nonEmpty) >= 0.4
       ? unitProfile
       : null;
+  if (unit) excluded.add(unit.index);
+
+  // A second free-text column is usually the manufacturer/agent in pharmacy
+  // exports; stock is the remaining all-integer column.
+  const companyProfile = bestColumn(
+    profiles,
+    (profile) => ratio(profile.text, profile.nonEmpty),
+    excluded,
+  );
+  const company =
+    companyProfile && ratio(companyProfile.text, companyProfile.nonEmpty) >= 0.3
+      ? companyProfile
+      : null;
+  if (company) excluded.add(company.index);
+
+  const quantityProfile = bestColumn(
+    profiles,
+    (profile) => ratio(profile.quantity, profile.nonEmpty),
+    excluded,
+  );
+  const quantity =
+    quantityProfile &&
+    ratio(quantityProfile.quantity, quantityProfile.nonEmpty) >= 0.5
+      ? quantityProfile
+      : null;
 
   if (!name || !price) return null;
 
@@ -168,6 +204,8 @@ export function detectByProfile(matrix: unknown[][]): ColumnDetection | null {
       price: price.index,
       barcode: barcode?.index ?? null,
       unit: unit?.index ?? null,
+      company: company?.index ?? null,
+      quantity: quantity?.index ?? null,
     },
   };
 }

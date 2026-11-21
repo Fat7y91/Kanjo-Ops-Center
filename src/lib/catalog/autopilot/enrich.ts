@@ -3,8 +3,8 @@ import "server-only";
 import { normalizeSearchText } from "@/lib/search/normalize";
 
 import {
-  defaultSupermarketCategoryKey,
-  supermarketCategories,
+  autopilotCategories,
+  defaultAutopilotCategoryKey,
 } from "./categories";
 import { callDeepSeekEnrichment, type DeepSeekRequestItem } from "./deepseek";
 import { existingImagesByBarcode } from "./existing-images";
@@ -75,11 +75,11 @@ function exactMasterMatch(
  */
 export async function enrichAutopilotItems(
   inputs: AutopilotEnrichmentInput[],
-  options: { merchantId?: string } = {},
+  options: { merchantId?: string; vendorTypeId: number },
 ): Promise<EnrichResponse> {
-  const categories = supermarketCategories();
+  const categories = autopilotCategories(options.vendorTypeId);
   const categoryKeys = new Set(categories.map((category) => category.key));
-  const fallbackCategory = defaultSupermarketCategoryKey();
+  const fallbackCategory = defaultAutopilotCategoryKey(options.vendorTypeId);
   const resumed = options.merchantId
     ? await existingImagesByBarcode(
         options.merchantId,

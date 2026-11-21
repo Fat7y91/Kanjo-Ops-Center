@@ -6,7 +6,11 @@ import {
   emptyColumns,
   type ColumnDetection,
 } from "./parse-columns-profile";
-import type { PosColumnField, PosColumnMap } from "./types";
+import {
+  POS_COLUMN_FIELDS,
+  type PosColumnField,
+  type PosColumnMap,
+} from "./types";
 
 /**
  * Column detection for messy POS exports.
@@ -61,9 +65,31 @@ const HEADER_ALIASES: Record<PosColumnField, string[]> = {
     "unit",
     "uom",
   ],
+  company: [
+    "الشركة",
+    "شركة",
+    "المصنع",
+    "التوكيل",
+    "الوكيل",
+    "company",
+    "manufacturer",
+    "brand",
+  ],
+  quantity: [
+    "الكمية",
+    "الكميه",
+    "الرصيد",
+    "المخزون",
+    "العدد",
+    "quantity",
+    "qty",
+    "stock",
+    "on hand",
+    "balance",
+  ],
 };
 
-const FIELDS: PosColumnField[] = ["name", "price", "barcode", "unit"];
+const FIELDS = POS_COLUMN_FIELDS;
 
 function normalizedAliases(field: PosColumnField): string[] {
   return HEADER_ALIASES[field].map(normalizeSearchText).filter(Boolean);

@@ -21,10 +21,12 @@ export async function POST(request: Request) {
     const scoped = await resolveAutopilotMerchant(session, input.merchantId);
     if (!scoped.merchant) return scoped.response;
 
-    const result = await saveAutopilotItems(input.merchantId, input.items, {
-      id: session.user.id,
-      name: session.user.name,
-    });
+    const result = await saveAutopilotItems(
+      input.merchantId,
+      scoped.merchant.vendorTypeId,
+      input.items,
+      { id: session.user.id, name: session.user.name },
+    );
     return NextResponse.json(
       { ...result, revision: catalogRevision() },
       { headers: { "Cache-Control": "no-store" } },

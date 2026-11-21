@@ -7,11 +7,16 @@ import { AutopilotProgressPanel } from "@/components/catalog/autopilot-progress"
 import { useAutopilot } from "@/components/catalog/use-autopilot";
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
-import { Field, InputControl } from "@/components/ui/form-inputs";
+import {
+  CheckboxField,
+  Field,
+  InputControl,
+} from "@/components/ui/form-inputs";
 
 type AutopilotModalProps = {
   open: boolean;
   merchantId: string;
+  vendorTypeId: number;
   onClose: () => void;
   onSaved: () => void;
 };
@@ -23,11 +28,13 @@ type AutopilotModalProps = {
 export function AutopilotModal({
   open,
   merchantId,
+  vendorTypeId,
   onClose,
   onSaved,
 }: AutopilotModalProps) {
-  const autopilot = useAutopilot(merchantId, onSaved);
+  const autopilot = useAutopilot(merchantId, vendorTypeId, onSaved);
   const running = autopilot.stage === "running";
+  const isPharmacy = vendorTypeId === 3;
 
   useEffect(() => {
     if (open) autopilot.reset();
@@ -41,8 +48,8 @@ export function AutopilotModal({
     <Modal
       open={open}
       title="الاستيراد التلقائي"
-      eyebrow="كتالوج السوبر ماركت"
-      description="ارفع ملف نقاط البيع بصيغة Excel أو CSV. الاسم والباركود والسعر كما هي في الملف، ويُستكمل التصنيف والصورة تلقائياً."
+      eyebrow={isPharmacy ? "كتالوج الصيدلية" : "كتالوج السوبر ماركت"}
+      description="ارفع ملف نقاط البيع بصيغة Excel أو CSV. الاسم والباركود والسعر والكمية كما هي في الملف، ويُستكمل التصنيف والصورة تلقائياً."
       onClose={() => {
         if (!running) onClose();
       }}
@@ -73,6 +80,16 @@ export function AutopilotModal({
           <p className="form-error" role="alert">
             {autopilot.error}
           </p>
+        ) : null}
+
+        {autopilot.sheet && autopilot.hasStock ? (
+          <CheckboxField
+            label="استبعاد الأصناف غير المتوفرة"
+            hint="يتم تجاهل الصفوف التي تكون كميتها صفراً في ملف نقاط البيع."
+            checked={autopilot.stockOnly}
+            onChange={autopilot.setStockOnly}
+            disabled={running}
+          />
         ) : null}
 
         {autopilot.sheet ? (

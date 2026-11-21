@@ -48,9 +48,10 @@ export function CatalogClient({
   const [mirrorOpen, setMirrorOpen] = useState(false);
   const [editRequestId, setEditRequestId] = useState<string | null>(null);
   const excel = useCatalogExport();
-  const merchantName =
-    merchants.find((merchant) => merchant.id === defaultMerchantId)?.name ??
-    "catalog";
+  const activeMerchant = merchants.find(
+    (merchant) => merchant.id === defaultMerchantId,
+  );
+  const merchantName = activeMerchant?.name ?? "catalog";
 
   const handleMirrored = useCallback((productId: string, url: string) => {
     setProducts((current) =>
@@ -150,10 +151,11 @@ export function CatalogClient({
         </p>
       ) : null}
 
-      {defaultMerchantId ? (
+      {defaultMerchantId && activeMerchant ? (
         <AutopilotModal
           open={autopilotOpen}
           merchantId={defaultMerchantId}
+          vendorTypeId={activeMerchant.vendorTypeId}
           onClose={() => setAutopilotOpen(false)}
           onSaved={handleSynced}
         />

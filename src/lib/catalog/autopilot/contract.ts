@@ -6,6 +6,8 @@ const itemBase = {
   unit: z.string().trim().max(80).default(""),
   barcode: z.string().trim().max(64).default(""),
   priceMinor: z.number().int().positive().max(10_000_000_000),
+  company: z.string().trim().max(160).default(""),
+  quantity: z.number().int().min(0).max(10_000_000).nullable().default(null),
 };
 
 export const autopilotEnrichRequestSchema = z.object({

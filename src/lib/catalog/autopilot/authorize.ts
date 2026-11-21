@@ -8,6 +8,8 @@ import { getMerchantById } from "@/lib/field-ops/store";
 import type { Merchant } from "@/lib/field-ops/types";
 import type { ActiveSession } from "@/lib/rbac/types";
 
+import { isAutopilotVendorType } from "./categories";
+
 export type AutopilotMerchantResult =
   | { merchant: Merchant; response: null }
   | { merchant: null; response: NextResponse };
@@ -17,8 +19,9 @@ function fail(message: string, status: number) {
 }
 
 /**
- * Autopilot only writes to active supermarket merchants inside the session's
- * city scope and behind an eligible contract, mirroring the manual create path.
+ * Autopilot only writes to active pharmacy/supermarket merchants inside the
+ * session's city scope and behind an eligible contract, mirroring the manual
+ * create path.
  */
 export async function resolveAutopilotMerchant(
   session: ActiveSession,
@@ -28,10 +31,13 @@ export async function resolveAutopilotMerchant(
   if (!merchant || merchant.archivedAt) {
     return { merchant: null, response: fail("التاجر غير موجود.", 404) };
   }
-  if (merchant.vendorTypeId !== 4) {
+  if (!isAutopilotVendorType(merchant.vendorTypeId)) {
     return {
       merchant: null,
-      response: fail("الاستيراد التلقائي متاح لتجار السوبر ماركت فقط.", 422),
+      response: fail(
+        "الاستيراد التلقائي متاح لتجار الصيدليات والسوبر ماركت فقط.",
+        422,
+      ),
     };
   }
 

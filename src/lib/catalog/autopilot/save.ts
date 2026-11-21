@@ -8,8 +8,8 @@ import { generateSku } from "@/lib/catalog/sku";
 import { getVendorType } from "@/lib/taxonomy/store";
 
 import {
-  defaultSupermarketCategoryKey,
-  supermarketCategories,
+  autopilotCategories,
+  defaultAutopilotCategoryKey,
 } from "./categories";
 import type {
   AutopilotSaveItem,
@@ -29,21 +29,25 @@ type ExistingRow = {
 const WRITE_TIMEOUT_MS = 15_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-let categoryCache: { map: Map<string, string>; expiresAt: number } | null = null;
+const categoryCache = new Map<
+  number,
+  { map: Map<string, string>; expiresAt: number }
+>();
 
 /**
  * The merchant product screen stores the category key, while the database also
  * has a UUID taxonomy reference. Resolve the UUIDs by name so both columns stay
  * consistent without hardcoding deployment-specific ids.
  */
-async function categoryUuidMap(): Promise<Map<string, string>> {
-  if (categoryCache && categoryCache.expiresAt > Date.now()) {
-    return categoryCache.map;
+async function categoryUuidMap(vendorTypeId: number): Promise<Map<string, string>> {
+  const cached = categoryCache.get(vendorTypeId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.map;
   }
   const map = new Map<string, string>();
   if (!hasSupabaseConfig()) return map;
 
-  const vendorName = getVendorType(4)?.name_ar ?? "سوبر ماركت";
+  const vendorName = getVendorType(vendorTypeId)?.name_ar ?? "";
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
@@ -53,7 +57,7 @@ async function categoryUuidMap(): Promise<Map<string, string>> {
 
   if (!error && Array.isArray(data)) {
     const rows = data as { id: string; name_ar: string; name_en: string }[];
-    for (const category of supermarketCategories()) {
+    for (const category of autopilotCategories(vendorTypeId)) {
       const names = new Set(
         [category.name_ar, category.name_en]
           .map((name) => normalizeSearchText(name))
@@ -70,7 +74,10 @@ async function categoryUuidMap(): Promise<Map<string, string>> {
     console.error("[autopilot] taxonomy category lookup failed", error);
   }
 
-  categoryCache = { map, expiresAt: Date.now() + 10 * 60 * 1000 };
+  categoryCache.set(vendorTypeId, {
+    map,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
   return map;
 }
 
@@ -83,6 +90,8 @@ function mergeQa(row: ExistingRow, item: AutopilotSaveItem, now: string) {
     ...base,
     autopilot_source: item.imageSource,
     autopilot_unit: item.unit,
+    autopilot_company: item.company ?? null,
+    autopilot_quantity: item.quantity ?? null,
     autopilot_master_catalog_id: item.masterCatalogId,
     autopilot_image_url: item.imageUrlRaw ?? null,
     autopilot_imported_at: now,
@@ -93,6 +102,8 @@ function newQa(item: AutopilotSaveItem, now: string) {
   return {
     autopilot_source: item.imageSource,
     autopilot_unit: item.unit,
+    autopilot_company: item.company ?? null,
+    autopilot_quantity: item.quantity ?? null,
     autopilot_master_catalog_id: item.masterCatalogId,
     autopilot_image_url: item.imageUrlRaw ?? null,
     autopilot_imported_at: now,
@@ -143,6 +154,7 @@ async function existingRows(
  */
 export async function saveAutopilotItems(
   merchantId: string,
+  vendorTypeId: number,
   items: AutopilotSaveItem[],
   actor: { id: string; name: string } | null,
 ): Promise<AutopilotSaveResult> {
@@ -150,9 +162,11 @@ export async function saveAutopilotItems(
     throw new Error("قاعدة بيانات الكتالوج غير متصلة.");
   }
 
-  const categories = new Set(supermarketCategories().map((c) => c.key));
-  const fallback = defaultSupermarketCategoryKey();
-  const categoryIds = await categoryUuidMap();
+  const categories = new Set(
+    autopilotCategories(vendorTypeId).map((c) => c.key),
+  );
+  const fallback = defaultAutopilotCategoryKey(vendorTypeId);
+  const categoryIds = await categoryUuidMap(vendorTypeId);
   const client = getSupabaseServerClient();
   const now = new Date().toISOString();
 
@@ -204,7 +218,7 @@ export async function saveAutopilotItems(
         const patch: Record<string, unknown> = {
           price_minor: item.priceMinor,
           category_key: categoryKey,
-          vendor_type_id: 4,
+          vendor_type_id: vendorTypeId,
           updated_at: now,
           qa_metadata: mergeQa(existing, item, now),
         };
@@ -238,7 +252,7 @@ export async function saveAutopilotItems(
           name: item.name,
           normalized_name: normalized,
           description: "",
-          vendor_type_id: 4,
+          vendor_type_id: vendorTypeId,
           category_key: categoryKey,
           taxonomy_category_id: categoryIds.get(categoryKey) ?? null,
           product_type: "simple",
