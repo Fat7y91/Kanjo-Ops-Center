@@ -299,6 +299,8 @@ export const biPartyBalanceSchema = z.object({
   currency: z.enum(["EGP", "SAR"]),
   receivables: z.number().nonnegative(),
   payables: z.number().nonnegative(),
+  /** Cash already received from posted merchant settlements. */
+  collected: z.number().nonnegative().default(0),
 });
 export type BiPartyBalance = z.infer<typeof biPartyBalanceSchema>;
 

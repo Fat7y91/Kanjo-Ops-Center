@@ -120,6 +120,12 @@ export type ClearingAccountRow = {
   partyName: string;
   currency: "EGP" | "SAR";
   balance: number;
+  /** Latest journal date for the account, ISO `YYYY-MM-DD`. */
+  lastActivityAt?: string | null;
+  /** Latest settlement/payout date, ISO `YYYY-MM-DD`. */
+  lastSettlementAt?: string | null;
+  /** Attendance days, couriers only, ISO `YYYY-MM-DD`. */
+  workingDates?: string[];
 };
 
 /** One posted line in a party's statement of account. */

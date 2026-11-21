@@ -8,87 +8,14 @@ import type {
   OperationSummary,
 } from "@/lib/operations/types";
 
+import { RoleBadge } from "./clearinghouse-party-book";
+
 /**
- * The clearinghouse lists: party balances, open accounts, and logged orders.
+ * The clearinghouse lists: open accounts and logged orders.
  *
- * Extracted from the board container so each list stays a focused, presentational
- * component and the board only wires state and modals around them.
+ * The party book lives in its own module so this file stays focused on the
+ * per-account settle controls and the recent-orders list.
  */
-
-function RoleBadge({ partyType }: { partyType: ClearingAccountRow["partyType"] }) {
-  return (
-    <span
-      className={
-        partyType === "merchant" ? "badge badge-blue" : "badge badge-orange"
-      }
-    >
-      {partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
-    </span>
-  );
-}
-
-type PartyBookProps = {
-  accounts: ClearingAccountRow[];
-  emptyLabel: string;
-  onOpenStatement: (accountId: string) => void;
-};
-
-export function PartyBook({
-  accounts,
-  emptyLabel,
-  onOpenStatement,
-}: PartyBookProps) {
-  if (accounts.length === 0) return <p className="muted">{emptyLabel}</p>;
-
-  const total = accounts.reduce(
-    (sum, account) => sum + Math.abs(account.balance),
-    0,
-  );
-  const currency = accounts[0]?.currency ?? "EGP";
-
-  return (
-    <div className="clearing-party-table">
-      <div className="clearing-party-head" aria-hidden="true">
-        <span>الطرف</span>
-        <span className="clearing-party-amount">المبلغ</span>
-        <span />
-      </div>
-
-      <ul className="clearing-parties">
-        {accounts.map((account) => (
-          <li key={account.accountId} className="clearing-party-row">
-            <div className="clearing-party-id">
-              <strong title={account.partyName}>{account.partyName}</strong>
-              <RoleBadge partyType={account.partyType} />
-            </div>
-            <strong
-              className={`clearing-party-amount ${
-                account.balance > 0 ? "clearing-positive" : "clearing-negative"
-              }`}
-            >
-              {operationMoney(Math.abs(account.balance), account.currency)}
-            </strong>
-            <Button
-              variant="quiet"
-              size="sm"
-              onClick={() => onOpenStatement(account.accountId)}
-            >
-              كشف حساب
-            </Button>
-          </li>
-        ))}
-      </ul>
-
-      <div className="clearing-party-total">
-        <strong>الإجمالي</strong>
-        <strong className="clearing-party-amount">
-          {operationMoney(total, currency)}
-        </strong>
-        <span />
-      </div>
-    </div>
-  );
-}
 
 export type AccountRowsProps = {
   accounts: ClearingAccountRow[];

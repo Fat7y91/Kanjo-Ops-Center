@@ -26,7 +26,7 @@ export default async function ClearinghousePage() {
     <>
       <PageHeader
         eyebrow="المالية"
-        title="تسديد وتحصيل"
+        title="المستحقات"
         description="أرصدة التجار ومناديب التوصيل المستخرجة من دفتر اليومية، مع تسديد أو تحصيل كامل أو جزئي."
       />
 

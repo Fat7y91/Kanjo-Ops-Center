@@ -4,6 +4,11 @@ import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 import { resolvePartyNames } from "./party-lookup";
+import { loadCollectedCashIn } from "./settlement-cash";
+import {
+  listCourierWorkingDates,
+  listPartyActivity,
+} from "./clearinghouse-activity";
 
 import type { ClearingAccountRow, ClearingPartyType } from "./types";
 
@@ -85,17 +90,32 @@ export async function listClearingAccounts(): Promise<ClearingAccountRow[]> {
   }
 
   const rows = (data ?? []) as BalanceViewRow[];
-  const names = await resolvePartyNames({
-    merchantIds: rows
-      .filter((row) => row.party_type === "merchant")
-      .map((row) => row.party_id ?? ""),
-    courierIds: rows
-      .filter((row) => row.party_type === "courier")
-      .map((row) => row.party_id ?? ""),
-  });
+  const [names, activity, workingDates] = await Promise.all([
+    resolvePartyNames({
+      merchantIds: rows
+        .filter((row) => row.party_type === "merchant")
+        .map((row) => row.party_id ?? ""),
+      courierIds: rows
+        .filter((row) => row.party_type === "courier")
+        .map((row) => row.party_id ?? ""),
+    }),
+    listPartyActivity(rows.map((row) => row.id)),
+    listCourierWorkingDates(),
+  ]);
 
   return rows
-    .map((row) => toAccount(row, names))
+    .map((row) => {
+      const account = toAccount(row, names);
+      const recent = activity.get(account.accountId);
+      return {
+        ...account,
+        lastActivityAt: recent?.lastActivityAt ?? null,
+        lastSettlementAt: recent?.lastSettlementAt ?? null,
+        ...(account.partyType === "courier"
+          ? { workingDates: workingDates.get(account.partyId) ?? [] }
+          : {}),
+      };
+    })
     .filter((row) => row.balance !== 0);
 }
 
@@ -158,7 +178,18 @@ export type PartyBalanceTotals = {
   currency: ClearingAccountRow["currency"];
   receivables: number;
   payables: number;
+  /**
+   * Cash actually received from merchant settlements, posted to the bank. This
+   * is a raked figure, not accrued commission: it stays 0 until a settlement
+   * entry hits the journal.
+   */
+  collected: number;
 };
+
+const ZERO_TOTALS: PartyBalanceTotals[] = [
+  { currency: "EGP", receivables: 0, payables: 0, collected: 0 },
+  { currency: "SAR", receivables: 0, payables: 0, collected: 0 },
+];
 
 /**
  * Company-wide receivable/payable totals, split by currency.
@@ -169,26 +200,24 @@ export type PartyBalanceTotals = {
  */
 export async function loadPartyBalanceTotals(): Promise<PartyBalanceTotals[]> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from(BALANCE_VIEW)
-    .select("currency,balance_minor")
-    .not("party_type", "is", null)
-    .limit(2000);
+  const [{ data, error }, collected] = await Promise.all([
+    client
+      .schema("app")
+      .from(BALANCE_VIEW)
+      .select("currency,balance_minor")
+      .not("party_type", "is", null)
+      .limit(2000),
+    loadCollectedCashIn(),
+  ]);
 
   if (error) {
-    if (isMissingSchemaObject(error)) {
-      return [
-        { currency: "EGP", receivables: 0, payables: 0 },
-        { currency: "SAR", receivables: 0, payables: 0 },
-      ];
-    }
+    if (isMissingSchemaObject(error)) return ZERO_TOTALS;
     throw error;
   }
 
   const totals: Record<"EGP" | "SAR", PartyBalanceTotals> = {
-    EGP: { currency: "EGP", receivables: 0, payables: 0 },
-    SAR: { currency: "SAR", receivables: 0, payables: 0 },
+    EGP: { currency: "EGP", receivables: 0, payables: 0, collected: collected.EGP },
+    SAR: { currency: "SAR", receivables: 0, payables: 0, collected: collected.SAR },
   };
 
   for (const raw of (data ?? []) as Array<{

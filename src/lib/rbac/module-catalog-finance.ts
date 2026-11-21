@@ -63,8 +63,8 @@ export const FINANCE_MODULES: readonly ModuleDefinition[] = [
   },
   {
     href: "/finance/clearinghouse",
-    label: "تسديد وتحصيل",
-    shortLabel: "التسديد",
+    label: "المستحقات",
+    shortLabel: "المستحقات",
     description: "مستحقات التجار والمناديب ومديونياتهم وتسويتها كاملة أو جزئية.",
     permission: "view_clearinghouse",
     alsoGrantedBy: ["settle_clearinghouse", "settle_clearinghouse_partial"],

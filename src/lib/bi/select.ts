@@ -208,7 +208,11 @@ function average(values: number[]): number {
 }
 
 export type FinanceSummary = {
-  /** Merchant commissions collected on the orders in scope. */
+  /**
+   * Merchant cash actually received through posted settlement entries. Accrued
+   * commission lives on the invoices, not here, so this stays 0 until finance
+   * records a collection.
+   */
   collected: number;
   /** Kanjo's delivery commission from drivers, net of the courier cut. */
   driverCommissions: number;
@@ -216,7 +220,9 @@ export type FinanceSummary = {
   receivables: number;
   /** Absolute clearinghouse payable, never date-filtered. */
   payables: number;
-  /** Operational collection only; corporate expenses are not subtracted. */
+  /** Net clearinghouse position: receivables minus payables (may be negative). */
+  netPosition: number;
+  /** Accrued operational collection, before expenses are deducted. */
   net: number;
   expenses: number;
   marginRate: number;
@@ -253,10 +259,13 @@ export function buildFinance(
   const monthlyValue = sum(merchants.map((row) => row.monthlyValue));
 
   return {
-    collected: orderSummary.merchantCommission,
+    collected: Math.round((egpParty?.collected ?? 0) * 100) / 100,
     driverCommissions: orderSummary.driverCommission,
     receivables: egpParty?.receivables ?? 0,
     payables: egpParty?.payables ?? 0,
+    netPosition:
+      Math.round(((egpParty?.receivables ?? 0) - (egpParty?.payables ?? 0)) * 100) /
+      100,
     net: Math.round(orderSummary.operationalCollection),
     expenses: expenseTotal,
     marginRate:

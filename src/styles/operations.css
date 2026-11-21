@@ -98,7 +98,11 @@
 
 .clearing-party-amount {
   justify-self: stretch;
-  text-align: left;
+  /* Keep the header and every amount on the same edge: the figures carry an
+   * Arabic currency glyph, so pinning the cell to LTR stops bidi from
+   * right-aligning numbers under a left-aligned header. */
+  direction: ltr;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -308,5 +312,52 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* Settlement book toolbar: period presets, sort and export share one row that
+ * wraps on small screens; a custom range reveals a second row of date fields. */
+.clearing-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.clearing-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.clearing-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-end: auto;
+}
+
+.clearing-sort {
+  min-width: 12rem;
+}
+
+.clearing-custom-range > * {
+  flex: 1 1 160px;
+}
+
+/* Quick collect/settle actions on a party row stay together at the column edge. */
+.clearing-party-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quick-settle-form {
+  display: grid;
+  gap: 14px;
+}
+
 /* The orders screen is a single full-width table; keeping the old two-column
  * desktop grid would compress it into the left half of the page. */

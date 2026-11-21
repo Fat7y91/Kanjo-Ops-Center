@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { usePermission } from "@/components/auth/use-permission";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
@@ -11,14 +13,15 @@ import type {
 } from "@/lib/operations/types";
 
 import { BreakdownModal } from "./breakdown-modal";
-import {
-  AccountRows,
-  OrderRows,
-  PartyBook,
-} from "./clearinghouse-rows";
+import { PartyBook } from "./clearinghouse-party-book";
+import { AccountRows, OrderRows } from "./clearinghouse-rows";
+import { ClearinghouseToolbar } from "./clearinghouse-toolbar";
 import { PartyStatementModal } from "./party-statement-modal";
+import { QuickSettleModal } from "./quick-settle-modal";
 import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
+import { useClearinghouseExport } from "./use-clearinghouse-export";
+import { useClearinghouseView } from "./use-clearinghouse-view";
 import { usePartyStatement } from "./use-party-statement";
 
 export function ClearinghouseBoard({
@@ -38,8 +41,6 @@ export function ClearinghouseBoard({
 
   const {
     accounts,
-    payables,
-    receivables,
     busyId,
     error,
     receiptNo,
@@ -48,27 +49,33 @@ export function ClearinghouseBoard({
     partialAmount,
     setPartialAmount,
     settle,
+    submitSettlement,
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
+  const view = useClearinghouseView(accounts);
   const breakdown = useBreakdown();
   const statement = usePartyStatement();
   const voucher = useJournalVoucher();
+  const exporter = useClearinghouseExport();
+  const [quickAccount, setQuickAccount] = useState<ClearingAccountRow | null>(
+    null,
+  );
   const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
-  const receivablesTotal = receivables.reduce(
+  const receivablesTotal = view.receivables.reduce(
     (sum, account) => sum + Math.abs(account.balance),
     0,
   );
-  const payablesTotal = payables.reduce(
+  const payablesTotal = view.payables.reduce(
     (sum, account) => sum + Math.abs(account.balance),
     0,
   );
   const netTotal = receivablesTotal - payablesTotal;
   const summaryCurrency =
-    receivables[0]?.currency ?? payables[0]?.currency ?? "EGP";
+    view.receivables[0]?.currency ?? view.payables[0]?.currency ?? "EGP";
 
   const rowsProps = {
-    accounts,
+    accounts: view.filtered,
     busyId,
     receiptNo,
     setReceiptNo,
@@ -80,6 +87,21 @@ export function ClearinghouseBoard({
     settle,
   };
 
+  function handleExport() {
+    void exporter.exportBook({
+      periodLabel: view.label,
+      generatedAt: new Date().toISOString().slice(0, 16).replace("T", " "),
+      range: view.range,
+      totals: {
+        receivables: receivablesTotal,
+        payables: payablesTotal,
+        net: netTotal,
+      },
+      receivables: view.receivables,
+      payables: view.payables,
+    });
+  }
+
   return (
     <div className="clearinghouse">
       {error ? <p className="form-error">{error}</p> : null}
@@ -89,9 +111,19 @@ export function ClearinghouseBoard({
           {
             id: "book",
             label: "المستحقات",
-            badge: accounts.length,
+            badge: view.filtered.length,
             content: (
               <>
+                <ClearinghouseToolbar
+                  period={view.period}
+                  onPeriod={view.patchPeriod}
+                  sort={view.sort}
+                  onSort={view.setSort}
+                  onExport={handleExport}
+                  exportBusy={exporter.busy}
+                  exportError={exporter.error}
+                />
+
                 <div className="clearing-kpis">
                   <div className="clearing-kpi clearing-kpi-positive">
                     <span>إجمالي مستحق لنا</span>
@@ -129,21 +161,29 @@ export function ClearinghouseBoard({
                       <span className="muted">مبالغ على كانجو سدادها</span>
                     </div>
                     <PartyBook
-                      accounts={payables}
+                      accounts={view.payables}
                       emptyLabel="لا توجد مبالغ مستحقة السداد."
+                      range={view.range}
+                      canSettle={canSettle}
                       onOpenStatement={statement.openFor}
+                      onQuickSettle={setQuickAccount}
                     />
                   </article>
 
                   <article className="panel">
                     <div className="panel-head">
                       <h2>مستحق لنا</h2>
-                      <span className="muted">مبالغ على التجار ومناديب التوصيل تحصيلها</span>
+                      <span className="muted">
+                        مبالغ على التجار ومناديب التوصيل تحصيلها
+                      </span>
                     </div>
                     <PartyBook
-                      accounts={receivables}
+                      accounts={view.receivables}
                       emptyLabel="لا توجد مبالغ مستحقة التحصيل."
+                      range={view.range}
+                      canSettle={canSettle}
                       onOpenStatement={statement.openFor}
+                      onQuickSettle={setQuickAccount}
                     />
                   </article>
                 </div>
@@ -164,6 +204,14 @@ export function ClearinghouseBoard({
             ),
           },
         ]}
+      />
+
+      <QuickSettleModal
+        open={quickAccount !== null}
+        account={quickAccount}
+        canPartial={canPartial}
+        onClose={() => setQuickAccount(null)}
+        onSubmit={submitSettlement}
       />
 
       <BreakdownModal

@@ -113,12 +113,28 @@ test("net collection never subtracts corporate expenses", () => {
     dataset().partyBalances,
   );
 
-  assert.equal(finance.collected, 100);
+  assert.equal(finance.collected, 0);
   assert.equal(finance.driverCommissions, 10);
   assert.equal(finance.net, 110);
+  assert.equal(finance.netPosition, 800);
   assert.equal(finance.expenses, 47840.06);
   assert.equal(finance.receivables, 1500);
   assert.equal(finance.payables, 700);
+});
+
+test("collected is posted settlement cash-in, not accrued commission", () => {
+  const finance = buildFinance(
+    [merchant()],
+    [order({ commission: 100 })],
+    [],
+    [
+      { currency: "EGP", receivables: 1500, payables: 700, collected: 250 },
+      { currency: "SAR", receivables: 0, payables: 0, collected: 0 },
+    ],
+  );
+
+  assert.equal(finance.collected, 250);
+  assert.equal(finance.netPosition, 800);
 });
 
 test("party balances stay absolute while orders obey the date filter", () => {

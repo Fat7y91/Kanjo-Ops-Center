@@ -90,6 +90,15 @@ function achievedCommission(
 }
 
 /**
+ * A product counts as live when it passed QA (`completed`) or was explicitly
+ * published. The migrated V1 catalog only ever stores `completed`, so keying
+ * readiness on `published` alone reported a permanent zero.
+ */
+function isSellableProduct(state: string): boolean {
+  return state === "published" || state === "completed";
+}
+
+/**
  * Aggregates the live field-ops and catalog tables into a single typed BI
  * payload. Finance and marketing facts come from `live-facts.ts`, which reads
  * the treasury and marketing tables — there is no synthetic dataset.
@@ -108,7 +117,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
 
   const publishedByMerchant = new Set(
     products
-      .filter((product) => product.state === "published")
+      .filter((product) => isSellableProduct(product.state))
       .map((product) => product.merchantId),
   );
 
@@ -152,10 +161,10 @@ export async function buildBiDataset(): Promise<BiDataset> {
         cityId: merchant?.cityId ?? "unknown",
         cityName: cityName.get(merchant?.cityId ?? "") ?? "غير محدد",
         team: merchant?.team ?? "غير مسند",
-        // BI distinguishes published from still-unpublished; review states fold
+        // BI distinguishes sellable from still-unpublished; review states fold
         // into "missing" so the dashboard keeps one binary catalog-health
         // signal.
-        state: product.state === "published" ? "published" : "missing",
+        state: isSellableProduct(product.state) ? "published" : "missing",
         appPublished: isAppPublished(product.merchantId),
         price: product.price,
         updatedAt: product.updatedAt,

@@ -176,6 +176,12 @@ export function OrdersMetricsSection({
             tone="purple"
           />
           <WidgetStat
+            label="متوسط قيمة الطلب"
+            value={money(summary.averageOrderValue)}
+            detail="لكل طلب داخل النطاق"
+            tone="gold"
+          />
+          <WidgetStat
             label="ربح المنصة"
             value={money(summary.platformProfit)}
             detail="العمولة ناقص الخصومات الممولة"
@@ -196,6 +202,12 @@ export function OrdersMetricsSection({
             label="إجمالي الخصومات"
             value={money(summary.discounts)}
             detail="كوبونات + محفظة"
+            tone="red"
+          />
+          <WidgetStat
+            label="دعم الكوبونات والخصومات"
+            value={money(summary.platformDiscount)}
+            detail="ممول من المنصة"
             tone="red"
           />
         </div>

@@ -4,13 +4,21 @@ import { useState } from "react";
 
 import type { ClearingAccountRow } from "@/lib/operations/types";
 
+export type SettlementDraft = {
+  amount: string;
+  receiptNo: string;
+  file: File | null;
+};
+
+export type SettlementResult = { ok: boolean; error: string };
+
 /**
  * Settlement state for the clearinghouse board.
  *
  * The book is a list of party accounts, each with a derived balance. Settling
- * one account posts a fresh journal entry that zeroes it and refreshes the
- * whole book, so the panels always reflect the journal rather than a local
- * guess.
+ * one account posts a fresh journal entry that zeroes (or reduces) it and
+ * refreshes the whole book, so the panels always reflect the journal rather than
+ * a local guess.
  */
 export function useClearinghouse(
   initialAccounts: ClearingAccountRow[],
@@ -61,34 +69,33 @@ export function useClearinghouse(
     }
   }
 
-  async function settle(account: ClearingAccountRow) {
-    setBusyId(account.accountId);
-    setError("");
-
-    const raw = partialAmount[account.accountId]?.trim() ?? "";
+  /**
+   * Posts one settlement. Returns a typed result so the quick-settle dialog can
+   * show its own error without touching the board's banner.
+   */
+  async function submitSettlement(
+    account: ClearingAccountRow,
+    draft: SettlementDraft,
+  ): Promise<SettlementResult> {
+    const raw = draft.amount.trim();
     const outstanding = Math.abs(account.balance);
     if (raw !== "") {
       const parsed = Number(raw);
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setError("أدخل مبلغاً صحيحاً للتسوية الجزئية.");
-        setBusyId("");
-        return;
+        return { ok: false, error: "أدخل مبلغاً صحيحاً للتسوية الجزئية." };
       }
       if (Math.round(parsed * 100) > Math.round(outstanding * 100)) {
-        setError("المبلغ أكبر من الرصيد المستحق.");
-        setBusyId("");
-        return;
+        return { ok: false, error: "المبلغ أكبر من الرصيد المستحق." };
       }
     }
 
     try {
       const form = new FormData();
       form.set("accountId", account.accountId);
-      const no = receiptNo[account.accountId]?.trim();
+      const no = draft.receiptNo.trim();
       if (no) form.set("receiptNo", no);
       if (raw !== "") form.set("amount", raw);
-      const chosen = file[account.accountId];
-      if (chosen) form.set("file", chosen);
+      if (draft.file) form.set("file", draft.file);
 
       const response = await fetch("/api/clearinghouse", {
         method: "POST",
@@ -99,18 +106,33 @@ export function useClearinghouse(
         error?: string;
       };
       if (!response.ok || !payload.entryId) {
-        setError(payload.error ?? "تعذر تسوية الحساب.");
-        return;
+        return { ok: false, error: payload.error ?? "تعذر تسوية الحساب." };
       }
+      await refresh();
+      return { ok: true, error: "" };
+    } catch {
+      return { ok: false, error: "تعذر الاتصال بالخادم." };
+    }
+  }
+
+  async function settle(account: ClearingAccountRow) {
+    setBusyId(account.accountId);
+    setError("");
+
+    const result = await submitSettlement(account, {
+      amount: partialAmount[account.accountId] ?? "",
+      receiptNo: receiptNo[account.accountId] ?? "",
+      file: file[account.accountId] ?? null,
+    });
+
+    if (result.ok) {
       setReceiptNo((current) => ({ ...current, [account.accountId]: "" }));
       setFile((current) => ({ ...current, [account.accountId]: null }));
       setPartialAmount((current) => ({ ...current, [account.accountId]: "" }));
-      await refresh();
-    } catch {
-      setError("تعذر الاتصال بالخادم.");
-    } finally {
-      setBusyId("");
+    } else {
+      setError(result.error);
     }
+    setBusyId("");
   }
 
   return {
@@ -127,5 +149,6 @@ export function useClearinghouse(
     setPartialAmount,
     refresh,
     settle,
+    submitSettlement,
   };
 }

@@ -23,6 +23,8 @@ export const EMPTY_ORDER_FILTERS: OrderMetricFilters = {
 export type OrderMetricSummary = {
   orders: number;
   volume: number;
+  /** Mean order value in the slice, 0 when there are no orders. */
+  averageOrderValue: number;
   /** Frozen merchant commissions on the operations in scope. */
   merchantCommission: number;
   /**
@@ -36,6 +38,8 @@ export type OrderMetricSummary = {
   platformProfit: number;
   merchantProfit: number;
   courierProfit: number;
+  /** Discounts the platform itself funded: coupon share plus wallet credit. */
+  platformDiscount: number;
   discounts: number;
 };
 
@@ -92,12 +96,14 @@ export function summarizeOrderMetrics(
   return {
     orders,
     volume,
+    averageOrderValue: orders === 0 ? 0 : volume / orders,
     merchantCommission: commission,
     driverCommission,
     operationalCollection: commission + driverCommission,
     platformProfit: commission - platformFunded - walletDiscount,
     merchantProfit: volume - commission - vendorFunded,
     courierProfit: courierCut,
+    platformDiscount: platformFunded + walletDiscount,
     discounts: couponDiscount + walletDiscount,
   };
 }

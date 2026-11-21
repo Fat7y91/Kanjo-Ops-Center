@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { count, money, percent } from "@/lib/bi/format";
+import { amount, count, currencySymbol, money, percent } from "@/lib/bi/format";
 import type { OrderMetricSummary } from "@/lib/bi/order-metrics";
 import type {
   CatalogSummary,
@@ -69,15 +69,19 @@ export function ExecutiveSummary({
         href: "/operations/log",
         label: "الطلبات",
         value: count(orders.orders),
-        detail: `${money(orders.volume)} حجم`,
+        detail: `${money(orders.volume)} حجم · ${amount(
+          orders.averageOrderValue,
+        )} ج.م./طلب`,
         tone: "green",
       },
       {
         href: "/finance/clearinghouse",
-        label: "صافي التحصيل",
-        value: money(finance.net),
-        detail: `${money(finance.collected)} تجار · ${money(finance.driverCommissions)} مناديب`,
-        tone: "green",
+        label: "صافي الموقف المالي (المقاصة)",
+        value: `${amount(finance.netPosition)} ${currencySymbol("EGP")}`,
+        detail: `${finance.netPosition >= 0 ? "مستحق لنا" : "مستحق لهم"} · لنا ${amount(
+          finance.receivables,
+        )} · علينا ${amount(finance.payables)}`,
+        tone: finance.netPosition >= 0 ? "green" : "red",
       },
       {
         href: "/finance/clearinghouse",
@@ -108,7 +112,9 @@ export function ExecutiveSummary({
       href: "/catalog",
       label: "جاهزية الكتالوج",
       value: percent(catalog.signedReadiness),
-      detail: `${count(catalog.liveMerchants)} من ${count(catalog.signedTotal)} عقد موقّع`,
+      detail: `${count(catalog.liveMerchants)} من ${count(
+        catalog.signedTotal,
+      )} تاجر متفق معه`,
       tone: catalog.signedReadiness >= 0.8 ? "green" : "red",
     },
   );

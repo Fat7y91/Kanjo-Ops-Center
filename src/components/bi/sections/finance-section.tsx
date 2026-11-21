@@ -118,11 +118,12 @@ export function FinanceSection({
           />
           <WidgetDivider />
           <WidgetStat
-            label="عمولات محصّلة"
+            label="عمولات محصّلة فعلياً"
             value={<MoneyValue value={finance.collected} currency="EGP" />}
-            detail={`${finance.signedCount} عقد موقّع`}
-            tone="gold"
-            onOpen={() => onDrill("finance-collected")}
+            detail={
+              finance.collected > 0 ? "من تسويات مرحّلة" : "لم تُحصّل بعد"
+            }
+            tone={finance.collected > 0 ? "green" : "default"}
           />
         </div>
       </div>
