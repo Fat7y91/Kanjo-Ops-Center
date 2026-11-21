@@ -71,31 +71,29 @@ export type AttendanceWrite = {
   createdBy: string | null;
 };
 
+/**
+ * The override and its 165 EGP journal entry are written by one Postgres
+ * function, so a manually marked present day is paid everywhere in the same
+ * transaction (and never double-posts if an order lands later that day).
+ */
 export async function upsertAttendance(
   input: AttendanceWrite,
 ): Promise<CourierAttendanceRecord> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("courier_attendance")
-    .upsert(
-      {
-        courier_id: input.courierId,
-        attendance_date: input.day,
-        status: input.status,
-        note: input.note,
-        created_by: input.createdBy,
-      },
-      { onConflict: "courier_id,attendance_date" },
-    )
-    .select(ATTENDANCE_COLUMNS)
-    .maybeSingle();
+  const { data, error } = await client.schema("app").rpc("save_courier_attendance", {
+    p_courier_id: input.courierId,
+    p_day: input.day,
+    p_status: input.status,
+    p_note: input.note,
+    p_created_by: input.createdBy,
+  });
 
   if (error) throw error;
-  if (!data) {
+  const row = (Array.isArray(data) ? data[0] : data) as AttendanceRow | null;
+  if (!row) {
     throw new Error("تعذر حفظ حضور مندوب التوصيل.");
   }
-  return toRecord(data as AttendanceRow);
+  return toRecord(row);
 }
 
 export async function deleteAttendance(
@@ -103,12 +101,10 @@ export async function deleteAttendance(
   day: string,
 ): Promise<void> {
   const client = getSupabaseServerClient();
-  const { error } = await client
-    .schema("app")
-    .from("courier_attendance")
-    .delete()
-    .eq("courier_id", courierId)
-    .eq("attendance_date", day);
+  const { error } = await client.schema("app").rpc("delete_courier_attendance", {
+    p_courier_id: courierId,
+    p_day: day,
+  });
 
   if (error) throw error;
 }

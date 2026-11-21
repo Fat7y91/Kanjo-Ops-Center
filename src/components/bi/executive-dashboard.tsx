@@ -14,7 +14,6 @@ import { FunnelSection } from "@/components/bi/sections/funnel-section";
 import { MarketingSection } from "@/components/bi/sections/marketing-section";
 import { NegotiationSection } from "@/components/bi/sections/negotiation-section";
 import { OrdersMetricsSection } from "@/components/bi/sections/orders-metrics-section";
-import { ProfitabilitySection } from "@/components/bi/profitability-section";
 import { resolveDrill, type DrillResolution } from "@/lib/bi/drill";
 import { summarizeOrderMetrics } from "@/lib/bi/order-metrics";
 import {
@@ -156,13 +155,6 @@ export function ExecutiveDashboard({
       />
 
       <div className="bi-bento">
-        {canSeeFinance ? (
-          <ProfitabilitySection
-            range={filters.range}
-            cityId={filters.cityId}
-          />
-        ) : null}
-
         {canSeeContracts ? (
           <FunnelSection
             steps={funnel}
