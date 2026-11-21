@@ -69,7 +69,7 @@ test("the three waterfall identities hold with no rounding drift", () => {
   const bases = [
     base(),
     base({ courierId: "courier-2", day: "2026-11-21" }),
-    // Not tied to a delivery day in the slice: never counted.
+    // Manual 0-order attendance day in the slice: still counted.
     base({ day: "2026-11-19" }),
   ];
 
@@ -81,8 +81,8 @@ test("the three waterfall identities hold with no rounding drift", () => {
   assert.equal(minor.grossRevenue, 37900);
   assert.equal(minor.coupons, 10000);
   assert.equal(minor.orderProfitBeforeBase, 27900);
-  assert.equal(minor.courierDailyBase, 33000);
-  assert.equal(minor.netOperating, -5100);
+  assert.equal(minor.courierDailyBase, 49500);
+  assert.equal(minor.netOperating, -21600);
 
   assert.equal(minor.commissions + minor.deliveryMargin, minor.grossRevenue);
   assert.equal(minor.grossRevenue - minor.coupons, minor.orderProfitBeforeBase);
@@ -143,8 +143,8 @@ test("the settlement workbook gains the exact P&L sheet", () => {
     coupons: 457,
     orderProfitBeforeBase: 257.36,
     averagePerOrder: 10.29,
-    courierDailyBase: 1650,
-    netOperating: -1392.64,
+    courierDailyBase: 1815,
+    netOperating: -1557.64,
   };
 
   const sheets = clearingExport.buildClearingSheets({
@@ -173,7 +173,7 @@ test("the settlement workbook gains the exact P&L sheet", () => {
   );
   assert.deepEqual(
     sheet.rows.map((row) => row["القيمة"]),
-    [547.36, 167, 714.36, 457, 257.36, 1650, -1392.64],
+    [547.36, 167, 714.36, 457, 257.36, 1815, -1557.64],
   );
 });
 

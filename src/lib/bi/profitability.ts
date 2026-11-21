@@ -19,6 +19,10 @@ import {
  * The per-order courier fee is the tiered rate (7 EGP for the first 15 orders a
  * partner delivers in a Cairo day, 15 EGP above that). The 165 EGP attendance
  * base is the separate footer deduction, never folded into the per-order fee.
+ *
+ * The attendance base includes every posted `courier_attendance` entry in the
+ * selected range, even courier-days with no delivered orders, so the footer
+ * reconciles exactly with the `5100` journal balance.
  */
 
 export type ProfitOrderFact = {
@@ -79,7 +83,7 @@ export type ProfitabilitySummary = {
   orderProfitBeforeBase: number;
   /** Per-order average of row 5, rounded to the piastre. */
   averagePerOrder: number;
-  /** Posted 165 EGP attendance entries for the courier-days in scope. */
+  /** Posted 165 EGP attendance entries in scope, including 0-order manual days. */
   courierDailyBase: number;
   /** Row 5 - courier daily base. */
   netOperating: number;
@@ -129,9 +133,7 @@ export function computeProfitabilityMinor(
 
   let courierDailyBase = 0;
   for (const base of bases) {
-    if (perCourierDay.has(courierDayKey(base.courierId, base.day))) {
-      courierDailyBase += base.amountMinor;
-    }
+    courierDailyBase += base.amountMinor;
   }
 
   return {
