@@ -176,12 +176,11 @@ export async function loadProfitability(params: {
 
   const bases: AttendanceBaseFact[] = [];
   // Without a city filter the base is every posted attendance entry in range,
-  // so 0-order manual attendance days reconcile with the journal. A city filter
-  // can only attribute attendance to courier-days that delivered in that city.
-  const cityCourierDays = params.cityId
-    ? new Set(
-        facts.map((fact) => `${fact.courierId}|${fact.deliveryDate}`),
-      )
+  // so 0-order manual attendance days reconcile with the journal. With a city
+  // filter we keep the attendance of couriers who delivered in that city in
+  // range, so their manual 0-order days are still counted.
+  const cityCourierIds = params.cityId
+    ? new Set(facts.map((fact) => fact.courierId))
     : null;
 
   for (const line of (attendanceResult.data ?? []) as unknown as RawAttendanceLine[]) {
@@ -189,7 +188,7 @@ export async function loadProfitability(params: {
     if (!entry) continue;
     const key = attendanceKey(entry.source_id);
     if (!key) continue;
-    if (cityCourierDays && !cityCourierDays.has(`${key.courierId}|${key.day}`)) {
+    if (cityCourierIds && !cityCourierIds.has(key.courierId)) {
       continue;
     }
     bases.push({
