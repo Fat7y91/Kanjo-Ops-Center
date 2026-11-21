@@ -15,15 +15,15 @@ export const runtime = "edge";
  */
 export async function PATCH(
   request: Request,
-  context: { params: Promise<{ orderId: string }> },
+  context: { params: Promise<{ id: string }> },
 ) {
   const { session, response } = await authorize("manage_commission_rates");
   if (!session) return response;
 
   try {
-    const { orderId } = await context.params;
+    const { id } = await context.params;
     const operation = await editOperationCommission(
-      orderId,
+      id,
       await readJson(request),
       session.user.id,
     );
