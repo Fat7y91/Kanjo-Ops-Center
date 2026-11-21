@@ -1,0 +1,152 @@
+/* Bank statement: a printable reconciliation, not a data grid. Opening and
+ * closing are the page's anchors; the movement table is the evidence between
+ * them. */
+.bank-statement {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bank-statement-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bank-statement-head h4 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.bank-statement-head p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-statement-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, auto));
+  gap: 6px 20px;
+  margin: 0;
+}
+
+.bank-statement-summary dt {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.bank-statement-summary dd {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-statement-scroll {
+  overflow-x: auto;
+}
+
+.bank-statement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.bank-statement-table th {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bank-statement-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+  color: var(--ink);
+  vertical-align: top;
+}
+
+.bank-statement-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.bank-statement-date {
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+}
+
+.bank-statement-in {
+  color: var(--green);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bank-statement-out {
+  color: var(--red);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bank-statement-table tfoot td {
+  padding: 10px;
+  border-top: 2px solid var(--line);
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.bank-statement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Print: the dialog chrome, buttons and every other surface disappear, leaving
+ * only the statement on an A4 page. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .bank-statement,
+  .bank-statement * {
+    visibility: visible;
+  }
+
+  .bank-statement {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    color: #000;
+  }
+
+  .bank-statement-actions {
+    display: none;
+  }
+
+  .bank-statement-scroll {
+    overflow: visible;
+  }
+
+  .bank-statement-table {
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .bank-statement-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

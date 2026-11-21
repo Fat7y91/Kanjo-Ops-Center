@@ -1,0 +1,48 @@
+name: CPU budget
+
+# Guardrails for the CPU budget in docs/CPU_1102_AUDIT.md.
+#
+# Three of the budget's rules are invisible to `tsc` and survive code review:
+# a route falling back to the Node runtime, a data screen losing its cache
+# opt-out, and a client module pulling the server graph into the bundle. The
+# fourth is a number — first-load script bytes per route — which is compared
+# against scripts/perf-baseline.json.
+
+on:
+  push:
+    branches: [main, feat/v2-enterprise-architecture]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Runtime and caching declarations
+        run: npm run check:runtime
+      - name: Build
+        run: npm run build
+      - name: Client payload budget
+        run: npm run check:perf
+      # The first run has no budget to compare against, so `check:perf` records
+      # one instead of failing. Uploading it is what turns the recording into a
+      # reviewable diff: download it, commit it, and later runs compare to it.
+      - name: Recorded payload baseline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-baseline
+          path: scripts/perf-baseline.json
+          if-no-files-found: ignore

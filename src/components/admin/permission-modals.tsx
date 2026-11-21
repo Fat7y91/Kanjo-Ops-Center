@@ -1,0 +1,254 @@
+"use client";
+
+import { useMemo } from "react";
+
+import { Modal } from "@/components/field-ops/modal";
+import { Button } from "@/components/ui/button";
+import { ChipToggle } from "@/components/ui/chip-toggle";
+import { CheckboxField, TextField } from "@/components/ui/form-inputs";
+import { SelectMenu } from "@/components/ui/select-menus";
+import { TeamPicker } from "@/components/admin/team-picker";
+import { PERMISSION_GROUPS, type Permission } from "@/lib/rbac/permissions";
+import type { CityTeam } from "@/lib/rbac/types";
+import {
+  isCourier,
+  type CityOption,
+  type CreateForm,
+  type LevelOption,
+} from "@/components/admin/user-form-types";
+
+type CopySource = {
+  id: string;
+  name: string;
+  permissions: Permission[];
+};
+
+type CreateModalProps = {
+  open: boolean;
+  form: CreateForm;
+  copySources: CopySource[];
+  levels: LevelOption[];
+  cities: CityOption[];
+  teams: CityTeam[];
+  viewerGlobalScope: boolean;
+  saving: boolean;
+  onFormChange: (next: CreateForm) => void;
+  onTeamCreated: (team: CityTeam) => void;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+};
+
+/**
+ * "Add user" dialog.
+ *
+ * Phone + password are the login identity (email is profile-only), the team is
+ * required only for a field courier, and the capability grid mirrors the edit
+ * matrix so a new user is provisioned with the exact grants they need instead
+ * of an empty slate.
+ */
+export function CreateUserModal({
+  open,
+  form,
+  copySources,
+  levels,
+  cities,
+  teams,
+  viewerGlobalScope,
+  saving,
+  onFormChange,
+  onTeamCreated,
+  onClose,
+  onSubmit,
+}: CreateModalProps) {
+  const needsTeam = isCourier(form.clearanceLevel);
+  const held = useMemo(() => new Set(form.permissions), [form.permissions]);
+
+  function patch(next: Partial<CreateForm>) {
+    onFormChange({ ...form, ...next });
+  }
+
+  function togglePermission(permission: Permission, enabled: boolean) {
+    patch({
+      // Editing a grant by hand breaks the tie to the copied template, so the
+      // dropdown must stop claiming the new user still matches that person.
+      copyFromId: "",
+      permissions: enabled
+        ? [...form.permissions, permission]
+        : form.permissions.filter((key) => key !== permission),
+    });
+  }
+
+  function copyFrom(id: string) {
+    if (!id) {
+      patch({ copyFromId: "", permissions: [] });
+      return;
+    }
+    const source = copySources.find((candidate) => candidate.id === id);
+    if (!source) return;
+    patch({ copyFromId: id, permissions: [...source.permissions] });
+  }
+
+  return (
+    <Modal
+      open={open}
+      title="إضافة مستخدم جديد"
+      eyebrow="إدارة الوصول"
+      description="أنشئ حساب دخول برقم الهاتف، ثم امنح القدرات الدقيقة ونطاق المدن. لا يمكن إنشاء مستخدم برتبة تعادل رتبتك أو تتجاوزها."
+      onClose={onClose}
+      wide
+    >
+      <form className="form-stack" onSubmit={onSubmit}>
+        <div className="form-grid">
+          <TextField
+            label="الاسم الكامل"
+            value={form.name}
+            onChange={(event) => patch({ name: event.target.value })}
+            required
+          />
+          <TextField
+            label="رقم الهاتف"
+            hint="بصيغة دولية تبدأ بـ +، وهو اسم الدخول."
+            value={form.phone}
+            onChange={(event) => patch({ phone: event.target.value })}
+            dir="ltr"
+            inputMode="tel"
+            placeholder="+201012345678"
+            required
+          />
+          <TextField
+            label="كلمة المرور المؤقتة"
+            hint="8 أحرف على الأقل؛ يغيّرها المستخدم عند أول دخول."
+            type="password"
+            value={form.password}
+            onChange={(event) => patch({ password: event.target.value })}
+            autoComplete="new-password"
+            required
+          />
+          <TextField
+            label="البريد الإلكتروني"
+            hint="اختياري، للتنبيهات فقط وليس للدخول."
+            type="email"
+            value={form.email}
+            onChange={(event) => patch({ email: event.target.value })}
+            dir="ltr"
+          />
+          <TextField
+            label="المسمى الوظيفي"
+            value={form.title}
+            onChange={(event) => patch({ title: event.target.value })}
+            required
+          />
+          <SelectMenu
+            label="مستوى التصريح"
+            value={form.clearanceLevel}
+            onChange={(clearanceLevel) => patch({ clearanceLevel })}
+            options={levels.map((option) => ({
+              value: String(option.level),
+              label: `${option.label} · L${option.level}`,
+            }))}
+          />
+        </div>
+
+        <div className="field">
+          <div className="field-head">
+            <span>نطاق المدن</span>
+            <span className="field-hint">
+              {viewerGlobalScope ? "يمكنك منح أي مدينة." : "مدنك المتاحة فقط."}
+            </span>
+          </div>
+          <div className="scope-picker">
+            {cities.map((city) => (
+              <ChipToggle
+                key={city.id}
+                label={city.name}
+                checked={form.cityIds.includes(city.id)}
+                onChange={(checked) =>
+                  patch({
+                    cityIds: checked
+                      ? [...form.cityIds, city.id]
+                      : form.cityIds.filter((id) => id !== city.id),
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Teams are city-owned, so the picker comes after the city scope. */}
+        {needsTeam ? (
+          <TeamPicker
+            cities={cities}
+            cityIds={form.cityIds}
+            teams={teams}
+            teamId={form.teamId}
+            teamCityId={form.teamCityId}
+            onChange={(next) => patch(next)}
+            onTeamCreated={onTeamCreated}
+          />
+        ) : null}
+
+        <div className="field">
+          <SelectMenu
+            label="نسخ الصلاحيات من مستخدم"
+            value={form.copyFromId}
+            onChange={copyFrom}
+            ariaLabel="نسخ الصلاحيات من مستخدم"
+            hint="اختيار مستخدم يستبدل القدرات المحددة أدناه بصلاحياته المتاحة لك."
+            options={[
+              { value: "", label: "بدون نسخ" },
+              ...copySources.map((source) => ({
+                value: source.id,
+                label: source.name,
+                hint: `${source.permissions.length} صلاحية`,
+              })),
+            ]}
+          />
+        </div>
+
+        <div className="field">
+          <div className="field-head">
+            <span>القدرات</span>
+            <span className="field-hint">
+              {form.permissions.length} صلاحية مختارة
+              {form.copyFromId ? " · منسوخة" : ""}
+            </span>
+          </div>
+          <div className="matrix-groups">
+            {PERMISSION_GROUPS.map((group) => (
+              <div
+                key={group.name}
+                className="matrix-group matrix-group-modal"
+              >
+                <h3>{group.name}</h3>
+                <div className="matrix-perms">
+                  {group.items.map((permission) => (
+                    <CheckboxField
+                      key={permission.key}
+                      label={permission.label}
+                      checked={held.has(permission.key as Permission)}
+                      onChange={(checked) =>
+                        togglePermission(
+                          permission.key as Permission,
+                          checked,
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="form-actions">
+          <Button variant="quiet" onClick={onClose}>
+            إلغاء
+          </Button>
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? "جارٍ الإنشاء..." : "إنشاء المستخدم"}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}

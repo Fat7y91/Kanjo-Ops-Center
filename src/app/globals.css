@@ -1,0 +1,36 @@
+/* Global stylesheet manifest.
+ *
+ * Tokens load first, then domain manifests, then the workspace manifest, and
+ * finally Tailwind utilities so responsive helpers win. Never append rules
+ * here: add them to the owning file under `src/styles/`.
+ */
+
+/* 1. Design tokens — must load first */
+@import "../styles/tokens.css";
+
+/* 2. Domain manifests */
+@import "../styles/bi.css";
+@import "../styles/catalog.css";
+@import "../styles/kpi.css";
+@import "../styles/field-ops-actions.css";
+@import "../styles/rbac.css";
+@import "../styles/accounts.css";
+@import "../styles/statement.css";
+@import "../styles/journal.css";
+@import "../styles/payroll.css";
+@import "../styles/commissions.css";
+@import "../styles/marketing.css";
+@import "../styles/governance.css";
+@import "../styles/notifications.css";
+@import "../styles/merchants.css";
+@import "../styles/contracts.css";
+@import "../styles/login.css";
+
+/* Resilience: in-shell reconnecting / error fallbacks */
+@import "../styles/errors.css";
+
+/* 3. Workspace shell and shared surfaces */
+@import "../styles/workspace.css";
+
+/* Tailwind utilities are emitted last so responsive helpers win. */
+@tailwind utilities;

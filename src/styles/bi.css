@@ -1,0 +1,19 @@
+/* Executive command center (BI dashboard).
+ *
+ * Manifest only: imported from globals.css right after tokens.css. Domain rules
+ * live in `styles/bi/*.css` and load in dependency order, base layout first and
+ * responsive overrides last.
+ *
+ * Layout language: each `.bi-widget` owns a *group* of metrics. Siblings inside
+ * a widget are separated by 1px dividers instead of gaps, which keeps the grid
+ * dense without merging unrelated numbers into one undifferentiated card.
+ */
+
+@import "./bi/layout.css";
+@import "./bi/stats.css";
+@import "./bi/negotiation.css";
+@import "./bi/funnel.css";
+@import "./bi/summary.css";
+@import "./bi/charts.css";
+@import "./bi/overlay.css";
+@import "./bi/responsive.css";

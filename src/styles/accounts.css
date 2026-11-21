@@ -1,0 +1,308 @@
+/* Accounts and bank ledger. */
+
+.accounts-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.accounts-notice {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.accounts-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.accounts-total {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.accounts-scope-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+/* The treasury grid gives the EGP account the dominant column: every daily
+ * settlement posts there, so it is the screen's primary object. The SAR account
+ * is a funding/holding account and reads as secondary. In RTL the first column
+ * is the rightmost, which is already where the eye lands. */
+.accounts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.account-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(35, 5, 53, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-card);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Primary card: the Egyptian Bank. Larger type and a stronger frame signal
+ * that this is where operational money lands, not just another account. */
+.account-card-primary {
+  padding: 24px;
+  border-color: color-mix(in srgb, var(--kanjo-purple-base) 28%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.account-card-primary .account-balance {
+  font-size: 1.9rem;
+}
+
+.account-card-primary .account-card-head h3 {
+  font-size: 1.2rem;
+}
+
+.account-card-primary .account-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.account-card-secondary {
+  align-self: stretch;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.account-card-secondary .account-balance {
+  font-size: 1.1rem;
+}
+
+.account-card-secondary .account-card-head h3 {
+  font-size: 0.92rem;
+}
+
+.account-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-card-head h3 {
+  margin: 6px 0 2px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.account-iban {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+}
+
+.account-balance {
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.account-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 0;
+  border-block: 1px dashed var(--line);
+}
+
+.account-metrics dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  margin-bottom: 3px;
+}
+
+.account-metrics dd {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.account-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-ledger li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+
+.account-ledger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.account-ledger-date {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.account-ledger strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.account-ledger-empty {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.account-form,
+.ledger-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ledger-kind {
+  display: flex;
+  gap: 8px;
+}
+
+.ledger-category {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ledger-category-create {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.account-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.expense-report {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.expense-report-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.expense-report-actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 960px) {
+  .expense-report-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .expense-report-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* FX transfer entry echoes the captured pair so the operator confirms the
+ * amount that actually moved, not a derived rate. */
+.fx-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.fx-rate {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.fx-echo {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-file {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.fx-file input {
+  font-size: 0.78rem;
+}
+
+@media (max-width: 720px) {
+  .accounts-totals,
+  .account-form-grid,
+  .accounts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accounts-total:last-child .bi-divider {
+    display: none;
+  }
+}

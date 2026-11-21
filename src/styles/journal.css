@@ -1,0 +1,173 @@
+/* ── Journal voucher (drill-down of a ledger row) ───────────────────────── */
+
+/* The whole row is the affordance: a bank ledger line opens its voucher.
+ * Scoped under `.account-ledger` so it outranks the Button primitive's
+ * utility classes (which are emitted after this file). */
+.account-ledger .account-ledger-row {
+  width: 100%;
+  display: grid;
+  justify-content: start;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius-control);
+  text-align: start;
+}
+
+.account-ledger .account-ledger-row:hover,
+.account-ledger .account-ledger-row:focus-visible {
+  background: var(--surface-soft);
+}
+
+.voucher {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.voucher-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.voucher-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.voucher-amount {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.voucher-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.voucher-section h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.voucher-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+  margin: 0;
+}
+
+.voucher-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.voucher-detail dt {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+
+.voucher-detail dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.voucher-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.voucher-side {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  background: var(--surface-soft);
+}
+
+.voucher-side ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voucher-side li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+}
+
+.voucher-side li span {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.voucher-side-tag {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.voucher-side-debit .voucher-side-tag {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.voucher-side-credit .voucher-side-tag {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.voucher-lines td:nth-child(3),
+.voucher-lines th:nth-child(3) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.voucher-receipt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.voucher-receipt-image {
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--line);
+  object-fit: contain;
+  background: var(--surface-soft);
+}
+
+@media (max-width: 720px) {
+  .voucher-details,
+  .voucher-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

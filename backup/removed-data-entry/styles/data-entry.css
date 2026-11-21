@@ -1,0 +1,122 @@
+/* Data entry: merchants first, then their products. */
+
+.data-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.data-entry-merchants,
+.data-entry-products {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--kanjo-surface);
+}
+
+.data-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.data-entry-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.data-entry-list,
+.data-entry-products-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.data-entry-merchant {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease-out,
+    background 0.18s ease-out;
+}
+
+.data-entry-merchant:hover,
+.data-entry-merchant.is-active {
+  border-color: var(--purple);
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+}
+
+.data-entry-merchant strong {
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.data-entry-merchant span,
+.data-entry-merchant em {
+  font-size: 0.68rem;
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.data-entry-products-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.data-entry-products-list div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.data-entry-products-list span {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.data-entry-price {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.data-entry-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 860px) {
+  .data-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

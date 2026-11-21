@@ -1,0 +1,52 @@
+/* Connectivity banners */
+
+.offline-banner,
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.offline-banner {
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, var(--surface));
+  color: var(--gold-deep);
+}
+
+.sync-banner {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+  color: var(--purple);
+}
+
+.offline-banner > div,
+.sync-banner > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.offline-banner strong,
+.sync-banner strong {
+  font-size: 0.84rem;
+}
+
+.offline-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #c08a18;
+  animation: visit-pulse 2s ease-out infinite;
+}
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--red) 26%, transparent);
+  background: var(--red-soft);
+  color: var(--red);
+}
+

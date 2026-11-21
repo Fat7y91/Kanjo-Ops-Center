@@ -1,0 +1,110 @@
+/* Dark theme */
+
+[data-theme="dark"] body.visit-mode-active {
+  background: var(--canvas);
+}
+
+[data-theme="dark"] .visit-mode {
+  background:
+    radial-gradient(circle at 12% -10%, rgba(201, 167, 255, 0.12), transparent 46%),
+    radial-gradient(circle at 92% 110%, rgba(255, 215, 0, 0.08), transparent 44%),
+    var(--canvas);
+}
+
+[data-theme="dark"] .visit-mode-head,
+[data-theme="dark"] .visit-mode-foot {
+  background: rgba(24, 24, 27, 0.92);
+}
+
+[data-theme="dark"] .visit-mode-card {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .visit-live-dot {
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45);
+}
+
+[data-theme="dark"] .visit-geo-note {
+  border-color: #4c3b16;
+  background: #201a0c;
+  color: #ffd75e;
+}
+
+[data-theme="dark"] .visit-advanced-note {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .outcome-advanced-tag {
+  background: rgba(255, 215, 0, 0.16);
+  color: #ffd75e;
+}
+
+[data-theme="dark"] .opinion-chip {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+}
+
+[data-theme="dark"] .opinion-chip:hover {
+  border-color: #7f6bb5;
+}
+
+[data-theme="dark"] .opinion-chip.is-active {
+  border-color: var(--purple);
+  background: var(--surface-soft);
+}
+
+[data-theme="dark"] .opinion-check {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  color: #a1a1aa;
+}
+
+[data-theme="dark"] .opinion-chip.is-active .opinion-check {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+[data-theme="dark"] .contact-card,
+[data-theme="dark"] .crm-contact-note,
+[data-theme="dark"] .visit-strategic-notes,
+[data-theme="dark"] .visit-summary-strip > div,
+[data-theme="dark"] .visit-figures > div,
+[data-theme="dark"] .visit-tracking-grid > div {
+  border-color: var(--line);
+  background: var(--surface-raised);
+}
+
+[data-theme="dark"] .contact-mobile {
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .crm-timeline-dot {
+  border-color: var(--surface);
+  box-shadow: 0 0 0 2px var(--line-strong);
+}
+
+[data-theme="dark"] .offline-banner {
+  border-color: #4c3b16;
+  background: #201a0c;
+  color: #f0e4bd;
+}
+
+[data-theme="dark"] .offline-dot {
+  background: #ffd75e;
+}
+
+[data-theme="dark"] .sync-banner {
+  border-color: var(--line-strong);
+  background: var(--surface-raised);
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .toast-error {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: #2a1313;
+  color: var(--red);
+}
+

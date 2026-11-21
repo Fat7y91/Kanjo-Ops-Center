@@ -1,0 +1,262 @@
+import { MAX_CLEARANCE_LEVEL } from "./hierarchy";
+import { PERMISSION_KEYS, type Permission } from "./permissions";
+import type { AppUser } from "./types";
+
+const ALL_PERMISSIONS: Permission[] = [...PERMISSION_KEYS];
+
+const REP_SET: Permission[] = [
+  "view_overview_contracts",
+  "view_merchants",
+  "view_catalog",
+  "view_rep_kpi",
+  "start_end_visit",
+  "write_report",
+  "request_ownership_transfer",
+  "view_pricing_and_status",
+];
+
+/**
+ * Baseline operator roster.
+ *
+ * Kept in its own module so the user store stays focused on mutation and
+ * invariants as the roster grows with new modules (finance, marketing).
+ *
+ * Rows are declarative; `SEED_USERS` below normalises them, so an L4 row can
+ * never be seeded with a partial grant set.
+ */
+type SeedUser = Omit<AppUser, "phone">;
+
+const SEED_ROSTER: SeedUser[] = [
+  {
+    id: "u-owner",
+    name: "Nour El-Sayed",
+    email: "nour@kanjo.example",
+    title: "مالك المنصة",
+    team: "Executive",
+    permissions: ALL_PERMISSIONS,
+    accessibleCities: ["city-cairo", "city-giza", "city-alexandria", "city-mansoura"],
+    clearanceLevel: 4,
+    globalScope: true,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-founder",
+    name: "Tarek Fahmy",
+    email: "tarek@kanjo.example",
+    title: "شريك مؤسس",
+    team: "Executive",
+    permissions: ALL_PERMISSIONS,
+    accessibleCities: ["city-cairo", "city-giza", "city-alexandria", "city-mansoura"],
+    clearanceLevel: 3,
+    globalScope: true,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-ops",
+    name: "Mariam Adel",
+    email: "mariam@kanjo.example",
+    title: "مدير عمليات المدن",
+    team: "City Operations",
+    permissions: [
+      "view_overview_contracts",
+      "view_overview_negotiation",
+      "view_overview_finance",
+      "view_overview_catalog",
+      "manage_cities",
+      "view_active_cities",
+      "view_geo_operations",
+      "view_merchants",
+      "view_merchant_profile",
+      "add_merchant",
+      "view_catalog",
+      "edit_catalog",
+      "manage_categories",
+      "view_global_kpi",
+      "assign_tasks",
+      "view_all_teams_visits",
+      "approve_ownership_transfer",
+      "approve_report_edits",
+      "edit_contract",
+      "sign_contract",
+      "record_bank_transaction",
+      "log_operations",
+      "view_clearinghouse",
+      "view_payroll_sheets",
+      "view_campaigns",
+      "manage_system_users",
+    ],
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 2,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-sales",
+    name: "Omar Khaled",
+    email: "omar@kanjo.example",
+    title: "شراكات التجار",
+    team: "Fox Team",
+    permissions: [
+      "view_overview_contracts",
+      "view_merchants",
+      "view_merchant_profile",
+      "add_merchant",
+      "view_catalog",
+      "add_catalog",
+      "draft_contract",
+      "view_all_teams_visits",
+      "view_rep_kpi",
+      "request_ownership_transfer",
+      "view_pricing_and_status",
+    ],
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-catalog",
+    name: "Salma Hany",
+    email: "salma@kanjo.example",
+    title: "مكتب الكتالوج",
+    team: "Catalog",
+    permissions: [
+      "view_overview_catalog",
+      "view_merchants",
+      "manage_categories",
+      "review_add_requests",
+      "view_catalog",
+      "edit_catalog",
+      "add_catalog",
+      "edit_product_images",
+      "review_image_quality",
+    ],
+    accessibleCities: [],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-audit",
+    name: "Youssef Tarek",
+    email: "youssef@kanjo.example",
+    title: "مراجع مالي",
+    team: "Audit",
+    permissions: [
+      "view_overview_compliance",
+      "view_overview_finance",
+      "view_bank_balances",
+      "view_bank_transactions",
+      "view_clearinghouse",
+      "view_marketing_logs",
+      "view_payroll_sheets",
+      "view_all_teams_visits",
+    ],
+    accessibleCities: ["city-alexandria"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-fox",
+    name: "Hassan Mostafa",
+    email: "hassan@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Fox Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-power",
+    name: "Dina Samir",
+    email: "dina@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Power Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-cairo-3",
+    name: "Yara Adel",
+    email: "yara@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Fox Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-cairo-4",
+    name: "Mahmoud Fekry",
+    email: "mahmoud@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Power Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-cairo"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-giza",
+    name: "Karim Nabil",
+    email: "karim@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Power Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-giza"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+  {
+    id: "u-rep-mansoura",
+    name: "Aya Fathy",
+    email: "aya@kanjo.example",
+    title: "مندوب ميداني",
+    team: "Fox Team",
+    permissions: REP_SET,
+    accessibleCities: ["city-mansoura"],
+    clearanceLevel: 1,
+    globalScope: false,
+    active: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+];
+
+/**
+ * Level 4 is the supreme tier: it holds the entire catalogue, always.
+ *
+ * The rule is applied here instead of being trusted from each literal above, so
+ * a future L4 row cannot be added with a partial set. The database enforces the
+ * same invariant in `20261101000000_seed_l4_new_permissions.sql`; both sides
+ * read the catalogue from `permissions.ts`, which is why this is a projection
+ * and not a second copy of 49 keys.
+ */
+function withSupremeCatalogue(user: SeedUser): SeedUser {
+  if (user.clearanceLevel < MAX_CLEARANCE_LEVEL) return user;
+  return { ...user, permissions: [...ALL_PERMISSIONS] };
+}
+
+export const SEED_USERS: AppUser[] = SEED_ROSTER.map(withSupremeCatalogue).map(
+  (user) => ({ ...user, phone: "" }),
+);

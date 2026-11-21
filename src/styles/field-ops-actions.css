@@ -1,0 +1,28 @@
+/* Direct follow-up channel actions (WhatsApp / phone call).
+ *
+ * Loaded before the base `.button` rule, so every selector is compounded with
+ * `.button` to win on specificity regardless of import order.
+ */
+
+.button.button-call {
+  border-color: #bfd7f5;
+  background: #e8f1fd;
+  color: #14508f;
+  font-weight: 700;
+}
+
+.button.button-call:hover {
+  border-color: #9dc1ee;
+  background: #d9e8fb;
+}
+
+[data-theme="dark"] .button.button-call {
+  border-color: #1e4674;
+  background: #10233a;
+  color: #81b9f7;
+}
+
+[data-theme="dark"] .button.button-call:hover {
+  border-color: #2b5f9a;
+  background: #142d49;
+}

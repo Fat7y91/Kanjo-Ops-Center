@@ -1,0 +1,1791 @@
+# Kanjo V2.0 — Architecture Blueprint
+
+Branch: `feat/v2-enterprise-architecture`
+Stack: Next.js 15.5 App Router · React 19 · TypeScript 5.7 · Zod 3.24 · Headless UI 2.2 · Tailwind 3.4
+
+This document is the single source of truth for **where code belongs**. Read it
+before touching any module. `AGENTS.md` holds the mandatory rules; this file
+holds the map and the migration status.
+
+---
+
+## 1. The Five Tiers
+
+Requests flow strictly downward. A tier may only import from tiers **below**
+it. Never import upward, never skip a tier.
+
+```mermaid
+graph TD
+    T1["Tier 1 - UI: src/app pages + src/components"] --> T2["Tier 2 - Controller: Route Handlers / Server Actions"]
+    T2 --> T3["Tier 3 - Business: pure domain rules"]
+    T3 --> T4["Tier 4 - Repository: persistence only"]
+    T4 --> T5["Tier 5 - Database"]
+```
+
+| Tier | Responsibility | Location | May import |
+|---|---|---|---|
+| 1 — UI | Render, view state, handlers. No domain rules, no I/O. | `src/app/**/page.tsx`, `src/components/**`, `src/components/ui/**` | T2 |
+| 2 — Controller | Auth/authorization, input validation (Zod), status codes, shaping responses. No business rules. | `src/app/api/**/route.ts`, `src/lib/auth/api.ts` | T3 |
+| 3 — Business | Domain rules, invariants, calculations. Zero DB or UI imports. | `src/lib/<domain>/*.ts` | T4 (types only ideally) |
+| 4 — Repository | Only layer that reads/writes a database. Doc mapping and queries. | `src/lib/<domain>/repository.ts`, `src/lib/<domain>/store/**` | T5 |
+| 5 — Database | Supabase (PostgreSQL) for all durable domains. Connecting clients live in `src/lib/db/`. | external | — |
+
+### Tier rules in practice
+
+- A controller route does: `authorizeAny([...])` → `schema.parse()` →
+  `businessFn()` → `NextResponse.json()`. Nothing else.
+- A component never calls `fetch("/api/...")` inline; it lives in a
+  `use-*.ts` hook under the same domain folder.
+- Domain functions are synchronous where possible and throw typed errors
+  (`CatalogError`, `FieldOpsError`) that the controller maps with `apiError()`.
+
+### Hybrid Database Strategy
+
+Two databases, chosen by domain, never by convenience:
+
+| Domain | Database | Tier 5 clients |
+|---|---|---|
+| Financial / ERP — users, RBAC, ledgers, wallets, commissions | Supabase (PostgreSQL) | `src/lib/db/supabase/{config,client,server}.ts` |
+| Operations — live order tracking, complex catalog, offline-first field data | Firebase (Firestore) | `src/lib/db/firebase/{config,client,admin}.ts` |
+
+- A repository talks to exactly one database. Cross-domain reads are composed
+  one tier up (Tier 3), never with a SQL join against Firestore.
+- `src/lib/db/supabase/server.ts` and `src/lib/db/firebase/admin.ts` import
+  `server-only`; importing either from a client component is a build error.
+- `firebase-admin` cannot run on the Edge Runtime. A controller that uses it
+  MUST declare `export const runtime = "nodejs"`. All other routes stay `edge`.
+- Configuration is read lazily inside the getters, so `next build` and
+  `/login` succeed even when no database secrets are configured.
+
+**Decision: Supabase is the committed SQL engine for Financial/ERP.** Its
+PostgreSQL foundation gives real transactions, constraints and referential
+integrity for ledgers, wallets and commissions, and its real-time channel keeps
+wallet/commission balances live without polling. Firebase is not a candidate
+for this domain.
+
+---
+
+## 2. Master Rules (summary of `AGENTS.md`)
+
+1. **Small files** — hard limit 250–300 lines per `.ts`/`.tsx`. Generated data
+   is the only exception and must live in `src/lib/**/data/`.
+2. **Single responsibility** — layout, state, business logic and API access are
+   separate modules.
+3. **CSS modularity** — `src/app/globals.css` is an `@import` manifest plus
+   global resets only. Domain CSS lives in `src/styles/<domain>.css`, tokens
+   first.
+4. **Refactor before extend** — touching an over-limit file requires a pure
+   extraction commit first, verified by `typecheck` + `build`.
+5. **Design system** — never use native `<button>`, `<input>`, `<select>` or
+   raw Tailwind dropdowns. Use the primitives in `src/components/ui/`.
+6. **Verification** — every refactor commit must pass `npm run typecheck` and
+   `npm run build` (dev server must be stopped for the build).
+7. **Production UI only** — never render architectural explanations,
+   implementation notes, stack names, env var names, or placeholder/"dummy"
+   paragraphs in React components. The DOM is for the end user: labels, values,
+   states, and actions. Rationale, trade-offs and backend mechanics belong in
+   `ARCHITECTURE.md`, code comments, or commit messages. If a reviewer would say
+   "why is this text in the product?", delete it.
+
+Full text: `AGENTS.md`.
+
+---
+
+## 3. Presentation Conventions
+
+### Numerals
+
+All numbers render as **Western digits (0-9)**, even inside Arabic text. Arabic
+locales default to Eastern Arabic-Indic digits (`ar-EG` → `١٬٢٣٤٬٥٦٧`), so every
+`Intl` formatter uses the `-u-nu-latn` extension:
+
+```ts
+new Intl.NumberFormat("ar-EG-u-nu-latn", { maximumFractionDigits: 0 });
+new Intl.DateTimeFormat("ar-EG-u-nu-latn", { dateStyle: "medium" });
+```
+
+This keeps Arabic labels and month names while digits, separators and decimals
+stay Latin. Never use a bare `ar-EG` locale for a formatter, and never
+`toLocaleString("ar-EG")`. Canonical formatters live in
+`src/lib/{bi,catalog,field-ops,kpi}/format.ts`; page-local formatters must follow
+the same rule.
+
+---
+
+## 4. Environment & Configuration
+
+All variables are read lazily by `src/lib/db/env.ts` and the domain config
+modules, so a missing value fails at first use — never at import or build time.
+Set them in Cloudflare Pages under **Settings → Variables and Secrets**; mark
+every secret as encrypted.
+
+### Required today (application boot)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `SESSION_SECRET` | Runtime | Yes | HMAC-SHA256 session cookie signing. Must be ≥ 16 chars; production throws otherwise. `src/lib/auth/session.ts` |
+
+`NODE_ENV` is supplied by Next.js / Cloudflare — never configure it manually.
+
+### Required once the Financial/ERP repositories are wired (Supabase)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `SUPABASE_URL` | Runtime | No | Project REST endpoint, e.g. `https://<ref>.supabase.co` |
+| `SUPABASE_ANON_KEY` | Build + Runtime | No (public) | `getSupabaseBrowserClient()`; `signInWithPassword()` during login |
+| `SUPABASE_SERVICE_ROLE_KEY` | Runtime | Yes | `getSupabaseServerClient()` — RLS-bypassing Tier 4 reads/writes, auth admin |
+
+Login needs **all three**. The anon key verifies the password; the service-role
+key reads the profile back from `app.users`. Missing any of them goes to
+`/login?error=login-disabled` rather than silently falling back to the seed
+roster.
+
+The service-role key must never be prefixed with `NEXT_PUBLIC_`. It is used by
+`app/api/admin/users/provision` to mint auth users, so leaking it would let
+anyone create an operator account.
+
+**Public signup must be disabled on the Supabase project.** Turn off email and
+phone signups (Dashboard → Authentication → Sign In / Providers, or
+`auth.enable_signup = false` in `supabase/config.toml`). Signup is not a product
+feature here: accounts are provisioned top-down only (§8.6). If the flag is
+left on, `POST /auth/v1/signup` remains reachable and would mint credential-only
+accounts with no `app.users` profile, no grants, and no city scope.
+
+### Required once the Operations repositories are wired (Firebase)
+
+| Key | Scope | Secret | Used by |
+|---|---|---|---|
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Build + Runtime | No (public) | `getFirebaseWebConfig()` |
+| `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` | Build + Runtime | No (public) | Optional analytics |
+| `NEXT_PUBLIC_FIREBASE_APP_CHECK_SITE_KEY` | Build + Runtime | No (public) | Optional App Check |
+| `FIREBASE_PROJECT_ID` | Runtime | No | `getFirebaseProjectId()`, admin app |
+| `FIREBASE_CLIENT_EMAIL` | Runtime | Yes | Admin credential (when not using the JSON blob) |
+| `FIREBASE_PRIVATE_KEY` | Runtime | Yes | Admin credential; literal `\n` sequences are restored |
+| `FIREBASE_SERVICE_ACCOUNT` | Runtime | Yes | Alternative: full service-account JSON as one value |
+
+`NEXT_PUBLIC_*` values are inlined at build time, so changing one requires a
+redeploy, not just a restart. The Admin SDK variables are only needed by routes
+declared `runtime = "nodejs"`.
+
+### Do not add to the Pages environment
+
+`FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`,
+`FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID`, `FIREBASE_MEASUREMENT_ID`,
+`FIREBASE_APP_CHECK_SITE_KEY`, `KANJO_DRIVE_SCRIPT_URL`,
+`KANJO_DRIVE_SCRIPT_TOKEN` belong to the legacy static site in `public/` and
+its build scripts. The `SYNC_DRY_RUN` / `DRY_RUN` / `BACKUP_PATH` /
+`CLAIMS_WRITE_DELAY_MS` family belongs to the GitHub Actions maintenance
+scripts. Neither group is read by the Next.js app.
+
+---
+
+## 5. UI Primitive Library — `src/components/ui/`
+
+All Headless UI backed. Brand styling lives inside each primitive via `data-*`
+states; call sites never hand-roll purple/gold classes.
+
+| File | Lines | Exports | Use for |
+|---|---|---|---|
+| `button.tsx` | 57 | `Button` | Every action / submit |
+| `dropdown-menu.tsx` | 99 | `DropdownMenu` | Row and context actions |
+| `popover-menu.tsx` | 71 | `PopoverMenu` | Trigger-anchored panels (inbox previews, filters) |
+| `tabs.tsx` | 97 | `Tabs` | Section / filter switchers |
+| `form-inputs.tsx` | 234 | `Field`, `TextField`, `TextAreaField`, `CheckboxField`, `ToggleField`, `InputControl` | Form controls |
+| `select-menus.tsx` | 237 | `SelectMenu`, `ComboField` | Selects and searchable pickers |
+| `chip-toggle.tsx` | 33 | `ChipToggle` | Multi-select chips |
+| `page-header.tsx` | 24 | `PageHeader` | Page titles |
+| `stat-card.tsx` | 19 | `StatCard` | KPI tiles |
+| `skeletons.tsx` | 183 | skeleton set | Loading states |
+| `cx.ts` | 4 | `cx` | Class merge helper |
+
+Aesthetic contract: rounded-full pills for tabs and menu triggers, rounded-lg
+inside menu panels, high-contrast purple focus/open/hover states
+(`--kanjo-interactive-hover` + white text, never white-on-white), soft shadows,
+interactive-purple / gold accents. Selected tabs use the
+`--gradient-primary` fill with white text (AA) so contrast never depends on the
+pastel wash alone. Dark mode is
+driven by `data-theme="dark"` on `<html>` (see `tailwind.config.ts` `darkMode`
+selector).
+
+Colour, elevation and geometry inherit V1: the deep navigation shell is the
+`--gradient-nav` recipe (`#240038 → #3b0764`), raised cards carry
+`--gradient-card` (white to `#faf5ff`), active nav rows use the gold tab fill
+with `--kanjo-purple-base` ink, and status badges use the V1 tinted-fill +
+hairline recipe (emerald / amber / orange / red / blue). Brand inputs live in
+`src/styles/tokens.css`; the Tailwind `kanjo-*` and `brand-*` aliases point at
+those variables, so components never hard-code the hex values.
+
+### Primitive rule: every `Label` needs a provider
+
+Headless UI's `Label`, `Description` and `Switch.Label` read from a React
+context. Rendering one without a parent that supplies it throws at render time
+and takes down the whole route:
+
+> `You used a <Label /> component, but it is not inside a relevant parent.`
+
+This string comes from `@headlessui/react`, not from Recharts, even when the
+crashing route happens to contain charts. Rules:
+
+- Wrap labelling in `Field` (which renders Headless UI `Field`), or inside
+  `Listbox` / `Combobox` / `Switch.Group`. Never render a bare `Label`.
+- `Field` must stay a `HeadlessField`; downgrading it to a `<div>` re-breaks
+  every `SelectMenu` that passes a `label`, including `/agent-kpi`.
+- A primitive that takes a `label` prop owns the provider, so call sites cannot
+  get this wrong.
+
+---
+
+## 6. Current Module Placement
+
+### Database Clients (Tier 5)
+- `src/lib/db/env.ts` — `optionalEnv`, `requireEnv`, `requireAnyEnv`,
+  `MissingEnvError`. Every client resolves configuration through this module.
+- `src/lib/db/supabase/config.ts` — lazy `SUPABASE_*` readers + `hasSupabaseConfig`.
+- `src/lib/db/supabase/client.ts` — anon-key browser client (RLS enforced).
+- `src/lib/db/supabase/server.ts` — service-role client for Tier 4 Financial/ERP
+  repositories. `server-only`.
+- `src/lib/db/supabase/errors.ts` — PostgREST error triage shared by every
+  repository: `isMissingSchemaObject` (`42703`, `42P01`, `PGRST202`, `PGRST204`,
+  `PGRST205`) and `isUniqueViolation` (`23505`). `rbac/rows.ts` and
+  `commissions/repository.ts` re-export it so no domain keeps a private copy.
+- `src/lib/db/firebase/config.ts` — lazy `NEXT_PUBLIC_FIREBASE_*` readers.
+- `src/lib/db/firebase/client.ts` — memoised web app + Firestore with persistent
+  cache and an in-memory fallback when IndexedDB is unavailable.
+- `src/lib/db/firebase/admin.ts` — service-account Admin SDK for Operations
+  writes. `server-only`; Node runtime only.
+- `supabase/migrations/20261029000000_rbac_foundation.sql` — the validated
+  `app` schema (RBAC tables, triggers, RLS). See Section 7.
+
+Status: RBAC (`rbac/repository.ts`, `rbac/team-repository.ts`) and commission
+rates (`commissions/repository.ts`) are live consumers. Merchants
+(`app.merchants`), catalog products (`app.catalog_products`) and visit reports
+(`app.visit_reports`) are SQL-backed single sources of truth. Cities, tasks,
+transfers and edit requests are still process-local until they are migrated one
+at a time.
+
+### Auth & RBAC (T1→T5)
+- `src/lib/auth/api.ts` — `authorize`, `authorizeAny`, `authorizeMinClearance`, `apiError`, `readJson` (Controller helpers).
+- `src/lib/auth/login.ts` — `resolveLoginRequest` / `safeNextPath`: verifies phone + password via `signInWithPassword`, then mints the app session. Never calls `redirect()`.
+- `src/app/login/login-form.tsx` — phone + password form (client).
+- `src/app/login/page.tsx` — login container.
+- `src/app/api/auth/login/route.ts` — `POST` login Route Handler; sets the cookie and returns `NextResponse.redirect`.
+- `src/app/api/auth/logout/route.ts` — `POST` logout Route Handler; clears the cookie and redirects.
+- `src/lib/auth/server-session.ts` — `getServerSession()` and cookie I/O.
+- `src/lib/auth/guard.ts` — `requireSession`, `requirePermission`, `requireMinClearance`, `requireAnyPermission` (server components), and `requireModuleAccess(pathname)` — the nav-derived page guard (§8.7).
+- `src/lib/auth/session.ts` — HMAC token encode/verify.
+- `src/lib/rbac/` — `permissions.ts` + `data/permissions.ts` (103 keys), `users.ts` (async facade), `repository.ts` (Tier 4 Supabase reads/writes), `rows.ts` (row shapes, projections, schema-drift fallback), `seed-users.ts` (fallback only), `modules.ts`, `hierarchy.ts` (clearance + scope rules), `management.ts` (`assertCanCreate` / `assertCanPatch`).
+- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`; top-down signup via `auth.admin.createUser`. See §8.6.
+- `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`: verifies the requested team exists, its city is reachable by the actor, and that city is inside the courier's scope.
+- `src/lib/rbac/services/provisioning-writes.ts` — `createAuthUser`, `attachProfile`, `attachGrants`, `attachCityScope` (the three profile writes).
+- `src/lib/rbac/services/team-service.ts` — `createTeam()`; mints a city-owned team, guarded by `assertCanManageCity()`.
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema` (E.164 phone, password 8–72, clearance, grants, cities; optional email; `teamId` required only for level 1).
+- `src/lib/rbac/teams.ts` — `listTeams()`: DB-backed read of `app.field_teams`, returning `[]` when the table is absent (§8.5.1).
+- `src/lib/rbac/team-repository.ts` — Tier 4 reads/writes for `app.field_teams`.
+- `src/app/api/admin/teams/route.ts` — `POST` team controller (edge runtime); creates a team in a city the caller manages.
+- `src/app/api/admin/users/provision/route.ts` — `POST` provisioning controller (edge runtime, `manage_system_users`).
+- `src/lib/city-scope*.ts` — `effectiveCityIds`, `canAccessCity`, `scopedCities`.
+
+**Public signup is disabled.** No signup route or `signUp()` call exists; accounts are only created top-down by an authorised operator (§8.6).
+
+#### Why login is a Route Handler, not a Server Action
+
+`next-on-pages` cannot resolve `redirect()` inside an Edge Server Action; it
+throws `Invariant: Missing initURL` and the POST returns HTTP 500. Login and
+logout therefore POST to plain route handlers. Rules locked in:
+
+- **Never call `redirect()` from a Server Action on this branch.** Return a path
+  and let the caller navigate, or use a Route Handler.
+- The handlers build an absolute redirect URL from `x-forwarded-host` /
+  `x-forwarded-proto`, because Cloudflare terminates TLS upstream and the
+  internal request URL carries the wrong origin.
+- `safeNextPath` rejects `//host` and absolute URLs, so `?next=` cannot be used
+  as an open redirect.
+- `src/app/login/actions.ts` is a deprecated, redirect-free shim; the forms now
+  target `/api/auth/login` and `/api/auth/logout` directly.
+
+#### Nav / page / API parity (one catalogue, three callers)
+
+`src/lib/rbac/module-catalog.ts` is the single source of truth for which
+capabilities open a module. Three layers read it and must never drift:
+
+- **Sidebar** filters entries with `moduleInSidebar(module)` then
+  `permissionsForPath(pathname)`. `hiddenFromSidebar` removes a module from the
+  primary navigation without removing the route.
+- **Middleware** admits a request when `permissionsForPath(pathname)` matches.
+  For a module with a `clearanceBypass` rank the middleware defers the decision
+  to the page guard instead of redirecting, because the page reads the
+  authoritative clearance from the database while the cookie may predate it.
+- **Pages** call `requireModuleAccess(pathname)` (`src/lib/auth/guard.ts`),
+  which applies `minClearance` first, then the `clearanceBypass` rank, then
+  `requireAnyPermission(permissionsForPath(pathname))`.
+  An empty list (unmapped or `sessionOnly`, e.g. `/profile`) means "signed in is
+  enough".
+- **Route Handlers** call `authorizeAny(permissionsForModule(href))`
+  (`src/lib/rbac/modules.ts`, exact-href lookup) so a screen that opens can load
+  its data. Routes with a rank bypass (the inbox) use
+  `authorizePermissionOrClearance(permission, rank)` instead.
+
+The rule this enforces: **if an operator can see a nav item, they must never hit
+`/forbidden`.** That bug came from pages hard-coding a narrower key than the nav
+advertised (e.g. `/cities` gated on `view_active_cities` while the nav also
+opened on `manage_cities` / `add_city`). Sub-sections stay strictly hidden: each
+restricted block still unmounts itself via `Protect` / `usePermission`, so
+parity widens *access to the module*, never *visibility of a guarded control*.
+A capability is always checked before a rank bypass, so an explicit grant is
+never dropped.
+
+`/notifications` is the one module with `hiddenFromSidebar: true`: notifications
+never occupy a primary sidebar item. The topbar bell is the entry point, and its
+`عرض كل الإشعارات` footer link opens the full inbox.
+
+The sidebar reads `src/lib/rbac/nav-groups.ts` for hierarchy only: the root
+dashboard is pinned, then four groups in PO priority order (التشغيل، التسويق،
+المالية، الإدارة) with التشغيل split into التعاقدات، إدخال البيانات and المبيعات
+sub-groups. Each href is
+resolved against `MODULES`, then filtered with `moduleAllows`; a group whose
+every row is revoked is dropped entirely. Group headers are Headless UI
+`Button`s with `aria-expanded`. On desktop the rail defaults to a 76px icon
+strip and expands over the workspace on hover or focus; the edge chevron pins it
+open or closed. At ≤1023px it becomes the existing off-canvas drawer instead.
+
+
+### Resilience — no white screens (T1)
+
+A dropped network, an aborted `fetch`, or a severed RSC stream must degrade to
+a reconnecting state, never a fatal "Application error" screen. Three layers:
+
+- **`src/app/global-error.tsx`** — the root boundary. Next replaces the whole
+  document when this renders, so it ships its own `<html>/<body>` and inline
+  brand styles (the root layout or `globals.css` may be exactly what failed).
+  It classifies the error and, for a connection drop, retries on `online` plus a
+  slow poll instead of demanding a reload.
+- **Route `error.tsx`** — one per segment that reads data (`overview`,
+  `catalog`, `field-ops`, `merchants`, `cities`, `contracts`, `accounts`,
+  `payroll`, `marketing`, `admin`, `profile`, `operations`, `finance`,
+  `agent-kpi`). Each is a thin wrapper over `ErrorPanel`, keeping the shell and
+  every other module mounted while offering a retry that re-renders only the
+  failed segment.
+- **`ClientErrorBoundary`** (`src/components/errors/`) — wraps a single client
+  island (the Overview dashboard, the Field Ops board) so a widget crash cannot
+  take out the page header or the shell. It remounts the subtree on retry.
+
+Classification lives in `src/lib/errors/connection.ts` (`isConnectionError`,
+`isOffline`): it walks the `cause` chain and matches RSC `Connection closed`,
+`Failed to fetch`, `NetworkError`, `AbortError`/`TimeoutError`, socket resets and
+their Arabic equivalents. A connection error renders `ConnectionFallback`
+(`src/components/ui/connection-fallback.tsx`, styles in
+`src/styles/errors.css`) — amber "reconnecting" surface that retries on
+`online` and on an 8 s poll — while a genuine defect renders the plain retry
+panel and is logged. The session provider is hardened to the same standard: it
+rejects a malformed `/api/session` payload before it can poison `new Set()`, and
+tolerates a browser that forbids `BroadcastChannel`.
+
+
+### Catalog (Tier 1–5)
+- UI: `src/components/catalog/` (`catalog-client` 121, `product-card` 133,
+  `product-form` 256, `cascading-taxonomy` 164, `use-product-entry` 270,
+  `draft-list-item`, `draft-queue-banner`, `variant-matrix`, filter tabs).
+- Controller: `src/app/api/catalog/products/`, `+ [id]/image-qa`, `+ sync`, and
+  the QA server actions in `src/app/(workspace)/catalog/qa/actions.ts`.
+- Business: `src/lib/catalog/services/variant-service.ts` (variant algebra) and
+  `services/image-qa-service.ts` (image review state machine + city scope), plus
+  `filters.ts`, `sku.ts`, `category.ts`, `draft-types.ts`. `variants.ts` and
+  `image-qa.ts` are deprecated shims over the services.
+- Data access: `src/lib/catalog/offline-queue.ts` (draft queue) over
+  `draft-storage.ts` (IndexedDB/localStorage); `draft-queue.ts` is a shim.
+- Repository: `src/lib/catalog/store.ts` — domain rules + CRUD/sync over
+  `product-repository.ts`, which is the only module that knows
+  `app.catalog_products`; `src/lib/catalog/repository.ts` — merchant-city
+  resolution + QA commits.
+- Schema: `src/lib/schemas/catalog.ts`.
+- State enum: `pending_review → completed → published`.
+- Image QA: approving needs `edit_catalog | review_image_quality`, replacing the
+  image also accepts `edit_product_images`; drafts edit gated by
+  `add_catalog | edit_catalog`.
+- QA workspace lives at `/catalog/qa` (nav module `review_image_quality` +
+  `edit_product_images`).
+- Storage is `app.catalog_products` (migration `20261106000000`), the single
+  source of truth; there is no seed fallback. The migration adds the columns the
+  domain model carries (vendor type, category, product type, variants, review
+  note, authorship, offline client id) and enforces uniqueness for the client
+  draft id, the merchant+normalised name pair, SKU and barcode, so a concurrent
+  pair of requests cannot double-create.
+
+### Field Ops (Tier 1–5)
+- UI: `src/components/field-ops/` (client shells, modals, visit engine, geo
+  panel). Note: `field-ops-client.tsx` (831) and `cities-client.tsx` (760)
+  exceed the limit — see backlog.
+- Controller: `src/app/api/field-ops/**` (board, cities + managers,
+  merchants + documents/edit-requests/reports/state/transfers, search, tasks,
+  transfers, visits/sync, edit-requests), plus `geo-intelligence` and `session`.
+- Business: `src/lib/field-ops/` — `offline-queue.ts`, `types.ts`,
+  `firestore.ts` (doc mappers).
+- Repository: `src/lib/field-ops/store.ts` is a barrel over
+  `store/core.ts` (error type, ids, clock) and `store/operations.ts`. The
+  concrete modules are `store/{cities,merchants,tasks,visits,transfers,edits,
+  documents,state,crm,dates}.ts`, all async and all backed by SQL. There is no
+  process-local store and no seed: a Worker isolate is not a database.
+- Durable field-ops catalogue: `20261110000000_field_ops_catalogue.sql` creates
+  `app.cities`, `app.field_tasks`, `app.follow_up_tasks`,
+  `app.transfer_requests` and `app.edit_requests`. Tier 4 repositories
+  (`city-repository.ts`, `task-repository.ts`, `request-repository.ts`) own the
+  column names; the store modules enforce the domain rules. Reads degrade to an
+  empty list when the migration is not deployed; writes fail with a typed 503
+  rather than being acknowledged and dropped.
+  - Cities are text-id rows (`city-cairo`); managers are
+    `app.user_city_scope` grants, not a column, so there is one source of truth
+    for who manages a city. `city-scope-query.ts` is now async
+    (`effectiveCityIds`, `scopedCities`, `canAccessCity`) because the id list is
+    a database read.
+  - Transfers and edit requests carry a partial unique index: one `pending`
+    row per `(merchant, requester)`, so a double submit cannot create a second
+    request a manager must reject twice.
+- Merchant directory (SSOT): `src/lib/field-ops/merchant-repository.ts` is the
+  only module that knows `app.merchants` (migration `20261106000000`).
+  `store/merchants.ts` is the async domain facade (`listMerchants`,
+  `getMerchantById`, `requireMerchant`, `createMerchant`) and `store/merchants`
+  no longer keeps rows in the global store — the merchant sub-data (documents,
+  contact, opinions) lives in the `documents`/`contact`/`opinions` jsonb columns
+  on the same row, so the profile is always one authoritative read. There is no
+  seed fallback: an unconfigured database yields an empty directory and writes
+  fail with `MERCHANTS_UNAVAILABLE` (503).
+- Durable reports: `src/lib/field-ops/reports-repository.ts` is the only module
+  that knows `app.visit_reports` (migration `20261102000005`). Writes go there
+  before the route acknowledges; reads go through
+  `store/report-source.ts`, which reads the table and returns an empty timeline
+  when the migration is not deployed. Report readers
+  (`listVisitReports`, `visitCountFor`, `merchantTimeline`,
+  `merchantCrmSummary`, `buildBoard`, payroll, BI) are async; the merchant page
+  reads once and passes the rows into the timeline/summary. Rows are
+  append-only (update/delete raise `VISIT_REPORT_IMMUTABLE`); corrections go
+  through the edit-request workflow. Reads that only need one merchant are
+  narrowed in SQL (`listVisitReportRows(merchantId)`) — the profile page must
+  not pay for the whole network's visit history.
+- Merchant state (SSOT): the agreement state of a merchant is *not*
+  `merchant.contractState`. It is the newest of three signals — a completed visit
+  outcome, a manager override, and the stored column — with an exact tie resolved
+  override > visit > stored (`src/lib/field-ops/merchant-state.ts`).
+  - `app.merchant_state_rollup` (migration `20261103000000`) resolves that once in
+    SQL and exposes `current_state`, `current_state_at`, `current_state_source`,
+    the visit counters and the last outcome/rep. `security_invoker = true`, so the
+    caller's RLS still applies.
+  - `app.merchant_state_overrides` is the durable, append-only record of a
+    manager decision (UPDATE/DELETE raise `MERCHANT_STATE_OVERRIDE_IMMUTABLE`).
+    Before it existed, an override lived only in the process-local store and
+    disappeared with the isolate that served it.
+  - `merchant-state-repository.ts` is the only module that knows those column
+    names; `state-source.ts` is the single read seam every screen calls
+    (`loadMerchantStates`, `loadMerchantRollup`, `loadMerchantVisitCounts`). It
+    falls back to the in-memory derivation only when the migration is not
+    deployed, and never substitutes seed data when the database is merely slow —
+    a busy database throws and the route segment's `error.tsx` offers a retry.
+  - Why it matters for the Edge runtime: `/merchants`, `/catalog`, `/field-ops`
+    and `/api/field-ops/search` used to download the report table and reduce it
+    per merchant on every request, which exceeded the Cloudflare Worker CPU limit
+    (error 1102 / HTTP 500). They now perform one small read.
+- V1 parity fields: `app.merchant_v1_profiles` (migration `20261102000006`)
+  holds the street address, socials, app publish state, VIP listing flag and the
+  official Drive folder, kept out of the contract record because they are
+  operational/product state. `merchant-profile-repository.ts` maps it; the
+  `.../profile` route authorises each supplied field against its own capability
+  (`edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`,
+  `export_merchant_data`), and `.../export` streams a SpreadsheetML `.xls`.
+- Every field-ops domain now lives in Postgres (cities, tasks, follow-ups,
+  visits, merchants, transfers, edit requests, state overrides). No
+  `__kanjoV2FieldOpsStore` global remains.
+- Visit report contract: `src/lib/schemas/visit.ts` (`visitReportSchema`)
+  is authoritative; `components/field-ops/visit/validate-visit-form.ts`
+  mirrors it client-side and must return the failing field key.
+  - A follow-up is optional. `followUpKind` is `null` by default ("بدون
+    متابعة") and is only mandatory once a date is set; a chosen type requires
+    both a schedule and a dialable `followUpContactNumber`. The server keys off
+    the schedule so cached legacy payloads that carry a default type without a
+    date still sync.
+  - A commission outcome (`provisional`, `final_contract`) requires the
+    PRIMARY `contact.mobile` in the بيانات التواصل block, not the follow-up
+    number.
+  - The schema accepts `null` for the follow-up fields because the visit
+    engine clears them as `report.followUpX || null`.
+  Form state and submit live in `components/field-ops/use-visit-report-form.ts`;
+  `visit-report-form.tsx` is presentation only. Failures render inline under
+  the offending control, never as a raw Zod 422. Every validatable control
+  carries an id from `visit/field-anchors.ts`; a rejected submit scrolls and
+  focuses the failing field, because the Save button sits at the bottom of a
+  long form and the error would otherwise be off-screen.
+
+### Merchant Applications — public intake (Tier 1–5)
+- Landing page: `https://joinus.kanjo.com.eg` is static and unauthenticated. It
+  owns no database access; its only integration point is
+  `POST /api/public/merchants/apply`.
+- Controller: `src/app/api/public/merchants/apply/route.ts` (`POST`, `OPTIONS`).
+  `/api` is excluded from the session middleware, so this route carries its own
+  three defences: a strict origin allow-list, zod validation, and the table's
+  constraints plus the `anon` insert policy.
+- CORS (`src/lib/merchant-applications/cors.ts`): the allow-list is a literal
+  (`https://joinus.kanjo.com.eg`) — no wildcard, no pattern. A non-matching
+  origin receives no `Access-Control-Allow-Origin` header and a `403`, and every
+  response carries `Vary: Origin` so no cache can cross the boundary. A
+  `PUBLIC_APPLICATIONS_DEV_ORIGIN` env var adds one extra origin for local
+  integration runs and is ignored when `NODE_ENV=production`. A request with no
+  `Origin` header (a worker retry, a smoke test) is served but never granted a
+  CORS header, because it is not a browser caller.
+- Validation: `src/lib/schemas/merchant-applications.ts` validates the four
+  answers and normalises the phone number to international digits
+  (`01012345678` → `201012345678`) using `whatsappNumber()`, so repeats from the
+  same contact are matchable and every row is dialable.
+  `src/lib/merchant-applications/input.ts` maps `storeName` / `store_name` /
+  `store` onto one canonical field, because the form is deployed separately.
+- Persistence: `src/lib/merchant-applications/repository.ts` is the only module
+  that knows `app.merchant_applications` (migration `20261104000000`). Writes go
+  through the service-role client and the route answers `201` only when the row
+  exists; a deployment without the table answers `503` instead of a false
+  success. `phone_number` is `text` with no FK to `app.merchants`: an
+  application is not a merchant, and promotion is a reviewed action.
+- Immutability: an operator may move `status` (`pending`, `contacted`,
+  `approved`, `rejected`); a trigger raises `MERCHANT_APPLICATION_IMMUTABLE` if
+  an update touches the applicant's answers. Delete is service-role only, for a
+  lawful erasure request.
+- RLS: `insert` for `anon` with `status = 'pending'` forced and length/regex
+  checks, so the public form cannot forge a status or a malformed number, and
+  cannot read any row back — a read grant would turn the form into a customer
+  lookup service. `select`/`update` for `authenticated` require
+  `manage_merchant_applications`; the schema also grants `usage` on `app` to
+  `anon`, which previously existed only for `authenticated`/`service_role`.
+- UI: `src/app/(workspace)/merchants/applications/page.tsx` (server component,
+  `requirePermission("manage_merchant_applications")` before any read). The
+  route is its own module in `src/lib/rbac/module-catalog.ts`, so the sidebar and
+  the middleware agree with the page guard: reviewing applications does not
+  require `view_merchants`, and `view_merchants` does not open the queue.
+
+### Taxonomy (Tier 1–5)
+- UI: `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` (764 — over
+  limit).
+- Controller: `src/app/api/taxonomy/**` (entries, requests, approve, reject).
+- Repository: `src/lib/taxonomy/store.ts` (in-memory reference catalogue, over
+  the 300-line limit — backlog). `data.generated.ts` (2219) is the generated
+  vendor-type/category/variant catalogue and is the allowed generated-data
+  exception. The review queue starts empty: a pending request is a real
+  operator submission, never seeded demo content.
+- Page opens on any capability in the `/catalog/taxonomy` nav module
+  (`manage_categories`, `review_add_requests`, `manage_merchant_types`,
+  `manage_variables`), but each tab and mutation maps to its own grant:
+  `manage_categories` is the umbrella (all tabs, approvals); `review_add_requests`
+  alone sees only the requests tab and may approve/reject; the two per-kind
+  manager keys see only their own tab and add directly into it. Unavailable
+  tabs are not rendered at all. API gates mirror this: `GET` on `/api/taxonomy`
+  and `/requests` accepts the module set; `POST /requests` needs
+  `review_add_requests`; `POST /entries` needs one of the three manager keys;
+  approve/reject needs `manage_categories` or `review_add_requests`.
+- Data backfill: `scripts/ai-taxonomy-batch.ts` classifies uncategorized
+  products, merchants without a vendor type, and legacy variant labels through
+  DeepSeek. A product below `CONFIDENCE_THRESHOLD` (85) is stored with
+  `taxonomy_category_id = null` and `needs_human_review = true`, never a guessed
+  category; merchant and variant passes write their flagged rows to
+  `.ai-migration/review/`.
+- Zero-review pass: `scripts/ai-force-resolve-review.ts` re-prompts only the
+  flagged rows and commits the model's best valid catalogue id regardless of
+  score. Missing or invalid model output falls back to `smartTextScore`
+  (categories, merchant types) or the variant label patterns, so every resolved
+  row keeps a valid id and clears `needs_human_review`. `--commit` is required;
+  `--limit` and `--batch-size` bound a run.
+
+### BI / Overview (Tier 1 + 3)
+- UI: `src/app/(workspace)/overview/`, `src/components/` charts.
+- Business: `src/lib/bi/` — `dataset.ts`, `select.ts`, `tables.ts`,
+  `drill.ts`, `export.ts`, `format.ts`, `live-facts.ts`, `types.ts`. There is no
+  mock dataset: every fact is a live SQL read.
+- Overview header is sticky: `ExecutiveDashboard` accepts an optional `header`
+  node and renders it inside `.bi-sticky-head`, pinned at
+  `top: var(--topbar-height)`. `--topbar-height` is a token (72px), overridden
+  to 64px at ≤1023px where the shell topbar shrinks. The page header and the
+  filter bar travel in that slot so filters stay reachable while scrolling.
+- BI catalog health is binary: `published` versus `missing`. Review-only states
+  (`pending_review`, `completed`) fold into `missing` because they are not yet
+  live in the consumer catalog. There is no "draft" product state: a product is
+  created directly into `pending_review`.
+- `dataset.ts` is server-only and ships a fully-denormalized payload. Treasury
+  facts (`treasury`, `accounts`, `ledger`, `payslips`) are computed there from
+  the accounts and payroll stores and travel inside `BiDataset`, so browser
+  components never import a server store. Importing a store client-side would
+  bundle a second, divergent ledger into the JS and let the dashboard disagree
+  with `/accounts`. The payslips are built once and the same array is passed to
+  `buildFounderFinancials()` for the treasury obligation, so the two widgets
+  cannot read two different rollup snapshots.
+- The route is a shell, not a join. `overview/page.tsx` resolves the session and
+  renders `OverviewDashboard`, which fetches `GET /api/bi/overview` through
+  `src/components/bi/use-overview-dataset.ts` and validates the body with
+  `biDatasetSchema` instead of casting it. The handler is gated by
+  `permissionsForModule("/overview")` — the set the page guard and the sidebar
+  accept — so a client that may open the screen may also load its data. Building
+  the dataset inside the render made every visit pay for the join before the
+  first byte went out; now the title block and the skeleton paint immediately
+  and the widgets fill in. The endpoint answers `no-store` because the request
+  is authorized per user, even though the payload itself is identical for
+  everyone holding the grant.
+- Report-derived facts (newest visit, latest negotiated commission) come from
+  `app.bi_merchant_rollup` (migration `20261105000000`) via
+  `bi/repository.ts` + `bi/merchant-facts.ts`. It replaces the old Worker-side
+  reduction over the whole report table. The view reads only
+  `app.visit_reports` — the durable fact table both screens already use — so it
+  is complete whether or not `app.merchants` has been backfilled. Published
+  product counts come from `app.catalog_products`, the same table the catalog
+  screens write, so the compliance document check and the catalog health widget
+  never disagree. When the view is not deployed, `merchant-facts.ts` falls back
+  to a single pass over the reports.
+- `tables.ts` builders are pure: they accept dataset slices (`accountsTable`,
+  `ledgerTable`, `payrollTable`) rather than reading stores themselves. Drills
+  receive the same slices through `BiScopedData`. Treasury rows are
+  company-wide, so `scopeDataset` passes them through unfiltered.
+- Charts guard their own empty state. `FunnelStageChart` skips Recharts when
+  every slice is `0`, and `ComplianceDonut` when every `complete` is `0`,
+  rendering `.bi-chart-empty` / `.bi-donut-empty` instead. Never mount a
+  `Funnel`/`Pie` with `LabelList`/`Cell` children over zero rows.
+- Section visibility is grant-driven, not placeholder-driven. Each widget in
+  `ExecutiveDashboard` renders only when its own `view_overview_*` capability is
+  held (finance also requires clearance ≥ 3, marketing uses `view_campaigns`).
+  A revoked section is absent from the DOM: there is no locked banner, no raw
+  key in the copy, and no empty slot. `.bi-bento` is a wrapping flex row, so the
+  surviving half-width widget stretches across the full row when its partner is
+  hidden.
+- `.bi-bento` groups the widgets: full-width funnel and marketing widgets sit on
+  their own row, while finance, negotiation, catalog and compliance pair up and
+  collapse to one column at ≤1100px.
+- `ExecutiveSummary` renders the first-viewport strip: merchants, signed
+  contracts, orders, net collection, campaign conversions and catalog
+  readiness. Every tile is a route link, so the headline number and its owning
+  module are one click apart.
+- `OrdersMetricsSection` adds volume, platform profit, merchant profit, courier
+  profit and discounts. Its merchant/courier/city/coupon/date filters narrow
+  the same bucket set, so all five cards always describe one slice. Buckets are
+  built server-side in `bi/order-metrics-server.ts` (daily + dimensions, max
+  20k source rows) and shipped inside `BiDataset.orders`; the pure fold lives in
+  `bi/order-metrics.ts`. Profit is derived, never stored: platform = commission
+  − platform-funded discounts, merchant = volume − commission − vendor-funded
+  discounts, courier = frozen delivery cut.
+
+### Agent KPI (Tier 1–5)
+- UI: `src/app/(workspace)/agent-kpi/page.tsx` (server container) plus
+  `components/{kpi-filter-bar,kpi-agent-card,kpi-metric-grid,kpi-rank-card,kpi-insights-panel}.tsx`.
+- Controller: page-level authorization (`view_global_kpi` or `view_rep_kpi`),
+  URL filter parsing (`parseKpiFilters`, incl. the vault `month`), and scope
+  resolution (`resolveKpiScope`). Reps (L1/L2) are pinned to themselves; admins
+  (clearance ≥ 3) may filter city/team/rep/month.
+- Business: `src/lib/kpi/services/agent-kpi-service.ts` (snapshots, city-scoped
+  rank, top-performer), `metrics.ts` (vault facts, live salary pricing,
+  scoring), `insights.ts` (gap heuristics), `scope.ts`, `calendar.ts` (month
+  arithmetic). All pure.
+- Repository: `src/lib/kpi/vault.ts` reads the SQL Vault (live month queries
+  and `app.kpi_snapshots`); `src/lib/kpi/rank-repository.ts` reads the
+  live-month `app.agent_kpi_rank_rollup`; `src/lib/kpi/repository.ts` composes
+  the RBAC roster + city catalogue with the vault and ranks into a `KpiDataset`.
+  No mock seeds.
+- Ranking is **strictly city-scoped**; scores from different cities are never
+  compared. `buildKpiReport` builds the city peer table once and reuses it for
+  every snapshot (the old code rebuilt and re-sorted it per snapshot,
+  O(agents² × city)); the live-month rank also comes pre-computed from
+  `app.agent_kpi_rank_rollup`. Snapshot months and local dev still rank the
+  in-memory facts. Metrics come from the city stage:
+  `preparation → contracting → data_entry → live_operations`.
+- CSS: `src/styles/kpi.css` manifest over `src/styles/kpi/{layout,metrics,ranking,insights,responsive}.css`.
+- Empty scope is a **rendered state, not an error**. When no rep matches the
+  viewer's scope (a fresh workspace has no field reps yet), the service throws
+  `KpiError("EMPTY_SCOPE")`; the page catches it and renders `KpiEmptyState`.
+  Letting it escape produced an RSC application error (digest 788090452).
+
+### Accounts / Treasury (Tier 1–5)
+- UI: `src/app/(workspace)/accounts/page.tsx` (server container) plus
+  `components/accounts/{accounts-view,account-card,account-form,ledger-entry-form}.tsx`.
+- Business: `src/lib/accounts/ledger.ts` — `summarizeAccount`, `summarizeAll`,
+  `totalByCurrency`. Balance is always `Σdeposits − Σexpenses`, never stored.
+- Data: `src/lib/accounts/{store,types,format}.ts` plus `repository.ts` (Tier 4)
+  over `app.bank_accounts` / `app.ledger_entries` (`20261030000100`). `store.ts`
+  is the async Tier 3 facade. Per-currency totals: EGP and SAR never sum
+  together.
+- App/Edge: `GET|POST /api/accounts` and `POST /api/accounts/ledger`.
+  `manage_accounts` implies read, so a manager can resolve the account it
+  writes to.
+- Access tiers (`src/lib/accounts/access.ts`, pure): treasury is not one
+  audience; every tier is derived from capabilities, never job titles.
+  - **Full book** — holding `view_bank_balances` or `add_bank_account`. Sees
+    every account in both countries, every movement, the derived balance and
+    expense totals. Founder / System Admin / Head of Accounts.
+  - **Ledger-only** — holding `view_bank_transactions` without a full-book
+    capability. Reads every movement but no derived balance and no expense
+    total; the page renders the movements list with an explicit "no balances"
+    note.
+  - **Deposit-only** — holding only `record_bank_transaction`. Opens the module
+    to record deposits into Egyptian accounts only. `visibleAccounts` drops
+    non-Egyptian accounts, `visibleEntries` drops every expense row, and the
+    page renders no balance and no expense total. `assertCanRecord` rejects an
+    expense or a Saudi account before the store is touched, so editing the
+    request body cannot escalate the tier.
+- The page opens on any capability in `/accounts`'s nav module
+  (`requireModuleAccess("/accounts")`); each tier then narrows its own data. The
+  API mirrors the same union via `authorizeAny`.
+- The ledger is append-only at both tiers: TypeScript exposes no update/delete,
+  and `app.ledger_reject_mutation()` blocks UPDATE/DELETE even for the owner.
+  A correction is a new opposing entry.
+
+### Profile & Founder Capital (Tier 1–5)
+- UI: `src/app/(workspace)/profile/page.tsx` (own profile) and
+  `src/app/(workspace)/admin/finance/reviews/page.tsx` (treasury review), plus
+  `components/profile/` (`profile-identity-card`, `profile-password-card`,
+  `payout-method-card`, `capital-deposit-card`, `capital-review-board`,
+  `use-profile`, `use-capital-review`).
+- Business: `src/lib/profile/{types,capital,profile,capital-service,errors}.ts`.
+  `types.ts` and `capital.ts` are the Zod contracts (one discriminated union per
+  payout method); `profile.ts` and `capital-service.ts` are the Tier 3 rules;
+  `errors.ts` maps PostgREST/trigger failures onto domain errors.
+- Data: `src/lib/profile/{repository,capital-repository,storage,upload}.ts`
+  (Tier 4/5). Split by table group to stay under the file-size limit; the
+  SQL half is `20261102000001_user_profiles_and_capital.sql` plus
+  `20261102000002_capital_treasury_gate.sql`.
+- App/Edge: `GET|PATCH /api/profile`, `POST /api/profile/password`,
+  `PUT /api/profile/payout-method`, `POST /api/profile/upload`,
+  `GET|POST /api/capital-deposits`,
+  `POST /api/capital-deposits/[id]/decision`,
+  `POST /api/payout-methods/[id]/decision`.
+- Every route derives the operator from the session. There is no `id`
+  parameter on the self-service surfaces, so no request can point at another
+  operator by editing the body.
+- `/profile` is `sessionOnly` in `rbac/module-catalog.ts`: nobody is *granted*
+  access to their own record, so `permissionsForPath()` returns an empty list and
+  the middleware accepts any valid session. The review surface is gated by the
+  full-book treasury capabilities, not by rank.
+
+### Operations & Clearinghouse (Tier 1–5)
+- UI: `src/app/(workspace)/operations/log/page.tsx` (order logger) and
+  `src/app/(workspace)/finance/clearinghouse/page.tsx` (the book), plus
+  `components/operations/` (`operation-log-form`, `clearinghouse-board`,
+  `use-operation-form`, `use-clearinghouse`).
+- Business: `src/lib/operations/{types,errors,service}.ts`. `types.ts` owns the
+  Zod contracts and the signed-amount vocabulary; `service.ts` is the Tier 3
+  rule that parses a payload, converts major units to minor units once, and
+  never forwards a commission percent.
+- Data: `src/lib/operations/repository.ts` (Tier 4). It is the only module that
+  knows the column names in `20261102000003_operations_clearinghouse.sql`; every
+  read degrades when the schema is ahead of the code.
+- App/Edge: `GET|POST /api/operations`, `GET|POST /api/clearinghouse`.
+- Commission is **not** a form field. The SQL trigger
+  `operation_freeze_amounts()` resolves `agreed_commission`, else
+  `target_commission`, and freezes it on the row before it exists. Editing a
+  merchant rate afterwards cannot rewrite an order already logged.
+- Reading and settling are separate capabilities (`view_clearinghouse` vs
+  `settle_clearinghouse`) so an operator can audit the book without being able
+  to release money. A settler may read the rows it settles; the RLS policies
+  accept either key.
+
+### Payroll (Tier 1–5)
+- UI: `src/app/(workspace)/payroll/page.tsx` plus
+  `components/payroll/{payroll-view,payroll-table}.tsx`.
+- Business: `src/lib/payroll/engine.ts` — `tieredCommission` (cumulative bands,
+  sorted ascending), `computePayroll`, `finalize`. All pure.
+- Data: `src/lib/payroll/{store,types}.ts` (+ `repository.ts`, `profiles-repository.ts`). Contribution is derived from
+  live visit reports, not stored on the payroll profile, so payroll can never
+  disagree with the commission dashboard.
+- Contributions: `src/lib/payroll/repository.ts` reads
+  `app.payroll_contributions_rollup` (migration `20261105000000`) — one grouped
+  row per rep. `buildPayslips()` reads it once; the old path called
+  `contributionFor()` inside the profile loop and re-read the whole report table
+  per profile (O(profiles × reports)), a P0 Edge CPU 1102 offender. When the
+  view is not deployed, a single-pass fallback keeps local dev and CI truthful
+  without reintroducing the per-profile scan.
+- **`view_employee_payslip` means "own payslip only".** The page guard is
+  `requireModuleAccess("/payroll")`, which opens on either payroll capability,
+  but `buildPayslips({ userId, canViewAll })` narrows the profile list to the
+  viewer's own row unless they also hold `view_payroll_sheets`. The full sheet
+  header and multi-row table are only shown to the latter; everyone else sees a
+  single-row "كشف راتبي". The narrowing happens in the data layer, so an API
+  caller cannot read a peer's payslip by id — there is no id parameter.
+- SQL: `20261030000200_payroll.sql` — `payroll_profiles`,
+  `payroll_commission_tiers` (cumulative bands), `payroll_kpi_links`,
+  `payroll_runs`, `payroll_lines`, and the `payroll_run_totals` view.
+
+### Finance — Commission Rates (Tier 1–5)
+- UI: `src/app/(workspace)/admin/finance/rates/page.tsx` (Server Component,
+  60 lines) plus `src/components/admin/finance/`
+  (`commission-rates-view`, `use-commission-rates`, `use-commission-rates-form`).
+- Business: `src/lib/commissions/rates.ts` — `activeRateForCity()` (override
+  first, else the NULL-city fallback), `loadActiveCommissionRate()`,
+  `saveCommissionRate()` insert-or-update with `23505` recovery,
+  `CommissionRatesError`.
+- Data: `src/lib/commissions/repository.ts` (Tier 4 for `app.commission_rates`),
+  `src/lib/commissions/types.ts`, `src/lib/schemas/commission-rates.ts`.
+- Controller: `src/app/api/admin/commission-rates/route.ts` — `GET` / `PUT`.
+- **Gated by clearance rank AND the module capability.** `modules.ts` declares
+  `minClearance: 4` with `permission: "manage_commission_rates"`, the Server
+  Component calls `requireMinClearance(4)` then
+  `requirePermission("manage_commission_rates")`, the Route Handler calls
+  `authorizeMinClearance(4)`, and SQL requires `app.has_min_clearance(4)` on
+  update/insert/delete. The nav filter reads the same fields, so the sidebar
+  never advertises a route the guard will refuse.
+- Lookup mirrors `app.commission_rates_for()`: a city row when present,
+  otherwise the NULL-city global row. Two rows are never merged, so an override
+  is a complete configuration. `city_id` is Firestore text with no FK (§8.4);
+  `UNKNOWN_CITY` (422) is returned before SQL is touched.
+- A fee is a non-negative EGP amount (`numeric(12,2)`). The schema turns an
+  empty submission into `NaN` rather than `0`, so a cleared field cannot save an
+  unintended zero fee.
+- **The contract fee is tiered by achievement**, not flat:
+  tier 1 `[0, 80)`, tier 2 `[80, 90)`, tier 3 `[90, 100)`, tier 4 `[100, ∞)`.
+  The boundaries live in exactly one place per side —
+  `app.contract_fee_tier(numeric)` in SQL and `contractFeeTier()` in
+  `src/lib/commissions/types.ts` — and both must agree. `100%` is tier 4: the
+  ladder is half-open and gap-free, so no achievement value is ever unpaid.
+  A null achievement (no target, or a target of zero) is tier 1, never an
+  unearned bonus. `app.contract_fee_for(city, achievement)` resolves the same
+  override/fallback pair as `commission_rates_for()`, then selects the band; the
+  TypeScript twin is `contractFeeForAchievement()` in `rates.ts`.
+- SQL: `20261031000000_enterprise_kpi_vault.sql` (`app.commission_rates`,
+  `has_min_clearance`), `20261031000002_city_specific_rates.sql` (`city_id`,
+  two partial unique indexes, drops the singleton trigger,
+  `commission_rates_for()`), `20261031000003_city_teams_and_contracting.sql`
+  (`contracts_closed`, `avg_achievement_ratio`), and
+  `20261102000000_tiered_contract_commissions.sql` (the four
+  `contract_fee_tier_*` columns, `achievement_percent()`, `contract_fee_tier()`,
+  `contract_fee_for()`, `applied_contract_fee`).
+- `20261102000000_tiered_contract_commissions.sql` is additive and safe: it
+  adds the four tiers, backfills **all four from the old flat fee** so the
+  migration changes no amount by itself, and only then drops
+  `contracting_base_fee`. Every statement is guarded (`if not exists`, `if
+  exists`, `coalesce`), so a re-run is a no-op.
+- `20261031000001_snapshot_rate_history.sql` freezes `applied_merchant_rate` /
+  `applied_item_rate` onto `app.kpi_snapshots` and extends the immutability
+  guard. Pre-existing rows stay NULL — the true rate is unrecoverable, and
+  inventing one would put false evidence in the ledger.
+  `20261102000000` adds `applied_contract_fee` beside them on the same terms.
+
+### Marketing Measurement (Tier 1–5)
+- UI: `src/app/(workspace)/marketing/page.tsx` plus
+  `components/marketing/{marketing-view,marketing-entry-form,campaign-form,campaign-card,settings-panel}.tsx`.
+  Tabs are capability-filtered, not shown-then-locked: campaigns
+  (`view_campaigns`), new campaign (`create_campaign`), daily results
+  (`record_campaign_results`), records (`view_campaigns` | `view_marketing_logs`),
+  platform settings (`manage_platform_settings`). There is no "Restricted"
+  placeholder tab; a grant simply does not add its tab. The page also avoids
+  loading data it will not render — settings-only users never receive campaign
+  rows and campaign users never receive platform credentials.
+- API parity: `GET /api/marketing/campaigns` (`view_campaigns`),
+  `POST` (`create_campaign`), `PATCH /[id]` (`create_campaign` |
+  `record_campaign_results`), `GET /api/marketing/entries` (`view_campaigns` |
+  `view_marketing_logs`), `POST entries` (`record_campaign_results`),
+  `GET|PUT /api/marketing/settings` (`manage_platform_settings`).
+- Data: `src/lib/marketing/{store,types,platforms}.ts`. Manual entries are
+  append-only.
+- Campaign is the unit of work: a campaign owns the plan (name, platform,
+  channel, budget, lead/conversion targets, date window) and every daily entry
+  points at one campaign. `platform` (`meta`, `tiktok`, `google`, `snapchat`,
+  `offline`) is who bills us; `channel` (`instagram`, `tiktok`, `google`,
+  `referral`, `field`) is where the audience saw the ad. The guard trigger
+  copies platform/channel from the campaign onto each entry so the two can
+  never drift, and the dashboard filters on platform while grouping by channel.
+- Status ladder: `active ⇄ paused → closed`. `closed` is terminal — enforced in
+  TS (`setCampaignStatus`) and by `app.marketing_campaign_terminal`, so a
+  closed campaign's figures can never move again.
+- Progress is always derived from entries via `campaignProgress()` /
+  `app.marketing_campaign_totals` (spend, leads, conversions, budget left);
+  nothing is stored twice.
+- Credentials: `platforms.ts` holds a per-platform field spec (regex per field)
+  and `verifyPlatformCredentials()` runs the format check server-side.
+  `updatePlatformSettings()` refuses `enabled: true` unless verification
+  passes; the PUT route answers 422 otherwise. `offline` is manual-only and
+  never needs credentials.
+- API keys are write-only: the store keeps the raw value server-side and
+  exposes `apiKeyConfigured` only. SQL stores `api_key_ciphertext` and the
+  client reads the `marketing_platform_settings_public` view.
+- SQL: `20261030000300_marketing.sql` (entries) and
+  `20261030000600_marketing_campaigns.sql` (campaigns, entry `campaign_id` /
+  `leads` / `note`, guard trigger, terminal trigger, totals view). The funnel is
+  constrained: `clicks ≤ impressions`, `conversions ≤ clicks` and
+  `leads ≤ clicks`.
+
+### Notifications — inbox + topbar bell (Tier 1→3)
+- Data: `src/lib/notifications/{repository,mutations,rows,store,types}.ts` —
+  reads, writes, row normalisation, shared plumbing, contracts. API is
+  `GET|PATCH /api/notifications` behind `view_notifications`, with the executive
+  tier (L3+) admitted by rank as well so a lagging grant table cannot 403 an
+  owner out of their own inbox. The capability is checked first.
+- The inbox is **not a sidebar item** (`hiddenFromSidebar: true` in
+  `rbac/module-catalog.ts`), matching the Facebook pattern: the header bell is
+  the access point. The module stays routable at `/notifications` and is linked
+  from the bell's `عرض كل الإشعارات` footer.
+- Two row shapes share `app.notifications`: a targeted row (`user_id` set) and a
+  broadcast (`user_id IS NULL`). A broadcast's read state is **per viewer** and
+  lives in `app.notification_reads`, so one operator marking it read never
+  clears another operator's badge.
+- Reads select `*` and normalise in `rows.ts` (`toNotification`). A table created
+  by hand with a subset of the canonical columns still renders: `kind` falls back
+  to `system`, text columns to `''`, `occurred_at` to `created_at`, and a missing
+  `read_at` degrades the update to `{ is_read: true }`. The ORDER BY retries
+  `occurred_at → created_at → natural`, so a narrowed table still returns rows.
+- Only an absent table degrades the surface, and it degrades honestly: the page
+  renders an error with a retry, never an "inbox not enabled" placeholder.
+  `countUnread()` swallows the failure so the shell badge can never 500 a route.
+- The bell (`src/components/shell/notification-bell.tsx`,
+  `use-notification-feed.ts`, `notification-panel.tsx`) polls
+  `GET /api/notifications` every 60s while the tab is visible, refetches on
+  focus/visibility change, and mounts for a session holding
+  `view_notifications` or at the executive rank — the same rule as the API and
+  page guards (`NOTIFICATIONS_CLEARANCE` in `notifications/types.ts`). The panel
+  is the shared `PopoverMenu` primitive
+  (`src/components/ui/popover-menu.tsx`); a row marks itself read and then
+  follows its `link`, and the footer leads to the full inbox.
+- Hand-made table drifted? `supabase/snippets/notifications_schema_repair.sql` is
+  the idempotent repair: additive columns, RLS/grants parity with the migration,
+  and `notify pgrst, 'reload schema'` — the PGRST205 case from §8.5.1.
+
+### CSS
+- Manifest: `src/app/globals.css` (4807 lines — still over limit, extraction backlog).
+- Domains: `src/styles/{tokens,bi,catalog,kpi,field-ops-actions,rbac,accounts,payroll,commissions,marketing,governance,notifications}.css` plus
+  `catalog/*` (cards, controls, form, matrix, qa, responsive) and `bi/*`
+  (charts, layout, negotiation, overlay, responsive, stats).
+
+---
+
+## 7. Migration Gaps (target end-state)
+
+The tiers exist conceptually; these are the concrete gaps to close.
+
+1. **Some domains are still process-local.** `rbac/users.ts`, `field-ops/store/`
+   (cities, tasks, transfers, edit requests), `taxonomy/store.ts` and
+   `lib/marketing` read a process-local global. On Cloudflare these are
+   per-isolate, so data is neither durable nor consistent across requests. The
+   connection clients exist in `src/lib/db/`; the remaining work is to move each
+   domain behind a `repository.ts` that uses them, one domain per commit:
+   - **Done:** RBAC users/teams/grants, commission rates, the accounts ledger,
+     payroll, visit reports, merchant state, KPI snapshots, and — as of
+     `20261106000000` — the merchant directory (`app.merchants`) and catalog
+     (`app.catalog_products`). These are SQL single sources of truth with no
+     seed fallback.
+   - Financial/ERP → Supabase: remaining stores `lib/accounts`, `lib/payroll`,
+     `lib/marketing` still read a process-local global. The schemas are the
+     contract; wiring the repositories is the remaining step.
+   - Operations → Firebase: live orders; field-ops cities/tasks/transfers and
+     taxonomy still run in-memory.
+2. **RBAC reads and writes are now Supabase-backed.** `rbac/repository.ts`
+   implements the Tier 4 seam and `rbac/users.ts` is an async facade over it.
+   The seed roster is consulted only when Supabase is not configured; once it
+   is, a missing row means "no such operator" rather than a demo fallback.
+   Password login uses `signInWithPassword`. Remaining: the write paths in
+   `field-ops/store/cities.ts` still mutate the in-memory city store alongside
+   RBAC grants, so a grant can succeed while the city assignment is process-local.
+3. **Create paths.** The admin UI now posts to
+   `POST /api/admin/users/provision` (the real path) and re-reads the roster
+   afterwards. The legacy `POST /api/admin/users` still calls the seed-only
+   `createUser()`, which throws when Supabase is configured; it is kept only
+   for the not-yet-migrated callers and should be removed once they are gone.
+4. **Repository seams are partially created.** `catalog/repository.ts`,
+   `kpi/repository.ts` and `rbac/repository.ts` exist. `field-ops` and
+   `taxonomy` still mix business rules with persistence.
+5. **Service extraction started.** `src/lib/catalog/services/` now holds the
+   variant and image-QA services, and `src/lib/catalog/repository.ts` is the
+   reserved Tier 4 seam. Other domains still mix business and persistence in
+   `src/lib/<domain>/store.ts`; extract pure rules into
+   `src/lib/<domain>/services/` and leave only queries in `store/`.
+6. **`catalog/store.ts` is the async domain facade over `product-repository.ts`.**
+   Validation lives in `schemas/catalog.ts` and `services/`; persistence is in
+   `product-repository.ts`. `store.ts` stays under the 300-line limit.
+7. **`taxonomy/store.ts` (707)** holds business decisions (approve/reject) and
+   persistence together. Split and drop below 300.
+8. **Page components are still clients.** Move view state into `use-*.ts` so
+   `page.tsx` stays a server container.
+9. **Files over the 300-line limit (backlog):**
+   - `src/components/field-ops/field-ops-client.tsx` — 831
+   - `src/app/(workspace)/catalog/taxonomy/taxonomy-center.tsx` — 764
+   - `src/components/field-ops/cities-client.tsx` — 760
+   - `src/lib/taxonomy/store.ts` — 707
+   - `src/components/field-ops/request-modals.tsx` — 506
+   - `src/lib/field-ops/types.ts` — 449
+   - `src/lib/geo/egypt.ts` — 426
+   - `src/lib/field-ops/offline-queue.ts` — 344
+   - `src/components/field-ops/ops-team-panel.tsx` — 327
+   - `src/app/globals.css` — 4884 (extract to `src/styles/<domain>.css`)
+10. **Business rules need negative-space tests.** Domain functions are pure;
+   add unit coverage before wiring new persistence.
+11. **Schema has no automated test.** The RBAC migration was validated by hand
+   against PostgreSQL 15. Port those checks into a repeatable SQL or pgTAP
+   suite so the governor invariant cannot silently regress.
+
+Generated data exception: `src/lib/taxonomy/data.generated.ts` is the only file
+allowed above the limit.
+
+---
+
+## 8. Data Persistence — Hybrid Schema Contract
+
+Tier 5 is deliberately split between two systems. Nothing may be stored in both.
+
+| Concern | System | Why |
+|---|---|---|
+| Identity, RBAC, city scope | Supabase (PostgreSQL) | Transactional, foreign keys, auditable writes |
+| Contracts, wallets, ledgers, commissions | Supabase (PostgreSQL) | ACID money movement; a lost write is a financial incident |
+| Catalog, merchants, tasks, visits, city geometry | Firebase (Firestore) | Offline-first writes, realtime sync, GeoJSON payloads |
+| Taxonomy | Firebase (Firestore) | Grows without migrations; edited by field staff |
+
+Rule: any entity that participates in a money movement or an authorization
+decision is SQL. Anything that is primarily edited offline in the field is
+NoSQL. A document never spans both stores.
+
+### 8.1 RBAC Schema
+
+The capability catalogue has one direction of truth: `app.permissions` is the
+database record, and `src/lib/rbac/data/permissions.ts` is generated from it so
+the two can never drift (103 keys, verified key-for-key). `src/lib/rbac/`
+`permissions.ts` adds the derived `Permission` union, the `isPermission` guard
+and the grouping on top. `app.users.clearance_level` follows `hierarchy.ts`
+(1–4).
+
+The migration lives at `supabase/migrations/20261029000000_rbac_foundation.sql`.
+It creates the `app` schema, four tables, three triggers, two RLS helpers, and
+policies. It is validated end-to-end against PostgreSQL 15.
+
+| Table | Purpose |
+|---|---|
+| `app.permissions` | Capability catalogue, one row per key |
+| `app.users` | Operator profile + authorization state (`team_id` → `app.field_teams`) |
+| `app.user_permissions` | Explicit capability grants (no roles table) |
+| `app.user_city_scope` | Per-operator city restriction |
+| `app.field_teams` | City-owned field teams (`20261031000003_city_teams_and_contracting.sql`) |
+
+Load order is `permissions` → `users` → `user_permissions` → `user_city_scope`.
+`app.field_teams` must exist before `app.users.team_id` can reference it.
+
+The capability catalogue is 103 keys. The rows (Arabic labels included) are
+generated data in `src/lib/rbac/data/permissions.ts`, derived from
+`app.permissions`; `src/lib/rbac/permissions.ts` only adds the derived types,
+the `isPermission` guard and the grouping. Regenerate the data file after any
+permission migration.
+
+Drift is enforced mechanically rather than by review. `npm test` runs
+`scripts/lib/permission-catalogue.test.mjs`, which parses every literal key
+inserted into `app.permissions` (including the `l4_catalogue` staging table) and
+fails if the data file has a duplicate, a key no migration inserts, or a key a
+migration inserts that the data file omits. `npm run check:permissions` runs the
+same comparison as a standalone gate, and `--database` additionally diffs
+against a live `app.permissions` when `DATABASE_URL` is set. Both run in
+`.github/workflows/permission-catalogue.yml` on push and pull request.
+
+| Group (as seeded) | Keys | Count |
+|---|---|---|
+| مساحة العمل | `view_overview`, `view_finance`, `view_notifications` | 3 |
+| نظرة عامة | `view_overview_contracts`, `view_overview_negotiation`, `view_overview_finance`, `view_overview_catalog`, `view_overview_compliance`, `view_overview_marketing` | 6 |
+| المدن | `view_cities`, `create_city`, `update_city_zone`, `view_city_analytics`, `assign_city_managers`, `manage_cities`, `view_active_cities`, `view_geo_operations`, `add_city` | 9 |
+| التجار | `create_merchants`, `edit_merchants`, `delete_merchants`, `view_merchants`, `transfer_merchants`, `view_merchant_profile`, `add_merchant`, `edit_merchant_socials`, `toggle_app_publish`, `manage_vip_menu`, `export_merchant_data` | 11 |
+| الكتالوج | `manage_catalog`, `view_catalog`, `create_products`, `edit_catalog`, `add_catalog`, `review_catalog_images`, `delete_products`, `view_taxonomy`, `request_taxonomy` | 9 |
+| مراجعة الصور | `edit_product_images`, `review_image_quality` | 2 |
+| التصنيفات | `review_add_requests`, `manage_merchant_types`, `manage_categories`, `manage_variables` | 4 |
+| الحوكمة | `manage_taxonomy`, `manage_permissions`, `view_audit_logs` | 3 |
+| العمليات الميدانية | `view_field_ops`, `view_agent_kpi`, `manage_tasks`, `approve_tasks`, `assign_tasks`, `request_transfers`, `view_all_teams_visits`, `approve_transfers`, `start_end_visit`, `approve_edit_requests`, `write_report`, `manage_merchant_state`, `request_ownership_transfer`, `approve_ownership_transfer`, `approve_report_edits`, `view_archived_reports`, `manage_archived_reports` | 17 |
+| مؤشرات المناديب | `view_global_kpi`, `view_rep_kpi` | 2 |
+| العقود | `view_contracts`, `create_contracts`, `draft_contract`, `edit_contracts`, `edit_contract`, `sign_contracts`, `delete_contracts`, `sign_contract`, `cancel_contract` | 9 |
+| الحسابات البنكية | `view_bank_balances`, `add_bank_account`, `view_bank_transactions`, `record_bank_transaction` | 4 |
+| المالية | `view_financials`, `manage_expenses`, `view_accounts`, `manage_accounts`, `record_deposits`, `view_payroll`, `manage_payroll` | 7 |
+| التسويق | `manage_marketing_metrics`, `view_campaigns`, `create_campaign`, `record_campaign_results`, `view_marketing_logs`, `manage_platform_settings`, `view_marketing_leads`, `manage_marketing_leads` | 8 |
+| الرواتب | `view_payroll_sheets`, `view_employee_payslip` | 2 |
+| إدخال البيانات | `view_pricing_and_status` | 1 |
+| أسعار العمولات | `manage_commission_rates` | 1 |
+| مستخدمين النظام | `manage_system_users` | 1 |
+| المقاصة والعمليات | `log_operations`, `view_clearinghouse`, `settle_clearinghouse` | 3 |
+| طلبات التجار | `manage_merchant_applications` | 1 |
+
+**Teams are city-owned, not global.** `app.field_teams(id, city_id, name)` is
+unique per `(city_id, lower(name))`, and `app.users.team_id` points at one row.
+The legacy free-text `app.users.team` label is kept, deprecated, only because
+the provisioning service and legacy readers still write it; `team_id` is
+authoritative. Reads embed the owning row (`field_teams!team_id(name)`, i.e. a
+`left join`) and expose it as `AppUser.teamName`; the deprecated `team` column is
+kept unchanged because merchant ownership in field-ops/KPI still compares
+against that vocabulary. Deleting a team sets `team_id` to NULL, but a merchant contract
+(`app.merchants.contracted_by_team_id`) is `on delete restrict`, so attribution
+survives. `app.can_manage_city(city_id)` gates team writes: an executive (level
+≥ 3) owns every city, a level-2 manager only their scoped cities.
+
+### 8.2 Identity: phone + password, and nothing else
+
+Login is **phone number + password**. Email is optional profile data and is
+therefore neither required nor unique.
+
+- Credentials are owned by Supabase `auth.users`. Kanjo never stores a password
+  hash of its own; there is no custom password column anywhere in `app`.
+- `app.users.id` is a foreign key to `auth.users.id`, and `app.users.phone`
+  mirrors `auth.users.phone` through the `auth_user_upsert_profile` trigger.
+- Phone is constrained to E.164 (`^\+[1-9][0-9]{7,14}$`) and is unique.
+- The same trigger raises `AUTH_PHONE_REQUIRED` if an auth user appears without
+  a phone, so a phone-less account can never be created.
+- `email` accepts NULL and carries no unique index. Duplicate emails are legal.
+
+### 8.3 Authorization invariants enforced in SQL
+
+These mirror the pure functions in `src/lib/rbac/`, so the rules hold even if a
+write bypasses the application.
+
+| Invariant | Mechanism |
+|---|---|
+| `global_scope` never drifts from clearance | `generated always as (clearance_level >= 3) stored` |
+| Clearance stays within 1–4 | `users_clearance_range` check |
+| At least one active `manage_system_users` holder | Deferred constraint triggers on `app.user_permissions` and `app.users` |
+| Ordinary profile edits stay legal | Guards fire only on governor-removal events, so the first operator can be bootstrapped |
+| Stale sessions can be invalidated | `auth_revision` counter |
+| Level 4 holds the whole catalogue | `20261030000800_l4_full_permission_backfill.sql`, converged by `20261101000000_seed_l4_new_permissions.sql` |
+
+Level 4 is the supreme tier: an L4 account holds the whole catalogue, so it
+always reports 100% of it — 49 keys under `20261101000000`, 97 today. Suspension
+is expressed by `app.users.active` and `is_active_user()`, never by withholding
+grants — a reactivated L4 returns whole instead of half-blind.
+`20261101000000` upserts the 15-module catalogue, deletes the L4 grants that
+point at keys the catalogue no longer contains, re-grants the 49, bumps
+`auth_revision`, and raises an exception if any L4 row does not end up with
+exactly 49. The count is that migration's, not a constant: every later
+capability migration appends a key and grants it to L4 in the same transaction
+(`20261030000700` treasury, `20261104000000` merchant applications), so an L4
+account stays whole. `20261101000000` itself is keyed to `clearance_level = 4`
+only — under the Hierarchy Security Rule L3 is strictly below L4, so L3 keeps
+whatever it was granted, and a one-time backfill for L3 (as in
+`20261030000700` and `20261104000000`) is a delta, not the tier rule.
+
+The governor guard is the SQL twin of `assertActiveGovernor()` in
+`src/lib/rbac/users.ts`. It rejects removing or deactivating the last active
+governor, but permits any unrelated update — an earlier draft fired on every
+update and made bootstrapping the first operator impossible.
+
+### 8.4 Cross-database reference
+
+`app.user_city_scope.city_id` has **no foreign key**. City documents live in
+Firestore, so referential integrity is a Tier 3 responsibility. The column is
+`text` and is validated only as non-empty at the database layer.
+
+### 8.5 Row Level Security
+
+Every table in the `app` schema has RLS enabled *and* forced, so even the table
+owner is subject to policy. `has_permission()` and `is_active_user()` are
+`security definer` to avoid a policy on `app.users` recursing into itself.
+
+| Surface | Policy |
+|---|---|
+| `app.permissions` | Read by any active operator; writes are service-role only |
+| `app.users` | Read own row, or all rows with `manage_system_users`; writes are governor-only |
+| `app.user_permissions` | Read own grants (needed to build a session), or all with `manage_system_users` |
+| `app.user_city_scope` | Same shape as grants |
+| `app.field_teams` | Read by any active operator (needed to pick a team); insert/update/delete only via `can_manage_city(city_id)` |
+| `app.merchant_applications` | `insert` for `anon` (status forced to `pending`); `select`/`update` for an active operator holding `manage_merchant_applications`; delete is service-role only |
+
+Self-service profile edits must go through a dedicated RPC rather than a direct
+`UPDATE`, so a user can never raise their own `clearance_level` or flip `active`.
+
+### 8.5.1 Schema drift must not 500 a page
+
+Application code and migrations deploy separately, so a release can reach
+production before `20261031000003_city_teams_and_contracting.sql` has run. That
+is exactly what happened when the city/team picker shipped: the Add User page
+selected `app.users.team_id` and queried `app.field_teams`, both of which were
+absent, so PostgREST returned `42703` / `42P01` during the Server Component
+render and the route answered HTTP 500 with *An error occurred in the Server
+Components render*.
+
+The rule: **a missing new schema object degrades a feature, it never tears down
+the page.**
+
+- `src/lib/db/supabase/errors.ts` owns `isMissingSchemaObject()`, which
+  recognises `42703` (no column), `42P01` (no table), and `PGRST202` /
+  `PGRST204` / `PGRST205` (stale schema cache). `PGRST200` (no relationship in
+  the schema cache) counts as a missing embed. `src/lib/rbac/rows.ts` owns the
+  row shapes and re-exports the helper.
+- `selectUserRows()` degrades in three steps: profile + `field_teams!team_id(name)`,
+  then profile + `team_id` (no embed), then `USER_COLUMNS_LEGACY` (no
+  `team_id`). The roster always renders; `teamId` falls back to `null` and
+  `teamName` falls back to `null` while `team` keeps the legacy label.
+- `listTeams()` returns `[]` when `app.field_teams` is absent, so the dialog
+  simply offers to create the first team.
+- The RBAC grants/scope reads (`loadRbacSnapshot`, `getUserProfile`) treat a
+  missing `user_permissions` / `user_city_scope` table as empty during a
+  migration window, so session resolution keeps working while the schema
+  catches up; every non-schema error is still re-thrown.
+- Session resolution reads `app.rbac_session(uuid)` — profile, grants, city
+  scope and revision in one document (`src/lib/rbac/session-snapshot.ts`).
+  When PostgREST reports that function as absent, the three-query path above is
+  used instead, so a deployment that has not applied `20261107000000` renders at
+  Phase 0 cost rather than failing.
+- `listCommissionRateRows()` (finance rates page) never throws inside a Server
+  Component: any read failure — missing table, stale schema cache, transient
+  outage — degrades to `null`, and the page renders its "finance database
+  unavailable" state instead of a 500. The KPI vault reads
+  (`src/lib/kpi/vault.ts`) follow the same contract: `null` on schema drift,
+  honest zeros in the UI.
+- Write paths answer `503 TEAM_STORE_UNAVAILABLE` rather than a raw PostgREST
+  code. `attachProfile` retries without `team_id` for a non-team profile, but
+  **refuses** when a team was requested: a courier must never be provisioned
+  with no team.
+
+Genuine errors (`42501` RLS denials, `23505` uniqueness) are re-thrown untouched,
+so this fallback never hides an authorization bug.
+
+**Finance rates read.** `src/lib/commissions/repository.ts` degrades through
+three projections — the tiered columns, then the old flat `contracting_base_fee`
+(copied into all four bands so no amount changes), then no contracting fee at
+all. Since the finance-500 fix, `listCommissionRateRows()` itself never throws
+out of a Server Component: missing table (`42P01` / `PGRST205`), missing
+`city_id` (`42703`) or any transient failure degrades the read to `null`, and
+the page renders its "finance database unavailable" state. Writes keep the
+strict error behaviour.
+
+### 8.6 No Self-Service Signup — Top-Down Provisioning
+
+**Public registration is strictly disabled.** There is no signup route, no
+`signUp()` call anywhere in the app, and no "create account" link on `/login`.
+An account can only come into existence when an authorised operator mints it.
+Kanjo is B2B operations software, not a consumer product: every identity is
+issued by someone who is accountable for it.
+
+Supabase's phone provider must stay closed to public signup. Set
+`auth.enable_signup = false` (Dashboard → Authentication → Providers, or
+`supabase/config.toml`) so the only remaining path is the Admin API used by
+Tier 3. Without that setting the REST `/auth/v1/signup` endpoint would still
+mint accounts behind the app's back.
+
+#### The Hierarchy Security Rule
+
+A user holding `manage_system_users` may only **see, edit and create** users who
+are inside their own city scope **and** have a **strictly lower clearance
+level** than themselves. Peers and superiors are invisible on the users
+surface, for executives included: an L4 may assign at most L3 and can never see
+or edit another L4 account. Without `manage_system_users` the page does not
+render at all.
+
+| Actor | Level | Creates | Scope it may grant |
+|---|---|---|---|
+| System Admin | 4 | Levels 1–3 (strictly lower) | Any city, any catalogued permission |
+| Founder | 3 | Levels 1–2 (strictly lower) | Any city, any permission it holds |
+| City Operations Manager | 2 | Field Reps (level 1) | Only their own cities |
+| Field Rep | 1 | Nobody | — |
+
+`governsLevel()` is strict (`actor.level > target.level`) for every rank, and
+`maxAssignableLevel()` always returns `actor.level − 1`, so peer-minting is
+impossible by construction — no shared-custody exception, no `global_scope`
+escape hatch.
+
+**Self-access is the one exception, and it is about the actor's own row, not
+about rank.** `canManageUser()` returns true for `target.id === actor.id` once
+the actor holds `manage_system_users`, so their account always appears in the
+roster and its detail page. Granting itself is bounded by
+`mayGrantPermissions()`, which is **rank-based**: the L4 rank is defined to hold
+the whole catalogue (`app.permissions`), so it may hand any catalogued key to
+itself **or to any account below it** — including a key a later migration seeded
+that it has not backfilled onto its own account yet. Every lower rank stays
+inside `permissionsAreWithinActor()`, unchanged, so a lower admin still cannot
+mint a capability it was never given. The same helper gates
+`assertCanPatch()`, `assertCanGrant()` and `assertCanCreate()`, and the client
+`canGrant()` in `use-user-capabilities.ts` reads it too, so a checkbox can never
+promise a grant the route would refuse. Self-editing never relaxes
+rank: `assertCanPatch()` rejects a self `clearance_level` change,
+self-deactivation, and dropping one's own `manage_system_users`; and
+`assertCanGovern()` (city-manager assignment) still excludes self. Deletion
+passes `assertCanManage()` without the self allowance, so an account cannot
+delete itself.
+
+`updateUserProfile()` writes grants as a **diff**, never delete-all-then-insert.
+`app.user_permissions` carries a deferred constraint trigger
+(`app.assert_governor_remaining`) that aborts the transaction if the last active
+governor's `manage_system_users` grant disappears. A truncate-and-reinsert would
+remove and restore that grant within the same transaction, so the deferred check
+would still fail at commit for a sole governor. Additions are written before
+removals, so the invariant is only ever observed on the full set; revocation of
+`manage_system_users` from a sole governor still fails loudly in the database,
+as intended.
+
+`permission_key` is also a foreign key into `app.permissions`, and the TypeScript
+catalogue ships in a different deploy from the migration that seeds the table.
+Before inserting, `updateUserProfile()` resolves the additions against the keys
+the database actually holds (`src/lib/rbac/permission-catalogue.ts`): the ones it
+carries are granted and the rest are returned as `skippedPermissions`. Without
+that step a single unseeded capability would abort the whole statement with
+`23503` and surface as a bare 500 — every other grant, the level change and the
+city scope in the same patch would be lost with it. The API reports the skipped
+keys, and the roster dialog shows them by catalogue label, so a checkbox that
+reverts on the next read is explained rather than mistaken for a lost write.
+Unexpected write failures are logged field by field (SQLSTATE, detail, hint)
+instead of being handed to `console.error` as an opaque object.
+
+A reported key means the table is behind the code, not that the operator lacks
+the right to grant it: the grant rule is rank-based (see above), so an L4 is
+never the obstacle. Repair the table with
+`supabase/snippets/rbac_capability_gap_repair.sql`, which seeds the six
+legacy-gap keys from `20261112000000_legacy_gap_resolutions.sql`, backfills them
+onto the ranks that own them, bumps `auth_revision` and asserts the result. It is
+idempotent and safe to re-run; it lives outside `supabase/migrations/` because
+the migration chain already carries the same statements and must not be
+replayed.
+
+The add-user dialog (`CreateUserModal`) collects phone, password, full name,
+optional email, job title, team (when level 1), city scope and the individual
+capability grants, grouped by the 20 `PERMISSION_GROUPS`. The client never
+posts to the legacy `POST /api/admin/users`; provisioning goes through the
+route above and the roster is re-read afterwards, because the auth account,
+grants and scope are all assigned server-side.
+
+The capability dialog (`UserPermissionsModal`) keeps the same immediate-PATCH
+contract as the old inline matrix, with one relationship layered on top:
+`view_overview` is the parent of the six `view_overview_*` section keys
+(`src/lib/rbac/permission-tree.ts`). Revoking the parent queues a per-key
+revoke for the master and every held section, so no operator can keep a section
+grant whose master is gone. Granting a section on its own stays allowed because
+each also opens the overview module via `alsoGrantedBy`. The cascade reuses the
+existing `{ permission, enabled: false }` PATCH, so the route only has to
+validate additions, as before; the mapping is UI-side grouping only.
+`scripts/lib/permission-tree.test.mjs` guards the parent-child wiring against
+catalogue drift.
+
+Rules enforced for every creation:
+
+1. **Assignable rank.** `canAssignLevel(actor, level)` — strictly below the
+   actor's own rank, always. This one rule lives only in Tier 3: provisioning
+   writes through the service-role client, which bypasses RLS and carries no
+   actor identity, so a database trigger could not tell who is granting. The
+   other three rules below are enforced in both tiers.
+2. **Permission subset.** The grantor can only hand out permissions they
+   themselves hold (`permissionsAreWithinActor`), with one rank-based exemption:
+   the top rank (L4) is defined to hold the whole catalogue, so it may grant any
+   key `app.permissions` carries — including one seeded by a migration that has
+   not backfilled it yet. No capability can be invented during provisioning
+   (`PERMISSION_KEYS` bounds the request, the foreign key bounds the table).
+3. **City subset.** A non-global actor can only assign cities from their own
+   `accessibleCities`. Global actors (level ≥ 3) may assign any city.
+4. **Global ranks are executive-only.** Levels 3–4 require a global actor.
+
+These live in `assertCanCreate()` in `src/lib/rbac/management.ts`, backed by the
+helpers in `hierarchy.ts`.
+
+#### The write path
+
+All four writes happen server-side; the service-role key never leaves the
+server.
+
+```
+POST /api/admin/users/provision        (protected Route Handler, edge)
+  → getServerSession()                 verify cookie + re-read live grants (one read)
+  → require manage_system_users        else 401 / 403
+  → provisionAccountSchema.parse()     E.164 phone, password 8–72 chars
+  → assertCanCreate(session, input)    rank / permission / city subset
+  → resolveTeam(session, input)        team exists, city reachable, city in scope
+  → supabase.auth.admin.createUser()   SERVICE ROLE, phone + password
+      ├─ trigger: app.handle_auth_user_upsert mirrors phone/email
+      ├─ update app.users                profile: name, title, team_id, clearance
+      ├─ insert app.user_permissions     explicit capability grants
+      └─ insert app.user_city_scope      city assignments
+  → on any failure: auth.admin.deleteUser()  cascade rollback
+```
+
+Implementation:
+
+- `src/lib/schemas/provisioning.ts` — `provisionAccountSchema`. Phone is E.164;
+  password is capped at 72 characters because bcrypt silently truncates beyond
+  that, and a silent truncation would make the stored credential differ from
+  what the operator typed. Email is optional profile data (never an identity,
+  never unique); `teamId` is required only when `clearanceLevel === 1`, because
+  a courier is always dispatched through a team.
+- `src/lib/rbac/team-repository.ts` / `teams.ts` — teams are **city-owned** rows
+  in `app.field_teams`, not a global label set. The page passes the whole
+  catalogue to the dialog, which filters it by the selected city; there is no
+  seed fallback, because a team only exists once it is created inside a city.
+  `listTeams()` returns `[]` when the table is absent (§8.5.1).
+- `src/lib/rbac/services/provisioning-team.ts` — `resolveTeam()`. Reads the
+  city from the team row (never from the client), rejects a team the actor
+  cannot reach, and rejects a team whose city is not in the courier's scope. The
+  same city is what `app.can_manage_city()` authorises on the database side.
+- `src/lib/rbac/services/provisioning-writes.ts` — profile / grants / scope
+  writes. `attachProfile` writes both `team_id` (authoritative) and the
+  deprecated free-text `team` label so legacy readers stay correct during the
+  migration.
+- `src/lib/rbac/services/provisioning-service.ts` — `createUserAccount()`. Pure
+  orchestration over the service-role client; no UI, no HTTP concerns.
+- `src/app/api/admin/teams/route.ts` — team controller. `GET` lists one city's
+  teams for the picker; `POST` mints a team, and both require the caller to
+  reach the city (`assertCanManageCity`, mirroring the SQL policy).
+- `src/app/api/admin/users/provision/route.ts` — thin controller. It only
+  authenticates, delegates, and maps errors to status codes.
+
+The handler declares `runtime = "edge"`. `auth.admin.*` works there because
+`@supabase/supabase-js` is fetch-based; a route left on the Node runtime breaks
+`next-on-pages`, which requires every route to opt into Edge. Do not call
+`redirect()` here — see §5 on `next-on-pages`.
+
+#### Deployment prerequisites
+
+Three project-level settings are required; none of them live in application code.
+
+1. **Expose the `app` schema to PostgREST.** The service writes through
+   `.schema("app")`, which only resolves if `app` is listed under
+   Dashboard → API → Exposed schemas (or `schemas = ["public", "app"]` in
+   `config.toml`). Without it every write fails with *The schema must be one of
+   the following*. Exposing `app` is safe: RLS is forced and the policies only
+   admit `authenticated` or `service_role`.
+2. **Grant `service_role` table privileges.** The foundation migration grants
+   `authenticated` only, so `20261029000100_rbac_service_role_grants.sql` adds
+   `usage` plus DML on the four `app` tables for `service_role`. `service_role`
+   also carries `BYPASSRLS` on Supabase, which is what makes the provisioning
+   writes succeed despite the forced policies.
+3. **Seed `app.permissions`.** `user_permissions.permission_key` is a foreign
+   key, so provisioning fails until the 49 keys from `permissions.ts` exist as
+   rows. `20261029000200_seed_permissions.sql` seeds them idempotently from the
+   live catalogue; run it before creating the first account.
+4. **Keep the auth-mirror trigger outside RLS.** `app.users` uses
+   `force row level security`, which applies even to the table owner. A
+   `SECURITY DEFINER` function only escapes RLS when its owner holds
+   `BYPASSRLS`; Supabase's migration-running role does not. When the foundation
+   migration was applied by such a role, `app.handle_auth_user_upsert()` was
+   rejected with *new row violates row-level security policy*, and GoTrue
+   reported it only as `[unexpected_failure] Database error creating new user`
+   (HTTP 500) — with no hint that RLS was involved. `20261029000300_fix_auth_mirror_rls.sql`
+   grants the trigger's owning role explicit `insert`/`select`/`update`
+   policies. The same migration adds `app.bootstrap_diagnostics()`, which
+   reports the trigger owner, whether it bypasses RLS, whether RLS is forced,
+   and the policy list, so this failure is self-explaining.
+5. **Normalize the blank email GoTrue sends.** `auth.users.email` is nullable,
+   but GoTrue stores an empty string rather than `NULL` for a phone-only
+   account. The mirror trigger copied that value verbatim and
+   `users_email_shape` rejected it, producing the same opaque
+   `Database error creating new user` / HTTP 500 — again indistinguishable from
+   the RLS failure until the diagnostics showed `owner_bypassrls: true`.
+   `20261029000400_fix_auth_mirror_email.sql` replaces the trigger with one that
+   maps blank email to `NULL` (`nullif(btrim(email), '')`), backfills any rows
+   written before the fix, and adds `app.bootstrap_probe()` which reports the
+   constraint definition and how many blank emails remain. Real addresses are
+   still validated, and a malformed one is still rejected.
+6. **Canonicalize the phone before the E.164 check.** Supabase's
+   `auth.users.phone` holds the number *without* the leading `+`
+   (`201040491882`), while the Admin API accepts it *with* the `+`
+   (`+201040491882`). The trigger copied the stored value verbatim, so
+   `users_phone_e164` (`^\+[1-9][0-9]{7,14}$`) rejected it — the same opaque
+   500 a third time. `20261029000500_fix_auth_mirror_phone.sql` adds
+   `app.normalize_phone()`, which reduces any input to one `+` plus digits, and
+   the trigger now writes that canonical form. `app.bootstrap_probe()` reports
+   the shape of GoTrue's newest stored phone plus any non-canonical rows, since
+   `auth` is not an exposed schema and cannot be queried from PostgREST.
+
+#### Bootstrapping the first Founder (chicken-and-egg)
+
+Provisioning is governor-only, so the very first account cannot be created
+through the UI. It is created out of band with
+`scripts/bootstrap-founder.mjs`, which uses the Admin API:
+
+```
+node --env-file=.env.local scripts/bootstrap-founder.mjs
+```
+
+It is idempotent and re-convergent: it creates the auth user (or resets the
+password on an existing phone), sets `clearance_level = 4`, and grants every row
+in `app.permissions`. Granting all permissions does not violate the governor
+invariant — the guard only blocks *removing* the last governor.
+
+The bootstrap was originally also exposed as a temporary Edge route,
+`GET /api/admin/bootstrap`. It has been deleted, together with
+`bootstrap-service.ts` and `bootstrap-diagnostics.ts`: the founder signs in
+normally now, and a self-provisioning endpoint that mints an all-powerful
+account is scaffolding, not a product surface. The
+`app.bootstrap_diagnostics()` SQL helper survives in
+`20261029000300_fix_auth_mirror_rls.sql` for the next mirror failure, but no
+route calls it.
+
+**Never write directly into `auth.users`.** Supabase owns credential storage;
+an INSERT there bypasses GoTrue's password hashing and its `auth.identities`
+rows, yielding an account that cannot sign in. The Admin API is the supported
+path and fires `app.handle_auth_user_upsert`. A SQL-only bootstrap is impossible
+for the same reason: `encrypted_password` must be a GoTrue-compatible bcrypt
+hash plus a matching identity row, which is implementation detail, not API.
+
+#### Password login
+
+Login is now real. `resolveLoginRequest()` in `src/lib/auth/login.ts`:
+
+1. calls `supabase.auth.signInWithPassword({ phone, password })` with the anon
+   key, so Supabase verifies the credential and Kanjo never sees a hash;
+2. reads the profile back from `app.users` through the service-role repository;
+3. refuses if the profile is missing or `active = false` — a valid Supabase
+   credential with no authorisation row is not a valid operator;
+4. mints the HMAC session cookie from the repository's grants and revision.
+
+Login therefore requires **all three** Supabase variables (`URL`, `ANON_KEY`,
+`SERVICE_ROLE_KEY`). With only the anon key, the profile read would fall back to
+the seed roster and every correct password would fail, which is
+indistinguishable from a wrong password. A missing configuration redirects to
+`/login?error=login-disabled` instead.
+
+The login page is a phone + password form (`login-form.tsx`). The demo roster
+picker is gone, and `login.css` replaces the dead `.account-*` rules.
+
+#### Failure handling
+
+Provisioning is multi-step and must not leave a half-created account. The auth
+user is created first, because `app.users.id` is a foreign key to
+`auth.users.id`. If any profile, grant, or scope step fails, the auth user is
+deleted; `on delete cascade` removes the dependent rows. Partial accounts are
+therefore impossible, and the operator sees a retryable error rather than a
+zombie login.
+
+`granted_by` records the authorising operator for audit. It is set only when
+the session id is a real UUID, because seed/demo sessions use `u-*` ids.
+
+#### Team selection in the add-user dialog
+
+A courier is the only rank that needs a team, and a team is city-owned
+(`app.field_teams`), so the picker is dependent on the city scope:
+
+1. The operator ticks the courier's cities first.
+2. `TeamPicker` (`src/components/admin/team-picker.tsx`) lists only the teams of
+   the selected city; with several cities the operator picks the owning city
+   explicitly, with one it is implied.
+3. "Create new team" posts `{ cityId, name }` to `POST /api/admin/teams`,
+   which enforces `assertCanManageCity()` (executive anywhere, city manager only
+   in their scoped cities) and relies on the per-city case-insensitive unique
+   index to reject duplicates.
+4. Removing a team's city from the courier scope also clears the selected team,
+   so the dialog can never submit a team the rep does not cover.
+5. Provisioning receives `teamId`; `resolveTeam()` re-reads the team, derives
+   its city from the row, and persists `app.users.team_id` (plus the deprecated
+   `team` label) in `attachProfile`.
+
+#### What replaces the old create flow
+
+The existing `POST /api/admin/users` writes to the in-memory `createUser()`
+store and collects an email. It stays until the RBAC repository lands, but it is
+**not** the production path: it cannot mint credentials. `createUser()` should
+gain a phone field and then delegate to `createUserAccount()` once the
+repository reads `app.users`.
+
+### 8.7 Money: treasury, payroll and marketing
+
+Every table below is SQL because each one participates in a money movement or a
+financial report. All ledger amounts are **minor units** (`bigint`), never
+floats, so no rounding can create or destroy value. The exception is the
+commission fee schedule: a rate is a price list in EGP, stored as
+`numeric(12,2)` (see below the table).
+
+| Migration | Tables | Invariant enforced in SQL |
+|---|---|---|
+| `20261030000100_accounts_ledger.sql` | `app.bank_accounts`, `app.ledger_entries`, view `app.account_balances` | Balance is derived (Σdeposits − Σexpenses), never a column. UPDATE/DELETE on the ledger raise `LEDGER_IMMUTABLE`. Entry currency must equal the account currency. |
+| `20261030000200_payroll.sql` | `app.payroll_profiles`, `app.payroll_commission_tiers`, `app.payroll_kpi_links`, `app.payroll_runs`, `app.payroll_lines`, view `app.payroll_run_totals` | Components are non-negative; `deduction` supplies the sign. Net is a signed sum in the view, never a stored total. |
+| `20261030000300_marketing.sql` | `app.marketing_platform_settings`, `app.marketing_entries`, view `app.marketing_platform_settings_public` | Entries are append-only. `clicks ≤ impressions`, `conversions ≤ clicks`. API keys are ciphertext and never exposed to client roles. |
+| `20261030000400_seed_treasury.sql` | seed only | Asserts SAR deposits 4,865,000 / expenses 3,973,631 / balance 891,369 minor units before committing. |
+| `20261030000500_treasury_access.sql` | adds `record_deposits`, rewrites account/ledger read+insert policies, grants the four prior migrations' tables to `authenticated` and `service_role` | Tiered treasury: deposit-only callers read Egyptian accounts and `deposit` rows only, and may insert deposits against an Egyptian account. The Saudi account and all expenses stay invisible. |
+| `20261031000000_enterprise_kpi_vault.sql` | `app.commission_rates`, `app.kpi_snapshots`, `app.merchants`, `app.catalog_products`; `app.has_min_clearance(integer)` | Fee schedule is one global row; reads are any active operator, writes require clearance level 4. |
+| `20261031000001_snapshot_rate_history.sql` | adds `applied_merchant_rate` / `applied_item_rate` to `app.kpi_snapshots` | A snapshot's rates are mandatory on insert and frozen thereafter, so a slip can always be reconciled against the schedule that produced it. Pre-existing rows stay NULL. |
+| `20261031000002_city_specific_rates.sql` | `app.commission_rates.city_id`, partial unique indexes, `app.commission_rates_for(text)` | One row per city plus exactly one NULL-city fallback (two partial unique indexes, because `UNIQUE` allows many NULLs). The residue of the old singleton trigger is dropped; L4 gains insert/delete. |
+| `20261031000003_city_teams_and_contracting.sql` | `contracts_closed` / `avg_achievement_ratio` on `app.kpi_snapshots`; adds the then-flat `contracting_base_fee` | Fees are non-negative; the new snapshot outcomes join the frozen set. |
+| `20261102000000_tiered_contract_commissions.sql` | replaces `contracting_base_fee` with `contract_fee_tier_1..4`; `achievement_percent()`, `contract_fee_tier()`, `contract_fee_for()`; `applied_contract_fee` on `app.kpi_snapshots` | Backfills all four tiers from the old flat fee before dropping it, so the migration changes no amount. Bands are half-open and gap-free; `100%` is tier 4. The applied fee is frozen with the snapshot. |
+| `20261102000001_user_profiles_and_capital.sql` | `app.user_payout_methods`, `app.capital_deposits`, `avatar_url` + `bank_info_status` on `app.users`, storage buckets | One payout method per operator; any detail edit resets the decision to `pending` (`payout_methods_reset_decision`). A capital approval appends exactly one ledger entry in the same transaction (`capital_deposit_decide`) and is immutable thereafter. Self-review is refused by `PAYOUT_SELF_REVIEW` / `CAPITAL_DEPOSIT_SELF_REVIEW`. |
+| `20261102000002_capital_treasury_gate.sql` | `app.can_manage_treasury()`, rewritten payout/capital policies | The first migration gated decisions on the legacy `manage_accounts` key, which the 49-key catalogue no longer contains — the policies would have been unreachable. Decisions now follow the full-book treasury capabilities, the same rule `resolveTreasuryAccess()` applies. |
+| `20261102000003_operations_clearinghouse.sql` | `app.couriers`, `app.operation_logs`, `app.financial_ledgers`; enums `payment_method` / `clearing_entity_type` / `clearing_ledger_status` | Operations are append-only (`OPERATION_IMMUTABLE`). `operation_freeze_amounts()` derives and freezes commission and courier cut before insert. `operation_route_ledgers()` writes exactly one merchant row and one courier row per order: **COD** → merchant `-(commission)`, courier `-(delivery_fee − courier_cut)`; **ONLINE** → merchant `+(order_value − commission)`, courier `+(courier_cut)`. A unique `(operation_id, entity_type)` index makes a retry unable to double-route. `clearing_ledger_guard()` forbids changing money terms or reopening a settled row. |
+| `20261102000004_fix_l4_missing_grants.sql` | re-grants `log_operations` / `view_clearinghouse` / `settle_clearinghouse` to active L3+ operators; bumps `auth_revision` | Repair for `49 / 52`: replaying `20261101000000_seed_l4_new_permissions.sql` after Pillar 2 deletes every L4 grant absent from its hardcoded 49-key snapshot, including the three new keys. The patch re-grants them and asserts every active L3+ operator holds all three before committing. |
+| `20261105000000_edge_rollups.sql` | views `app.payroll_contributions_rollup`, `app.bi_merchant_rollup`, `app.agent_kpi_rank_rollup` (all `security_invoker = true`) | Moves the remaining P0 Edge CPU 1102 work into SQL. Each view is one indexed read that replaces a Worker-side scan: payroll contributions (was O(profiles × reports)), overview merchant facts (was a report-table reduction plus a nested product join), and live-month KPI city rank (was O(agents² × city)). Re-runnable via guarded `drop ... if exists`; grants are idempotent. |
+| `20261107000000_rbac_session_read.sql` | `app.rbac_revision()`, `app.rbac_session(uuid)` | Collapses session resolution from six queries to one: the profile, capability keys, city scope and revision arrive as a single jsonb document, and the revision is a scalar instead of a rebuild of the graph it guards. The revision keeps its meaning — newest timestamp across profiles, grants and scope, floored to seconds — so cookies minted earlier stay valid. `rbac_session` is `security definer` and revokes the `PUBLIC` grant that implies, because its payload is another operator's grants; only the service role may call it. |
+
+Commission rates are **numeric EGP, not minor units**: the schedule is a price
+list read by humans, and `numeric(12,2)` keeps the two decimal places Postgres
+already rounds correctly. The cache-and-freeze rule still holds — every money
+movement derived from a rate is stored in minor units on the ledger, and the KPI
+snapshot freezes the rate that produced it.
+
+The clearinghouse is deliberately **not** the treasury. `app.ledger_entries`
+records cash the company holds, while `app.financial_ledgers` records what the
+company owes to, or is owed by, merchants and couriers. The clearinghouse amount
+is signed from Kanjo's point of view: positive is a payable, negative is a
+receivable. Settling a row changes `status` and stamps `cleared_at`; it never
+touches the amount, so history stays a faithful record of what was owed.
+
+Ledger and marketing immutability is enforced by a trigger rather than a policy
+so it holds for every role, including the table owner and the service role. The
+safe settings view is `security_invoker`, so it inherits the caller's RLS.
+
+`manage_accounts` also grants read on accounts and the ledger. A manager that
+could insert but not select would silently write nothing: the insert's
+`select ... from app.bank_accounts` returned zero rows, so `INSERT 0 0` looked
+like success. The policy now accepts `view_accounts OR manage_accounts` for
+reads and requires `manage_accounts` for writes.
+
+The four treasury migrations created policies but no table privileges, so
+`authenticated` could not read the tables at all and RLS was never consulted.
+`20261030000500_treasury_access.sql` adds the missing grants; without them the
+policies are inert. Verified on local PG15 as `authenticated`: a
+`record_deposits`-only caller sees one Egyptian account and `deposit` rows
+only, its expense insert raises an RLS violation, and its Saudi deposit inserts
+zero rows, while a `view_accounts` caller sees both accounts and both kinds.
+
+---
+
+## 9. Refactored Modules
+
+### Catalog — Smart Variant Matrix
+
+The variant entry flow is the reference implementation of the five tiers.
+Each tier owns exactly one concern:
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `src/components/catalog/variant-matrix.tsx` | Dumb grid. Receives `selectedAttributes` + hydrated `rows` as props, renders name/SKU read-only and uses `InputControl` for the price only. Dispatches `onPriceChange(key, value)` upward. |
+| 1 — UI | `src/components/catalog/product-form.tsx` | Presentation form. Consumes the controller hook; no domain math. |
+| 2 — Controller | `src/components/catalog/use-variant-matrix.ts` | Derives view state (matrix → hydrated rows → selected labels) and memoises it. |
+| 2 — Controller | `src/components/catalog/use-product-entry.ts` | Owns form state, validation order and save orchestration; calls the service, then the queue. |
+| 3 — Business | `src/lib/catalog/services/variant-service.ts` | Pure and zero-dependency: `generateVariantMatrix`, `hydrateVariantCombinations`, `finalizeVariantProducts`. No React, no IndexedDB. |
+| 4 — Data access | `src/lib/catalog/offline-queue.ts` | `enqueueDraft` / `enqueueDrafts` / `flushDrafts` + reads. Stores fully hydrated payloads only. |
+
+Data flow:
+
+```mermaid
+graph TD
+    A["VariantMatrix (T1)"] -->|onPriceChange| B["use-variant-matrix (T2)"]
+    B --> C["variant-service (T3)"]
+    C -->|hydrated rows| A
+    B -->|finalizeVariantProducts| D["use-product-entry (T2)"]
+    D -->|enqueueDrafts| E["offline-queue (T4)"]
+```
+
+Rules locked in by this refactor:
+
+- Names (`base + attributes`) and SKUs (`KJ-<vendor>-<seed><seq>`) are produced
+  once, in Tier 3, so the matrix and the queued draft can never disagree.
+- The UI never imports from `src/lib/catalog/*` except read-only types and the
+  hydrated row shape.
+- `src/lib/catalog/variants.ts` and `src/lib/catalog/draft-queue.ts` are now
+  deprecated re-export shims; new code imports the service / queue directly.
+
+### Catalog — Image Quality Assurance (QA) Pipeline
+
+The QA workspace proves the 5-tier model end-to-end with server actions.
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `src/app/(workspace)/catalog/qa/page.tsx` | Server container: `requireModuleAccess("/catalog/qa")`, calls the service, renders stats + board. |
+| 1 — UI | `src/components/catalog/image-qa-board.tsx` | Client shell; owns lightbox state and message timeout, and forwards `canApprove` / `canEnhance` from the session. |
+| 1 — UI | `src/components/catalog/image-qa-card.tsx` | Dumb card: image, price, SKU and the available exits (تحميل / رفع المحسنة / اعتماد مباشر); enhance and approve render only when their own capability is held. |
+| 2 — Controller | `src/app/(workspace)/catalog/qa/actions.ts` | `"use server"` actions enforce RBAC, validate the data URL, call the service, `revalidatePath`. |
+| 2 — Controller | `src/components/catalog/use-image-qa-board.ts` | Client glue: busy state, optimistic removal, `prepareImage` before upload. No domain rules. |
+| 2 — Controller | `src/app/api/catalog/products/[id]/image-qa/route.ts` | Legacy REST entry point; same service + repository, same guards. |
+| 3 — Business | `src/lib/catalog/services/image-qa-service.ts` | `ImageQaError`, `getPendingReviewProducts`, `approveImage`, `uploadEnhancedImage`, plus pure `assertImageQaTransition` / `applyImageQa`. Repository is injected — zero Tier 4 imports. |
+| 4 — Repository | `src/lib/catalog/repository.ts` | `listCatalogRecords` / `findCatalogRecord` (merchant→city) and `commitImageQa`. Only layer that touches `catalog/store.ts`. |
+| 5 — Database | `src/lib/catalog/product-repository.ts` | Only module that knows `app.catalog_products` (migration `20261106000000`): async CRUD, minor-unit price mapping, unique-violation → typed domain codes. `store.ts` keeps the domain rules over it. |
+
+Data flow:
+
+```mermaid
+graph TD
+    A["qa/page.tsx (T1 server)"] --> B["image-qa-service (T3)"]
+    B --> C["catalog/repository (T4)"]
+    C --> D["catalog/store (T5)"]
+    E["ImageQaCard (T1)"] -->|server action| F["qa/actions.ts (T2)"]
+    F --> B
+```
+
+Rules locked in by this pipeline:
+
+- `pending_review → completed` only; any other starting state raises
+  `IMAGE_QA_NOT_PENDING` (verified: a replay returns 422).
+- City scope is enforced twice: in the service (`getPendingReviewProducts`,
+  `approveImage`, `uploadEnhancedImage`) and in the legacy route. An
+  out-of-scope reviewer receives `PRODUCT_NOT_FOUND` (verified).
+- RBAC: the page opens on the `/catalog/qa` nav module
+  (`review_image_quality`, `edit_product_images`). Approving the current image
+  needs `edit_catalog` or `review_image_quality`; replacing it additionally
+  accepts `edit_product_images`. The actions split `APPROVE_CAPABILITIES` from
+  `ENHANCE_CAPABILITIES`, the REST route applies the union gate then a per-op
+  re-check, and the card only renders an exit the viewer can actually finish —
+  so an image-editor cannot approve and a reviewer cannot overwrite content.
+- All buttons in the QA surfaces use the `Button` primitive; row extras use
+  `DropdownMenu`.
+
+---
+
+## 10. Agent KPI Dashboard — SQL-Backed Vault
+
+The dashboard renders per-rep monthly figures from the SQL Vault. The same rep
+is scored across the four vault axes; the card keeps the city stage rail as
+context, but the numbers are no longer computed from in-memory field-ops or
+catalog mock data — every figure is either a live SQL count or a frozen
+snapshot row.
+
+| Tier | File | Responsibility |
+|---|---|---|
+| 1 — UI | `agent-kpi/page.tsx` | Server container: `requireAnyPermission([view_global_kpi, view_rep_kpi])`, loads the vault month, resolves scope, renders cards. |
+| 1 — UI | `components/kpi-filter-bar.tsx` | Client shell; writes city/team/rep/window/month into the URL. No math. |
+| 1 — UI | `components/kpi-agent-card.tsx` | Layout: identity, stage rail, vault metric grid, snapshot badge, insights + rank. |
+| 1 — UI | `components/kpi-metric-grid.tsx`, `kpi-rank-card.tsx`, `kpi-insights-panel.tsx` | Dumb presentational blocks. |
+| 2 — Controller | `src/lib/kpi/scope.ts` | `parseKpiFilters` (incl. `month`), `resolveKpiScope`, `buildKpiFilterOptions`, `isKpiAdmin`. |
+| 3 — Business | `src/lib/kpi/services/agent-kpi-service.ts` | `buildKpiReport`, `getAgentSnapshot`, `selectAgents`; 0–100 score and city rank. |
+| 3 — Business | `src/lib/kpi/metrics.ts` | `factsFor` (rep + shared team attribution), `computeLiveSalary`, `scoreVaultFacts`, `vaultMetrics`. |
+| 3 — Business | `src/lib/kpi/insights.ts` | `buildInsights` compares the agent with the city top performer on the vault axes. |
+| 3 — Business | `src/lib/kpi/calendar.ts` | Month keys, window bounds, labels, recent-month options. Pure. |
+| 4 — Repository | `src/lib/kpi/vault.ts` | The only SQL reader: live month queries and `app.kpi_snapshots`. Degrades to `null`. |
+| 4 — Repository | `src/lib/kpi/repository.ts` | `loadKpiDataset(month)`: RBAC roster + field-ops city catalogue + vault inputs. No mocks. |
+| 5 — Database | `app` schema (Supabase) | `catalog_products`, `merchants`, `commission_rates`, `kpi_snapshots`. |
+
+### Vault reading rules
+
+- **Current month (live).** Every figure is counted on read:
+  - *Data entry* — `app.catalog_products` rows created this month, counted by
+    `created_by`.
+  - *Activations* — `app.merchants` rows whose `first_entry_at` falls this
+    month, counted by `first_entry_by`.
+  - *Contracting* — `app.merchants` rows in `final_contract`/`signed_contract`
+    with `contracted_by_team_id` set and `updated_at` this month; the count and
+    the average agreed/target margin ratio are credited to the team, so paired
+    reps share the credit (the split is a payout concern, not a schema one).
+  - *Live salary* — priced from the active `app.commission_rates` row for the
+    rep's `city_id` (override first, then the NULL-city global row):
+    `activations × merchant_activation_fee + items × photo_item_fee +
+    contracts × contracting_base_fee × marginRatio`.
+- **Past months (vault).** Read strictly from `app.kpi_snapshots`
+  (`new_merchants_activated`, `items_added`, `contracts_closed`,
+  `avg_achievement_ratio`, `calculated_salary`, `status`). Snapshots are
+  immutable after lock; only `status` moves `pending → paid`, and only an L4
+  may move it.
+- **Scope.** Reps (L1/L2) are pinned to their own row; admins (clearance ≥ 3)
+  may filter city/team/agent/month. Ranking stays strictly city-scoped — a Giza
+  rep is never compared to a Cairo rep.
+- **No mocks.** The old `globalThis` seed dataset (`facts-seed.ts`, in-memory
+  merchants/products/visits/usage) is purged from the KPI path. A deployment
+  without the vault configured renders an honest zeroed state with an explicit
+  "database not connected" note, never fabricated numbers.
+- **Schema drift must not 500.** `vault.ts` returns `null` on missing schema
+  objects and transient failures, mirroring `rows.ts` and the commission-rates
+  read; the page maps `null` to the unavailable state.
+
+Data flow:
+
+```mermaid
+graph TD
+    A["agent-kpi/page.tsx (T1)"] --> B["scope.ts (T2)"]
+    A --> C["repository.ts (T4)"]
+    C --> D["vault.ts (T4) -> app schema: products, merchants, commission_rates, kpi_snapshots"]
+    C --> R["rank-repository.ts (T4) -> app.agent_kpi_rank_rollup"]
+    C --> G["rbac users + field-ops cities"]
+    B --> E["agent-kpi-service.ts (T3)"]
+    E --> F["metrics.ts + insights.ts + calendar.ts (T3)"]
+    F --> A
+```
+
+---
+
+## 11. The AI Workflow Loop (MANDATORY)
+
+Every AI session on this branch follows this loop. No exceptions.
+
+1. **Read first.** Before any code change, read `ARCHITECTURE.md` (this file)
+   and `AGENTS.md`.
+2. **Locate the tier.** Decide which tier(s) the task touches and confirm the
+   target file is under the size limit. If it is over, the first commit is a
+   pure extraction.
+3. **Implement downward.** UI → Controller → Business → Repository. Respect the
+   import direction.
+4. **Verify.** Run `npm run typecheck` and `npm run build` (stop the dev server
+   first).
+5. **Update this file.** After every task that changes structure, module
+   placement, primitives, or the migration gaps, edit `ARCHITECTURE.md` in the
+   same change set. A task is not done until the document matches reality.
+6. **Commit.** Conventional commit on `feat/v2-enterprise-architecture`; never
+   amend a failed commit — fix forward.
+
+If a rule and this document disagree, `AGENTS.md` wins; then update this
+document.

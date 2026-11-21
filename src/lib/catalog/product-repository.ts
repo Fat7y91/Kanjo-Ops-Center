@@ -1,0 +1,522 @@
+import "server-only";
+
+import { hasSupabaseConfig } from "@/lib/db/supabase/config";
+import {
+  isMissingSchemaObject,
+  isUniqueViolation,
+} from "@/lib/db/supabase/errors";
+import { getSupabaseServerClient } from "@/lib/db/supabase/server";
+import { normalizeSearchText } from "@/lib/search/normalize";
+
+import { persistImageReference } from "./images/store";
+
+import type {
+  CatalogProduct,
+  CatalogProductQaMetadata,
+  CatalogProductState,
+  CatalogProductType,
+  CatalogVariantSelection,
+} from "./types";
+
+/**
+ * Tier 4 repository for `app.catalog_products`.
+ *
+ * This is the only module that knows the product column names. The catalog is a
+ * strict SQL store: there is no seed fallback, so a deployment without a
+ * database shows an empty catalog instead of invented products, and a failed
+ * write is surfaced rather than acknowledged.
+ *
+ * Created and widened by `20261106000000_merchant_catalog_ssot.sql`.
+ */
+
+const COLUMNS = [
+  "id",
+  "merchant_id",
+  "name",
+  "normalized_name",
+  "description",
+  "vendor_type_id",
+  "category_key",
+  "product_type",
+  "sku",
+  "barcode",
+  "image_data_url",
+  "attributes",
+  "price_minor",
+  "state",
+  "review_note",
+  "entered_by_name",
+  "client_product_id",
+  "qa_metadata",
+  "created_by",
+  "created_at",
+  "updated_at",
+].join(",");
+
+type ProductRow = {
+  id: string;
+  merchant_id: string;
+  name: string;
+  normalized_name: string;
+  description: string;
+  vendor_type_id: number | null;
+  category_key: string | null;
+  product_type: CatalogProductType;
+  sku: string | null;
+  barcode: string | null;
+  image_data_url: string | null;
+  attributes: CatalogVariantSelection[] | null;
+  price_minor: number | string;
+  state: CatalogProductState;
+  review_note: string;
+  entered_by_name: string | null;
+  client_product_id: string | null;
+  qa_metadata: CatalogProductQaMetadata | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * PostgREST caps a single response at 1000 rows unless the caller paginates.
+ * The catalog has ~9k products, so every read walks pages until the server
+ * returns a short page.
+ */
+const PRODUCT_PAGE_SIZE = 1000;
+
+export type CatalogProductPatch = Partial<{
+  name: string;
+  description: string;
+  categoryKey: string;
+  sku: string | null;
+  barcode: string | null;
+  imageDataUrl: string | null;
+  price: number;
+  state: CatalogProductState;
+  reviewNote: string;
+}>;
+
+export class CatalogRepositoryError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status = 400) {
+    super(message);
+    this.name = "CatalogRepositoryError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function isCatalogDatabaseConfigured(): boolean {
+  return hasSupabaseConfig();
+}
+
+function toProduct(row: ProductRow, merchantName: string): CatalogProduct {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    merchantId: row.merchant_id,
+    merchantName,
+    vendorTypeId: row.vendor_type_id == null ? null : Number(row.vendor_type_id),
+    categoryKey: row.category_key,
+    productType: row.product_type,
+    sku: row.sku ?? "",
+    barcode: row.barcode ?? "",
+    imageDataUrl: row.image_data_url,
+    attributes: Array.isArray(row.attributes) ? row.attributes : [],
+    price: Number(row.price_minor) / 100,
+    state: row.state,
+    reviewNote: row.review_note,
+    enteredById: row.created_by,
+    enteredByName: row.entered_by_name,
+    clientProductId: row.client_product_id,
+    qaMetadata:
+      row.qa_metadata && typeof row.qa_metadata === "object"
+        ? row.qa_metadata
+        : {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function loggedByValue(actorId: string | null): string | null {
+  return actorId && UUID.test(actorId) ? actorId : null;
+}
+
+/** True when the error is a unique violation on the given index name. */
+function violates(error: unknown, index: string): boolean {
+  if (!isUniqueViolation(error)) return false;
+  const message = (error as { message?: unknown }).message;
+  const details = (error as { details?: unknown }).details;
+  const text = `${typeof message === "string" ? message : ""} ${
+    typeof details === "string" ? details : ""
+  }`;
+  return text.includes(index);
+}
+
+/**
+ * Products plus the merchant name the card renders.
+ *
+ * Merchant names live on `app.merchants`, so the read joins once instead of
+ * issuing a query per product.
+ */
+export async function listProductRows(
+  merchantId?: string,
+): Promise<CatalogProduct[]> {
+  if (!isCatalogDatabaseConfigured()) return [];
+
+  const client = getSupabaseServerClient();
+  const rows: Array<
+    ProductRow & { merchants: { name: string } | { name: string }[] | null }
+  > = [];
+
+  for (let from = 0; ; from += PRODUCT_PAGE_SIZE) {
+    let query = client
+      .schema("app")
+      .from("catalog_products")
+      .select(`${COLUMNS},merchants(name)`)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PRODUCT_PAGE_SIZE - 1);
+    if (merchantId) query = query.eq("merchant_id", merchantId);
+
+    const { data, error } = await query;
+    if (error) {
+      if (isMissingSchemaObject(error)) return [];
+      throw error;
+    }
+
+    const batch = (data ?? []) as unknown as Array<
+      ProductRow & { merchants: { name: string } | { name: string }[] | null }
+    >;
+    rows.push(...batch);
+    if (batch.length < PRODUCT_PAGE_SIZE) break;
+  }
+
+  return rows.map((row) => {
+    const embed = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
+    return toProduct(row, embed?.name ?? titleCase(row.merchant_id));
+  });
+}
+
+export async function getProductRow(
+  id: string,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) return null;
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .select(`${COLUMNS},merchants(name)`)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  const row = data as unknown as ProductRow & {
+    merchants: { name: string } | { name: string }[] | null;
+  };
+  const embed = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
+  return toProduct(row, embed?.name ?? titleCase(row.merchant_id));
+}
+
+/** The product created from a given offline draft id, when it exists. */
+export async function findProductByClientId(
+  clientProductId: string,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) return null;
+  return firstMatch("client_product_id", clientProductId);
+}
+
+export async function findProductBySku(
+  sku: string,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) return null;
+  return firstMatch("sku", sku);
+}
+
+export async function findProductByBarcode(
+  barcode: string,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) return null;
+  return firstMatch("barcode", barcode);
+}
+
+export async function findProductByMerchantName(
+  merchantId: string,
+  normalizedName: string,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) return null;
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .select(COLUMNS)
+    .eq("merchant_id", merchantId)
+    .eq("normalized_name", normalizedName)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    throw error;
+  }
+  return data ? toProduct(data as unknown as ProductRow, "") : null;
+}
+
+async function firstMatch(
+  column: "client_product_id" | "sku" | "barcode",
+  value: string,
+): Promise<CatalogProduct | null> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .select(`${COLUMNS},merchants(name)`)
+    .eq(column, value)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    throw error;
+  }
+  if (!data) return null;
+  const row = data as unknown as ProductRow & {
+    merchants: { name: string } | { name: string }[] | null;
+  };
+  const embed = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
+  return toProduct(row, embed?.name ?? titleCase(row.merchant_id));
+}
+
+export async function insertProduct(
+  product: CatalogProduct,
+): Promise<CatalogProduct> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const imageDataUrl = await persistImageReference(
+    product.imageDataUrl,
+    product.merchantId,
+  );
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .insert({
+      id: product.id,
+      merchant_id: product.merchantId,
+      name: product.name,
+      normalized_name: normalizeSearchText(product.name),
+      description: product.description,
+      vendor_type_id: product.vendorTypeId,
+      category_key: product.categoryKey,
+      product_type: product.productType,
+      sku: product.sku || null,
+      barcode: product.barcode || null,
+      image_data_url: imageDataUrl,
+      attributes: product.attributes,
+      price_minor: Math.round(product.price * 100),
+      state: product.state,
+      review_note: product.reviewNote,
+      entered_by_name: product.enteredByName,
+      client_product_id: product.clientProductId,
+      qa_metadata: product.qaMetadata,
+      created_by: loggedByValue(product.enteredById),
+      created_at: product.createdAt,
+      updated_at: product.updatedAt,
+    })
+    .select(`${COLUMNS},merchants(name)`)
+    .single();
+
+  if (error) {
+    if (violates(error, "catalog_products_client_id_key")) {
+      throw new CatalogRepositoryError(
+        "PRODUCT_ALREADY_SYNCED",
+        "تمت مزامنة هذه المسودة بالفعل.",
+        409,
+      );
+    }
+    if (violates(error, "catalog_products_merchant_name_key")) {
+      throw new CatalogRepositoryError(
+        "PRODUCT_EXISTS",
+        "يوجد منتج بهذا الاسم لهذا التاجر بالفعل.",
+        409,
+      );
+    }
+    if (
+      violates(error, "catalog_products_merchant_barcode_key") ||
+      violates(error, "catalog_products_barcode_key")
+    ) {
+      throw new CatalogRepositoryError(
+        "BARCODE_EXISTS",
+        "الباركود مستخدم لمنتج آخر لدى نفس التاجر.",
+        409,
+      );
+    }
+    if (violates(error, "catalog_products_sku_key")) {
+      throw new CatalogRepositoryError(
+        "SKU_EXISTS",
+        "رمز SKU مستخدم بالفعل.",
+        409,
+      );
+    }
+    throw error;
+  }
+
+  const row = data as unknown as ProductRow & {
+    merchants: { name: string } | { name: string }[] | null;
+  };
+  const embed = Array.isArray(row.merchants) ? row.merchants[0] : row.merchants;
+  return toProduct(row, embed?.name ?? product.name);
+}
+
+export async function updateProductRow(
+  id: string,
+  patch: CatalogProductPatch,
+): Promise<CatalogProduct | null> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.name !== undefined) {
+    row.name = patch.name;
+    row.normalized_name = normalizeSearchText(patch.name);
+  }
+  if (patch.description !== undefined) row.description = patch.description;
+  if (patch.categoryKey !== undefined) row.category_key = patch.categoryKey;
+  if (patch.sku !== undefined) row.sku = patch.sku || null;
+  if (patch.barcode !== undefined) row.barcode = patch.barcode || null;
+  if (patch.imageDataUrl !== undefined) {
+    row.image_data_url = await persistImageReference(patch.imageDataUrl);
+  }
+  if (patch.price !== undefined) row.price_minor = Math.round(patch.price * 100);
+  if (patch.state !== undefined) row.state = patch.state;
+  if (patch.reviewNote !== undefined) row.review_note = patch.reviewNote;
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .update(row)
+    .eq("id", id)
+    .select(`${COLUMNS},merchants(name)`)
+    .maybeSingle();
+
+  if (error) {
+    if (
+      violates(error, "catalog_products_merchant_barcode_key") ||
+      violates(error, "catalog_products_barcode_key")
+    ) {
+      throw new CatalogRepositoryError(
+        "BARCODE_EXISTS",
+        "الباركود مستخدم لمنتج آخر لدى نفس التاجر.",
+        409,
+      );
+    }
+    if (violates(error, "catalog_products_sku_key")) {
+      throw new CatalogRepositoryError(
+        "SKU_EXISTS",
+        "رمز SKU مستخدم بالفعل.",
+        409,
+      );
+    }
+    throw error;
+  }
+
+  if (!data) return null;
+  const record = data as unknown as ProductRow & {
+    merchants: { name: string } | { name: string }[] | null;
+  };
+  const embed = Array.isArray(record.merchants)
+    ? record.merchants[0]
+    : record.merchants;
+  return toProduct(record, embed?.name ?? titleCase(record.merchant_id));
+}
+
+/**
+ * Rewrites only the image reference, leaving every identity field untouched.
+ *
+ * The mirror workflow owns the copy, not the product: name, barcode, SKU and
+ * price must never move because a photo was copied to the server. Returns false
+ * when the row no longer exists.
+ */
+export async function updateProductImageUrl(
+  id: string,
+  url: string,
+): Promise<boolean> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .update({ image_data_url: url, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/**
+ * Permanently removes a product row.
+ *
+ * Catalog rows carry no foreign-key references from order or accounting tables,
+ * so a hard delete cannot orphan history. Returns `true` when a row was
+ * removed, `false` when the id no longer exists.
+ */
+export async function deleteProductRow(id: string): Promise<boolean> {
+  if (!isCatalogDatabaseConfigured()) {
+    throw new CatalogRepositoryError(
+      "CATALOG_UNAVAILABLE",
+      "قاعدة بيانات الكتالوج غير متصلة.",
+      503,
+    );
+  }
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("catalog_products")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}

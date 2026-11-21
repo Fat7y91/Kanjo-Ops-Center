@@ -1,0 +1,237 @@
+/* RBAC module — users / permission matrix.
+ *
+ * Imported by globals.css after tokens.css. The legacy matrix layout rules still
+ * live in globals.css; new selectors for the Users module belong here.
+ */
+
+.matrix-user-link {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.matrix-user-link:hover {
+  color: var(--purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.matrix-user-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.matrix-user-summary {
+  margin-bottom: 16px;
+}
+
+/* ── Operator roster cards ──────────────────────────────────────────────── */
+
+.matrix-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 14px;
+}
+
+.matrix-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 15px 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color 140ms ease;
+}
+
+.matrix-card:hover {
+  border-color: var(--line-strong);
+}
+
+/* The viewer's own card is pinned first in the grid, so it also carries a
+ * visible tint and border instead of relying on the small "حسابك" badge. */
+.matrix-card-is-self {
+  border-color: color-mix(in srgb, var(--purple) 55%, var(--line));
+  background: color-mix(in srgb, var(--purple) 7%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--purple) 38%, transparent);
+}
+
+.matrix-card-is-self:hover {
+  border-color: var(--purple);
+}
+
+.matrix-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-card-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.25;
+}
+
+.matrix-card-role {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-card-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.matrix-card-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.matrix-card-facts dt {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.matrix-card-facts dd {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-card-grants {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.matrix-card-grants strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.matrix-card-bar {
+  display: block;
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.matrix-card-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--purple);
+}
+
+.matrix-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.matrix-card-sync {
+  margin: 0;
+  color: var(--gold-deep);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+/* Own row: the rank is read-only, so it shows as a note instead of a select. */
+.matrix-card-self {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* ── Capability dialog ─────────────────────────────────────────────────── */
+
+.matrix-dialog-actions {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.matrix-dialog-count {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+/* ── Add-user dialog: capability grid ───────────────────────────────────── */
+
+.matrix-group-modal {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.matrix-group-modal h3 {
+  margin-bottom: 8px;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* The modal grid scrolls independently so the action row stays reachable.
+ *
+ * Masonry columns instead of a CSS grid: capability groups have very different
+ * heights, and a grid row would stretch every group to the tallest one, leaving
+ * a hole under the short groups. Columns pack them tight with no dead space. */
+.modal-body .matrix-groups {
+  display: block;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  columns: 3;
+  column-gap: 10px;
+}
+
+.modal-body .matrix-groups .matrix-group-modal {
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 10px;
+  break-inside: avoid;
+}
+
+/* The dedicated capability dialog owns the whole overlay, so its grid gets the
+   taller viewport-relative cap instead of the inline create-form budget. */
+.modal-body .matrix-groups-dialog {
+  max-height: min(58vh, 460px);
+}
+
+@media (max-width: 1180px) {
+  .modal-body .matrix-groups {
+    columns: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .modal-body .matrix-groups {
+    columns: 1;
+  }
+}

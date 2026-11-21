@@ -1,0 +1,101 @@
+import { notFound } from "next/navigation";
+
+import { MerchantProfileClient } from "@/components/field-ops/merchant-profile-client";
+import { PageHeader } from "@/components/ui/page-header";
+import { requireModuleAccess } from "@/lib/auth/guard";
+import { effectiveCityIds } from "@/lib/city-scope-query";
+import {
+  getCityById,
+  getMerchantById,
+  listCities,
+  listFollowUpTasks,
+  listStateOverrides,
+  listTasks,
+  listVisitReports,
+  merchantCrmSummary,
+  merchantTimeline,
+} from "@/lib/field-ops/store";
+import { getMerchantV1Profile } from "@/lib/field-ops/merchant-profile-repository";
+import { loadMerchantRollup } from "@/lib/field-ops/state-source";
+import { teamLabel } from "@/lib/field-ops/types";
+import { listVendorTypes } from "@/lib/taxonomy/store";
+
+export const dynamic = "force-dynamic";
+export const runtime = "edge";
+
+type MerchantPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function MerchantProfilePage({
+  params,
+}: MerchantPageProps) {
+  const session = await requireModuleAccess("/merchants");
+  const { id } = await params;
+  const merchant = await getMerchantById(id);
+  // Merchant profiles follow the merchant directory's scope: any city the
+  // viewer can operate in, not just cities they have the `view_active_cities`
+  // dashboard permission for.
+  const cityScope = await effectiveCityIds(session);
+  if (!merchant || !cityScope.includes(merchant.cityId)) {
+    notFound();
+  }
+
+  const allowedCities = new Set(cityScope);
+  const cities = (await listCities())
+    .filter((city) => allowedCities.has(city.id))
+    .map((city) => ({ id: city.id, name: city.name, stage: city.stage }));
+  const vendorTypes = listVendorTypes();
+
+  const permissions = session.permissions;
+  const [city, reports, v1Profile, overrides, allTasks, followUps] =
+    await Promise.all([
+      getCityById(merchant.cityId),
+      listVisitReports(merchant.id),
+      getMerchantV1Profile(merchant.id),
+      listStateOverrides(merchant.id),
+      listTasks(),
+      listFollowUpTasks(merchant.id),
+    ]);
+  // State decisions recorded by another worker only exist in the rollup; the
+  // profile is the screen managers trust, so it reads the same source as the
+  // directory badge.
+  const rollup = await loadMerchantRollup(merchant.id);
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="كارت التاجر"
+        title={merchant.name}
+        description="السجل التجاري الموحّد: كل زيارة، كل رأي مندوب، بيانات التواصل الحالية، والتحليلات المجمّعة — بعيداً عن ضجيج المهام اليومية."
+        actions={<span className="badge">{teamLabel(merchant.team)}</span>}
+      />
+      <MerchantProfileClient
+        merchant={merchant}
+        cityName={city?.name ?? "مدينة غير محددة"}
+        reports={reports}
+        v1Profile={v1Profile}
+        overrides={overrides}
+        tasks={allTasks.filter((task) => task.merchantId === merchant.id)}
+        followUps={followUps}
+        timeline={await merchantTimeline(merchant.id, reports)}
+        summary={await merchantCrmSummary(merchant.id, reports, rollup)}
+        visitCount={rollup?.visitCount ?? reports.length}
+        viewerTeam={session.user.team}
+        cities={cities}
+        vendorTypes={vendorTypes}
+        canEditMerchants={permissions.includes("view_merchant_profile")}
+        canEditMerchantDetails={permissions.includes("edit_merchants")}
+        canRequestTransfers={permissions.includes("request_ownership_transfer")}
+        canManageState={permissions.includes("edit_contract")}
+        canViewFieldOps={permissions.includes("view_all_teams_visits")}
+        canViewFieldOpsPage={permissions.includes("view_all_teams_visits")}
+        canStartVisit={permissions.includes("view_all_teams_visits")}
+        canEditMerchantSocials={permissions.includes("edit_merchant_socials")}
+        canToggleAppPublish={permissions.includes("toggle_app_publish")}
+        canManageVipMenu={permissions.includes("manage_vip_menu")}
+        canExportMerchantData={permissions.includes("export_merchant_data")}
+      />
+    </>
+  );
+}

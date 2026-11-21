@@ -65,5 +65,35 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Service account / credential bundles (never commit)
+firebase-service-account.json
+*-service-account.json
+
 # dataconnect generated files
 .dataconnect
+
+# Next.js (V2 app)
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+
+# Local env overrides for the V2 app
+.env*.local
+
+# Supabase CLI local state
+supabase/.temp/
+
+# AI migration run artifacts (review queue, raw model responses)
+.ai-migration/
+
+# V1 Firestore export (contains production data; never commit)
+v1_data_dump.json
+v1_data_dump.json.partial
+
+# Legacy financial source workbooks (production money data; never commit)
+/financials.xlsx
+scripts/legacy-data/*.xlsx
+scripts/legacy-data/*.xls
+scripts/legacy-data/*.xlsm
+scripts/legacy-data/*.ods

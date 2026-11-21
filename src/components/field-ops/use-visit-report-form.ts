@@ -1,0 +1,261 @@
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  OUTCOME_LABELS,
+  REP_OUTCOME_ORDER,
+  toOpinionState,
+  type OpinionState,
+  type OutcomeOption,
+} from "@/components/field-ops/visit/outcome-options";
+import { focusVisitField } from "@/components/field-ops/visit/field-anchors";
+import {
+  validateVisitForm,
+  type VisitFormField,
+} from "@/components/field-ops/visit/validate-visit-form";
+import { sanitizePhone } from "@/lib/field-ops/phone";
+import {
+  ADVANCED_OUTCOMES,
+  COMMISSION_OUTCOMES,
+  type ContractState,
+  type FollowUpKind,
+  type Merchant,
+} from "@/lib/field-ops/types";
+
+import type { VisitReportDraft } from "./visit-report-form";
+
+/**
+ * State machine and submit handler for the visit report form.
+ *
+ * Extracted from the render module so the modal body stays a presentation of
+ * state, and so the reset-on-open rule and the inline-error rule live in one
+ * testable place. The form is a controlled form, not React Hook Form: the app
+ * carries no form library, and the validation rules are already pure functions
+ * in `validate-visit-form.ts`.
+ */
+export function useVisitReportForm(options: {
+  open: boolean;
+  merchant: Merchant | null;
+  visitCount: number;
+  canManageState: boolean;
+  onSubmit: (report: VisitReportDraft) => void;
+}) {
+  const { open, merchant, visitCount, canManageState, onSubmit } = options;
+
+  const [outcome, setOutcome] = useState<ContractState>("no_agreement");
+  const [notes, setNotes] = useState("");
+  const [contactName, setContactName] = useState(merchant?.contact?.name ?? "");
+  const [contactRole, setContactRole] = useState(merchant?.contact?.role ?? "");
+  const [contactMobile, setContactMobile] = useState(
+    merchant?.contact?.mobile ?? "",
+  );
+  const [opinionState, setOpinionState] = useState<Record<string, OpinionState>>(
+    () => toOpinionState(merchant?.opinions),
+  );
+  const [customLabel, setCustomLabel] = useState("");
+  const [customWeight, setCustomWeight] = useState(50);
+  const [customEnabled, setCustomEnabled] = useState(false);
+  const [agreedCommission, setAgreedCommission] = useState<string>(
+    merchant?.agreedCommission != null ? String(merchant.agreedCommission) : "",
+  );
+  const [followUpAt, setFollowUpAt] = useState("");
+  // Default to "no follow-up": the number is only mandatory once the rep
+  // explicitly picks a type, so an untouched section never blocks the save.
+  const [followUpKind, setFollowUpKind] = useState<FollowUpKind | null>(null);
+  const [followUpNote, setFollowUpNote] = useState("");
+  const [followUpContactNumber, setFollowUpContactNumber] = useState("");
+  const [error, setError] = useState("");
+  const [errorField, setErrorField] = useState<VisitFormField | null>(null);
+  // Bumped on every rejected submit. Two identical failures leave `error` and
+  // `errorField` unchanged, so the scroll effect keys off this instead of them
+  // and still re-centres the field the second time the rep taps Save.
+  const [failedSubmit, setFailedSubmit] = useState(0);
+
+  /** Only the field that failed carries a message; the rest stay clean. */
+  function fieldError(field: VisitFormField): string | undefined {
+    return errorField === field ? error : undefined;
+  }
+
+  function clearError() {
+    setError("");
+    setErrorField(null);
+  }
+
+  const canUseAdvanced = visitCount > 0 || canManageState;
+
+  // Reset whenever a new visit opens; the modal stays mounted, so React state
+  // would otherwise leak the previous merchant's answers into a new report.
+  useEffect(() => {
+    if (!open || !merchant) return;
+    setOutcome(
+      ADVANCED_OUTCOMES.includes(merchant.contractState) && visitCount === 0
+        ? "no_agreement"
+        : REP_OUTCOME_ORDER.includes(merchant.contractState)
+          ? merchant.contractState
+          : "no_agreement",
+    );
+    setNotes("");
+    setContactName(merchant.contact?.name ?? "");
+    setContactRole(merchant.contact?.role ?? "");
+    setContactMobile(merchant.contact?.mobile ?? "");
+    setOpinionState(toOpinionState(merchant.opinions));
+    const existingCustom = (merchant.opinions ?? []).find(
+      (opinion) => opinion.trait === "custom",
+    );
+    setCustomLabel(existingCustom?.label ?? "");
+    setCustomWeight(existingCustom?.weight || 50);
+    setCustomEnabled(Boolean(existingCustom));
+    setAgreedCommission(
+      merchant.agreedCommission != null ? String(merchant.agreedCommission) : "",
+    );
+    setFollowUpAt("");
+    setFollowUpKind(null);
+    setFollowUpNote("");
+    setFollowUpContactNumber("");
+    setError("");
+    setErrorField(null);
+    setFailedSubmit(0);
+  }, [open, merchant, visitCount]);
+
+  const outcomeOptions = useMemo<OutcomeOption[]>(() => {
+    return REP_OUTCOME_ORDER.map((state) => ({
+      value: state,
+      label: OUTCOME_LABELS[state].label,
+      description: OUTCOME_LABELS[state].description,
+      advanced: ADVANCED_OUTCOMES.includes(state),
+    })).filter((option) => !option.advanced || canUseAdvanced);
+  }, [canUseAdvanced]);
+
+  function changeFollowUpKind(kind: FollowUpKind | null) {
+    setFollowUpKind(kind);
+    if (errorField === "followUpKind" || errorField === "followUpAt") {
+      clearError();
+    }
+    if (!kind) {
+      // "No follow-up" means the disabled date/note fields must not linger in
+      // state, or a later save would submit a schedule nobody chose.
+      setFollowUpAt("");
+      setFollowUpNote("");
+      setFollowUpContactNumber("");
+      return;
+    }
+    // Every follow-up type now needs a dialable number, so seed it from the
+    // merchant contact for any choice. Only fills an empty field, so a rep who
+    // already typed an override keeps it.
+    if (!followUpContactNumber.trim()) {
+      const fallback = sanitizePhone(contactMobile);
+      if (fallback) setFollowUpContactNumber(fallback);
+    }
+  }
+
+  function changeContactMobile(value: string) {
+    setContactMobile(value);
+    // Typing in the failing field is the rep acknowledging it; keeping the old
+    // message on screen while the value changes reads as a stale error.
+    if (errorField === "contactMobile") clearError();
+  }
+
+  function changeFollowUpAt(value: string) {
+    setFollowUpAt(value);
+    if (errorField === "followUpAt") clearError();
+  }
+
+  function changeContactNumber(value: string) {
+    setFollowUpContactNumber(value);
+    // Typing in the failing field is the rep acknowledging it; keeping the old
+    // message on screen while the value changes reads as a stale error.
+    if (errorField === "followUpContactNumber") clearError();
+  }
+
+  function patchOpinion(trait: string, patch: Partial<OpinionState>) {
+    setOpinionState((current) => ({
+      ...current,
+      [trait]: { ...current[trait], ...patch },
+    }));
+  }
+
+  // Scroll the failing field into view once it has rendered with its message.
+  // The submit handler only stores the field; the scroll is a DOM side effect
+  // that must run after React paints the error, or the element would still be
+  // unmarked when we look for it.
+  useEffect(() => {
+    if (failedSubmit === 0 || !errorField) return;
+    focusVisitField(errorField);
+  }, [failedSubmit, errorField]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearError();
+
+    const result = validateVisitForm({
+      outcome,
+      notes,
+      contactName,
+      contactRole,
+      contactMobile,
+      opinionState,
+      customEnabled,
+      customLabel,
+      customWeight,
+      agreedCommission,
+      followUpAt,
+      followUpKind,
+      followUpNote,
+      followUpContactNumber,
+      canUseAdvanced,
+      hasTeam: Boolean(merchant?.team),
+    });
+
+    if (!result.ok) {
+      setError(result.error);
+      setErrorField(result.field);
+      setFailedSubmit((count) => count + 1);
+      return;
+    }
+
+    onSubmit(result.payload);
+  }
+
+  const activeOpinions = Object.values(opinionState).filter(
+    (state) => state.enabled,
+  );
+
+  // An agreement is recorded against the merchant's primary mobile.
+  const needsContactMobile = COMMISSION_OUTCOMES.includes(outcome);
+
+  return {
+    outcome,
+    setOutcome,
+    notes,
+    setNotes,
+    contactName,
+    setContactName,
+    contactRole,
+    setContactRole,
+    contactMobile,
+    changeContactMobile,
+    opinionState,
+    customLabel,
+    setCustomLabel,
+    customWeight,
+    setCustomWeight,
+    customEnabled,
+    setCustomEnabled,
+    agreedCommission,
+    setAgreedCommission,
+    followUpAt,
+    changeFollowUpAt,
+    followUpKind,
+    followUpNote,
+    setFollowUpNote,
+    followUpContactNumber,
+    changeFollowUpKind,
+    changeContactNumber,
+    outcomeOptions,
+    activeOpinions,
+    patchOpinion,
+    fieldError,
+    submit,
+    canUseAdvanced,
+    needsContactMobile,
+  };
+}

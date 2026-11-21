@@ -1,0 +1,199 @@
+/* Notifications: topbar bell, its dropdown panel, and the inbox preview rows.
+ * The inbox page itself reuses the shared governance feed rules; these selectors
+ * only cover the shell surface. */
+
+/* ── Bell trigger ─────────────────────────────────────────────────────── */
+
+.notification-bell-trigger {
+  padding: 8px;
+  border-radius: 999px;
+}
+
+.notification-bell-trigger:hover {
+  border-color: var(--gold);
+}
+
+.notification-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+
+.notification-bell svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notification-bell-badge {
+  position: absolute;
+  top: -7px;
+  inset-inline-end: -9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* ── Dropdown panel ───────────────────────────────────────────────────── */
+
+.notification-pop {
+  display: flex;
+  flex-direction: column;
+}
+
+.notification-pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-pop-head strong {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.notification-pop-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(60vh, 380px);
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.notification-pop-row {
+  border-radius: var(--radius-control);
+}
+
+.notification-pop-row.is-unread {
+  background: var(--kanjo-pastel);
+}
+
+.notification-pop-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: var(--radius-control);
+  color: inherit;
+  text-decoration: none;
+  transition: background 140ms ease;
+}
+
+.notification-pop-link:hover,
+.notification-pop-link:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
+}
+
+.notification-pop-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.notification-pop-row.is-unread .notification-pop-dot {
+  background: var(--kanjo-purple-interactive);
+}
+
+.notification-pop-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.notification-pop-title {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.notification-pop-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.notification-pop-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.notification-pop-empty {
+  margin: 0;
+  padding: 22px 14px;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.notification-pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.notification-pop-all {
+  color: var(--kanjo-purple-interactive);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.notification-pop-all:hover,
+.notification-pop-all:focus-visible {
+  text-decoration: underline;
+}
+
+/* ── Dark surface corrections ─────────────────────────────────────────── */
+
+[data-theme="dark"] .notification-pop-link:hover,
+[data-theme="dark"] .notification-pop-link:focus-visible {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+[data-theme="dark"] .notification-pop-all {
+  color: #c4b5fd;
+}
+
+@media (max-width: 620px) {
+  .notification-bell-trigger {
+    padding: 7px;
+  }
+}

@@ -1,0 +1,262 @@
+/* Merchant identity mark.
+ *
+ * One shared primitive used by the catalog tiles, the merchant directory table
+ * and the execution board, so the sizes stay consistent across contexts. The
+ * monogram background is the brand purple; a real logo covers it edge to edge.
+ */
+
+.merchant-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--kanjo-purple-base);
+  color: var(--gold);
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+  /* A hairline ring lifts the mark off the row background without drawing a
+   * heavy outline; the shadow gives the table a little depth. */
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shadow-sm);
+}
+
+.merchant-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.merchant-avatar-initial {
+  font-size: 0.9em;
+  letter-spacing: 0;
+}
+
+/* Sizes. The directory table uses `lg` (48px) so a logo reads as a brand mark
+ * rather than a favicon; cards use `xl`. */
+.merchant-avatar-sm {
+  width: 28px;
+  height: 28px;
+  font-size: 0.78rem;
+}
+
+.merchant-avatar-md {
+  width: 40px;
+  height: 40px;
+  font-size: 1rem;
+}
+
+.merchant-avatar-lg {
+  width: 48px;
+  height: 48px;
+  font-size: 1.1rem;
+}
+
+.merchant-avatar-xl {
+  width: 64px;
+  height: 64px;
+  font-size: 1.4rem;
+}
+
+/* Overlaps a cover image: a thick surface-colored ring separates the logo from
+ * the banner behind it, like a social profile avatar. The ring is drawn as a
+ * border so the shadow sits outside it. */
+.merchant-avatar-elevated {
+  border: 3px solid var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* Name + avatar pair used in table cells and card headers. */
+.merchant-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.merchant-identity-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.merchant-identity-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Directory balance cell: signed amount plus a plain-language reading, so the
+ * column explains itself without a legend elsewhere on the page.
+ *
+ * Colour follows the cash direction, not the sign of the raw journal figure:
+ * money owed to Kanjo (a receivable) reads green, money Kanjo owes (a payable)
+ * reads red, exactly like a bank statement's credit/debit columns. */
+.merchant-balance {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-inline-start-width: 3px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  white-space: nowrap;
+}
+
+.merchant-balance strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.merchant-balance-note {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.merchant-balance-due_to_house {
+  border-inline-start-color: var(--green);
+}
+
+.merchant-balance-due_to_house strong {
+  color: var(--green);
+}
+
+.merchant-balance-due_to_merchant {
+  border-inline-start-color: var(--red);
+}
+
+.merchant-balance-due_to_merchant strong {
+  color: var(--red);
+}
+
+.merchant-balance-settled {
+  border-inline-start-color: var(--line-strong);
+}
+
+.merchant-balance-settled strong {
+  color: var(--ink-soft);
+}
+
+/* Directory slicers: search grows, the four selects stay compact and wrap as a
+ * group on narrow widths instead of squeezing into unreadable slivers. */
+.merchant-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.merchant-filters > .search-shell {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.merchant-filters .merchant-filter-select {
+  flex: 0 0 168px;
+}
+
+.merchant-filters-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* Dark theme: the purple base is too close to the dark surface, so lift the
+ * monogram onto the gold-on-deep-violet tile gradient instead. */
+[data-theme="dark"] .merchant-avatar {
+  background: var(--gradient-tile);
+  color: var(--gold);
+}
+
+/* ── Merchant logo / cover manager (profile) ───────────────────────────── */
+
+.merchant-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.merchant-assets-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.merchant-assets-head h3 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+/* Positioning wrapper for cover + overlapping logo. Must NOT clip: the logo
+ * is translated past the cover's bottom edge and an `overflow: hidden` here
+ * would cut it in half. The cover clips only its own image, with its top
+ * corners rounded to match the wrapper's border. */
+.merchant-assets-preview {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+.merchant-assets-cover {
+  position: relative;
+  overflow: hidden;
+  height: 148px;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      120% 120% at 15% 0%,
+      color-mix(in srgb, var(--kanjo-gold) 50%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      135deg,
+      var(--kanjo-purple-deep) 0%,
+      var(--kanjo-purple-base) 55%,
+      var(--kanjo-purple-interactive) 100%
+    );
+}
+
+.merchant-assets-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.merchant-assets-cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--kanjo-cream) 82%, transparent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* The logo straddles the cover's bottom edge, matching the catalog tile. */
+.merchant-assets-logo {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline-start: 18px;
+  transform: translateY(50%);
+  display: inline-flex;
+  border-radius: 9999px;
+}
+
+.merchant-assets-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  /* Clears the half-overlapping logo drawn over the preview above. */
+  margin-top: 22px;
+}
