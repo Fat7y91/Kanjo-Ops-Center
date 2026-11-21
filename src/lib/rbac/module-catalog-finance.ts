@@ -51,6 +51,19 @@ export const FINANCE_MODULES: readonly ModuleDefinition[] = [
     icon: "operations",
   },
   {
+    // Custody register: riders are onboarded once and receive a printed
+    // receipt for the equipment and cash they carry. The same courier grants
+    // open the surface so an operator who manages partners can issue custody.
+    href: "/riders",
+    label: "مناديب التوصيل والعهد",
+    shortLabel: "العهد",
+    description:
+      "تسجيل مناديب التوصيل وإصدار إيصالات العهدة وتسليم الأدوات والعهدة النقدية.",
+    permission: "view_couriers",
+    alsoGrantedBy: ["manage_couriers"],
+    icon: "operations",
+  },
+  {
     // Discount catalogue. Managing and viewing are separate grants so a
     // logger can pick a coupon without being able to edit funding rules.
     href: "/coupons",

@@ -41,7 +41,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       {
         id: "operations-sales",
         label: "المبيعات",
-        hrefs: ["/merchants", "/couriers", "/operations/log"],
+        hrefs: ["/merchants", "/couriers", "/riders", "/operations/log"],
       },
     ],
   },

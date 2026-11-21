@@ -65,6 +65,9 @@
 /* Delivery roster and per-employee operations report */
 @import "./couriers.css";
 
+/* Delivery riders, custody receipts and the A4 print sheet */
+@import "./riders.css";
+
 /* Discount coupons catalogue and bulk import */
 @import "./coupons.css";
 
