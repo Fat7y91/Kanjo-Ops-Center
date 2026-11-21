@@ -2,14 +2,22 @@
  * Best-effort downloader for external product images.
  *
  * Marketplace CDNs commonly reject requests that do not look like a browser,
- * require a `Referer`, or answer with a format we cannot store (`avif`, `svg`).
- * The pipeline tries a browser-shaped request, then the same request with the
- * origin as `Referer`, then a JPEG-normalising public proxy. `fetch` is
- * injectable so the fallbacks are unit tested without network access.
+ * require a `Referer`, or answer with a format we cannot store (`avif`, `svg`)
+ * or a multi-megabyte original. The pipeline tries a browser-shaped request,
+ * then the same request with the origin as `Referer`, then a resizing JPEG
+ * proxy. Anything larger than the target, and every PNG/BMP/AVIF, is normalised
+ * through the proxy before it can reach R2 or the internal blob store.
+ *
+ * `fetch` is injectable so the fallbacks are unit tested without network access.
  */
 
 export const IMAGE_MIN_BYTES = 500;
-export const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+/** Raw files under this size can be stored as-is when they are already JPEG. */
+export const IMAGE_TARGET_BYTES = 400 * 1024;
+/** Hard ceiling for anything this pipeline persists. */
+export const IMAGE_MAX_BYTES = 1024 * 1024;
+/** A 800px JPEG above this gets one smaller retry. */
+export const IMAGE_RETRY_BYTES = 500 * 1024;
 export const DOWNLOAD_TIMEOUT_MS = 10_000;
 
 const CHROME_UA =
@@ -31,6 +39,11 @@ export type DownloadResult =
       via: DownloadVia;
     }
   | { ok: false; reason: string };
+
+type ResizeVariant = { width: number; height: number; quality: number };
+
+const PRIMARY_VARIANT: ResizeVariant = { width: 800, height: 800, quality: 82 };
+const COMPACT_VARIANT: ResizeVariant = { width: 600, height: 600, quality: 75 };
 
 type Attempt = {
   ok: boolean;
@@ -85,33 +98,36 @@ async function attempt(
   }
 }
 
-function sizeInRange(bytes: Uint8Array | null): boolean {
+function sizeInRange(bytes: Uint8Array | null, maxBytes: number): boolean {
   return Boolean(
     bytes &&
       bytes.byteLength >= IMAGE_MIN_BYTES &&
-      bytes.byteLength <= IMAGE_MAX_BYTES,
+      bytes.byteLength <= maxBytes,
   );
 }
 
-function isImage(attempted: Attempt): boolean {
+function isImageWithin(attempted: Attempt, maxBytes: number): boolean {
   return (
     attempted.ok &&
     attempted.contentType.startsWith("image/") &&
-    sizeInRange(attempted.bytes)
+    sizeInRange(attempted.bytes, maxBytes)
   );
 }
 
-/** JPEG/PNG upload as-is; anything else is normalised through the proxy. */
-function isPreferred(attempted: Attempt): boolean {
+/** Already JPEG and under the raw target: no proxy needed. */
+function isServableJpeg(attempted: Attempt): boolean {
   return (
-    isImage(attempted) &&
-    (attempted.contentType === "image/jpeg" ||
-      attempted.contentType === "image/png")
+    isImageWithin(attempted, IMAGE_TARGET_BYTES) &&
+    attempted.contentType === "image/jpeg"
   );
 }
 
-function isAllowed(attempted: Attempt): boolean {
-  return isImage(attempted) && ALLOWED_TYPES.has(attempted.contentType);
+/** Last-resort origin file when the proxy is unavailable, still under 1 MB. */
+function isServableFallback(attempted: Attempt): boolean {
+  return (
+    isImageWithin(attempted, IMAGE_MAX_BYTES) &&
+    ALLOWED_TYPES.has(attempted.contentType)
+  );
 }
 
 function originOf(url: string): string {
@@ -122,12 +138,20 @@ function originOf(url: string): string {
   }
 }
 
+/** wsrv.nl resize + JPEG normalisation. `we` never enlarges a small source. */
+export function resizeImageUrl(
+  url: string,
+  variant: ResizeVariant = PRIMARY_VARIANT,
+): string {
+  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=${variant.width}&h=${variant.height}&fit=inside&we&output=jpg&q=${variant.quality}`;
+}
+
 export function proxyImageUrl(url: string): string {
-  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=85&n=-1`;
+  return resizeImageUrl(url);
 }
 
 function succeed(attempted: Attempt, via: DownloadVia): DownloadResult {
-  // `isPreferred`/`isAllowed` already proved bytes and type are present.
+  // The predicates above already proved bytes and type are present.
   return {
     ok: true,
     bytes: attempted.bytes as Uint8Array,
@@ -136,34 +160,59 @@ function succeed(attempted: Attempt, via: DownloadVia): DownloadResult {
   };
 }
 
-/** Downloads an external image, trying the three documented strategies. */
+/** Downloads an external image, always returning a bounded JPEG when possible. */
 export async function downloadImage(
   url: string,
   options: { fetchImpl?: FetchLike } = {},
 ): Promise<DownloadResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const direct = await attempt(fetchImpl, url);
-  if (isPreferred(direct)) return succeed(direct, "direct");
+  if (isServableJpeg(direct)) return succeed(direct, "direct");
 
   let referred: Attempt | null = null;
   const referer = originOf(url);
-  if (referer && (!direct.ok || !isPreferred(direct))) {
+  if (referer) {
     referred = await attempt(fetchImpl, url, referer);
-    if (isPreferred(referred)) return succeed(referred, "referer");
+    if (isServableJpeg(referred)) return succeed(referred, "referer");
   }
 
-  const proxied = await attempt(fetchImpl, proxyImageUrl(url));
-  if (isAllowed(proxied)) return succeed(proxied, "proxy");
-
-  // A valid WebP from the origin is still usable when the proxy is unavailable.
-  if (isAllowed(direct)) return succeed(direct, "direct");
-  if (referred && isAllowed(referred)) return succeed(referred, "referer");
-
-  const candidates = [direct, referred, proxied];
-  const blocked = candidates.some(
-    (candidate) => candidate && (candidate.status === 403 || candidate.status === 406),
+  const rawCandidates = [direct, referred];
+  const rawBlocked = rawCandidates.some(
+    (candidate) =>
+      candidate && (candidate.status === 403 || candidate.status === 406),
   );
-  if (blocked) {
+
+  /* Oversized files and PNG/BMP/AVIF go through wsrv at 800x800/q82. */
+  const normalized = await attempt(fetchImpl, proxyImageUrl(url));
+  const normalizedFits = isImageWithin(normalized, IMAGE_MAX_BYTES);
+  const normalizedBytes = normalized.bytes?.byteLength ?? 0;
+  const shouldRetrySmaller =
+    !normalizedFits ||
+    (normalized.contentType === "image/jpeg" &&
+      normalizedBytes > IMAGE_RETRY_BYTES);
+
+  if (shouldRetrySmaller) {
+    const compact = await attempt(
+      fetchImpl,
+      resizeImageUrl(url, COMPACT_VARIANT),
+    );
+    if (isImageWithin(compact, IMAGE_MAX_BYTES)) {
+      return succeed(compact, "proxy");
+    }
+  }
+  if (normalizedFits) return succeed(normalized, "proxy");
+
+  // Proxy unavailable: a small WebP/PNG from the origin is still bounded.
+  if (isServableFallback(direct)) return succeed(direct, "direct");
+  if (referred && isServableFallback(referred)) {
+    return succeed(referred, "referer");
+  }
+
+  if (
+    rawBlocked ||
+    normalized.status === 403 ||
+    normalized.status === 406
+  ) {
     return {
       ok: false,
       reason:
@@ -171,7 +220,7 @@ export async function downloadImage(
     };
   }
 
-  const sawImage = candidates.some(
+  const sawImage = [direct, referred, normalized].some(
     (candidate) => candidate && candidate.contentType.startsWith("image/"),
   );
   return {

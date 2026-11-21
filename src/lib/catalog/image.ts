@@ -1,14 +1,15 @@
 /**
  * Image capture helpers for field product entry.
  *
- * Phone cameras produce 3-8 MB JPEGs. We downscale to a 900px box and re-encode
- * as JPEG before it ever reaches IndexedDB, so a rep's whole draft queue stays
- * comfortably inside browser quota limits.
+ * Phone cameras produce 3-8 MB JPEGs. We downscale to an 800px box and re-encode
+ * as JPEG (q82) before it ever reaches IndexedDB or the upload endpoint, so a
+ * rep's whole draft queue stays comfortably inside browser quota limits.
  */
 
-const MAX_EDGE = 900;
-const QUALITY = 0.72;
-const HARD_LIMIT_BYTES = 1_500_000;
+const MAX_EDGE = 800;
+const QUALITY = 0.82;
+const TARGET_LIMIT_BYTES = 400 * 1024;
+const HARD_LIMIT_BYTES = 1_000_000;
 
 export type PreparedImage = {
   dataUrl: string;
@@ -42,6 +43,9 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   context.drawImage(image, 0, 0, width, height);
 
   let dataUrl = canvas.toDataURL("image/jpeg", QUALITY);
+  if (approximateBytes(dataUrl) > TARGET_LIMIT_BYTES) {
+    dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+  }
   if (approximateBytes(dataUrl) > HARD_LIMIT_BYTES) {
     dataUrl = canvas.toDataURL("image/jpeg", 0.5);
   }
@@ -65,6 +69,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error("image-decode-failed"));
     image.src = src;
   });
+}
+
+/** First image file on a paste event, if any. */
+export function clipboardImageFile(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const item of Array.from(data.items)) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+  return null;
 }
 
 export function formatBytes(bytes: number): string {

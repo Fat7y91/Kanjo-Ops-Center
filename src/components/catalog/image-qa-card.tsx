@@ -6,6 +6,7 @@ import { CatalogImage } from "@/components/catalog/catalog-image";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
+import { clipboardImageFile } from "@/lib/catalog/image";
 import type { CatalogProduct } from "@/lib/catalog/types";
 
 type ImageQaCardProps = {
@@ -45,7 +46,15 @@ export function ImageQaCard({
   const hasImage = Boolean(imageUrl);
 
   return (
-    <article className="img-qa-card">
+    <article
+      className="img-qa-card"
+      onPaste={(event) => {
+        const file = clipboardImageFile(event.clipboardData);
+        if (!file || locked) return;
+        event.preventDefault();
+        onUploadEnhanced(file);
+      }}
+    >
       <input
         ref={inputRef}
         type="file"

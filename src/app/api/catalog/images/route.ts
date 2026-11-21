@@ -36,6 +36,12 @@ export async function POST(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof Error && error.message === "IMAGE_TOO_LARGE") {
+      return NextResponse.json(
+        { error: "حجم الصورة كبير جداً. استخدم صورة أصغر." },
+        { status: 413 },
+      );
+    }
     return apiError(error);
   }
 }

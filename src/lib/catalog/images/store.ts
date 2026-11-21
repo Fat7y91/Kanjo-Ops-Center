@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
-import { toImageDataUrl } from "./base64";
+import { parseImageDataUrl, toImageDataUrl } from "./base64";
 
 /**
  * Content-addressed store for product photos captured by operators.
@@ -13,6 +13,8 @@ import { toImageDataUrl } from "./base64";
  */
 
 const FALLBACK_ORIGIN = "https://kanjo-ops-center.pages.dev";
+/** Never persist a manually-uploaded blob above this decoded size. */
+export const STORED_IMAGE_MAX_BYTES = 1024 * 1024;
 const IMAGE_PATH = "/api/catalog/images";
 const IMAGE_PREFIX = "img-";
 
@@ -70,6 +72,13 @@ export async function storeCatalogImage(
   if (!contentType) {
     throw new Error("IMAGE_INVALID_DATA_URL");
   }
+  const parsed = parseImageDataUrl(dataUrl);
+  if (!parsed) {
+    throw new Error("IMAGE_INVALID_DATA_URL");
+  }
+  if (parsed.bytes.byteLength > STORED_IMAGE_MAX_BYTES) {
+    throw new Error("IMAGE_TOO_LARGE");
+  }
 
   const id = await contentId(dataUrl);
   const client = getSupabaseServerClient();
@@ -106,6 +115,9 @@ export async function storeCatalogImageBytes(
   contentType: string,
   merchantId: string | null = null,
 ): Promise<string> {
+  if (bytes.byteLength > STORED_IMAGE_MAX_BYTES) {
+    throw new Error("IMAGE_TOO_LARGE");
+  }
   const dataUrl = toImageDataUrl(contentType, bytes);
   const client = getSupabaseServerClient();
   const { error } = await client
@@ -119,7 +131,7 @@ export async function storeCatalogImageBytes(
         data_url: dataUrl,
         byte_size: bytes.byteLength,
       },
-      { onConflict: "id", ignoreDuplicates: true },
+      { onConflict: "id" },
     );
 
   if (error) {

@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CatalogImage } from "@/components/catalog/catalog-image";
-import { formatBytes, prepareImage } from "@/lib/catalog/image";
+import {
+  clipboardImageFile,
+  formatBytes,
+  prepareImage,
+} from "@/lib/catalog/image";
 import { uploadCatalogImage } from "@/lib/catalog/images/upload";
 
 type ProductImageFieldProps = {
@@ -60,7 +64,16 @@ export function ProductImageField({
   }
 
   return (
-    <div className="cat-image-field">
+    <div
+      className="cat-image-field"
+      tabIndex={0}
+      onPaste={(event) => {
+        const file = clipboardImageFile(event.clipboardData);
+        if (!file) return;
+        event.preventDefault();
+        void handleFile(file);
+      }}
+    >
       <span className="cat-label">صورة المنتج</span>
 
       <div className="cat-image-body">

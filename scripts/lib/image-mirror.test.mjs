@@ -175,3 +175,76 @@ test("a signed /api/image proxy path resolves to its upstream URL", () => {
   const raw = `/api/image?url=${encodeURIComponent(TARGET)}&sig=abc123`;
   assert.equal(format.resolveDisplayImageUrl(raw), TARGET);
 });
+
+/* ── bounded storage ──────────────────────────────────────────────────── */
+
+test("an oversized JPEG is normalised through the 800px resize proxy", async () => {
+  const seen = [];
+  const result = await download.downloadImage(TARGET, {
+    fetchImpl: async (url) => {
+      seen.push(url);
+      if (url.startsWith("https://wsrv.nl/")) {
+        assert.match(url, /[?&]w=800(&|$)/);
+        assert.match(url, /[?&]h=800(&|$)/);
+        assert.match(url, /[?&]fit=inside(&|$)/);
+        assert.match(url, /[?&]we(&|$)/);
+        assert.match(url, /[?&]output=jpg(&|$)/);
+        assert.match(url, /[?&]q=82(&|$)/);
+        return imageResponse("image/jpeg", 120 * 1024);
+      }
+      return imageResponse("image/jpeg", 9 * 1024 * 1024);
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, "proxy");
+  assert.equal(result.bytes.byteLength, 120 * 1024);
+  assert.ok(seen.some((url) => url.includes(encodeURIComponent(TARGET))));
+});
+
+test("a PNG is re-encoded to JPEG even below the raw size target", async () => {
+  const result = await download.downloadImage(TARGET, {
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://wsrv.nl/")) {
+        return imageResponse("image/jpeg", 90 * 1024);
+      }
+      return imageResponse("image/png", 300 * 1024);
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, "proxy");
+  assert.equal(result.contentType, "image/jpeg");
+});
+
+test("a proxy result above 500 KB retries at 600x600/q75", async () => {
+  let proxyCalls = 0;
+  const result = await download.downloadImage(TARGET, {
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://wsrv.nl/")) {
+        proxyCalls += 1;
+        if (url.includes("w=600")) {
+          assert.match(url, /[?&]q=75(&|$)/);
+          return imageResponse("image/jpeg", 150 * 1024);
+        }
+        return imageResponse("image/jpeg", 600 * 1024);
+      }
+      return imageResponse("image/jpeg", 9 * 1024 * 1024);
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, "proxy");
+  assert.equal(result.bytes.byteLength, 150 * 1024);
+  assert.equal(proxyCalls, 2);
+});
+
+test("a proxy result above the 1 MB ceiling is rejected", async () => {
+  const result = await download.downloadImage(TARGET, {
+    fetchImpl: async (url) => {
+      if (url.startsWith("https://wsrv.nl/")) {
+        return imageResponse("image/jpeg", 2 * 1024 * 1024);
+      }
+      return imageResponse("image/jpeg", 9 * 1024 * 1024);
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /حجم/);
+});
