@@ -1,6 +1,15 @@
 import { assertCategoryInVendor } from "@/lib/taxonomy/store";
-import type { CatalogProduct } from "@/lib/catalog/types";
+import type {
+  CatalogProduct,
+  CatalogProductState,
+  CatalogProductType,
+  CatalogVariantSelection,
+} from "@/lib/catalog/types";
 import { normalizeCode } from "@/lib/catalog/sku";
+import {
+  normalizeVariantDrafts,
+  type VariantEditDraft,
+} from "@/lib/catalog/variant-edit";
 import { getMerchantById } from "@/lib/field-ops/store";
 
 import {
@@ -10,6 +19,8 @@ import {
 } from "./product-repository";
 import { CatalogError, bumpRevision } from "./store";
 
+export type CatalogVariantEditInput = VariantEditDraft;
+
 export type CatalogProductUpdateInput = {
   name: string;
   description: string;
@@ -17,14 +28,23 @@ export type CatalogProductUpdateInput = {
   sku: string;
   barcode: string;
   imageDataUrl: string | null;
-  price: number;
+  price?: number;
+  productType?: CatalogProductType;
+  variants?: CatalogVariantEditInput[];
+  state?: CatalogProductState;
+  reviewNote?: string;
+  unit?: string;
+  stockQuantity?: number | null;
+  compareAtPrice?: number | null;
 };
 
 /**
  * Manual correction of a stored product.
  *
  * Autopilot rows are intentionally not special-cased: a merchant can fix the
- * name, price, barcode, category or image of any product they can see.
+ * name, price, barcode, category, image, product type and variant set of any
+ * product they can see. A simple → variable conversion replaces the variant
+ * set in the same atomic row update.
  */
 export async function updateProduct(
   productId: string,
@@ -42,6 +62,18 @@ export async function updateProduct(
 
   const vendorTypeId = existing.vendorTypeId ?? merchant.vendorTypeId;
   const category = assertCategoryInVendor(vendorTypeId, input.categoryId);
+  const productType = input.productType ?? existing.productType;
+
+  let attributes: CatalogVariantSelection[] = [];
+  let basePrice = input.price ?? existing.price;
+  if (productType === "variable") {
+    const normalized = normalizeVariantDrafts(input.variants ?? []);
+    if (!normalized.ok) {
+      throw new CatalogError("INVALID_VARIANTS", normalized.message, 422);
+    }
+    attributes = normalized.attributes;
+    basePrice = input.price ?? normalized.basePrice;
+  }
 
   const stored = await updateProductRow(productId, {
     name: input.name.trim(),
@@ -50,7 +82,20 @@ export async function updateProduct(
     sku: normalizeCode(input.sku),
     barcode: normalizeCode(input.barcode),
     imageDataUrl: input.imageDataUrl,
-    price: input.price,
+    price: basePrice,
+    unit: input.unit ?? existing.unit,
+    stockQuantity:
+      input.stockQuantity === undefined
+        ? existing.stockQuantity
+        : input.stockQuantity,
+    compareAtPrice:
+      input.compareAtPrice === undefined
+        ? existing.compareAtPrice
+        : input.compareAtPrice,
+    productType,
+    attributes,
+    state: input.state ?? existing.state,
+    reviewNote: input.reviewNote ?? existing.reviewNote,
   });
   bumpRevision();
   if (!stored) {

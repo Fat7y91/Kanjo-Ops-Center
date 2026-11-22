@@ -10,6 +10,17 @@ export type CatalogVariantSelection = {
   /** Legacy rows may carry no resolvable variant id. */
   variantId?: number | null;
   optionIds: number[];
+  /** Display label for this variant, e.g. "كبير - حار". */
+  variantLabel?: string;
+  /** Variant price in minor units. Kept snake_case for V1 JSON compatibility. */
+  price_minor?: number | null;
+  /** Variant-specific codes; the product-level codes remain the fallback. */
+  sku?: string | null;
+  barcode?: string | null;
+  /** Variant availability. Undefined means available. */
+  available?: boolean;
+  /** Legacy V1 variant image URL, preserved when present. */
+  image_url?: string | null;
 };
 
 export type CatalogProduct = {
@@ -26,6 +37,12 @@ export type CatalogProduct = {
   imageDataUrl: string | null;
   attributes: CatalogVariantSelection[];
   price: number;
+  /** Sale unit label, e.g. كيلو / علبة. */
+  unit: string;
+  /** Optional on-hand quantity; null means stock is not tracked. */
+  stockQuantity: number | null;
+  /** Optional original price in major units. */
+  compareAtPrice: number | null;
   state: CatalogProductState;
   reviewNote: string;
   /**
@@ -81,6 +98,9 @@ export type CatalogProductInput = {
   imageDataUrl?: string | null;
   attributes?: CatalogVariantSelection[];
   price: number;
+  unit?: string;
+  stockQuantity?: number | null;
+  compareAtPrice?: number | null;
   state: CatalogProductState;
   reviewNote: string;
   clientProductId?: string | null;

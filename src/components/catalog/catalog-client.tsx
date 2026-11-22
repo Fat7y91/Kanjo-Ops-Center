@@ -189,6 +189,7 @@ export function CatalogClient({
         categories={categories}
         variants={variants}
         vendorTypes={vendorTypes}
+        merchantVendorTypeId={activeMerchant?.vendorTypeId ?? null}
         onProductsChange={setProducts}
         editRequestId={editRequestId}
         onEditRequestHandled={() => setEditRequestId(null)}

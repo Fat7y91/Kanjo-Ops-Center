@@ -27,6 +27,8 @@ type CatalogGridProps = {
   categories: TaxonomyCategory[];
   variants: TaxonomyVariant[];
   vendorTypes: TaxonomyVendorType[];
+  /** Vendor type of the merchant page, used when a row has no vendor type. */
+  merchantVendorTypeId?: number | null;
   onProductsChange: (products: CatalogProduct[]) => void;
   /** A product the mirror dialog asked to repair, opened once then cleared. */
   editRequestId?: string | null;
@@ -44,6 +46,7 @@ export function CatalogGrid({
   categories,
   variants,
   vendorTypes,
+  merchantVendorTypeId,
   onProductsChange,
   editRequestId,
   onEditRequestHandled,
@@ -226,6 +229,7 @@ export function CatalogGrid({
         vendorTypes={vendorTypes}
         categories={categories}
         variants={variants}
+        merchantVendorTypeId={merchantVendorTypeId}
         onClose={() => setEditing(null)}
         onSaved={handleUpdated}
       />

@@ -37,7 +37,7 @@ export function ProductDetailsModal({
   const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
 
   const variantRows = product.attributes
-    .map((selection) => {
+    .map((selection, index) => {
       const variant =
         selection.variantId == null
           ? undefined
@@ -51,16 +51,24 @@ export function ProductDetailsModal({
         .filter((option) => option !== undefined)
         .map((option) => option.option_name_ar);
       return {
+        key: `${selection.variantId ?? "x"}-${selection.optionIds.join("-")}-${index}`,
         variantId: selection.variantId ?? null,
         name:
-          variant?.name_ar ??
+          selection.variantLabel?.trim() ||
+          variant?.name_ar ||
           (selection.variantId == null
             ? "متغير غير محدد"
             : `متغير #${selection.variantId}`),
         options,
+        price:
+          selection.price_minor == null
+            ? null
+            : selection.price_minor / 100,
+        sku: selection.sku ?? "",
+        available: selection.available ?? true,
       };
     })
-    .filter((row) => row.options.length > 0);
+    .filter((row) => row.options.length > 0 || row.name);
 
   return (
     <Modal
@@ -117,6 +125,22 @@ export function ProductDetailsModal({
             <dd>{formatPrice(product.price)}</dd>
           </div>
           <div>
+            <dt>السعر قبل الخصم</dt>
+            <dd>
+              {product.compareAtPrice == null
+                ? "—"
+                : formatPrice(product.compareAtPrice)}
+            </dd>
+          </div>
+          <div>
+            <dt>وحدة البيع</dt>
+            <dd>{product.unit || "—"}</dd>
+          </div>
+          <div>
+            <dt>المخزون</dt>
+            <dd>{product.stockQuantity == null ? "غير متتبع" : product.stockQuantity}</dd>
+          </div>
+          <div>
             <dt>نوع المنتج</dt>
             <dd>{PRODUCT_TYPE_META[product.productType].label}</dd>
           </div>
@@ -142,9 +166,14 @@ export function ProductDetailsModal({
         ) : (
           <ul>
             {variantRows.map((row) => (
-              <li key={row.variantId ?? "unmapped"}>
+              <li key={row.key}>
                 <strong>{row.name}</strong>
-                <span>{row.options.join(" · ")}</span>
+                <span>{row.options.join(" · ") || "بدون خيارات"}</span>
+                <span>
+                  {row.price == null ? "بدون سعر" : formatPrice(row.price)}
+                  {row.sku ? ` · ${row.sku}` : ""}
+                  {row.available ? "" : " · غير متاح"}
+                </span>
               </li>
             ))}
           </ul>

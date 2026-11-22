@@ -43,6 +43,9 @@ const COLUMNS = [
   "image_data_url",
   "attributes",
   "price_minor",
+  "unit",
+  "stock_quantity",
+  "compare_at_price_minor",
   "state",
   "review_note",
   "entered_by_name",
@@ -67,6 +70,9 @@ type ProductRow = {
   image_data_url: string | null;
   attributes: CatalogVariantSelection[] | null;
   price_minor: number | string;
+  unit: string | null;
+  stock_quantity: number | string | null;
+  compare_at_price_minor: number | string | null;
   state: CatalogProductState;
   review_note: string;
   entered_by_name: string | null;
@@ -94,6 +100,11 @@ export type CatalogProductPatch = Partial<{
   barcode: string | null;
   imageDataUrl: string | null;
   price: number;
+  unit: string;
+  stockQuantity: number | null;
+  compareAtPrice: number | null;
+  productType: CatalogProductType;
+  attributes: CatalogVariantSelection[];
   state: CatalogProductState;
   reviewNote: string;
 }>;
@@ -129,6 +140,13 @@ function toProduct(row: ProductRow, merchantName: string): CatalogProduct {
     imageDataUrl: row.image_data_url,
     attributes: Array.isArray(row.attributes) ? row.attributes : [],
     price: Number(row.price_minor) / 100,
+    unit: row.unit ?? "",
+    stockQuantity:
+      row.stock_quantity == null ? null : Number(row.stock_quantity),
+    compareAtPrice:
+      row.compare_at_price_minor == null
+        ? null
+        : Number(row.compare_at_price_minor) / 100,
     state: row.state,
     reviewNote: row.review_note,
     enteredById: row.created_by,
@@ -330,6 +348,12 @@ export async function insertProduct(
       image_data_url: imageDataUrl,
       attributes: product.attributes,
       price_minor: Math.round(product.price * 100),
+      unit: product.unit,
+      stock_quantity: product.stockQuantity,
+      compare_at_price_minor:
+        product.compareAtPrice == null
+          ? null
+          : Math.round(product.compareAtPrice * 100),
       state: product.state,
       review_note: product.reviewNote,
       entered_by_name: product.enteredByName,
@@ -409,6 +433,16 @@ export async function updateProductRow(
     row.image_data_url = await persistImageReference(patch.imageDataUrl);
   }
   if (patch.price !== undefined) row.price_minor = Math.round(patch.price * 100);
+  if (patch.unit !== undefined) row.unit = patch.unit;
+  if (patch.stockQuantity !== undefined) row.stock_quantity = patch.stockQuantity;
+  if (patch.compareAtPrice !== undefined) {
+    row.compare_at_price_minor =
+      patch.compareAtPrice == null
+        ? null
+        : Math.round(patch.compareAtPrice * 100);
+  }
+  if (patch.productType !== undefined) row.product_type = patch.productType;
+  if (patch.attributes !== undefined) row.attributes = patch.attributes;
   if (patch.state !== undefined) row.state = patch.state;
   if (patch.reviewNote !== undefined) row.review_note = patch.reviewNote;
 
