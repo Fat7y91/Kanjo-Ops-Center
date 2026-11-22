@@ -108,19 +108,19 @@ begin
 
   select
     coalesce(max(case
-      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'HB-[0-9]+$')
+      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'HB-[0-9]{1,9}$')
       then pg_catalog.substring(pg_catalog.upper(serial), '([0-9]+)$')::integer
     end), 0),
     coalesce(max(case
-      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'HP-[0-9]+$')
+      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'HP-[0-9]{1,9}$')
       then pg_catalog.substring(pg_catalog.upper(serial), '([0-9]+)$')::integer
     end), 0),
     coalesce(max(case
-      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'TSH-[0-9]+$')
+      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'TSH-[0-9]{1,9}$')
       then pg_catalog.substring(pg_catalog.upper(serial), '([0-9]+)$')::integer
     end), 0),
     coalesce(max(case
-      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'CAP-[0-9]+$')
+      when pg_catalog.upper(serial) ~ ('^' || v_prefix || 'CAP-[0-9]{1,9}$')
       then pg_catalog.substring(pg_catalog.upper(serial), '([0-9]+)$')::integer
     end), 0)
     into v_hb, v_hp, v_tsh, v_cap
