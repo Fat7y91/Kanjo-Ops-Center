@@ -89,6 +89,8 @@ export type EditableVariantRow = {
   sku: string;
   barcode: string;
   available: boolean;
+  /** Legacy V1 variant image, carried through edits untouched. */
+  imageUrl: string;
 };
 
 type VariantTaxonomy = {
@@ -160,9 +162,10 @@ export function editableRowsFromProduct(
             ? product.price.toFixed(2)
             : ""
           : (selection.price_minor / 100).toFixed(2),
-      sku: selection.sku ?? (index === 0 ? product.sku : ""),
-      barcode: selection.barcode ?? (index === 0 ? product.barcode : ""),
+      sku: selection.sku ?? "",
+      barcode: selection.barcode ?? "",
       available: selection.available ?? true,
+      imageUrl: selection.image_url ?? "",
     };
   });
 }

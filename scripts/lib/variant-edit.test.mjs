@@ -110,3 +110,36 @@ test("blank variant codes are stored as null", () => {
   assert.equal(result.attributes[0].sku, null);
   assert.equal(result.attributes[0].barcode, null);
 });
+
+test("legacy variant images survive the edit round trip", () => {
+  const rows = variantEdit.editableRowsFromProduct(
+    {
+      id: "prod-1",
+      price: 98,
+      sku: "KJ-03-PARENT",
+      barcode: "",
+      attributes: [
+        {
+          variantId: 8,
+          optionIds: [43],
+          variantLabel: "قطعه 30",
+          price_minor: 98000,
+          image_url: "https://cdn.example/legacy.png",
+        },
+      ],
+    },
+    [
+      {
+        variant_id: 8,
+        name_ar: "الحجم",
+        options: [{ option_id: 43, option_name_ar: "30" }],
+      },
+    ],
+  );
+
+  assert.equal(rows[0].imageUrl, "https://cdn.example/legacy.png");
+  assert.equal(rows[0].sku, "");
+  assert.equal(rows[0].barcode, "");
+  assert.equal(rows[0].label, "قطعه 30");
+  assert.equal(rows[0].price, "980.00");
+});

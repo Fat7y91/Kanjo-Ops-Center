@@ -91,6 +91,7 @@ export function useProductEdit({
           sku: generateSku(vendorTypeId),
           barcode: "",
           available: true,
+          imageUrl: "",
         });
       }
     }
@@ -129,6 +130,7 @@ export function useProductEdit({
         sku: row.sku,
         barcode: row.barcode,
         available: row.available,
+        imageUrl: row.imageUrl || null,
       });
     }
     return drafts;
