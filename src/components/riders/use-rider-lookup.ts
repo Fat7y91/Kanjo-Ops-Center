@@ -53,10 +53,12 @@ export function useRiderLookup({ onFound }: UseRiderLookupArgs) {
       setState("found");
       onFound(rider);
 
-      if (rider.hasCustody) {
-        setError("المندوب لديه عهدة مسجلة بالفعل. افتح الإيصال للمراجعة.");
-      } else if (rider.status !== "active") {
+      if (rider.status !== "active") {
         setError("المندوب غير نشط ولا يمكن إصدار عهدة له.");
+      } else {
+        setError(
+          "هذا الرقم مسجل لمندوب حالي. اختر «مندوب حالي» لإصدار إيصال إضافي.",
+        );
       }
     } catch {
       setError("تعذر الاتصال بالخادم.");
@@ -70,7 +72,6 @@ export function useRiderLookup({ onFound }: UseRiderLookupArgs) {
     error,
     check,
     reset,
-    hasBlockingLookup:
-      lookup !== null && (lookup.hasCustody || lookup.status !== "active"),
+    hasBlockingLookup: lookup !== null,
   };
 }

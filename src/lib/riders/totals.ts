@@ -54,7 +54,10 @@ export function normalizeItems(
       key,
       label,
       codePrefix,
-      serial: null,
+      serial:
+        quantity > 0
+          ? draft.serial?.trim().slice(0, 40) || null
+          : null,
       quantity,
       condition: draft.condition?.trim().slice(0, 40) || "جديد",
       unitPrice,

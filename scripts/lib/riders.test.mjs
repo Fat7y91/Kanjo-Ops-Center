@@ -42,6 +42,32 @@ test("serial numbers exist only for positive quantities", () => {
   assert.equal(codes.buildItemSerial("OTHER", PARTS, 5, 1, null), null);
 });
 
+test("asset serials are decoupled from the rider sequence", () => {
+  assert.equal(codes.buildItemSerial("HP", PARTS, 1, 1), "KFS-DQ-HP-0001");
+  assert.equal(codes.buildItemSerial("HB", PARTS, 3, 1), "KFS-DQ-HB-0003");
+  assert.equal(
+    codes.buildItemSerial("TSH", PARTS, 1500, 1),
+    "KFS-DQ-TSH-1500",
+  );
+  assert.notEqual(
+    codes.buildItemSerial("HP", PARTS, 1, 1),
+    codes.buildItemSerial("HP", PARTS, 3, 1),
+  );
+});
+
+test("normalizeItems keeps submitted serials and clears zero quantities", () => {
+  const drafts = defaults.buildDefaultItems().map((item) =>
+    item.key === "HB"
+      ? { ...item, quantity: 1, serial: "KFS-DQ-HB-0003" }
+      : item.key === "HP"
+        ? { ...item, quantity: 0, serial: "KFS-DQ-HP-0009" }
+        : item,
+  );
+  const items = totals.normalizeItems(drafts);
+  assert.equal(items.find((item) => item.key === "HB").serial, "KFS-DQ-HB-0003");
+  assert.equal(items.find((item) => item.key === "HP").serial, null);
+});
+
 test("the default custody totals 6,500 EGP and reads in Arabic words", () => {
   const items = totals.normalizeItems(defaults.buildDefaultItems());
   assert.equal(totals.itemsTotal(items), 4500);
@@ -99,8 +125,35 @@ test("issue schema accepts a valid receipt and rejects bad identities", () => {
   };
 
   const parsed = schema.issueCustodySchema.parse(payload);
+  assert.equal(parsed.riderMode, "new");
   assert.equal(parsed.items.length, 5);
   assert.equal(parsed.cashCustody, 2000);
+
+  const existing = schema.issueCustodySchema.parse({
+    riderMode: "existing",
+    riderId: "8b837bd0-b3b5-4c0b-9b94-abc8b4f5446b",
+    governorate: "كفر الشيخ",
+    city: "دسوق",
+    receiptSequence: 9,
+    deliveryDate: "2026-11-21",
+    handoverOfficer: "م/ محمود الجمل",
+    items: defaults.buildDefaultItems(),
+    cashCustody: 0,
+    totalAmount: 4500,
+  });
+  assert.equal(existing.riderId, "8b837bd0-b3b5-4c0b-9b94-abc8b4f5446b");
+  assert.equal(existing.receiptSequence, 9);
+
+  assert.throws(
+    () =>
+      schema.issueCustodySchema.parse({
+        ...payload,
+        riderMode: "existing",
+        riderId: null,
+        sequence: null,
+      }),
+    /اختر مندوباً/,
+  );
 
   assert.throws(
     () => schema.issueCustodySchema.parse({ ...payload, nationalId: "123" }),

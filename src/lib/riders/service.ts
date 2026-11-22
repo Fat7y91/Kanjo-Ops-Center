@@ -16,7 +16,7 @@ import {
 import type {
   CustodyIssueResult,
   LocationCatalog,
-  NextSequence,
+  NextSequences,
   Rider,
   RiderCustodyReceipt,
   RiderLookup,
@@ -51,7 +51,7 @@ export async function loadLocations(): Promise<LocationCatalog> {
 
 export async function loadNextSequence(
   rawQuery: unknown,
-): Promise<NextSequence> {
+): Promise<NextSequences> {
   requireDatabase();
   const query = sequenceQuerySchema.parse(rawQuery);
   return getNextSequence(query.governorate, query.city);

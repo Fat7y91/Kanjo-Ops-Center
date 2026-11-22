@@ -3,19 +3,13 @@ import "server-only";
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
-import {
-  buildCustodyNumber,
-  buildRiderCode,
-  nextSequence,
-  type LocationCodeParts,
-} from "./codes";
 import { RidersError } from "./errors";
 import { asNumber, type LocationRow } from "./rows";
 import type {
   LocationCatalog,
   LocationCity,
   LocationGovernorate,
-  NextSequence,
+  NextSequences,
 } from "./types";
 
 const LOCATION_COLUMNS =
@@ -64,83 +58,80 @@ export async function listLocations(): Promise<LocationCatalog> {
   return { governorates, cities };
 }
 
-async function findLocation(
-  governorateName: string,
-  cityName: string,
-): Promise<{ gov: LocationRow; city: LocationRow }> {
-  const client = getSupabaseServerClient();
-  const [govResult, cityResult] = await Promise.all([
-    client
-      .schema("app")
-      .from("governorate_city_codes")
-      .select(LOCATION_COLUMNS)
-      .eq("governorate_name", governorateName)
-      .eq("level", "governorate")
-      .maybeSingle(),
-    client
-      .schema("app")
-      .from("governorate_city_codes")
-      .select(LOCATION_COLUMNS)
-      .eq("governorate_name", governorateName)
-      .eq("city_name", cityName)
-      .eq("level", "city")
-      .maybeSingle(),
-  ]);
-
-  if (govResult.error) throw govResult.error;
-  if (cityResult.error) throw cityResult.error;
-  if (!govResult.data || !cityResult.data) {
-    throw new RidersError(
-      "LOCATION_NOT_FOUND",
-      "المحافظة أو المدينة غير مسجلة.",
-      400,
-    );
-  }
-  return {
-    gov: govResult.data as unknown as LocationRow,
-    city: cityResult.data as unknown as LocationRow,
-  };
-}
+type NextSequenceRow = {
+  governorate_alpha: string;
+  governorate_num: string;
+  city_alpha: string;
+  city_num: string;
+  starting_sequence: number;
+  max_rider_seq: number;
+  next_rider_seq: number;
+  max_receipt_seq: number;
+  next_receipt_seq: number;
+  next_hb_seq: number;
+  next_hp_seq: number;
+  next_tsh_seq: number;
+  next_cap_seq: number;
+};
 
 export async function getNextSequence(
   governorateName: string,
   cityName: string,
-): Promise<NextSequence> {
-  const { gov, city } = await findLocation(governorateName, cityName);
+): Promise<NextSequences> {
   const client = getSupabaseServerClient();
-  const { data, error } = await client
-    .schema("app")
-    .from("delivery_riders")
-    .select("sequence_number")
-    .eq("governorate_code", gov.alpha_code)
-    .eq("city_code", city.alpha_code)
-    .order("sequence_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await client.schema("app").rpc("rider_next_sequences", {
+    p_governorate: governorateName,
+    p_city: cityName,
+  });
 
-  if (error && !isMissingSchemaObject(error)) throw error;
-  const maxSequence = data
-    ? asNumber((data as { sequence_number?: number }).sequence_number)
-    : null;
-  const sequence = nextSequence(maxSequence, city.starting_sequence);
-  const parts: LocationCodeParts = {
-    govAlpha: gov.alpha_code,
-    cityAlpha: city.alpha_code,
-    govNum: gov.numeric_code,
-    cityNum: city.numeric_code,
-  };
+  if (error) {
+    if (isMissingSchemaObject(error)) {
+      throw new RidersError(
+        "STORE_UNAVAILABLE",
+        "خدمة العهد غير متاحة حالياً. حاول لاحقاً.",
+        503,
+      );
+    }
+    const message =
+      typeof error === "object" && error !== null
+        ? String((error as { message?: unknown }).message ?? "")
+        : "";
+    if (message.includes("LOCATION_NOT_FOUND")) {
+      throw new RidersError(
+        "LOCATION_NOT_FOUND",
+        "المحافظة أو المدينة غير مسجلة.",
+        400,
+      );
+    }
+    throw error;
+  }
+
+  const row = (Array.isArray(data) ? data[0] : data) as NextSequenceRow | null;
+  if (!row) {
+    throw new RidersError(
+      "RIDERS_FAILED",
+      "تعذر حساب أرقام التسلسل.",
+      502,
+    );
+  }
 
   return {
     governorate: governorateName,
     city: cityName,
-    sequence,
-    maxSequence,
-    startingSequence: city.starting_sequence,
-    governorateAlpha: gov.alpha_code,
-    governorateNum: gov.numeric_code,
-    cityAlpha: city.alpha_code,
-    cityNum: city.numeric_code,
-    riderCode: buildRiderCode(parts, sequence),
-    custodyNumber: buildCustodyNumber(parts, sequence),
+    governorateAlpha: row.governorate_alpha,
+    governorateNum: row.governorate_num,
+    cityAlpha: row.city_alpha,
+    cityNum: row.city_num,
+    startingSequence: asNumber(row.starting_sequence),
+    maxRiderSequence: asNumber(row.max_rider_seq),
+    nextRiderSequence: asNumber(row.next_rider_seq),
+    maxReceiptSequence: asNumber(row.max_receipt_seq),
+    nextReceiptSequence: asNumber(row.next_receipt_seq),
+    nextAssetSequences: {
+      HB: asNumber(row.next_hb_seq),
+      HP: asNumber(row.next_hp_seq),
+      TSH: asNumber(row.next_tsh_seq),
+      CAP: asNumber(row.next_cap_seq),
+    },
   };
 }

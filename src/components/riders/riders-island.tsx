@@ -109,6 +109,7 @@ export function RidersIsland({
         <IssueCustodyModal
           key={state.issuingFor?.id ?? "new"}
           locations={locations}
+          riders={state.riders}
           initialRider={state.issuingFor}
           onClose={() => {
             state.setCreating(false);

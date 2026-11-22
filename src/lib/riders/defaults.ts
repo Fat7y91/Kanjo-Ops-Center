@@ -13,6 +13,7 @@ export const DEFAULT_CUSTODY_ITEMS: readonly CustodyItemDraft[] = [
     quantity: 1,
     condition: DEFAULT_CONDITION,
     unitPrice: 3500,
+    serial: null,
   },
   {
     key: "HP",
@@ -21,6 +22,7 @@ export const DEFAULT_CUSTODY_ITEMS: readonly CustodyItemDraft[] = [
     quantity: 0,
     condition: DEFAULT_CONDITION,
     unitPrice: 0,
+    serial: null,
   },
   {
     key: "TSH",
@@ -29,6 +31,7 @@ export const DEFAULT_CUSTODY_ITEMS: readonly CustodyItemDraft[] = [
     quantity: 2,
     condition: DEFAULT_CONDITION,
     unitPrice: 420,
+    serial: null,
   },
   {
     key: "CAP",
@@ -37,6 +40,7 @@ export const DEFAULT_CUSTODY_ITEMS: readonly CustodyItemDraft[] = [
     quantity: 1,
     condition: DEFAULT_CONDITION,
     unitPrice: 160,
+    serial: null,
   },
   {
     key: "OTHER",
@@ -45,6 +49,7 @@ export const DEFAULT_CUSTODY_ITEMS: readonly CustodyItemDraft[] = [
     quantity: 0,
     condition: DEFAULT_CONDITION,
     unitPrice: 0,
+    serial: null,
   },
 ];
 

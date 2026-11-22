@@ -187,7 +187,7 @@ export function RidersDirectory({
                               عرض الإيصال
                             </Link>
                           ) : null}
-                          {!custody && canManage ? (
+                          {canManage ? (
                             <Button
                               variant="quiet"
                               size="sm"

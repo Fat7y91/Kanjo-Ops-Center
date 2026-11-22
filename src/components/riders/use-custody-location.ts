@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildCustodyNumber,
   buildRiderCode,
   type LocationCodeParts,
 } from "@/lib/riders/codes";
-import type { LocationCatalog, Rider, RiderLookup } from "@/lib/riders/types";
+import type {
+  AssetSequences,
+  LocationCatalog,
+  NextSequences,
+  Rider,
+} from "@/lib/riders/types";
 
 type UseCustodyLocationArgs = {
   locations: LocationCatalog;
@@ -72,9 +77,14 @@ export function useCustodyLocation({
   );
   const [city, setCity] = useState<string | null>(initial.city);
   const [sequence, setSequence] = useState<number | null>(initial.sequence);
+  const [receiptSequence, setReceiptSequence] = useState<number | null>(null);
+  const [assetSequences, setAssetSequences] =
+    useState<AssetSequences | null>(null);
   const [sequenceLocked, setSequenceLocked] = useState(initialRider !== null);
   const [nextLoading, setNextLoading] = useState(false);
   const [error, setError] = useState("");
+  const riderTouched = useRef(false);
+  const receiptTouched = useRef(false);
 
   useEffect(() => {
     if (!governorate || city) return;
@@ -85,7 +95,7 @@ export function useCustodyLocation({
   }, [governorate, city, locations]);
 
   useEffect(() => {
-    if (!governorate || !city || sequenceLocked) return;
+    if (!governorate || !city) return;
     const controller = new AbortController();
     setNextLoading(true);
     const query = new URLSearchParams({ governorate, city });
@@ -94,17 +104,23 @@ export function useCustodyLocation({
       cache: "no-store",
     })
       .then((response) => response.json())
-      .then((body: { next?: { sequence: number } }) => {
-        if (body.next) {
-          setSequence(body.next.sequence);
-          setError("");
+      .then((body: { next?: NextSequences }) => {
+        const next = body.next;
+        if (!next) return;
+        if (!sequenceLocked && !riderTouched.current) {
+          setSequence(next.nextRiderSequence);
         }
+        if (!receiptTouched.current) {
+          setReceiptSequence(next.nextReceiptSequence);
+        }
+        setAssetSequences(next.nextAssetSequences);
+        setError("");
       })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "AbortError") {
           return;
         }
-        setError("تعذر حساب رقم التسلسل التالي.");
+        setError("تعذر حساب أرقام التسلسل التالية.");
       })
       .finally(() => setNextLoading(false));
     return () => controller.abort();
@@ -119,41 +135,69 @@ export function useCustodyLocation({
   const cityOptions = locations.cities.filter(
     (item) => item.governorateName === governorate,
   );
-  const parts: LocationCodeParts | null =
-    selectedGovernorate && selectedCity
-      ? {
-          govAlpha: selectedGovernorate.alphaCode,
-          cityAlpha: selectedCity.alphaCode,
-          govNum: selectedGovernorate.numericCode,
-          cityNum: selectedCity.numericCode,
-        }
-      : null;
+  const parts: LocationCodeParts | null = useMemo(
+    () =>
+      selectedGovernorate && selectedCity
+        ? {
+            govAlpha: selectedGovernorate.alphaCode,
+            cityAlpha: selectedCity.alphaCode,
+            govNum: selectedGovernorate.numericCode,
+            cityNum: selectedCity.numericCode,
+          }
+        : null,
+    [selectedGovernorate, selectedCity],
+  );
+
+  function resetSequences() {
+    setSequence(null);
+    setReceiptSequence(null);
+    setAssetSequences(null);
+    riderTouched.current = false;
+    receiptTouched.current = false;
+  }
 
   function changeGovernorate(value: string) {
     setGovernorate(value);
     setCity(null);
-    setSequence(null);
     setSequenceLocked(false);
+    resetSequences();
     setError("");
   }
 
   function changeCity(value: string) {
     setCity(value);
-    setSequence(null);
     setSequenceLocked(false);
+    resetSequences();
     setError("");
   }
 
-  function applyRider(rider: RiderLookup) {
+  function changeRiderSequence(value: number | null) {
+    riderTouched.current = true;
+    setSequence(value);
+  }
+
+  function changeReceiptSequence(value: number | null) {
+    receiptTouched.current = true;
+    setReceiptSequence(value);
+  }
+
+  function applyRider(
+    rider: Pick<Rider, "governorateCode" | "cityCode" | "sequenceNumber">,
+  ) {
     const location = riderLocation(locations, rider);
     if (location.governorate) setGovernorate(location.governorate);
     if (location.city) setCity(location.city);
     setSequence(rider.sequenceNumber);
     setSequenceLocked(true);
+    setReceiptSequence(null);
+    setAssetSequences(null);
+    riderTouched.current = false;
+    receiptTouched.current = false;
     setError("");
   }
 
   function unlock() {
+    riderTouched.current = false;
     setSequenceLocked(false);
   }
 
@@ -161,15 +205,21 @@ export function useCustodyLocation({
     governorate,
     city,
     sequence,
+    receiptSequence,
+    assetSequences,
     nextLoading,
     cityOptions,
     parts,
     riderCode: parts && sequence ? buildRiderCode(parts, sequence) : "",
     custodyNumber:
-      parts && sequence ? buildCustodyNumber(parts, sequence) : "",
+      parts && receiptSequence
+        ? buildCustodyNumber(parts, receiptSequence)
+        : "",
     error,
     changeGovernorate,
     changeCity,
+    changeRiderSequence,
+    changeReceiptSequence,
     applyRider,
     unlock,
   };

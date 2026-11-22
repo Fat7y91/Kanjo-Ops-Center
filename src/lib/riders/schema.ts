@@ -10,25 +10,20 @@ const custodyItemSchema = z.object({
   condition: z.string().trim().max(40).default("جديد"),
   unitPrice: z.coerce.number().min(0).max(1_000_000),
   label: z.string().trim().max(80).optional(),
+  serial: z.string().trim().max(40).nullish(),
 });
 
 export const issueCustodySchema = z
   .object({
+    riderMode: z.enum(["new", "existing"]).default("new"),
+    riderId: z.string().uuid().nullish(),
     governorate: z.string().trim().min(1, "المحافظة مطلوبة."),
     city: z.string().trim().min(1, "المدينة مطلوبة."),
-    sequence: z.coerce.number().int().min(1).max(9999),
-    fullName: z.string().trim().min(3, "اسم المندوب مطلوب.").max(80),
-    nationalId: z
-      .string()
-      .trim()
-      .regex(/^[0-9]{14}$/, "الرقم القومي يجب أن يكون 14 رقماً."),
-    phone: z
-      .string()
-      .trim()
-      .regex(
-        /^\+?[0-9][0-9\s-]{6,18}$/,
-        "أدخل رقم هاتف صالحاً، مثل 01012345678.",
-      ),
+    sequence: z.coerce.number().int().min(1).max(9999).nullish(),
+    receiptSequence: z.coerce.number().int().min(1).max(9999).nullish(),
+    fullName: z.string().trim().max(80).default(""),
+    nationalId: z.string().trim().default(""),
+    phone: z.string().trim().default(""),
     workArea: z.string().trim().max(80).default(""),
     deliveryDate: z
       .string()
@@ -60,6 +55,44 @@ export const issueCustodySchema = z
         code: z.ZodIssueCode.custom,
         path: ["items"],
         message: "أضف بنداً واحداً على الأقل أو عهدة نقدية.",
+      });
+    }
+    if (value.riderMode === "existing") {
+      if (!value.riderId) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["riderId"],
+          message: "اختر مندوباً مسجلاً.",
+        });
+      }
+      return;
+    }
+    if (!value.sequence) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["sequence"],
+        message: "رقم تسلسل المندوب مطلوب.",
+      });
+    }
+    if (value.fullName.length < 3) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["fullName"],
+        message: "اسم المندوب مطلوب.",
+      });
+    }
+    if (!/^[0-9]{14}$/.test(value.nationalId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["nationalId"],
+        message: "الرقم القومي يجب أن يكون 14 رقماً.",
+      });
+    }
+    if (!/^\+?[0-9][0-9\s-]{6,18}$/.test(value.phone)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["phone"],
+        message: "أدخل رقم هاتف صالحاً، مثل 01012345678.",
       });
     }
   });

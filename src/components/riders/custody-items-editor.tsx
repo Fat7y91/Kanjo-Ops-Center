@@ -11,7 +11,6 @@ import {
 
 type CustodyItemsEditorProps = {
   items: CustodyItemDraft[];
-  serials: Map<CustodyItemKey, string | null>;
   onUpdate: (
     key: CustodyItemKey,
     patch: Partial<CustodyItemDraft>,
@@ -20,7 +19,6 @@ type CustodyItemsEditorProps = {
 
 export function CustodyItemsEditor({
   items,
-  serials,
   onUpdate,
 }: CustodyItemsEditorProps) {
   return (
@@ -35,7 +33,6 @@ export function CustodyItemsEditor({
       </div>
 
       {items.map((item) => {
-        const serial = serials.get(item.key);
         return (
           <div className="custody-item-row" key={item.key}>
             <div className="custody-item-name">
@@ -68,9 +65,21 @@ export function CustodyItemsEditor({
               ) : null}
             </div>
 
-            <span className="custody-serial" dir="ltr">
-              {serial ?? "—"}
-            </span>
+            <InputControl
+              value={item.serial ?? ""}
+              onChange={(event) =>
+                onUpdate(item.key, {
+                  serial: event.target.value.toUpperCase().slice(0, 40) || null,
+                })
+              }
+              placeholder={
+                item.quantity > 0 ? "سيريال البند" : "أضف كمية أولاً"
+              }
+              aria-label={`سيريال ${CUSTODY_ITEM_SHORT_LABEL[item.key]}`}
+              maxLength={40}
+              dir="ltr"
+              disabled={item.quantity <= 0}
+            />
 
             <InputControl
               value={item.condition}

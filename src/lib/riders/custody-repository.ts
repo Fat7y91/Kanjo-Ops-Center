@@ -56,9 +56,25 @@ const RPC_ERRORS: Record<string, { status: number; message: string }> = {
     status: 409,
     message: "المندوب لديه عهدة مسجلة بالفعل.",
   },
+  RIDER_NOT_FOUND: {
+    status: 404,
+    message: "المندوب غير مسجل.",
+  },
+  RIDER_ALREADY_EXISTS: {
+    status: 409,
+    message: "الرقم القومي مسجل لمندوب آخر، استخدم خيار المندوب الحالي.",
+  },
   SEQUENCE_TAKEN: {
     status: 409,
     message: "رقم التسلسل مستخدم بالفعل، اختر الرقم التالي.",
+  },
+  INVALID_RECEIPT_SEQUENCE: {
+    status: 400,
+    message: "رقم تسلسل الإيصال غير صالح.",
+  },
+  RECEIPT_SEQUENCE_TAKEN: {
+    status: 409,
+    message: "رقم تسلسل الإيصال مستخدم بالفعل، اختر رقماً آخر.",
   },
   CUSTODY_NUMBER_TAKEN: {
     status: 409,
@@ -76,8 +92,8 @@ function rpcError(error: unknown): RidersError {
   }
   if (isUniqueViolation(error)) {
     return new RidersError(
-      "RIDER_ALREADY_HAS_CUSTODY",
-      "المندوب لديه عهدة مسجلة بالفعل.",
+      "SEQUENCE_TAKEN",
+      "رقم التسلسل أو الإيصال مستخدم بالفعل.",
       409,
     );
   }
@@ -192,6 +208,7 @@ export async function issueCustody(
     quantity: item.quantity,
     condition: item.condition,
     unitPrice: item.unitPrice,
+    serial: item.serial ?? null,
   }));
   const items = normalizeItems(drafts);
   const total = custodyTotal(items, input.cashCustody);
@@ -221,15 +238,20 @@ export async function issueCustody(
     quantity: item.quantity,
     condition: item.condition,
     unitPrice: item.unitPrice,
+    serial: item.serial,
   }));
+
+  const existingRider = input.riderMode === "existing";
 
   const client = getSupabaseServerClient();
   const { data, error } = await client.schema("app").rpc("issue_rider_custody", {
+    p_rider_id: existingRider ? input.riderId ?? null : null,
     p_governorate: input.governorate,
     p_city: input.city,
-    p_sequence: input.sequence,
+    p_sequence: existingRider ? null : input.sequence ?? null,
+    p_receipt_sequence: input.receiptSequence ?? null,
     p_full_name: input.fullName,
-    p_national_id: input.nationalId,
+    p_national_id: input.nationalId || null,
     p_phone: input.phone,
     p_work_area: input.workArea,
     p_delivery_date: input.deliveryDate,

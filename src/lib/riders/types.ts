@@ -26,6 +26,10 @@ export const CUSTODY_ITEM_SHORT_LABEL: Record<CustodyItemKey, string> = {
   OTHER: "أخرى",
 };
 
+export const ASSET_ITEM_KEYS = ["HB", "HP", "TSH", "CAP"] as const;
+export type AssetItemKey = (typeof ASSET_ITEM_KEYS)[number];
+export type AssetSequences = Record<AssetItemKey, number>;
+
 export type CustodyItemDraft = {
   key: CustodyItemKey;
   label: string;
@@ -33,10 +37,10 @@ export type CustodyItemDraft = {
   quantity: number;
   condition: string;
   unitPrice: number;
+  serial: string | null;
 };
 
 export type CustodyItem = CustodyItemDraft & {
-  serial: string | null;
   lineTotal: number;
 };
 
@@ -115,18 +119,19 @@ export type LocationCatalog = {
   cities: LocationCity[];
 };
 
-export type NextSequence = {
+export type NextSequences = {
   governorate: string;
   city: string;
-  sequence: number;
-  maxSequence: number | null;
-  startingSequence: number;
   governorateAlpha: string;
   governorateNum: string;
   cityAlpha: string;
   cityNum: string;
-  riderCode: string;
-  custodyNumber: string;
+  startingSequence: number;
+  maxRiderSequence: number;
+  nextRiderSequence: number;
+  maxReceiptSequence: number;
+  nextReceiptSequence: number;
+  nextAssetSequences: AssetSequences;
 };
 
 export type RiderLookup = {

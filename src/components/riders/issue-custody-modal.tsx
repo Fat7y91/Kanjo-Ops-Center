@@ -7,6 +7,7 @@ import {
   TextField,
 } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
+import { Tabs } from "@/components/ui/tabs";
 import type {
   CustodyIssueResult,
   LocationCatalog,
@@ -15,11 +16,13 @@ import type {
 
 import { CustodyItemsEditor } from "./custody-items-editor";
 import { CustodyRiderFields } from "./custody-rider-fields";
+import { CustodyRiderPicker } from "./custody-rider-picker";
 import { CustodySummary } from "./custody-summary";
 import { useIssueCustody } from "./use-issue-custody";
 
 type IssueCustodyModalProps = {
   locations: LocationCatalog;
+  riders: Rider[];
   initialRider: Rider | null;
   onClose: () => void;
   onIssued: (result: CustodyIssueResult) => void;
@@ -27,11 +30,17 @@ type IssueCustodyModalProps = {
 
 export function IssueCustodyModal({
   locations,
+  riders,
   initialRider,
   onClose,
   onIssued,
 }: IssueCustodyModalProps) {
-  const state = useIssueCustody({ locations, initialRider, onIssued });
+  const state = useIssueCustody({
+    locations,
+    riders,
+    initialRider,
+    onIssued,
+  });
 
   const governorateOptions = locations.governorates.map((item) => ({
     value: item.name,
@@ -43,6 +52,15 @@ export function IssueCustodyModal({
     label: item.name,
     hint: `${item.alphaCode} · ${item.numericCode}`,
   }));
+  const canSubmit =
+    !state.submitting &&
+    !state.hasBlockingLookup &&
+    Boolean(state.governorate) &&
+    Boolean(state.city) &&
+    Boolean(state.receiptSequence) &&
+    (state.riderMode === "existing"
+      ? state.existingRider !== null
+      : Boolean(state.sequence));
 
   return (
     <Modal
@@ -60,6 +78,19 @@ export function IssueCustodyModal({
           void state.submit();
         }}
       >
+        <section className="riders-form-section">
+          <h3>نوع المندوب</h3>
+          <Tabs
+            items={[
+              { id: "new", label: "مندوب جديد", content: null },
+              { id: "existing", label: "مندوب حالي", content: null },
+            ]}
+            selectedIndex={state.modeIndex}
+            onChange={state.changeMode}
+            showPanels={false}
+          />
+        </section>
+
         <section className="riders-form-section">
           <h3>الموقع والتسلسل</h3>
           {locations.governorates.length === 0 ? (
@@ -86,14 +117,40 @@ export function IssueCustodyModal({
               placeholder="اختر المدينة"
             />
             <TextField
-              label="رقم التسلسل"
+              label="رقم تسلسل المندوب"
+              type="number"
+              min={1}
+              max={9999}
               value={state.sequence ?? ""}
-              readOnly
+              onChange={(event) =>
+                state.changeRiderSequence(
+                  event.target.value
+                    ? Math.max(1, Math.min(9999, Number(event.target.value)))
+                    : null,
+                )
+              }
+              readOnly={state.riderMode === "existing"}
               hint={
                 state.nextLoading
                   ? "جارٍ حساب التسلسل…"
-                  : "يُحدد من آخر تسلسل مسجل."
+                  : "تسلسل مستقل عن سيريالات الأدوات."
               }
+              dir="ltr"
+            />
+            <TextField
+              label="رقم تسلسل الإيصال"
+              type="number"
+              min={1}
+              max={9999}
+              value={state.receiptSequence ?? ""}
+              onChange={(event) =>
+                state.changeReceiptSequence(
+                  event.target.value
+                    ? Math.max(1, Math.min(9999, Number(event.target.value)))
+                    : null,
+                )
+              }
+              hint="عدد مستقل لكل إيصال في هذه المدينة."
               dir="ltr"
             />
           </div>
@@ -110,31 +167,43 @@ export function IssueCustodyModal({
           </div>
         </section>
 
-        <CustodyRiderFields
-          fullName={state.fullName}
-          nationalId={state.nationalId}
-          phone={state.phone}
-          workArea={state.workArea}
-          deliveryDate={state.deliveryDate}
-          handoverOfficer={state.handoverOfficer}
-          locked={state.locked}
-          lookup={state.lookup}
-          lookupState={state.lookupState}
-          hasBlockingLookup={state.hasBlockingLookup}
-          onFullName={state.setFullName}
-          onNationalId={state.changeNationalId}
-          onPhone={state.setPhone}
-          onWorkArea={state.setWorkArea}
-          onDeliveryDate={state.setDeliveryDate}
-          onHandoverOfficer={state.setHandoverOfficer}
-          onCheck={() => void state.checkRider()}
-        />
+        {state.riderMode === "new" ? (
+          <CustodyRiderFields
+            fullName={state.fullName}
+            nationalId={state.nationalId}
+            phone={state.phone}
+            workArea={state.workArea}
+            deliveryDate={state.deliveryDate}
+            handoverOfficer={state.handoverOfficer}
+            locked={state.locked}
+            lookup={state.lookup}
+            lookupState={state.lookupState}
+            hasBlockingLookup={state.hasBlockingLookup}
+            onFullName={state.setFullName}
+            onNationalId={state.changeNationalId}
+            onPhone={state.setPhone}
+            onWorkArea={state.setWorkArea}
+            onDeliveryDate={state.setDeliveryDate}
+            onHandoverOfficer={state.setHandoverOfficer}
+            onCheck={() => void state.checkRider()}
+          />
+        ) : (
+          <CustodyRiderPicker
+            options={state.riderOptions}
+            selectedRiderId={state.existingRiderId}
+            selectedRider={state.existingRider}
+            deliveryDate={state.deliveryDate}
+            handoverOfficer={state.handoverOfficer}
+            onSelect={state.selectExistingRider}
+            onDeliveryDate={state.setDeliveryDate}
+            onHandoverOfficer={state.setHandoverOfficer}
+          />
+        )}
 
         <section className="riders-form-section">
           <h3>بنود العهدة</h3>
           <CustodyItemsEditor
             items={state.items}
-            serials={state.serials}
             onUpdate={state.updateItem}
           />
         </section>
@@ -182,13 +251,7 @@ export function IssueCustodyModal({
           <Button
             variant="primary"
             type="submit"
-            disabled={
-              state.submitting ||
-              state.hasBlockingLookup ||
-              !state.sequence ||
-              !state.governorate ||
-              !state.city
-            }
+            disabled={!canSubmit}
           >
             {state.submitting ? "جارٍ الإصدار…" : "إصدار الإيصال"}
           </Button>
