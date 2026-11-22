@@ -36,6 +36,11 @@ const RPC_ERRORS: Record<string, { status: number; message: string }> = {
     message: "الرقم القومي يجب أن يكون 14 رقماً.",
   },
   INVALID_ITEMS: { status: 400, message: "بنود العهدة غير صالحة." },
+  NAME_REQUIRED: { status: 400, message: "اسم المندوب مطلوب." },
+  PHONE_TAKEN: {
+    status: 409,
+    message: "رقم الهاتف مسجل لمندوب آخر، راجع سجل المناديب.",
+  },
   LOCATION_NOT_FOUND: {
     status: 400,
     message: "المحافظة أو المدينة غير مسجلة.",
@@ -135,7 +140,7 @@ export async function getRiderCustodyReceipt(
   const receipt = data as unknown as ReceiptRow;
   const { data: riderData, error: riderError } = await client
     .schema("app")
-    .from("delivery_riders")
+    .from("couriers")
     .select(RIDER_COLUMNS)
     .eq("id", receipt.rider_id)
     .maybeSingle();
@@ -154,7 +159,7 @@ export async function findRiderByNationalId(
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
-    .from("delivery_riders")
+    .from("couriers")
     .select(RIDER_COLUMNS)
     .eq("national_id", nationalId)
     .maybeSingle();
@@ -184,14 +189,14 @@ export async function findRiderByNationalId(
 
   return {
     id: rider.id,
-    riderCode: rider.rider_code,
-    governorateCode: rider.governorate_code,
-    cityCode: rider.city_code,
-    sequenceNumber: rider.sequence_number,
-    fullName: rider.full_name,
-    phone: rider.phone,
-    workArea: rider.work_area,
-    status: rider.status,
+    riderCode: rider.rider_code ?? "",
+    governorateCode: rider.governorate_code ?? "",
+    cityCode: rider.city_code ?? "",
+    sequenceNumber: rider.sequence_number ?? 0,
+    fullName: rider.display_name,
+    phone: rider.phone ?? "",
+    workArea: rider.work_area ?? "",
+    status: rider.active ? "active" : "suspended",
     hasCustody: rows.length > 0,
     custodyId: active?.id ?? null,
   };
@@ -248,7 +253,7 @@ export async function issueCustody(
     p_rider_id: existingRider ? input.riderId ?? null : null,
     p_governorate: input.governorate,
     p_city: input.city,
-    p_sequence: existingRider ? null : input.sequence ?? null,
+    p_sequence: input.sequence ?? null,
     p_receipt_sequence: input.receiptSequence ?? null,
     p_full_name: input.fullName,
     p_national_id: input.nationalId || null,

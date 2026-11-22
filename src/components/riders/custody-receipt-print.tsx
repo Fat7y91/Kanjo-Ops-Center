@@ -73,11 +73,11 @@ export function CustodyReceiptPrint({
           </div>
           <div>
             <span>كود المندوب</span>
-            <strong dir="ltr">{receipt.rider.riderCode}</strong>
+            <strong dir="ltr">{receipt.rider.riderCode || "—"}</strong>
           </div>
           <div>
             <span>الرقم القومي</span>
-            <strong dir="ltr">{receipt.rider.nationalId}</strong>
+            <strong dir="ltr">{receipt.rider.nationalId || "—"}</strong>
           </div>
           <div>
             <span>الهاتف</span>
@@ -187,7 +187,7 @@ export function CustodyReceiptPrint({
           <div className="wallet-card-grid">
             <div>
               <span>كود المندوب</span>
-              <strong dir="ltr">{receipt.rider.riderCode}</strong>
+              <strong dir="ltr">{receipt.rider.riderCode || "—"}</strong>
             </div>
             <div>
               <span>رقم العهدة</span>

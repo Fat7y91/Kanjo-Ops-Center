@@ -143,7 +143,7 @@ export function RidersDirectory({
                       </td>
                       <td>
                         <span className="riders-code" dir="ltr">
-                          {rider.riderCode}
+                          {rider.riderCode || "—"}
                         </span>
                       </td>
                       <td>
@@ -155,7 +155,9 @@ export function RidersDirectory({
                       <td>{rider.workArea || "—"}</td>
                       <td>
                         <span className="riders-location" dir="ltr">
-                          {rider.governorateCode} / {rider.cityCode}
+                          {rider.governorateCode && rider.cityCode
+                            ? `${rider.governorateCode} / ${rider.cityCode}`
+                            : "—"}
                         </span>
                       </td>
                       <td>

@@ -68,9 +68,21 @@ export function useIssueCustody({
     return initialRider?.id === existingRiderId ? initialRider : null;
   }, [riders, existingRiderId, initialRider]);
 
+  const existingNeedsCode =
+    riderMode === "existing" &&
+    existingRider !== null &&
+    !existingRider.riderCode;
+
+  const existingNeedsIdentity =
+    riderMode === "existing" &&
+    existingRider !== null &&
+    (!existingRider.riderCode ||
+      !existingRider.nationalId ||
+      !existingRider.phone);
+
   const locked =
     riderMode === "existing"
-      ? existingRider !== null
+      ? existingRider !== null && Boolean(existingRider.riderCode)
       : lookup.lookup !== null;
 
   const hasBlockingLookup =
@@ -79,28 +91,34 @@ export function useIssueCustody({
       : lookup.lookup !== null;
 
   const riderOptions = useMemo(() => {
-    const gov = location.parts?.govAlpha;
-    const city = location.parts?.cityAlpha;
-    const options = riders
-      .filter(
-        (rider) =>
-          (!gov || rider.governorateCode === gov) &&
-          (!city || rider.cityCode === city),
-      )
-      .map((rider) => ({
-        value: rider.id,
-        label: `${rider.fullName} · ${rider.riderCode}`,
-        hint: `${rider.workArea || "بدون منطقة"} · ${riderStatusLabel(rider.status)}`,
-      }));
-    if (existingRider && !options.some((item) => item.value === existingRider.id)) {
+    const options = riders.map((rider) => ({
+      value: rider.id,
+      label: rider.riderCode
+        ? `${rider.fullName} · ${rider.riderCode}`
+        : rider.fullName,
+      hint:
+        [
+          rider.phone,
+          rider.workArea,
+          rider.riderCode ? "" : "بدون كود عهدة",
+        ]
+          .filter(Boolean)
+          .join(" · ") || riderStatusLabel(rider.status),
+    }));
+    if (
+      existingRider &&
+      !options.some((item) => item.value === existingRider.id)
+    ) {
       options.unshift({
         value: existingRider.id,
-        label: `${existingRider.fullName} · ${existingRider.riderCode}`,
-        hint: existingRider.workArea || "بدون منطقة",
+        label: existingRider.riderCode
+          ? `${existingRider.fullName} · ${existingRider.riderCode}`
+          : existingRider.fullName,
+        hint: existingRider.workArea || "بدون كود عهدة",
       });
     }
     return options;
-  }, [riders, location.parts, existingRider]);
+  }, [riders, existingRider]);
 
   function changeGovernorate(value: string) {
     location.changeGovernorate(value);
@@ -134,15 +152,25 @@ export function useIssueCustody({
   }
 
   function selectExistingRider(id: string) {
-    const rider = riders.find((item) => item.id === id) ?? null;
+    const rider =
+      riders.find((item) => item.id === id) ??
+      (initialRider?.id === id ? initialRider : null);
     setExistingRiderId(id);
     if (!rider) return;
     setFullName(rider.fullName);
     setNationalId(rider.nationalId);
     setPhone(rider.phone);
     setWorkArea(rider.workArea);
-    location.applyRider(rider);
-    items.clearSerials();
+    const previousCity = location.parts?.cityAlpha ?? null;
+    location.applyRiderLocation(rider);
+    if (rider.riderCode && rider.sequenceNumber > 0) {
+      location.setRiderSequence(rider.sequenceNumber);
+    } else {
+      location.unlock();
+    }
+    if (rider.cityCode && previousCity && rider.cityCode !== previousCity) {
+      items.clearSerials();
+    }
     setError("");
   }
 
@@ -168,6 +196,20 @@ export function useIssueCustody({
         setError("اختر مندوباً مسجلاً.");
         return;
       }
+      if (existingNeedsIdentity) {
+        if (existingNeedsCode && !location.sequence) {
+          setError("أدخل رقم تسلسل المندوب.");
+          return;
+        }
+        if (!/^[0-9]{14}$/.test(nationalId)) {
+          setError("الرقم القومي يجب أن يكون 14 رقماً.");
+          return;
+        }
+        if (!phone.trim()) {
+          setError("رقم هاتف المندوب مطلوب.");
+          return;
+        }
+      }
     } else {
       if (!location.sequence) {
         setError("أدخل رقم تسلسل المندوب.");
@@ -189,7 +231,7 @@ export function useIssueCustody({
           riderId: riderMode === "existing" ? existingRiderId : null,
           governorate: location.governorate,
           city: location.city,
-          sequence: riderMode === "new" ? location.sequence : null,
+          sequence: location.sequence,
           receiptSequence: location.receiptSequence,
           fullName,
           nationalId,
@@ -232,6 +274,8 @@ export function useIssueCustody({
     modeIndex: riderMode === "new" ? 0 : 1,
     existingRider,
     existingRiderId,
+    existingNeedsCode,
+    existingNeedsIdentity,
     riderOptions,
     governorate: location.governorate,
     city: location.city,
@@ -239,9 +283,7 @@ export function useIssueCustody({
     receiptSequence: location.receiptSequence,
     nextLoading: location.nextLoading,
     cityOptions: location.cityOptions,
-    riderCode:
-      existingRider?.riderCode ??
-      (riderMode === "new" ? location.riderCode : ""),
+    riderCode: existingRider?.riderCode || location.riderCode,
     custodyNumber: location.custodyNumber,
     fullName,
     nationalId,

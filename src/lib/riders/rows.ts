@@ -6,11 +6,10 @@ import {
   type Rider,
   type RiderCustodyReceipt,
   type RiderReceiptSummary,
-  type RiderStatus,
 } from "./types";
 
 export const RIDER_COLUMNS =
-  "id,rider_code,governorate_code,city_code,sequence_number,full_name,national_id,phone,work_area,status,created_at";
+  "id,rider_code,governorate_code,city_code,sequence_number,display_name,national_id,phone,work_area,active,created_at";
 export const RECEIPT_SUMMARY_COLUMNS =
   "id,rider_id,custody_number,delivery_date,total_amount,status,created_at";
 export const RECEIPT_COLUMNS =
@@ -20,15 +19,15 @@ export const UUID_PATTERN =
 
 export type RiderRow = {
   id: string;
-  rider_code: string;
-  governorate_code: string;
-  city_code: string;
-  sequence_number: number;
-  full_name: string;
-  national_id: string;
+  rider_code: string | null;
+  governorate_code: string | null;
+  city_code: string | null;
+  sequence_number: number | null;
+  display_name: string;
+  national_id: string | null;
   phone: string;
   work_area: string;
-  status: RiderStatus;
+  active: boolean;
   created_at: string;
 };
 
@@ -83,15 +82,15 @@ export function toRider(
   );
   return {
     id: row.id,
-    riderCode: row.rider_code,
-    governorateCode: row.governorate_code,
-    cityCode: row.city_code,
-    sequenceNumber: row.sequence_number,
-    fullName: row.full_name,
-    nationalId: row.national_id,
-    phone: row.phone,
-    workArea: row.work_area,
-    status: row.status,
+    riderCode: row.rider_code ?? "",
+    governorateCode: row.governorate_code ?? "",
+    cityCode: row.city_code ?? "",
+    sequenceNumber: row.sequence_number ?? 0,
+    fullName: row.display_name,
+    nationalId: row.national_id ?? "",
+    phone: row.phone ?? "",
+    workArea: row.work_area ?? "",
+    status: row.active ? "active" : "suspended",
     createdAt: row.created_at,
     activeCustody:
       ordered.find((receipt) => receipt.status === "active") ?? null,
@@ -157,15 +156,15 @@ export function toReceipt(
     createdAt: row.created_at,
     rider: {
       id: rider.id,
-      riderCode: rider.rider_code,
-      fullName: rider.full_name,
-      nationalId: rider.national_id,
-      phone: rider.phone,
-      workArea: rider.work_area,
-      governorateCode: rider.governorate_code,
-      cityCode: rider.city_code,
-      sequenceNumber: rider.sequence_number,
-      status: rider.status,
+      riderCode: rider.rider_code ?? "",
+      fullName: rider.display_name,
+      nationalId: rider.national_id ?? "",
+      phone: rider.phone ?? "",
+      workArea: rider.work_area ?? "",
+      governorateCode: rider.governorate_code ?? "",
+      cityCode: rider.city_code ?? "",
+      sequenceNumber: rider.sequence_number ?? 0,
+      status: rider.active ? "active" : "suspended",
     },
   };
 }

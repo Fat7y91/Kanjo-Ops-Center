@@ -17,9 +17,16 @@ type CustodyRiderPickerProps = {
   options: RiderOption[];
   selectedRiderId: string | null;
   selectedRider: Rider | null;
+  needsIdentity: boolean;
+  nationalId: string;
+  phone: string;
+  workArea: string;
   deliveryDate: string;
   handoverOfficer: string;
   onSelect: (riderId: string) => void;
+  onNationalId: (value: string) => void;
+  onPhone: (value: string) => void;
+  onWorkArea: (value: string) => void;
   onDeliveryDate: (value: string) => void;
   onHandoverOfficer: (value: string) => void;
 };
@@ -28,9 +35,16 @@ export function CustodyRiderPicker({
   options,
   selectedRiderId,
   selectedRider,
+  needsIdentity,
+  nationalId,
+  phone,
+  workArea,
   deliveryDate,
   handoverOfficer,
   onSelect,
+  onNationalId,
+  onPhone,
+  onWorkArea,
   onDeliveryDate,
   onHandoverOfficer,
 }: CustodyRiderPickerProps) {
@@ -44,7 +58,7 @@ export function CustodyRiderPicker({
           options={options}
           onChange={onSelect}
           placeholder="ابحث بالاسم أو الكود أو الهاتف"
-          hint="اختر مندوباً مسجلاً لإصدار إيصال عهدة إضافي."
+          hint="اختر من مناديب التشغيل المسجلين لإصدار إيصال عهدة."
         />
         <TextField
           label="تاريخ التسليم"
@@ -65,8 +79,10 @@ export function CustodyRiderPicker({
       {selectedRider ? (
         <div className="rider-lookup-note">
           <strong>{selectedRider.fullName}</strong>
-          <span dir="ltr">{selectedRider.riderCode}</span>
-          <span dir="ltr">{selectedRider.phone}</span>
+          <span dir="ltr">
+            {selectedRider.riderCode || "بدون كود عهدة"}
+          </span>
+          <span dir="ltr">{selectedRider.phone || "بدون هاتف"}</span>
           <span>{selectedRider.workArea || "بدون منطقة عمل"}</span>
           <span>{riderStatusLabel(selectedRider.status)}</span>
           {selectedRider.latestCustody ? (
@@ -84,6 +100,44 @@ export function CustodyRiderPicker({
           اختر مندوباً مسجلاً من القائمة لإصدار إيصال إضافي.
         </p>
       )}
+
+      {selectedRider && needsIdentity ? (
+        <>
+          <p className="rider-lookup-note">
+            هذا المندوب موجود في دليل التشغيل لكنه لم يُسجل له كود عهدة بعد.
+            أكمل بيانات الهوية، وسيُحفظ الكود في سجل المناديب عند إصدار
+            الإيصال.
+          </p>
+          <div className="riders-form-grid">
+            <TextField
+              label="الرقم القومي"
+              value={nationalId}
+              onChange={(event) => onNationalId(event.target.value)}
+              placeholder="14 رقماً"
+              inputMode="numeric"
+              maxLength={14}
+              dir="ltr"
+              required
+            />
+            <TextField
+              label="الهاتف"
+              value={phone}
+              onChange={(event) => onPhone(event.target.value)}
+              placeholder="01012345678"
+              inputMode="tel"
+              dir="ltr"
+              required
+            />
+            <TextField
+              label="منطقة العمل"
+              value={workArea}
+              onChange={(event) => onWorkArea(event.target.value)}
+              placeholder="المدينة أو نطاق التوصيل"
+              maxLength={80}
+            />
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }

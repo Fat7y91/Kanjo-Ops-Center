@@ -144,6 +144,43 @@ test("issue schema accepts a valid receipt and rejects bad identities", () => {
   assert.equal(existing.riderId, "8b837bd0-b3b5-4c0b-9b94-abc8b4f5446b");
   assert.equal(existing.receiptSequence, 9);
 
+  const existingWithIdentity = schema.issueCustodySchema.parse({
+    riderMode: "existing",
+    riderId: "fcf92126-254e-403b-919d-bd6bc4557c43",
+    governorate: "كفر الشيخ",
+    city: "دسوق",
+    sequence: 7,
+    receiptSequence: 10,
+    fullName: "مندوب تشغيلي",
+    nationalId: "12345678901234",
+    phone: "01012345678",
+    workArea: "دسوق",
+    deliveryDate: "2026-11-21",
+    handoverOfficer: "م/ محمود الجمل",
+    items: defaults.buildDefaultItems(),
+    cashCustody: 0,
+    totalAmount: 4500,
+  });
+  assert.equal(existingWithIdentity.sequence, 7);
+  assert.equal(existingWithIdentity.nationalId, "12345678901234");
+
+  assert.throws(
+    () =>
+      schema.issueCustodySchema.parse({
+        riderMode: "existing",
+        riderId: "fcf92126-254e-403b-919d-bd6bc4557c43",
+        governorate: "كفر الشيخ",
+        city: "دسوق",
+        nationalId: "123",
+        deliveryDate: "2026-11-21",
+        handoverOfficer: "م/ محمود الجمل",
+        items: defaults.buildDefaultItems(),
+        cashCustody: 0,
+        totalAmount: 4500,
+      }),
+    /الرقم القومي/,
+  );
+
   assert.throws(
     () =>
       schema.issueCustodySchema.parse({

@@ -129,7 +129,9 @@ export function IssueCustodyModal({
                     : null,
                 )
               }
-              readOnly={state.riderMode === "existing"}
+              readOnly={
+                state.riderMode === "existing" && !state.existingNeedsCode
+              }
               hint={
                 state.nextLoading
                   ? "جارٍ حساب التسلسل…"
@@ -192,9 +194,16 @@ export function IssueCustodyModal({
             options={state.riderOptions}
             selectedRiderId={state.existingRiderId}
             selectedRider={state.existingRider}
+            needsIdentity={state.existingNeedsIdentity}
+            nationalId={state.nationalId}
+            phone={state.phone}
+            workArea={state.workArea}
             deliveryDate={state.deliveryDate}
             handoverOfficer={state.handoverOfficer}
             onSelect={state.selectExistingRider}
+            onNationalId={state.changeNationalId}
+            onPhone={state.setPhone}
+            onWorkArea={state.setWorkArea}
             onDeliveryDate={state.setDeliveryDate}
             onHandoverOfficer={state.setHandoverOfficer}
           />

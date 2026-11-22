@@ -51,7 +51,7 @@ export async function listRiders(): Promise<Rider[]> {
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
-    .from("delivery_riders")
+    .from("couriers")
     .select(RIDER_COLUMNS)
     .order("created_at", { ascending: false });
 
@@ -70,7 +70,7 @@ export async function getRiderDetail(id: string): Promise<RiderDetail | null> {
   const client = getSupabaseServerClient();
   const { data, error } = await client
     .schema("app")
-    .from("delivery_riders")
+    .from("couriers")
     .select(RIDER_COLUMNS)
     .eq("id", id)
     .maybeSingle();

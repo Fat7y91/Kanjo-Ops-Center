@@ -48,17 +48,26 @@ function initialState(
 ): InitialState {
   if (initialRider) {
     const { governorate, city } = riderLocation(locations, initialRider);
-    return { governorate, city, sequence: initialRider.sequenceNumber };
+    if (governorate && city) {
+      return {
+        governorate,
+        city,
+        sequence:
+          initialRider.sequenceNumber > 0 ? initialRider.sequenceNumber : null,
+      };
+    }
   }
-  const governorate =
+  const defaultGovernorate =
     locations.governorates.length === 1
       ? locations.governorates[0].name
       : null;
-  const cities = governorate
-    ? locations.cities.filter((item) => item.governorateName === governorate)
+  const cities = defaultGovernorate
+    ? locations.cities.filter(
+        (item) => item.governorateName === defaultGovernorate,
+      )
     : [];
   return {
-    governorate,
+    governorate: defaultGovernorate,
     city: cities.length === 1 ? cities[0].name : null,
     sequence: null,
   };
@@ -80,7 +89,9 @@ export function useCustodyLocation({
   const [receiptSequence, setReceiptSequence] = useState<number | null>(null);
   const [assetSequences, setAssetSequences] =
     useState<AssetSequences | null>(null);
-  const [sequenceLocked, setSequenceLocked] = useState(initialRider !== null);
+  const [sequenceLocked, setSequenceLocked] = useState(
+    initialRider !== null && Boolean(initialRider.riderCode),
+  );
   const [nextLoading, setNextLoading] = useState(false);
   const [error, setError] = useState("");
   const riderTouched = useRef(false);
@@ -184,16 +195,26 @@ export function useCustodyLocation({
   function applyRider(
     rider: Pick<Rider, "governorateCode" | "cityCode" | "sequenceNumber">,
   ) {
+    applyRiderLocation(rider);
+    if (rider.sequenceNumber > 0) setRiderSequence(rider.sequenceNumber);
+  }
+
+  function applyRiderLocation(
+    rider: Pick<Rider, "governorateCode" | "cityCode">,
+  ) {
     const location = riderLocation(locations, rider);
     if (location.governorate) setGovernorate(location.governorate);
     if (location.city) setCity(location.city);
-    setSequence(rider.sequenceNumber);
-    setSequenceLocked(true);
-    setReceiptSequence(null);
-    setAssetSequences(null);
+    setSequenceLocked(false);
     riderTouched.current = false;
     receiptTouched.current = false;
     setError("");
+  }
+
+  function setRiderSequence(value: number) {
+    riderTouched.current = true;
+    setSequence(value);
+    setSequenceLocked(true);
   }
 
   function unlock() {
@@ -221,6 +242,8 @@ export function useCustodyLocation({
     changeRiderSequence,
     changeReceiptSequence,
     applyRider,
+    applyRiderLocation,
+    setRiderSequence,
     unlock,
   };
 }

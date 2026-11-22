@@ -65,6 +65,23 @@ export const issueCustodySchema = z
           message: "اختر مندوباً مسجلاً.",
         });
       }
+      if (value.nationalId && !/^[0-9]{14}$/.test(value.nationalId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["nationalId"],
+          message: "الرقم القومي يجب أن يكون 14 رقماً.",
+        });
+      }
+      if (
+        value.phone &&
+        !/^\+?[0-9][0-9\s-]{6,18}$/.test(value.phone)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["phone"],
+          message: "أدخل رقم هاتف صالحاً، مثل 01012345678.",
+        });
+      }
       return;
     }
     if (!value.sequence) {
