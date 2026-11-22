@@ -163,6 +163,14 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+
+.statement-sheet {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .statement-brand {
@@ -171,13 +179,14 @@
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 8px;
-  border-bottom: 2px solid var(--kanjo-purple-base);
+  border-bottom: 2px solid #6c35b6;
 }
 
 .statement-brand-id {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
 }
 
 .statement-logo {
@@ -189,42 +198,77 @@
 
 .statement-company {
   margin: 0;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--kanjo-purple-base);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #6c35b6;
 }
 
-.statement-brand h3 {
-  margin: 1px 0 0;
-  font-size: 0.98rem;
-}
-
-.statement-brand-meta {
+.statement-brand-title {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 1px;
+  gap: 2px;
   font-size: 0.72rem;
   color: var(--ink-soft);
   white-space: nowrap;
 }
 
-.statement-brand-meta strong {
-  font-size: 0.92rem;
+.statement-brand-title strong {
+  font-size: 0.98rem;
   color: var(--ink);
+}
+
+.statement-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.statement-meta-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statement-meta-label {
+  flex: none;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.statement-meta-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.statement-meta-period {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  grid-column: 1 / -1;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.statement-date {
+  unicode-bidi: isolate;
 }
 
 .statement-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .statement-summary > div {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 9px;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
@@ -236,33 +280,61 @@
 }
 
 .statement-summary strong {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .statement-summary-closing {
-  border-color: var(--kanjo-gold, #d4a017) !important;
+  border-color: #d4a017 !important;
 }
 
 .statement-table {
   table-layout: fixed;
   width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
   font-size: 0.78rem;
 }
 
-/* Dates sit on the right (start in RTL) and never wrap. */
+/* Explicit percentages keep all five columns inside the sheet. */
 .statement-table th:nth-child(1),
 .statement-table td:nth-child(1) {
-  width: 78px;
+  width: 16%;
   text-align: right;
   white-space: nowrap;
 }
 
-/* The description is forced to one line so a week of movements stays flat. */
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
+  width: 44%;
   text-align: right;
+}
+
+.statement-table th:nth-child(3),
+.statement-table td:nth-child(3) {
+  width: 13%;
+}
+
+.statement-table th:nth-child(4),
+.statement-table td:nth-child(4) {
+  width: 13%;
+}
+
+.statement-table th:nth-child(5),
+.statement-table td:nth-child(5) {
+  width: 14%;
+}
+
+.statement-table th:nth-child(3),
+.statement-table td:nth-child(3),
+.statement-table th:nth-child(4),
+.statement-table td:nth-child(4),
+.statement-table th:nth-child(5),
+.statement-table td:nth-child(5) {
+  text-align: left;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .statement-desc {
@@ -272,22 +344,10 @@
   white-space: nowrap;
 }
 
-/* Amounts are LTR numerals flushed to the outer edge. */
-.statement-table th:nth-child(3),
-.statement-table td:nth-child(3),
-.statement-table th:nth-child(4),
-.statement-table td:nth-child(4),
-.statement-table th:nth-child(5),
-.statement-table td:nth-child(5) {
-  width: 100px;
-  text-align: left;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 .statement-table th,
 .statement-table td {
-  padding: 6px 8px;
+  box-sizing: border-box;
+  padding: 6px 7px;
 }
 
 .statement-table td:nth-child(5) {
@@ -319,6 +379,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 32px;
+  width: 100%;
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
@@ -327,6 +388,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
   font-size: 0.72rem;
   color: var(--ink-soft);
 }
@@ -344,7 +406,7 @@
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm;
+    margin: 10mm;
   }
 
   body > *:not(.modal-backdrop),
@@ -362,9 +424,12 @@
   }
 
   .statement-sheet {
+    box-sizing: border-box;
     position: absolute;
     inset: 0;
     width: 100%;
+    max-width: 100%;
+    overflow: visible;
     padding: 0;
     gap: 6px;
     font-size: 10.5px;
@@ -376,21 +441,26 @@
     display: none !important;
   }
 
-  .modal-backdrop {
-    position: static;
-    padding: 0;
-    background: #fff;
-  }
-
+  .modal-backdrop,
   .modal-card,
   .modal-body {
+    width: 100% !important;
+    max-width: 100% !important;
     max-height: none;
+    margin: 0;
+    padding: 0;
     overflow: visible !important;
     border: 0;
     box-shadow: none;
   }
 
+  .modal-backdrop {
+    position: static;
+    background: #fff;
+  }
+
   .statement-brand {
+    gap: 12px;
     padding-bottom: 5px;
   }
 
@@ -399,8 +469,13 @@
     height: 30px;
   }
 
+  .statement-meta {
+    gap: 4px 14px;
+    padding: 5px 0;
+  }
+
   .statement-summary {
-    gap: 4px;
+    gap: 5px;
   }
 
   .statement-summary > div {

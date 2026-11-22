@@ -5,12 +5,6 @@ import type { TaxonomyCategory } from "@/lib/taxonomy/types";
 export const PHARMACY_VENDOR_TYPE_ID = 3;
 export const SUPERMARKET_VENDOR_TYPE_ID = 4;
 
-/** Vendor types whose POS workbook can run through the autopilot importer. */
-export const AUTOPILOT_VENDOR_TYPE_IDS: readonly number[] = [
-  PHARMACY_VENDOR_TYPE_ID,
-  SUPERMARKET_VENDOR_TYPE_ID,
-];
-
 /**
  * Safe aisle for an item the model could not place, chosen per vendor type so a
  * pharmacy never receives a grocery category (and vice versa).
@@ -19,10 +13,6 @@ const FALLBACK_CATEGORY_ID: Record<number, number> = {
   [PHARMACY_VENDOR_TYPE_ID]: 26, // مستلزمات
   [SUPERMARKET_VENDOR_TYPE_ID]: 32, // بقالة
 };
-
-export function isAutopilotVendorType(vendorTypeId: number): boolean {
-  return AUTOPILOT_VENDOR_TYPE_IDS.includes(vendorTypeId);
-}
 
 /** Active categories offered to the importer for a vendor type. */
 export function autopilotCategories(

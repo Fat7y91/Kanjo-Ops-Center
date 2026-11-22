@@ -73,6 +73,20 @@ function printStamp(): string {
   }
 }
 
+function arabicDate(value?: string): string {
+  if (!value) return "—";
+  const parsed = new Date(
+    value.length === 10 ? `${value}T12:00:00Z` : value,
+  );
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("ar-EG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
 /**
  * Printable A4 statement of account for a merchant or courier.
  *
@@ -102,7 +116,13 @@ export function PartyStatementModal({
   const balance = statement?.balance ?? 0;
 
   return (
-    <Modal open={open} title="كشف حساب" eyebrow={statement?.partyName ?? "الطرف"} onClose={onClose} wide>
+    <Modal
+      open={open}
+      title="كشف حساب"
+      onClose={onClose}
+      wide
+      hideHeader
+    >
       {loading ? <p className="muted">جارٍ تحميل كشف الحساب…</p> : null}
 
       {!loading && error ? (
@@ -119,46 +139,55 @@ export function PartyStatementModal({
       {!loading && !error && statement ? (
         <div className="statement statement-sheet" dir="rtl">
           <header className="statement-brand">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="" className="statement-logo" />
-            <div>
+            <div className="statement-brand-id">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" className="statement-logo" />
               <p className="statement-company">{BRAND}</p>
-              <h3>كشف حساب طرف</h3>
             </div>
-            <span className="statement-stamp">{printStamp()}</span>
+            <div className="statement-brand-title">
+              <strong>
+                {statement.partyType === "merchant"
+                  ? "كشف حساب تاجر"
+                  : "كشف حساب مندوب توصيل"}
+              </strong>
+              <span>طُبع: {printStamp()}</span>
+            </div>
           </header>
 
           <div className="statement-meta">
-            <div>
-              <span className="statement-meta-label">الطرف</span>
+            <div className="statement-meta-item">
+              <span className="statement-meta-label">الطرف:</span>
               <strong>{statement.partyName}</strong>
-              <span
-                className={
-                  statement.partyType === "merchant"
-                    ? "badge badge-blue"
-                    : "badge badge-orange"
-                }
-              >
-                {statement.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
-              </span>
             </div>
-            <div>
-              <span className="statement-meta-label">الفترة</span>
-              <strong dir="ltr">
-                {firstDate ? shortDate(firstDate) : "—"} ←{" "}
-                {lastDate ? shortDate(lastDate) : "—"}
+            <div className="statement-meta-item">
+              <span className="statement-meta-label">النوع:</span>
+              <strong>
+                {statement.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
               </strong>
             </div>
-            <div>
-              <span className="statement-meta-label">العملة</span>
+            <div className="statement-meta-item">
+              <span className="statement-meta-label">العملة:</span>
               <strong>{currency}</strong>
             </div>
             {statement.partyType === "courier" ? (
-              <div>
-                <span className="statement-meta-label">أيام العمل</span>
-                <strong dir="ltr">{statement.workingDays ?? 0}</strong>
+              <div className="statement-meta-item">
+                <span className="statement-meta-label">أيام العمل:</span>
+                <strong>{statement.workingDays ?? 0} أيام</strong>
               </div>
             ) : null}
+            <div className="statement-meta-period">
+              <span className="statement-meta-label">الفترة:</span>
+              <span>
+                من{" "}
+                <span className="statement-date" dir="rtl">
+                  {arabicDate(firstDate)}
+                </span>{" "}
+                إلى{" "}
+                <span className="statement-date" dir="rtl">
+                  {arabicDate(lastDate)}
+                </span>
+              </span>
+            </div>
           </div>
 
           <div className="statement-summary">
@@ -170,8 +199,20 @@ export function PartyStatementModal({
               <span>إجمالي الدائن</span>
               <strong dir="ltr">{money(totalCredit)}</strong>
             </div>
+            <div>
+              <span>
+                {statement.partyType === "courier" ? "أيام العمل" : "عدد الحركات"}
+              </span>
+              <strong dir="ltr">
+                {statement.partyType === "courier"
+                  ? statement.workingDays ?? 0
+                  : statement.lines.length}
+              </strong>
+            </div>
             <div className="statement-summary-closing">
-              <span>الرصيد الختامي · {closingLabel(statement.partyType, balance)}</span>
+              <span>
+                الرصيد الختامي · {closingLabel(statement.partyType, balance)}
+              </span>
               <strong dir="ltr">{money(Math.abs(balance))}</strong>
             </div>
           </div>

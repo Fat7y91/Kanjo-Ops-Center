@@ -20,6 +20,8 @@ type ModalProps = {
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  /** Hides the visual header; the dialog keeps its accessible title. */
+  hideHeader?: boolean;
   /**
    * Closing when the backdrop is clicked is opt-in. A stray click while filling
    * a form should not discard entered data, so the default keeps the dialog
@@ -36,6 +38,7 @@ export function Modal({
   onClose,
   children,
   wide = false,
+  hideHeader = false,
   closeOnBackdrop = false,
 }: ModalProps) {
   const modalId = useId();
@@ -78,21 +81,23 @@ export function Modal({
         aria-label={title}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="modal-head">
-          <div>
-            {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-            <h2>{title}</h2>
-            {description ? <p className="modal-note">{description}</p> : null}
+        {hideHeader ? null : (
+          <div className="modal-head">
+            <div>
+              {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+              <h2>{title}</h2>
+              {description ? <p className="modal-note">{description}</p> : null}
+            </div>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={onClose}
+              aria-label="إغلاق النافذة"
+            >
+              ×
+            </button>
           </div>
-          <button
-            type="button"
-            className="modal-close"
-            onClick={onClose}
-            aria-label="إغلاق النافذة"
-          >
-            ×
-          </button>
-        </div>
+        )}
         <div className="modal-body">{children}</div>
       </div>
     </div>

@@ -22,7 +22,7 @@ type AutopilotModalProps = {
 };
 
 /**
- * Zero-touch POS importer for one supermarket. The operator only picks the
+ * Zero-touch POS importer for any merchant. The operator only picks the
  * workbook; parsing, enrichment and saving are narrated by the progress panel.
  */
 export function AutopilotModal({
@@ -48,7 +48,7 @@ export function AutopilotModal({
     <Modal
       open={open}
       title="الاستيراد التلقائي"
-      eyebrow={isPharmacy ? "كتالوج الصيدلية" : "كتالوج السوبر ماركت"}
+      eyebrow={isPharmacy ? "كتالوج الصيدلية" : "استيراد كتالوج التاجر"}
       description="ارفع ملف نقاط البيع بصيغة Excel أو CSV. الاسم والباركود والسعر والكمية كما هي في الملف، ويُستكمل التصنيف والصورة تلقائياً."
       onClose={() => {
         if (!running) onClose();
