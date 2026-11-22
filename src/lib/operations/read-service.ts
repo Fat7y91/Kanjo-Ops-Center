@@ -14,6 +14,7 @@ import {
 } from "./service-guards";
 import {
   findPartyAccount,
+  listOperationStatementFacts,
   listPartyStatementRows,
 } from "./statement-repository";
 import { listCourierWorkingDates } from "./clearinghouse-activity";
@@ -85,6 +86,11 @@ export async function loadPartyStatement(
     }
 
     const rows = await listPartyStatementRows(accountId);
+    const facts = await listOperationStatementFacts(
+      rows
+        .filter((row) => row.sourceType === "operation" && row.sourceId)
+        .map((row) => row.sourceId as string),
+    );
     const names = await resolvePartyNames({
       merchantIds: account.partyType === "merchant" ? [account.partyId] : [],
       courierIds: account.partyType === "courier" ? [account.partyId] : [],
@@ -98,6 +104,10 @@ export async function loadPartyStatement(
     let runningMinor = 0;
     const lines: PartyStatementLine[] = rows.map((row) => {
       runningMinor += row.debitMinor - row.creditMinor;
+      const fact =
+        row.sourceType === "operation" && row.sourceId
+          ? facts.get(row.sourceId)
+          : undefined;
       return {
         id: row.id,
         entryId: row.entryId,
@@ -107,6 +117,13 @@ export async function loadPartyStatement(
         debit: Math.round(row.debitMinor) / 100,
         credit: Math.round(row.creditMinor) / 100,
         running: Math.round(runningMinor) / 100,
+        orderNumber: fact?.orderNumber,
+        occurredAt: fact?.occurredAt,
+        orderValue:
+          fact && Number.isFinite(fact.orderValueMinor)
+            ? Math.round(fact.orderValueMinor) / 100
+            : undefined,
+        commissionPercent: fact?.commissionPercent ?? undefined,
       };
     });
 

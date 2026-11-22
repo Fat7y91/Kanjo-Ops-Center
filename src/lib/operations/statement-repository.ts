@@ -4,6 +4,22 @@ import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
 
 const READ_TIMEOUT_MS = 6_000;
+const FACT_BATCH_SIZE = 100;
+
+export type OperationStatementFact = {
+  orderNumber: string;
+  occurredAt: string;
+  orderValueMinor: number;
+  commissionPercent: number | null;
+};
+
+type OperationFactRow = {
+  id: string;
+  order_id: string;
+  occurred_at: string;
+  order_value_minor: number | string;
+  commission_percent: number | string | null;
+};
 
 type StatementLineRow = {
   id: string;
@@ -62,6 +78,8 @@ export async function listPartyStatementRows(accountId: string): Promise<
     memo: string;
     debitMinor: number;
     creditMinor: number;
+    sourceType: string;
+    sourceId: string | null;
   }[]
 > {
   const client = getSupabaseServerClient();
@@ -103,9 +121,64 @@ export async function listPartyStatementRows(accountId: string): Promise<
         memo: row.memo ?? "",
         debitMinor: Number(row.debit_minor),
         creditMinor: Number(row.credit_minor),
+        sourceType: entry?.source_type ?? "",
+        sourceId: entry?.source_id ?? null,
       };
     })
     .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+/**
+ * Order facts for statement lines whose source is an operation.
+ *
+ * The journal stores the operation id only, so the statement resolves the
+ * human-facing order number, exact timestamp, subtotal and commission rate in
+ * one batched read. Missing rows are simply absent from the map; the statement
+ * then falls back to the journal memo.
+ */
+export async function listOperationStatementFacts(
+  operationIds: string[],
+): Promise<Map<string, OperationStatementFact>> {
+  const unique = [...new Set(operationIds.filter(Boolean))];
+  const facts = new Map<string, OperationStatementFact>();
+  if (unique.length === 0) return facts;
+
+  const client = getSupabaseServerClient();
+  const batches: string[][] = [];
+  for (let index = 0; index < unique.length; index += FACT_BATCH_SIZE) {
+    batches.push(unique.slice(index, index + FACT_BATCH_SIZE));
+  }
+
+  const results = await Promise.all(
+    batches.map((batch) =>
+      client
+        .schema("app")
+        .from("operation_logs")
+        .select(
+          "id,order_id,occurred_at,order_value_minor,commission_percent",
+        )
+        .in("id", batch)
+        .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS)),
+    ),
+  );
+
+  for (const { data, error } of results) {
+    if (error) {
+      if (isMissingSchemaObject(error)) continue;
+      throw error;
+    }
+    for (const row of (data ?? []) as unknown as OperationFactRow[]) {
+      const percent = Number(row.commission_percent);
+      facts.set(row.id, {
+        orderNumber: row.order_id,
+        occurredAt: row.occurred_at,
+        orderValueMinor: Number(row.order_value_minor),
+        commissionPercent: row.commission_percent === null ? null : percent,
+      });
+    }
+  }
+
+  return facts;
 }
 
 /**

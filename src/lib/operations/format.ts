@@ -68,7 +68,10 @@ function compactNumber(value: string): string {
 }
 
 /** A single-line description so a weekly statement stays on one A4 page. */
-export function statementLineDescription(line: PartyStatementLine): string {
+export function statementLineDescription(
+  line: PartyStatementLine,
+  currency: PartyStatement["currency"] = "EGP",
+): string {
   if (
     line.memo.includes("الحضور اليومي") ||
     line.reference.startsWith("حضور يومي")
@@ -88,12 +91,23 @@ export function statementLineDescription(line: PartyStatementLine): string {
     }
   }
 
+  if (line.orderNumber && line.orderValue !== undefined) {
+    const rate =
+      line.commissionPercent !== undefined
+        ? ` (عمولة ${compactNumber(String(line.commissionPercent))}%)`
+        : "";
+    return `طلب #${line.orderNumber} — قيمة الطلب: ${currencyMoney(
+      line.orderValue,
+      currency,
+    )}${rate}`;
+  }
+
   return line.memo.replace(/^صافي الطلب:\s*/, "") || line.reference;
 }
 
 export function statementPrintStamp(): string {
   try {
-    return new Intl.DateTimeFormat("ar-EG", {
+    return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
       dateStyle: "medium",
       timeStyle: "short",
       timeZone: "Africa/Cairo",
@@ -109,7 +123,7 @@ export function statementArabicDate(value?: string): string {
     value.length === 10 ? `${value}T12:00:00Z` : value,
   );
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("ar-EG", {
+  return new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
     day: "numeric",
     month: "long",
     year: "numeric",

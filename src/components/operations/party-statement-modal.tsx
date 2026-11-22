@@ -2,7 +2,7 @@
 
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
-import { currencyMoney, shortDate } from "@/lib/accounts/format";
+import { cairoDateTime, currencyMoney, shortDate } from "@/lib/accounts/format";
 import {
   statementArabicDate,
   statementClosingLabel,
@@ -93,11 +93,11 @@ export function PartyStatementModal({
 
           <div className="statement-meta">
             <div className="statement-meta-item">
-              <span className="statement-meta-label">الطرف:</span>
+              <span className="statement-meta-label">اسم الجهة:</span>
               <strong>{statement.partyName}</strong>
             </div>
             <div className="statement-meta-item">
-              <span className="statement-meta-label">النوع:</span>
+              <span className="statement-meta-label">نوع الشريك:</span>
               <strong>
                 {statement.partyType === "merchant" ? "تاجر" : "مندوب توصيل"}
               </strong>
@@ -160,7 +160,7 @@ export function PartyStatementModal({
             <table className="breakdown-journal statement-table">
               <thead>
                 <tr>
-                  <th>التاريخ</th>
+                  <th>التاريخ والوقت</th>
                   <th>المرجع</th>
                   <th>مدين</th>
                   <th>دائن</th>
@@ -189,13 +189,17 @@ export function PartyStatementModal({
                       onOpenEntry ? `عرض تفاصيل حركة ${line.reference}` : undefined
                     }
                   >
-                    <td>{shortDate(line.date)}</td>
+                    <td className="statement-when">
+                      {line.occurredAt
+                        ? cairoDateTime(line.occurredAt)
+                        : shortDate(line.date)}
+                    </td>
                     <td>
                       <span
                         className="statement-desc"
                         title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
                       >
-                        {statementLineDescription(line)}
+                        {statementLineDescription(line, currency)}
                       </span>
                     </td>
                     <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
@@ -206,7 +210,8 @@ export function PartyStatementModal({
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={2}>الإجمالي</td>
+                  <td className="statement-total-label">الإجمالي</td>
+                  <td />
                   <td dir="ltr">{money(totalDebit)}</td>
                   <td dir="ltr">{money(totalCredit)}</td>
                   <td dir="ltr">{money(balance)}</td>

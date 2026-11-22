@@ -44,3 +44,24 @@ export function fullDateTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "—" : DATE_TIME.format(date);
 }
+
+const CAIRO_DATE = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Africa/Cairo",
+});
+
+const CAIRO_TIME = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: "Africa/Cairo",
+});
+
+/** Long Arabic date plus the exact Cairo clock time. */
+export function cairoDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${CAIRO_DATE.format(date)} · ${CAIRO_TIME.format(date)}`;
+}

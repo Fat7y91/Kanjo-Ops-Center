@@ -149,6 +149,14 @@ export type PartyStatementLine = {
   credit: number;
   /** Running balance after this line, in major units (debit − credit). */
   running: number;
+  /** Order number from the source operation, when the line is an order. */
+  orderNumber?: string;
+  /** Exact operation timestamp, when the line is an order. */
+  occurredAt?: string;
+  /** Order subtotal in major units, when the line is an order. */
+  orderValue?: number;
+  /** Commission percentage charged on the order. */
+  commissionPercent?: number;
 };
 
 /**

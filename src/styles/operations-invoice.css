@@ -294,36 +294,36 @@
   width: 100%;
   max-width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 /* Explicit percentages keep all five columns inside the sheet. */
 .statement-table th:nth-child(1),
 .statement-table td:nth-child(1) {
-  width: 16%;
+  width: 21%;
   text-align: right;
   white-space: nowrap;
 }
 
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
-  width: 44%;
+  width: 43%;
   text-align: right;
 }
 
 .statement-table th:nth-child(3),
 .statement-table td:nth-child(3) {
-  width: 13%;
+  width: 12%;
 }
 
 .statement-table th:nth-child(4),
 .statement-table td:nth-child(4) {
-  width: 13%;
+  width: 12%;
 }
 
 .statement-table th:nth-child(5),
 .statement-table td:nth-child(5) {
-  width: 14%;
+  width: 12%;
 }
 
 .statement-table th:nth-child(3),
@@ -337,11 +337,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+.statement-when {
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .statement-desc {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .statement-table th,
