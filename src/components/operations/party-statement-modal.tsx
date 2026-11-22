@@ -3,10 +3,13 @@
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { currencyMoney, shortDate } from "@/lib/accounts/format";
-import type {
-  PartyStatement,
-  PartyStatementLine,
-} from "@/lib/operations/types";
+import {
+  statementArabicDate,
+  statementClosingLabel,
+  statementLineDescription,
+  statementPrintStamp,
+} from "@/lib/operations/format";
+import type { PartyStatement } from "@/lib/operations/types";
 
 type PartyStatementModalProps = {
   open: boolean;
@@ -20,72 +23,6 @@ type PartyStatementModalProps = {
 };
 
 const BRAND = "كانجو للتوصيل والتجارة الإلكترونية";
-
-function closingLabel(type: PartyStatement["partyType"], balance: number) {
-  if (Math.abs(balance) < 0.005) return "مطابق";
-  if (type === "courier") {
-    return balance > 0 ? "مستحق لكانجو" : "مستحق للمندوب";
-  }
-  return balance > 0 ? "مستحق لكانجو" : "مستحق للتاجر";
-}
-
-function compactNumber(value: string): string {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return value;
-  return Number.isInteger(parsed)
-    ? String(parsed)
-    : parsed.toFixed(2).replace(/\.?0+$/, "");
-}
-
-/** A single-line description so a weekly statement stays on one A4 page. */
-function describeLine(line: PartyStatementLine): string {
-  if (
-    line.memo.includes("الحضور اليومي") ||
-    line.reference.startsWith("حضور يومي")
-  ) {
-    return `حضور يومي (${line.date})`;
-  }
-
-  if (line.memo.includes("صافي الطلب")) {
-    const numbers = line.memo.match(/\d+(?:\.\d+)?/g) ?? [];
-    if (numbers.length >= 3) {
-      const [value = "0", collected = "0", cut = "0"] = numbers;
-      const order = /(\d{4,})/.exec(line.reference)?.[1];
-      const head = order ? `طلب #${order}` : line.reference;
-      return `${head} (قيمة ${compactNumber(value)} · محصّل ${compactNumber(
-        collected,
-      )} · أجر ${compactNumber(cut)})`;
-    }
-  }
-
-  return line.memo.replace(/^صافي الطلب:\s*/, "") || line.reference;
-}
-
-function printStamp(): string {
-  try {
-    return new Intl.DateTimeFormat("ar-EG", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "Africa/Cairo",
-    }).format(new Date());
-  } catch {
-    return "";
-  }
-}
-
-function arabicDate(value?: string): string {
-  if (!value) return "—";
-  const parsed = new Date(
-    value.length === 10 ? `${value}T12:00:00Z` : value,
-  );
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("ar-EG", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(parsed);
-}
 
 /**
  * Printable A4 statement of account for a merchant or courier.
@@ -150,7 +87,7 @@ export function PartyStatementModal({
                   ? "كشف حساب تاجر"
                   : "كشف حساب مندوب توصيل"}
               </strong>
-              <span>طُبع: {printStamp()}</span>
+              <span>طُبع: {statementPrintStamp()}</span>
             </div>
           </header>
 
@@ -180,11 +117,11 @@ export function PartyStatementModal({
               <span>
                 من{" "}
                 <span className="statement-date" dir="rtl">
-                  {arabicDate(firstDate)}
+                  {statementArabicDate(firstDate)}
                 </span>{" "}
                 إلى{" "}
                 <span className="statement-date" dir="rtl">
-                  {arabicDate(lastDate)}
+                  {statementArabicDate(lastDate)}
                 </span>
               </span>
             </div>
@@ -211,7 +148,7 @@ export function PartyStatementModal({
             </div>
             <div className="statement-summary-closing">
               <span>
-                الرصيد الختامي · {closingLabel(statement.partyType, balance)}
+                الرصيد الختامي · {statementClosingLabel(statement.partyType, balance)}
               </span>
               <strong dir="ltr">{money(Math.abs(balance))}</strong>
             </div>
@@ -258,7 +195,7 @@ export function PartyStatementModal({
                         className="statement-desc"
                         title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
                       >
-                        {describeLine(line)}
+                        {statementLineDescription(line)}
                       </span>
                     </td>
                     <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
