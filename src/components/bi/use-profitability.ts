@@ -15,11 +15,13 @@ export function profitabilityUrl(
   from: string | null,
   to: string | null,
   cityId: string | null,
+  excludeInternalStaff = false,
 ): string {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   if (cityId) params.set("cityId", cityId);
+  if (excludeInternalStaff) params.set("excludeInternalStaff", "1");
   const query = params.toString();
   return `/api/bi/profitability${query ? `?${query}` : ""}`;
 }
@@ -35,8 +37,12 @@ export function useProfitability(
   from: string | null,
   to: string | null,
   cityId: string | null,
+  excludeInternalStaff = false,
 ) {
-  return useEndpointData(profitabilityUrl(from, to, cityId), parseSummary);
+  return useEndpointData(
+    profitabilityUrl(from, to, cityId, excludeInternalStaff),
+    parseSummary,
+  );
 }
 
 /**
@@ -50,12 +56,13 @@ export async function fetchProfitability(
   from: string | null,
   to: string | null,
   cityId: string | null,
+  excludeInternalStaff = false,
 ): Promise<ProfitabilitySummary | null> {
   try {
-    const response = await fetch(profitabilityUrl(from, to, cityId), {
-      cache: "no-store",
-      credentials: "same-origin",
-    });
+    const response = await fetch(
+      profitabilityUrl(from, to, cityId, excludeInternalStaff),
+      { cache: "no-store", credentials: "same-origin" },
+    );
     if (!response.ok) return null;
     return parseSummary(await response.json());
   } catch {

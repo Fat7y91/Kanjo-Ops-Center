@@ -3,9 +3,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
+import { useInternalStaffFilter } from "@/components/operations/use-internal-staff-filter";
 import { useSocialMetrics } from "@/components/bi/use-social-metrics";
+import { useProfitability } from "@/components/bi/use-profitability";
 import { ExecutiveSummary } from "@/components/bi/executive-summary";
 import { FilterBar } from "@/components/bi/filter-bar";
+import { ProfitabilitySection } from "@/components/bi/profitability-section";
 import { SlideOver } from "@/components/bi/slide-over";
 import { CatalogSection } from "@/components/bi/sections/catalog-section";
 import { ComplianceSection } from "@/components/bi/sections/compliance-section";
@@ -25,7 +28,9 @@ import {
   buildNegotiation,
   scopeDataset,
 } from "@/lib/bi/select";
+import { resolveBiWindow } from "@/lib/bi/range";
 import {
+  BI_RANGE_LABELS,
   DEFAULT_BI_FILTERS,
   type BiDataset,
   type BiDealStage,
@@ -63,6 +68,20 @@ export function ExecutiveDashboard({
   const [filters, setFilters] = useState<BiFilters>(DEFAULT_BI_FILTERS);
   const [drill, setDrill] = useState<DrillResolution | null>(null);
   const [activeStage, setActiveStage] = useState<BiDealStage | null>(null);
+  const { excludeInternalStaff, setExcludeInternalStaff } =
+    useInternalStaffFilter();
+
+  const profitWindow = useMemo(() => resolveBiWindow(filters), [filters]);
+  const profitability = useProfitability(
+    profitWindow.from?.toISOString() ?? null,
+    profitWindow.to?.toISOString() ?? null,
+    filters.cityId,
+    excludeInternalStaff,
+  );
+  const profitLabel =
+    filters.range === "custom"
+      ? `${filters.from || "البداية"} ← ${filters.to || "الآن"}`
+      : BI_RANGE_LABELS[filters.range];
 
   const scoped = useMemo(
     () => scopeDataset(dataset, filters),
@@ -136,9 +155,12 @@ export function ExecutiveDashboard({
           reps={dataset.reps}
           vendorTypes={dataset.vendorTypes}
           resultCount={scoped.merchants.length}
+          excludeInternalStaff={excludeInternalStaff}
           onChange={updateFilters}
+          onExcludeInternalStaffChange={setExcludeInternalStaff}
           onReset={() => {
             setFilters(DEFAULT_BI_FILTERS);
+            setExcludeInternalStaff(false);
             setActiveStage(null);
           }}
         />
@@ -149,6 +171,11 @@ export function ExecutiveDashboard({
         signedCount={finance.signedCount}
         orders={orderMetrics}
         finance={finance}
+        operatingProfit={
+          profitability.status === "ready"
+            ? profitability.data.netOperating
+            : null
+        }
         marketing={marketing}
         catalog={catalog}
         showFinancials={canSeeFinance}
@@ -170,6 +197,10 @@ export function ExecutiveDashboard({
             treasury={dataset.treasury}
             onDrill={openDrill}
           />
+        ) : null}
+
+        {canSeeFinance ? (
+          <ProfitabilitySection state={profitability} label={profitLabel} />
         ) : null}
 
         {canSeeFinance ? (

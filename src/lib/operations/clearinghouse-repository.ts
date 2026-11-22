@@ -48,6 +48,7 @@ const BALANCE_COLUMNS =
 function toAccount(
   row: BalanceViewRow,
   names: { merchants: Map<string, string>; couriers: Map<string, string> },
+  internalCouriers: Set<string>,
 ): ClearingAccountRow {
   const partyType = row.party_type as ClearingPartyType;
   const partyId = row.party_id ?? "";
@@ -65,7 +66,29 @@ function toAccount(
       (partyType === "merchant" ? "تاجر غير معروف" : "مندوب غير معروف"),
     currency: row.currency,
     balance: Number(row.balance_minor) / 100,
+    isInternalStaff:
+      partyType === "courier" && internalCouriers.has(partyId),
   };
+}
+
+async function listInternalCourierIds(ids: string[]): Promise<Set<string>> {
+  const unique = [...new Set(ids.filter((id) => id !== ""))];
+  if (unique.length === 0) return new Set();
+
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("couriers")
+    .select("id")
+    .in("id", unique)
+    .eq("is_internal_staff", true)
+    .limit(unique.length);
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return new Set();
+    throw error;
+  }
+  return new Set((data ?? []).map((row) => (row as { id: string }).id));
 }
 
 /**
@@ -90,22 +113,24 @@ export async function listClearingAccounts(): Promise<ClearingAccountRow[]> {
   }
 
   const rows = (data ?? []) as BalanceViewRow[];
-  const [names, activity, workingDates] = await Promise.all([
+  const courierIds = rows
+    .filter((row) => row.party_type === "courier")
+    .map((row) => row.party_id ?? "");
+  const [names, activity, workingDates, internalCouriers] = await Promise.all([
     resolvePartyNames({
       merchantIds: rows
         .filter((row) => row.party_type === "merchant")
         .map((row) => row.party_id ?? ""),
-      courierIds: rows
-        .filter((row) => row.party_type === "courier")
-        .map((row) => row.party_id ?? ""),
+      courierIds,
     }),
     listPartyActivity(rows.map((row) => row.id)),
     listCourierWorkingDates(),
+    listInternalCourierIds(courierIds),
   ]);
 
   return rows
     .map((row) => {
-      const account = toAccount(row, names);
+      const account = toAccount(row, names, internalCouriers);
       const recent = activity.get(account.accountId);
       return {
         ...account,

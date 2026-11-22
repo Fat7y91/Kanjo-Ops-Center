@@ -33,12 +33,13 @@ type CourierRow = {
   fixed_profit_per_order_minor: number;
   payout_preferences: unknown;
   active: boolean;
+  is_internal_staff?: boolean;
   applied_at: string | null;
   created_at: string;
 };
 
 const COURIER_COLUMNS =
-  "id,display_name,phone,fixed_profit_per_order_minor,payout_preferences,active,applied_at,created_at";
+  "id,display_name,phone,fixed_profit_per_order_minor,payout_preferences,active,is_internal_staff,applied_at,created_at";
 
 const COURIER_COLUMNS_LEGACY =
   "id,display_name,phone,active,applied_at,created_at";
@@ -51,6 +52,7 @@ function toCourier(row: CourierRow, totals: CourierTotals): Courier {
     fixedProfitPerOrder: Number(row.fixed_profit_per_order_minor ?? 0) / 100,
     payoutPreferences: parsePayoutPreferences(row.payout_preferences),
     active: row.active,
+    isInternalStaff: row.is_internal_staff ?? false,
     appliedAt: row.applied_at ?? row.created_at,
     earnings: totals.earnings.get(row.id) ?? 0,
     deliveries: totals.deliveries.get(row.id) ?? 0,
@@ -106,6 +108,7 @@ function rosterPatch(input: CourierWrite) {
     fixed_profit_per_order_minor: Math.round(input.fixedProfit * 100),
     payout_preferences: input.payout,
     active: input.active,
+    is_internal_staff: input.isInternalStaff,
   };
 }
 
@@ -160,6 +163,7 @@ export async function insertImportedCourier(
       fixed_profit_per_order_minor: Math.max(0, Math.round(fixedProfit * 100)),
       payout_preferences: {},
       active: true,
+      is_internal_staff: false,
     })
     .select("id")
     .maybeSingle();

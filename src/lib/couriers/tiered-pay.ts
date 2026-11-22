@@ -35,11 +35,11 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 /** One delivered order, reduced to the fields the engine needs. */
 export type CourierDelivery = {
   courierId: string;
-  /** Delivery timestamp (or `YYYY-MM-DD`); the Cairo calendar day is derived. */
+  /** Delivery timestamp (or `YYYY-MM-DD`); the operating day is derived. */
   deliveredAt: string;
 };
 
-/** A manual attendance override keyed to one courier and one Cairo day. */
+/** A manual attendance override keyed to one courier and one operating day. */
 export type CourierAttendance = {
   courierId: string;
   /** Cairo calendar day, `YYYY-MM-DD`. */
@@ -83,6 +83,17 @@ const dayFormatter = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+const wallClockFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: COURIER_TIME_ZONE,
+  hourCycle: "h23",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
 /**
  * Resolves a timestamp to its Cairo calendar day (`YYYY-MM-DD`).
  *
@@ -95,6 +106,44 @@ export function cairoDay(value: string): string {
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return text.slice(0, 10);
   return dayFormatter.format(parsed);
+}
+
+/**
+ * Resolves a timestamp to the Kanjo operating day (`YYYY-MM-DD`).
+ *
+ * The operating day runs 14:00 → 14:00 Africa/Cairo: the Cairo wall clock is
+ * shifted back 14 hours and the resulting date is the day. `02:30` on 20 Nov
+ * therefore belongs to 19 Nov, while `15:00` on 20 Nov belongs to 20 Nov.
+ *
+ * A bare date is already an operating-day label and is returned unchanged.
+ * This mirrors `app.to_kanjo_business_day(timestamptz)` exactly.
+ */
+export function toKanjoBusinessDay(value: string | Date): string {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return text.slice(0, 10);
+    return businessDayOf(parsed);
+  }
+  return businessDayOf(value);
+}
+
+function businessDayOf(instant: Date): string {
+  const parts = wallClockFormatter.formatToParts(instant);
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const wallClockUtc = Date.UTC(
+    read("year"),
+    read("month") - 1,
+    read("day"),
+    read("hour"),
+    read("minute"),
+    read("second"),
+  );
+  return new Date(wallClockUtc - 14 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 function emptySummary(): CourierPaySummary {
@@ -125,7 +174,7 @@ export function computeCourierPay(
   const perDay = new Map<string, number>();
   for (const delivery of deliveries) {
     if (delivery.courierId !== courierId) continue;
-    const day = cairoDay(delivery.deliveredAt);
+    const day = toKanjoBusinessDay(delivery.deliveredAt);
     perDay.set(day, (perDay.get(day) ?? 0) + 1);
   }
 

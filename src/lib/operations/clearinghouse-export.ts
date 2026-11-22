@@ -1,4 +1,5 @@
 import type { ProfitabilitySummary } from "@/lib/bi/profitability";
+import { profitabilityRows } from "@/lib/bi/profitability-export";
 
 import { clearingWorkingDays, type ClearingRange } from "./clearinghouse-view";
 import type { ClearingAccountRow, ClearingPartyType } from "./types";
@@ -50,39 +51,10 @@ function accountRow(
   };
 }
 
-function profitabilityRows(
+function profitabilitySheetRows(
   summary: ProfitabilitySummary,
 ): Record<string, string | number>[] {
-  return [
-    {
-      البند: "إجمالي العمولات المستحقة",
-      القيمة: summary.commissions,
-    },
-    {
-      البند: "إجمالي ربحية التوصيل",
-      القيمة: summary.deliveryMargin,
-    },
-    {
-      البند: "إجمالي الإيراد (العمولات + ربحية التوصيل)",
-      القيمة: summary.grossRevenue,
-    },
-    {
-      البند: "إجمالي الكوبونات والخصومات",
-      القيمة: summary.coupons,
-    },
-    {
-      البند: "ربحية الطلبات قبل خصم مصاريف مناديب التوصيل",
-      القيمة: summary.orderProfitBeforeBase,
-    },
-    {
-      البند: "- مصاريف يوميات المناديب الثابتة",
-      القيمة: summary.courierDailyBase,
-    },
-    {
-      البند: "= صافي ربح/خسارة التشغيل الفعلي",
-      القيمة: summary.netOperating,
-    },
-  ];
+  return profitabilityRows(summary);
 }
 
 export function buildClearingSheets(input: ClearingExportInput): ClearingSheet[] {
@@ -111,7 +83,7 @@ export function buildClearingSheets(input: ClearingExportInput): ClearingSheet[]
       ? [
           {
             name: "ربحية الطلبات",
-            rows: profitabilityRows(input.profitability),
+            rows: profitabilitySheetRows(input.profitability),
           },
         ]
       : []),

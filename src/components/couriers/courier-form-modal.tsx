@@ -27,6 +27,7 @@ type FormState = PayoutForm & {
   phone: string;
   fixedProfit: string;
   active: boolean;
+  isInternalStaff: boolean;
 };
 
 const EMPTY: FormState = {
@@ -35,6 +36,7 @@ const EMPTY: FormState = {
   phone: "",
   fixedProfit: "",
   active: true,
+  isInternalStaff: false,
 };
 
 function formFrom(courier: Courier | null): FormState {
@@ -45,6 +47,7 @@ function formFrom(courier: Courier | null): FormState {
     phone: courier.phone,
     fixedProfit: String(courier.fixedProfitPerOrder),
     active: courier.active,
+    isInternalStaff: courier.isInternalStaff,
   };
 }
 
@@ -83,6 +86,7 @@ export function CourierFormModal({
       fixedProfit: Number(form.fixedProfit) || 0,
       payout: formToPayout(form),
       active: form.active,
+      isInternalStaff: form.isInternalStaff,
     };
 
     try {
@@ -166,6 +170,12 @@ export function CourierFormModal({
           hint="مندوب التوصيل الموقوف يبقى في السجل لكن لا يُختار في الطلبات."
           checked={form.active}
           onChange={(checked) => set("active", checked)}
+        />
+        <ToggleField
+          label="مندوب داخلي (ZEMBAWY)"
+          hint="تبقى طلباته وعمولات التجار، ويمكن استبعاد مستحقاته من التسوية وملخص الربحية."
+          checked={form.isInternalStaff}
+          onChange={(checked) => set("isInternalStaff", checked)}
         />
       </div>
 

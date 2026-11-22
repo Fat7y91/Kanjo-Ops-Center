@@ -70,30 +70,36 @@ export function ProfitabilityWaterfall({
         sign="+"
         label="إجمالي العمولات المستحقة"
         value={summary.commissions}
+        detail="نسبة متفق عليها من قيمة كل طلب مسلّم."
       />
       <ProfitabilityRow
         sign="+"
         label="إجمالي ربحية التوصيل"
         value={summary.deliveryMargin}
+        detail="رسوم التوصيل − خصم الشحن − أجر المندوب لكل طلب."
       />
       <ProfitabilityRow
         sign="="
         label="إجمالي الإيراد (العمولات + ربحية التوصيل)"
         value={summary.grossRevenue}
         tone="subtotal"
+        detail="مجموع العمولات وربحية التوصيل قبل الخصومات."
       />
       <ProfitabilityRow
         sign="-"
         label="إجمالي الكوبونات والخصومات"
         value={summary.coupons}
         tone="deduction"
+        detail="كوبونات ومكافآت تحملتها المنصة."
       />
       <ProfitabilityRow
         sign="="
         label="ربحية الطلبات قبل خصم مصاريف مناديب التوصيل"
         value={summary.orderProfitBeforeBase}
         tone={profitPositive ? "positive" : "negative"}
-        detail={`متوسط للطلب: ${amount(summary.averagePerOrder)} ج.م.`}
+        detail={`الإيراد − الكوبونات · متوسط للطلب: ${amount(
+          summary.averagePerOrder,
+        )} ج.م.`}
       />
 
       <div className="profitability-divider" aria-hidden="true" />
@@ -103,12 +109,14 @@ export function ProfitabilityWaterfall({
         label="مصاريف يوميات المناديب الثابتة"
         value={summary.courierDailyBase}
         tone="deduction"
+        detail="165 ج.م × عدد أيام عمل المناديب."
       />
       <ProfitabilityRow
         sign="="
         label="صافي ربح/خسارة التشغيل الفعلي"
         value={summary.netOperating}
         tone={netPositive ? "total-positive" : "total-negative"}
+        detail="ربحية الطلبات − يوميات المناديب."
       />
     </div>
   );

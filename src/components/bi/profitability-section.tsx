@@ -1,38 +1,36 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { ProfitabilityWaterfall } from "@/components/bi/profitability-waterfall";
-import { useProfitability } from "@/components/bi/use-profitability";
+import { useProfitabilityExport } from "@/components/bi/use-profitability-export";
 import { Widget } from "@/components/bi/widget";
+import type { EndpointState } from "@/components/data/use-endpoint-data";
 import { Button } from "@/components/ui/button";
-import { rangeStart } from "@/lib/bi/select";
-import { BI_RANGE_LABELS, type BiRange } from "@/lib/bi/types";
+import type { ProfitabilitySummary } from "@/lib/bi/profitability";
+
+type ProfitabilityState = EndpointState<ProfitabilitySummary> & {
+  reload: () => void;
+};
 
 /**
  * Executive order P&L card.
  *
- * The date window comes from the universal filter bar, and the city filter is
- * the same merchant-city slice every other order widget uses. The arithmetic
- * happens on the server from delivered orders and posted attendance entries.
+ * The dashboard owns the window and the internal-staff switch so the headline
+ * tile and this waterfall cannot disagree. The arithmetic happens on the server
+ * from delivered orders and posted attendance entries.
  */
 export function ProfitabilitySection({
-  range,
-  cityId,
+  state,
+  label,
 }: {
-  range: BiRange;
-  cityId: string | null;
+  state: ProfitabilityState;
+  label: string;
 }) {
-  const from = useMemo(
-    () => rangeStart(range)?.toISOString().slice(0, 10) ?? null,
-    [range],
-  );
-  const state = useProfitability(from, null, cityId);
+  const exporter = useProfitabilityExport();
 
   const badge =
     state.status === "ready"
-      ? `${state.data.orders} طلب · ${BI_RANGE_LABELS[range]}`
-      : `EGP · ${BI_RANGE_LABELS[range]}`;
+      ? `${state.data.orders} طلب · ${label}`
+      : `EGP · ${label}`;
 
   return (
     <Widget
@@ -41,6 +39,22 @@ export function ProfitabilitySection({
       span={12}
       badge={<span className="badge badge-gold">{badge}</span>}
     >
+      {state.status === "ready" ? (
+        <div className="profitability-export">
+          <Button
+            size="sm"
+            variant="quiet"
+            disabled={exporter.busy}
+            onClick={() => void exporter.exportSummary(state.data, label)}
+          >
+            {exporter.busy ? "جارٍ التصدير…" : "تصدير Excel"}
+          </Button>
+          {exporter.error ? (
+            <p className="form-error">{exporter.error}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       {state.status === "loading" ? (
         <p className="bi-widget-empty">جارٍ حساب ربحية الطلبات…</p>
       ) : null}

@@ -32,6 +32,8 @@ export type Courier = {
   fixedProfitPerOrder: number;
   payoutPreferences: PayoutPreferences | null;
   active: boolean;
+  /** Internal delivery partner: payable can be excluded from settlement and P&L. */
+  isInternalStaff: boolean;
   appliedAt: string;
   /** Total fixed profit earned across logged operations (major units). */
   earnings: number;
@@ -63,6 +65,7 @@ const identityShape = {
     .default(0),
   payout: payoutPreferencesSchema,
   active: z.boolean().default(true),
+  isInternalStaff: z.boolean().default(false),
 };
 
 export const courierCreateSchema = z.object(identityShape);

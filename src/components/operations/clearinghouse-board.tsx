@@ -9,6 +9,7 @@ import {
 } from "@/components/bi/use-profitability";
 import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal";
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
+import { ToggleField } from "@/components/ui/form-inputs";
 import { Tabs } from "@/components/ui/tabs";
 import { operationMoney } from "@/lib/operations/format";
 import type {
@@ -27,6 +28,7 @@ import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
 import { useClearinghouseExport } from "./use-clearinghouse-export";
 import { useClearinghouseView } from "./use-clearinghouse-view";
+import { useInternalStaffFilter } from "./use-internal-staff-filter";
 import { usePartyStatement } from "./use-party-statement";
 
 export function ClearinghouseBoard({
@@ -57,12 +59,15 @@ export function ClearinghouseBoard({
     submitSettlement,
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
-  const view = useClearinghouseView(accounts);
+  const { excludeInternalStaff, setExcludeInternalStaff } =
+    useInternalStaffFilter();
+  const view = useClearinghouseView(accounts, excludeInternalStaff);
   const [profitCityId, setProfitCityId] = useState<string | null>(null);
   const profitability = useProfitability(
     view.range.from,
     view.range.to,
     profitCityId,
+    excludeInternalStaff,
   );
   const breakdown = useBreakdown();
   const statement = usePartyStatement();
@@ -73,17 +78,19 @@ export function ClearinghouseBoard({
   );
   const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
-  const receivablesTotal = view.receivables.reduce(
+  const receivablesTotal = view.openReceivables.reduce(
     (sum, account) => sum + Math.abs(account.balance),
     0,
   );
-  const payablesTotal = view.payables.reduce(
+  const payablesTotal = view.openPayables.reduce(
     (sum, account) => sum + Math.abs(account.balance),
     0,
   );
   const netTotal = receivablesTotal - payablesTotal;
   const summaryCurrency =
-    view.receivables[0]?.currency ?? view.payables[0]?.currency ?? "EGP";
+    view.openReceivables[0]?.currency ??
+    view.openPayables[0]?.currency ??
+    "EGP";
 
   const rowsProps = {
     accounts: view.filtered,
@@ -106,6 +113,7 @@ export function ClearinghouseBoard({
             view.range.from,
             view.range.to,
             profitCityId,
+            excludeInternalStaff,
           );
 
     void exporter.exportBook({
@@ -150,6 +158,8 @@ export function ClearinghouseBoard({
                   cityId={profitCityId}
                   onCityChange={setProfitCityId}
                   periodLabel={view.label}
+                  excludeInternalStaff={excludeInternalStaff}
+                  onExcludeInternalStaffChange={setExcludeInternalStaff}
                 />
 
                 <div className="clearing-kpis">
@@ -221,7 +231,19 @@ export function ClearinghouseBoard({
           {
             id: "accounts",
             label: "تسديد وتحصيل",
-            content: <AccountRows {...rowsProps} />,
+            content: (
+              <>
+                <div className="clearing-scope-toggle">
+                  <ToggleField
+                    label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+                    hint="يبقي طلباتهم وعمولات التجار، ويستبعد أجرهم من المستحقات."
+                    checked={excludeInternalStaff}
+                    onChange={setExcludeInternalStaff}
+                  />
+                </div>
+                <AccountRows {...rowsProps} />
+              </>
+            ),
           },
           {
             id: "orders",

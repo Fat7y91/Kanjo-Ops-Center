@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { TextField, ToggleField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
 import {
   BI_RANGES,
@@ -18,7 +19,9 @@ type FilterBarProps = {
   reps: { id: string; name: string }[];
   vendorTypes: { id: number; name: string }[];
   resultCount: number;
+  excludeInternalStaff: boolean;
   onChange: (patch: Partial<BiFilters>) => void;
+  onExcludeInternalStaffChange: (next: boolean) => void;
   onReset: () => void;
 };
 
@@ -39,7 +42,9 @@ export function FilterBar({
   reps,
   vendorTypes,
   resultCount,
+  excludeInternalStaff,
   onChange,
+  onExcludeInternalStaffChange,
   onReset,
 }: FilterBarProps) {
   const dirty =
@@ -47,7 +52,10 @@ export function FilterBar({
     filters.cityId !== null ||
     filters.team !== null ||
     filters.repId !== null ||
-    filters.vendorTypeId !== null;
+    filters.vendorTypeId !== null ||
+    filters.from !== "" ||
+    filters.to !== "" ||
+    excludeInternalStaff;
 
   const cityOptions: Option<string>[] = [
     { value: ALL, label: "كل المدن" },
@@ -76,13 +84,39 @@ export function FilterBar({
           <span>الفترة</span>
           <SelectMenu
             value={filters.range}
-            onChange={(range) => onChange({ range: range as BiRange })}
+            onChange={(range) =>
+              onChange({
+                range: range as BiRange,
+                ...(range === "custom" ? {} : { from: "", to: "" }),
+              })
+            }
             options={BI_RANGES.map((range) => ({
               value: range,
               label: BI_RANGE_LABELS[range],
             }))}
           />
         </label>
+
+        {filters.range === "custom" ? (
+          <>
+            <TextField
+              fieldClassName="bi-filter"
+              label="من (باليوم والساعة)"
+              type="datetime-local"
+              dir="ltr"
+              value={filters.from}
+              onChange={(event) => onChange({ from: event.target.value })}
+            />
+            <TextField
+              fieldClassName="bi-filter"
+              label="إلى (باليوم والساعة)"
+              type="datetime-local"
+              dir="ltr"
+              value={filters.to}
+              onChange={(event) => onChange({ to: event.target.value })}
+            />
+          </>
+        ) : null}
 
         <label className="bi-filter">
           <span>المدينة</span>
@@ -134,6 +168,11 @@ export function FilterBar({
       </div>
 
       <div className="bi-filterbar-meta">
+        <ToggleField
+          label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+          checked={excludeInternalStaff}
+          onChange={onExcludeInternalStaffChange}
+        />
         <span className="bi-result-count">{resultCount} تاجر في النطاق</span>
         {dirty ? (
           <Button size="sm" variant="quiet" onClick={onReset}>

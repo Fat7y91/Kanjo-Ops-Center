@@ -129,6 +129,14 @@
 }
 
 /* Compact company-wide position above the two party books. */
+.clearing-scope-toggle {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
 .clearing-kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

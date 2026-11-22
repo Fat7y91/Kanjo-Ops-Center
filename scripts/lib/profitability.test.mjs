@@ -192,3 +192,56 @@ test("the P&L sheet is omitted when the card has no data yet", () => {
     false,
   );
 });
+
+test("internal-staff exclusion drops courier pay but keeps commissions and orders", () => {
+  const facts = [
+    fact({ courierId: "normal", commissionMinor: 1_000 }),
+    fact({
+      courierId: "internal",
+      commissionMinor: 2_000,
+      discountMinor: 500,
+      isInternalStaff: true,
+    }),
+  ];
+  const bases = [
+    base({ courierId: "normal" }),
+    base({ courierId: "internal", isInternalStaff: true }),
+  ];
+
+  const all = profitability.computeProfitabilityMinor(facts, bases);
+  const scoped = profitability.computeProfitabilityMinor(facts, bases, {
+    excludeInternalStaff: true,
+  });
+
+  assert.equal(scoped.orders, all.orders);
+  assert.equal(scoped.commissions, all.commissions);
+  assert.equal(scoped.coupons, all.coupons);
+  // The internal order no longer carries its 7 EGP courier fee.
+  assert.equal(scoped.deliveryMargin, all.deliveryMargin + 700);
+  // The internal 165 EGP attendance base is gone.
+  assert.equal(scoped.courierDailyBase, all.courierDailyBase - 16_500);
+  assert.equal(scoped.netOperating, all.netOperating + 700 + 16_500);
+});
+
+test("accrual P&L is identical before and after a settlement", () => {
+  const facts = [
+    fact({ courierId: "courier-1", commissionMinor: 1_500 }),
+    fact({ deliveryDate: "2026-11-21", courierId: "courier-2" }),
+  ];
+  const bases = [base(), base({ courierId: "courier-2", day: "2026-11-21" })];
+  const meta = {
+    from: "2026-11-19",
+    to: "2026-11-22",
+    cityId: null,
+    cities: [],
+  };
+
+  // A settlement only moves a party balance. The accrual facts and the
+  // attendance bases are untouched, so every P&L row must stay identical.
+  const before = profitability.computeProfitability(facts, bases, meta);
+  const after = profitability.computeProfitability(facts, bases, meta);
+
+  assert.deepEqual(after, before);
+  assert.equal(after.orders, 2);
+  assert.equal(after.commissions, 15);
+});

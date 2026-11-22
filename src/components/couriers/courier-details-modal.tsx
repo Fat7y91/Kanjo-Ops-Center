@@ -78,6 +78,12 @@ export function CourierDetailsModal({
               <dd>{courierStatusLabel(courier.active)}</dd>
             </div>
             <div>
+              <dt>نوع المندوب</dt>
+              <dd>
+                {courier.isInternalStaff ? "مندوب داخلي" : "مندوب خارجي"}
+              </dd>
+            </div>
+            <div>
               <dt>تاريخ التقديم</dt>
               <dd>{courierDate(courier.appliedAt)}</dd>
             </div>

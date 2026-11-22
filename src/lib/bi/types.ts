@@ -1,87 +1,8 @@
 import { z } from "zod";
 
-/** Filter windows offered by the universal filter bar. */
-export const BI_RANGES = ["30d", "90d", "ytd", "all"] as const;
-export type BiRange = (typeof BI_RANGES)[number];
+import { BI_MARKETING_CHANNELS, BI_MARKETING_PLATFORMS } from "./filters";
 
-export const BI_RANGE_LABELS: Record<BiRange, string> = {
-  "30d": "آخر 30 يوماً",
-  "90d": "آخر 90 يوماً",
-  ytd: "منذ بداية العام",
-  all: "كل الفترات",
-};
-
-export const BI_MARKETING_CHANNELS = [
-  "instagram",
-  "tiktok",
-  "google",
-  "referral",
-  "field",
-] as const;
-export type BiMarketingChannel = (typeof BI_MARKETING_CHANNELS)[number];
-
-export const BI_MARKETING_META: Record<BiMarketingChannel, string> = {
-  instagram: "إنستجرام",
-  tiktok: "تيك توك",
-  google: "إعلانات جوجل",
-  referral: "إحالات",
-  field: "تسويق ميداني",
-};
-
-/**
- * Ad platform, one level above the channel.
- *
- * A channel is where the audience sees us; a platform is the network that bills
- * us for it. Splitting them lets one platform run several channels without
- * duplicating spend.
- */
-export const BI_MARKETING_PLATFORMS = [
-  "meta",
-  "tiktok",
-  "google",
-  "snapchat",
-  "offline",
-] as const;
-export type BiMarketingPlatform = (typeof BI_MARKETING_PLATFORMS)[number];
-
-export const BI_MARKETING_PLATFORM_META: Record<BiMarketingPlatform, string> = {
-  meta: "ميتا",
-  tiktok: "تيك توك",
-  google: "جوجل",
-  snapchat: "سناب شات",
-  offline: "مباشر",
-};
-
-export const BI_CHANNEL_PLATFORM: Record<
-  BiMarketingChannel,
-  BiMarketingPlatform
-> = {
-  instagram: "meta",
-  tiktok: "tiktok",
-  google: "google",
-  referral: "offline",
-  field: "offline",
-};
-
-
-export const biFiltersSchema = z.object({
-  range: z.enum(BI_RANGES),
-  cityId: z.string().nullable(),
-  team: z.string().nullable(),
-  /** Assigned field rep ("courier") who owns the merchant relationship. */
-  repId: z.string().nullable(),
-  /** Central taxonomy vendor type, so the dashboard can slice by category. */
-  vendorTypeId: z.number().int().nullable(),
-});
-export type BiFilters = z.infer<typeof biFiltersSchema>;
-
-export const DEFAULT_BI_FILTERS: BiFilters = {
-  range: "all",
-  cityId: null,
-  team: null,
-  repId: null,
-  vendorTypeId: null,
-};
+export * from "./filters";
 
 /** Merchant lifecycle funnel, in presentation order. */
 export const BI_DEAL_STAGES = [
@@ -268,20 +189,29 @@ export const biTreasurySchema = z.object({
 export type BiTreasury = z.infer<typeof biTreasurySchema>;
 
 export const biOrderMetricRowSchema = z.object({
+  /** Operating day, `YYYY-MM-DD`. */
   date: z.string(),
+  /** Timestamp of the latest order in the bucket. */
+  occurredAt: z.string(),
+  /** Kanjo operating day resolved from the delivery/occurrence timestamp. */
+  businessDay: z.string(),
   merchantId: z.string(),
   merchantName: z.string(),
   cityId: z.string().nullable(),
   courierId: z.string(),
   courierName: z.string(),
+  /** Internal partner: payable may be excluded from settlement and P&L. */
+  isInternalStaff: z.boolean().default(false),
   couponCode: z.string(),
   currency: z.enum(["EGP", "SAR"]),
   orders: z.number().int().nonnegative(),
   volume: z.number(),
   deliveryFee: z.number(),
+  shippingDiscount: z.number().default(0),
   commission: z.number(),
   courierCut: z.number(),
   couponDiscount: z.number(),
+  rewardDiscount: z.number().default(0),
   platformFunded: z.number(),
   vendorFunded: z.number(),
   walletDiscount: z.number(),

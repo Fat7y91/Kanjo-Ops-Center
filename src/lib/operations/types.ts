@@ -134,6 +134,8 @@ export type ClearingAccountRow = {
   lastSettlementAt?: string | null;
   /** Attendance days, couriers only, ISO `YYYY-MM-DD`. */
   workingDates?: string[];
+  /** Internal delivery partner (e.g. ZEMBAWY); payable can be excluded. */
+  isInternalStaff?: boolean;
 };
 
 /** One posted line in a party's statement of account. */
@@ -164,6 +166,8 @@ export type PartyStatement = {
   partyName: string;
   currency: "EGP" | "SAR";
   balance: number;
+  /** Paid attendance days, couriers only. */
+  workingDays?: number;
   lines: PartyStatementLine[];
 };
 

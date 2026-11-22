@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { ProfitabilityWaterfall } from "@/components/bi/profitability-waterfall";
+import { useProfitabilityExport } from "@/components/bi/use-profitability-export";
 import type { EndpointState } from "@/components/data/use-endpoint-data";
 import { Button } from "@/components/ui/button";
+import { ToggleField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
 import type { ProfitabilitySummary } from "@/lib/bi/profitability";
 
@@ -19,6 +21,8 @@ type ProfitabilityPanelProps = {
   cityId: string | null;
   onCityChange: (cityId: string | null) => void;
   periodLabel: string;
+  excludeInternalStaff: boolean;
+  onExcludeInternalStaffChange: (next: boolean) => void;
 };
 
 /**
@@ -33,10 +37,13 @@ export function ProfitabilityPanel({
   cityId,
   onCityChange,
   periodLabel,
+  excludeInternalStaff,
+  onExcludeInternalStaffChange,
 }: ProfitabilityPanelProps) {
   const [knownCities, setKnownCities] = useState<
     { id: string; name: string }[]
   >([]);
+  const exporter = useProfitabilityExport();
 
   useEffect(() => {
     if (state.status === "ready") setKnownCities(state.data.cities);
@@ -58,6 +65,11 @@ export function ProfitabilityPanel({
           </span>
         </div>
         <div className="profitability-controls">
+          <ToggleField
+            label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+            checked={excludeInternalStaff}
+            onChange={onExcludeInternalStaffChange}
+          />
           {knownCities.length > 0 ? (
             <SelectMenu
               label="المدينة"
@@ -69,12 +81,26 @@ export function ProfitabilityPanel({
             />
           ) : null}
           {state.status === "ready" ? (
-            <span className="badge badge-gold">
-              {state.data.orders} طلب · EGP
-            </span>
+            <>
+              <span className="badge badge-gold">
+                {state.data.orders} طلب · EGP
+              </span>
+              <Button
+                size="sm"
+                variant="quiet"
+                disabled={exporter.busy}
+                onClick={() =>
+                  void exporter.exportSummary(state.data, periodLabel)
+                }
+              >
+                {exporter.busy ? "جارٍ التصدير…" : "تصدير Excel"}
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
+
+      {exporter.error ? <p className="form-error">{exporter.error}</p> : null}
 
       {state.status === "loading" ? (
         <p className="bi-widget-empty">جارٍ حساب ربحية الطلبات…</p>

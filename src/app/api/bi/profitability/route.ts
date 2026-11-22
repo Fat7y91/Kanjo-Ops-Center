@@ -9,10 +9,13 @@ import type { Permission } from "@/lib/rbac/permissions";
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
 
+const dateTime = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
 const querySchema = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z.string().regex(dateTime).optional(),
+  to: z.string().regex(dateTime).optional(),
   cityId: z.string().min(1).max(64).optional(),
+  excludeInternalStaff: z.enum(["1", "0"]).optional(),
 });
 
 /**
@@ -56,12 +59,14 @@ export async function GET(request: Request) {
       from: params.get("from") || undefined,
       to: params.get("to") || undefined,
       cityId: params.get("cityId") || undefined,
+      excludeInternalStaff: params.get("excludeInternalStaff") || undefined,
     });
 
     const summary = await loadProfitability({
       from: query.from ?? null,
       to: query.to ?? null,
       cityId: query.cityId ?? null,
+      excludeInternalStaff: query.excludeInternalStaff === "1",
     });
 
     return NextResponse.json(summary, {

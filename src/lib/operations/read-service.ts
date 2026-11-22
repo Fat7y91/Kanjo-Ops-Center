@@ -16,6 +16,7 @@ import {
   findPartyAccount,
   listPartyStatementRows,
 } from "./statement-repository";
+import { listCourierWorkingDates } from "./clearinghouse-activity";
 import type { PartyStatement, PartyStatementLine } from "./types";
 
 /**
@@ -109,6 +110,12 @@ export async function loadPartyStatement(
       };
     });
 
+    let workingDays: number | undefined;
+    if (account.partyType === "courier") {
+      const working = await listCourierWorkingDates();
+      workingDays = working.get(account.partyId)?.length ?? 0;
+    }
+
     return {
       accountId: account.accountId,
       partyType: account.partyType,
@@ -116,6 +123,7 @@ export async function loadPartyStatement(
       partyName,
       currency: account.currency,
       balance: account.balance,
+      workingDays,
       lines,
     };
   } catch (error) {

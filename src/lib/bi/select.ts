@@ -9,34 +9,9 @@ import {
 } from "./types";
 import { summarizeOrderMetrics } from "./order-metrics";
 import { sum } from "./aggregate";
+import { resolveBiWindow, withinBiWindow } from "./range";
 
-const RANGE_DAYS: Record<BiFilters["range"], number | null> = {
-  "30d": 30,
-  "90d": 90,
-  ytd: null,
-  all: null,
-};
-
-/**
- * Resolves the active window into an inclusive lower bound.
- * `ytd` starts at January 1st of the current year; `all` has no bound.
- */
-export function rangeStart(range: BiFilters["range"]): Date | null {
-  if (range === "all") return null;
-  if (range === "ytd") {
-    return new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
-  }
-  const days = RANGE_DAYS[range] ?? 0;
-  const start = new Date();
-  start.setUTCDate(start.getUTCDate() - days);
-  return start;
-}
-
-function withinRange(iso: string | null, start: Date | null): boolean {
-  if (!start) return true;
-  if (!iso) return false;
-  return new Date(iso).getTime() >= start.getTime();
-}
+export { rangeStart } from "./range";
 
 export type BiScopedData = {
   merchants: BiMerchantRow[];
@@ -66,7 +41,9 @@ export function scopeDataset(
   dataset: BiDataset,
   filters: BiFilters,
 ): BiScopedData {
-  const start = rangeStart(filters.range);
+  const window = resolveBiWindow(filters);
+  const withinRange = (iso: string | null | undefined) =>
+    withinBiWindow(iso, window);
 
   const cityOk = (cityId: string) =>
     !filters.cityId || cityId === filters.cityId;
@@ -87,7 +64,7 @@ export function scopeDataset(
       cityOk(row.cityId ?? "") &&
       teamOk(merchant?.team ?? "غير مسند") &&
       repOk(merchant?.repId ?? null) &&
-      withinRange(row.date, start)
+      withinRange(row.businessDay ?? row.date)
     );
   };
 
@@ -98,19 +75,19 @@ export function scopeDataset(
         teamOk(row.team) &&
         repOk(row.repId) &&
         vendorTypeOk(row.vendorTypeId) &&
-        withinRange(row.lastVisitAt ?? row.visitedAt, start),
+        withinRange(row.lastVisitAt ?? row.visitedAt),
     ),
     expenses: dataset.expenses.filter(
       (row) =>
         cityOk(row.cityId) &&
         teamOk(row.team) &&
-        withinRange(row.incurredAt, start),
+        withinRange(row.incurredAt),
     ),
     marketing: dataset.marketing.filter(
       (row) =>
         cityOk(row.cityId) &&
         teamOk(row.team) &&
-        withinRange(row.occurredAt, start),
+        withinRange(row.occurredAt),
     ),
     catalog: dataset.catalog.filter(
       (row) => cityOk(row.cityId) && teamOk(row.team),

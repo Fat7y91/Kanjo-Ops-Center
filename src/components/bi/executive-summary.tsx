@@ -15,6 +15,8 @@ type ExecutiveSummaryProps = {
   signedCount: number;
   orders: OrderMetricSummary;
   finance: FinanceSummary;
+  /** Accrual operating result from the P&L waterfall; null while loading. */
+  operatingProfit: number | null;
   marketing: MarketingSummary;
   catalog: CatalogSummary;
   showFinancials: boolean;
@@ -41,6 +43,7 @@ export function ExecutiveSummary({
   signedCount,
   orders,
   finance,
+  operatingProfit,
   marketing,
   catalog,
   showFinancials,
@@ -76,12 +79,21 @@ export function ExecutiveSummary({
       },
       {
         href: "/finance/clearinghouse",
-        label: "صافي الموقف المالي (المقاصة)",
-        value: `${amount(finance.netPosition)} ${currencySymbol("EGP")}`,
-        detail: `${finance.netPosition >= 0 ? "مستحق لنا" : "مستحق لهم"} · لنا ${amount(
-          finance.receivables,
-        )} · علينا ${amount(finance.payables)}`,
-        tone: finance.netPosition >= 0 ? "green" : "red",
+        label: "صافي ربح/خسارة التشغيل",
+        value:
+          operatingProfit === null
+            ? "—"
+            : `${amount(operatingProfit)} ${currencySymbol("EGP")}`,
+        detail:
+          operatingProfit === null
+            ? "جارٍ حساب ربحية الطلبات"
+            : "ربحية الطلبات بعد يوميات المناديب",
+        tone:
+          operatingProfit === null
+            ? "gold"
+            : operatingProfit >= 0
+              ? "green"
+              : "red",
       },
       {
         href: "/finance/clearinghouse",

@@ -2,6 +2,7 @@ import "server-only";
 
 import { isMissingSchemaObject } from "@/lib/db/supabase/errors";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
+import { toKanjoBusinessDay } from "@/lib/couriers/tiered-pay";
 
 import {
   computeProfitability,
@@ -10,6 +11,7 @@ import {
   type ProfitOrderFact,
   type ProfitabilitySummary,
 } from "./profitability";
+import { cairoWallToUtc } from "./range";
 
 /**
  * Delivered-order facts for the P&L waterfall.
@@ -18,6 +20,11 @@ import {
  * The attendance base is read from the posted `5100` debit legs of
  * `courier_attendance` entries, so the footer deduction is the ledger amount,
  * not a recomputed 165 EGP estimate.
+ *
+ * The waterfall is pure accrual: only operation facts and courier-day bases
+ * enter it. A settlement or payout never changes these figures. Filtering is
+ * done in memory on the Kanjo operating day so a 02:30 delivery groups with the
+ * previous day. The fact set is bounded, so this cannot scan unbounded.
  */
 
 const ROW_LIMIT = 20_000;
@@ -26,6 +33,7 @@ const TIMEOUT_MS = 8_000;
 type RawOrder = {
   courier_id: string;
   delivered_at: string | null;
+  occurred_at: string;
   commission_minor: number | string;
   delivery_fee_minor: number | string;
   shipping_discount_minor: number | string;
@@ -57,28 +65,67 @@ function asMinor(value: number | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-async function loadOrders(from: string | null, to: string | null) {
+function hasTime(value: string) {
+  return value.includes("T") || value.includes(" ");
+}
+
+function wallToUtc(value: string) {
+  /* The dashboard already resolved its window to UTC instants. A bare value
+   * from a date picker is Cairo wall clock, so only that shape is converted. */
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(value)) return new Date(value);
+  const [day, rest = "00:00"] = value.replace(" ", "T").split("T");
+  const [hour = "0", minute = "0"] = rest.split(":");
+  return cairoWallToUtc(day, Number(hour), Number(minute));
+}
+
+/** Day-granularity membership for attendance rows keyed by operating day. */
+function dayInRange(day: string, from: string | null, to: string | null) {
+  if (from && day < toKanjoBusinessDay(from)) return false;
+  if (to && day > toKanjoBusinessDay(to)) return false;
+  return true;
+}
+
+/** Instant membership for order rows, honouring a custom date+hour window. */
+function orderInRange(
+  instant: string,
+  day: string,
+  from: string | null,
+  to: string | null,
+) {
+  if (from) {
+    if (hasTime(from)) {
+      if (new Date(instant).getTime() < wallToUtc(from).getTime()) return false;
+    } else if (day < from) {
+      return false;
+    }
+  }
+  if (to) {
+    if (hasTime(to)) {
+      if (new Date(instant).getTime() > wallToUtc(to).getTime()) return false;
+    } else if (day > to) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function loadOrders() {
   const client = getSupabaseServerClient();
-  let query = client
+  return client
     .schema("app")
     .from("operation_logs")
     .select(
-      "courier_id,delivered_at,commission_minor,delivery_fee_minor,shipping_discount_minor,discount_minor,reward_discount_minor,merchants(city_id)",
+      "courier_id,delivered_at,occurred_at,commission_minor,delivery_fee_minor,shipping_discount_minor,discount_minor,reward_discount_minor,merchants(city_id)",
     )
     .eq("currency", "EGP")
-    .not("delivered_at", "is", null)
-    .order("delivered_at", { ascending: true })
+    .order("occurred_at", { ascending: true })
     .limit(ROW_LIMIT)
     .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
-
-  if (from) query = query.gte("delivered_at", from);
-  if (to) query = query.lte("delivered_at", to);
-  return query;
 }
 
-async function loadAttendance(from: string | null, to: string | null) {
+function loadAttendance() {
   const client = getSupabaseServerClient();
-  let query = client
+  return client
     .schema("app")
     .from("journal_lines")
     .select("debit_minor,journal_entries!inner(entry_date,source_id,source_type),accounts!inner(code)")
@@ -87,13 +134,9 @@ async function loadAttendance(from: string | null, to: string | null) {
     .eq("journal_entries.status", "posted")
     .limit(ROW_LIMIT)
     .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
-
-  if (from) query = query.gte("journal_entries.entry_date", from);
-  if (to) query = query.lte("journal_entries.entry_date", to);
-  return query;
 }
 
-async function loadCities() {
+function loadCities() {
   const client = getSupabaseServerClient();
   return client
     .schema("app")
@@ -102,6 +145,23 @@ async function loadCities() {
     .order("name", { ascending: true })
     .limit(500)
     .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
+}
+
+async function loadInternalStaffIds(): Promise<Set<string>> {
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("couriers")
+    .select("id")
+    .eq("is_internal_staff", true)
+    .limit(500)
+    .abortSignal(AbortSignal.timeout(TIMEOUT_MS));
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return new Set();
+    throw error;
+  }
+  return new Set((data ?? []).map((row) => (row as { id: string }).id));
 }
 
 /**
@@ -123,12 +183,15 @@ export async function loadProfitability(params: {
   from: string | null;
   to: string | null;
   cityId: string | null;
+  excludeInternalStaff?: boolean;
 }): Promise<ProfitabilitySummary> {
-  const [ordersResult, attendanceResult, citiesResult] = await Promise.all([
-    loadOrders(params.from, params.to),
-    loadAttendance(params.from, params.to),
-    loadCities(),
-  ]);
+  const [ordersResult, attendanceResult, citiesResult, internalIds] =
+    await Promise.all([
+      loadOrders(),
+      loadAttendance(),
+      loadCities(),
+      loadInternalStaffIds(),
+    ]);
 
   const cities: RawCity[] =
     !citiesResult.error && Array.isArray(citiesResult.data)
@@ -154,12 +217,16 @@ export async function loadProfitability(params: {
     const merchant = embed(row.merchants);
     const cityId = merchant?.city_id ?? null;
     if (params.cityId && cityId !== params.cityId) continue;
-    if (!row.delivered_at) continue;
+
+    const occurredAt = row.delivered_at ?? row.occurred_at;
+    const day = toKanjoBusinessDay(occurredAt);
+    if (!orderInRange(occurredAt, day, params.from, params.to)) continue;
 
     facts.push({
-      deliveryDate: row.delivered_at,
+      deliveryDate: day,
       cityId,
       courierId: row.courier_id,
+      isInternalStaff: internalIds.has(row.courier_id),
       commissionMinor: asMinor(row.commission_minor),
       deliveryFeeMinor: asMinor(row.delivery_fee_minor),
       shippingDiscountMinor: asMinor(row.shipping_discount_minor),
@@ -168,36 +235,32 @@ export async function loadProfitability(params: {
     });
   }
 
-  if (attendanceResult.error) {
-    if (isMissingSchemaObject(attendanceResult.error)) {
-      return computeProfitability(facts, [], meta);
-    }
-    throw attendanceResult.error;
-  }
-
   const bases: AttendanceBaseFact[] = [];
-  // Without a city filter the base is every posted attendance entry in range,
-  // so 0-order manual attendance days reconcile with the journal. With a city
-  // filter we keep the attendance of couriers who delivered in that city in
-  // range, so their manual 0-order days are still counted.
   const cityCourierIds = params.cityId
     ? new Set(facts.map((fact) => fact.courierId))
     : null;
 
-  for (const line of (attendanceResult.data ?? []) as unknown as RawAttendanceLine[]) {
-    const entry = embed(line.journal_entries);
-    if (!entry) continue;
-    const key = attendanceKey(entry.source_id);
-    if (!key) continue;
-    if (cityCourierIds && !cityCourierIds.has(key.courierId)) {
-      continue;
+  if (!attendanceResult.error) {
+    for (const line of (attendanceResult.data ??
+      []) as unknown as RawAttendanceLine[]) {
+      const entry = embed(line.journal_entries);
+      if (!entry) continue;
+      const key = attendanceKey(entry.source_id);
+      if (!key) continue;
+      if (cityCourierIds && !cityCourierIds.has(key.courierId)) continue;
+      if (!dayInRange(key.day, params.from, params.to)) continue;
+      bases.push({
+        courierId: key.courierId,
+        day: key.day,
+        amountMinor: asMinor(line.debit_minor),
+        isInternalStaff: internalIds.has(key.courierId),
+      });
     }
-    bases.push({
-      courierId: key.courierId,
-      day: key.day,
-      amountMinor: asMinor(line.debit_minor),
-    });
+  } else if (!isMissingSchemaObject(attendanceResult.error)) {
+    throw attendanceResult.error;
   }
 
-  return computeProfitability(facts, bases, meta);
+  return computeProfitability(facts, bases, meta, {
+    excludeInternalStaff: params.excludeInternalStaff,
+  });
 }

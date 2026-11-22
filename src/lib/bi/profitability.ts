@@ -26,10 +26,12 @@ import {
  */
 
 export type ProfitOrderFact = {
-  /** Delivery day, `YYYY-MM-DD`, as posted on the operation. */
+  /** Operating day, `YYYY-MM-DD`, as posted on the operation. */
   deliveryDate: string;
   cityId: string | null;
   courierId: string;
+  /** Internal partner: orders count, but the courier payable can be excluded. */
+  isInternalStaff?: boolean;
   /** Frozen commission posted on the order. */
   commissionMinor: number;
   deliveryFeeMinor: number;
@@ -41,9 +43,20 @@ export type ProfitOrderFact = {
 
 export type AttendanceBaseFact = {
   courierId: string;
-  /** Cairo calendar day, `YYYY-MM-DD`. */
+  /** Operating day, `YYYY-MM-DD`. */
   day: string;
   amountMinor: number;
+  /** Internal partner: the 165 EGP base can be excluded. */
+  isInternalStaff?: boolean;
+};
+
+export type ProfitabilityOptions = {
+  /**
+   * Drops the courier payable (tiered per-order fee + 165 base) for internal
+   * partners. Orders, delivery fees, customer coupons and every merchant
+   * commission stay in the result untouched.
+   */
+  excludeInternalStaff?: boolean;
 };
 
 export type ProfitabilityMeta = {
@@ -103,7 +116,9 @@ export function tieredOrderFeeMinor(orders: number): number {
 export function computeProfitabilityMinor(
   facts: readonly ProfitOrderFact[],
   bases: readonly AttendanceBaseFact[],
+  options: ProfitabilityOptions = {},
 ): ProfitabilityMinor {
+  const excludeInternal = options.excludeInternalStaff === true;
   let orders = 0;
   let commissions = 0;
   let deliveryFees = 0;
@@ -118,6 +133,9 @@ export function computeProfitabilityMinor(
     shippingDiscounts += fact.shippingDiscountMinor;
     coupons += fact.discountMinor + fact.rewardDiscountMinor;
 
+    /* Internal orders still carry GMV, customer coupons, delivery fees and
+     * merchant commission; only their courier fee is out of scope. */
+    if (excludeInternal && fact.isInternalStaff) continue;
     const key = courierDayKey(fact.courierId, fact.deliveryDate);
     perCourierDay.set(key, (perCourierDay.get(key) ?? 0) + 1);
   }
@@ -133,6 +151,7 @@ export function computeProfitabilityMinor(
 
   let courierDailyBase = 0;
   for (const base of bases) {
+    if (excludeInternal && base.isInternalStaff) continue;
     courierDailyBase += base.amountMinor;
   }
 
@@ -199,8 +218,12 @@ export function computeProfitability(
   facts: readonly ProfitOrderFact[],
   bases: readonly AttendanceBaseFact[],
   meta: ProfitabilityMeta,
+  options: ProfitabilityOptions = {},
 ): ProfitabilitySummary {
-  return summarizeProfitability(computeProfitabilityMinor(facts, bases), meta);
+  return summarizeProfitability(
+    computeProfitabilityMinor(facts, bases, options),
+    meta,
+  );
 }
 
 const cityOptionSchema = z.object({

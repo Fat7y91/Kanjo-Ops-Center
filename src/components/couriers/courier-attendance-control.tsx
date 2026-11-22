@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
 import {
-  cairoDay,
+  toKanjoBusinessDay,
   type AttendanceStatus,
 } from "@/lib/couriers/tiered-pay";
 import type { Courier } from "@/lib/couriers/types";
@@ -34,7 +34,7 @@ export function CourierAttendanceControl({
   canManage: boolean;
   onChanged: () => void;
 }) {
-  const [day, setDay] = useState(() => cairoDay(new Date().toISOString()));
+  const [day, setDay] = useState(() => toKanjoBusinessDay(new Date()));
   const [status, setStatus] = useState<AttendanceStatus>("present");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
