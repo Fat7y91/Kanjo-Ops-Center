@@ -189,9 +189,13 @@ export function ComboField<T extends string | number>({
   const filtered =
     query === ""
       ? options
-      : options.filter((option) =>
-          option.label.toLowerCase().includes(query.trim().toLowerCase()),
-        );
+      : options.filter((option) => {
+          const needle = query.trim().toLowerCase();
+          return (
+            option.label.toLowerCase().includes(needle) ||
+            Boolean(option.hint?.toLowerCase().includes(needle))
+          );
+        });
 
   const control = (
     <Combobox
