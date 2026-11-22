@@ -216,7 +216,7 @@ export function ToggleField({
       className="flex items-center justify-between gap-4"
     >
       <span className="flex flex-col gap-0.5">
-        <HeadlessSwitch.Label className="text-sm font-semibold text-[color:var(--ink)]">
+        <HeadlessSwitch.Label className="kanjo-switch-label text-sm font-semibold text-[color:var(--ink)]">
           {label}
         </HeadlessSwitch.Label>
         {hint ? (
@@ -226,13 +226,10 @@ export function ToggleField({
         ) : null}
       </span>
       <HeadlessSwitch
-        className={cx(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-[color:var(--line-strong)] transition duration-200 ease-out data-[checked]:bg-[color:var(--kanjo-purple-interactive)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--kanjo-focus-ring)] data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
-          className,
-        )}
+        className={cx("kanjo-switch", className)}
         {...props}
       >
-        <span className="inline-block size-5 translate-x-0.5 rounded-full bg-white shadow-sm transition duration-200 ease-out data-[checked]:translate-x-[1.375rem]" />
+        <span className="kanjo-switch-thumb" />
       </HeadlessSwitch>
     </HeadlessSwitch.Group>
   );

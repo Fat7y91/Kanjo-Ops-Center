@@ -3,7 +3,10 @@
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { currencyMoney, shortDate } from "@/lib/accounts/format";
-import type { PartyStatement } from "@/lib/operations/types";
+import type {
+  PartyStatement,
+  PartyStatementLine,
+} from "@/lib/operations/types";
 
 type PartyStatementModalProps = {
   open: boolean;
@@ -24,6 +27,38 @@ function closingLabel(type: PartyStatement["partyType"], balance: number) {
     return balance > 0 ? "مستحق لكانجو" : "مستحق للمندوب";
   }
   return balance > 0 ? "مستحق لكانجو" : "مستحق للتاجر";
+}
+
+function compactNumber(value: string): string {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  return Number.isInteger(parsed)
+    ? String(parsed)
+    : parsed.toFixed(2).replace(/\.?0+$/, "");
+}
+
+/** A single-line description so a weekly statement stays on one A4 page. */
+function describeLine(line: PartyStatementLine): string {
+  if (
+    line.memo.includes("الحضور اليومي") ||
+    line.reference.startsWith("حضور يومي")
+  ) {
+    return `حضور يومي (${line.date})`;
+  }
+
+  if (line.memo.includes("صافي الطلب")) {
+    const numbers = line.memo.match(/\d+(?:\.\d+)?/g) ?? [];
+    if (numbers.length >= 3) {
+      const [value = "0", collected = "0", cut = "0"] = numbers;
+      const order = /(\d{4,})/.exec(line.reference)?.[1];
+      const head = order ? `طلب #${order}` : line.reference;
+      return `${head} (قيمة ${compactNumber(value)} · محصّل ${compactNumber(
+        collected,
+      )} · أجر ${compactNumber(cut)})`;
+    }
+  }
+
+  return line.memo.replace(/^صافي الطلب:\s*/, "") || line.reference;
 }
 
 function printStamp(): string {
@@ -178,10 +213,12 @@ export function PartyStatementModal({
                   >
                     <td>{shortDate(line.date)}</td>
                     <td>
-                      {line.reference}
-                      {line.memo ? (
-                        <em className="breakdown-journal-memo">{line.memo}</em>
-                      ) : null}
+                      <span
+                        className="statement-desc"
+                        title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
+                      >
+                        {describeLine(line)}
+                      </span>
                     </td>
                     <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
                     <td dir="ltr">{line.credit > 0 ? money(line.credit) : "—"}</td>
@@ -202,22 +239,14 @@ export function PartyStatementModal({
 
           <footer className="statement-signoff">
             <div>
-              <span>الأسبوع الأول</span>
+              <span>توقيع المستلم (المندوب / التاجر)</span>
               <i />
             </div>
             <div>
-              <span>الأسبوع الثاني</span>
+              <span>توقيع المحاسب / الختم</span>
               <i />
+              <small>التاريخ: ____ / ____ / 2026</small>
             </div>
-            <div>
-              <span>الأسبوع الثالث</span>
-              <i />
-            </div>
-            <div>
-              <span>الأسبوع الرابع</span>
-              <i />
-            </div>
-            <p>توقيع المسؤول / الختم</p>
           </footer>
 
           <div className="breakdown-foot statement-actions">

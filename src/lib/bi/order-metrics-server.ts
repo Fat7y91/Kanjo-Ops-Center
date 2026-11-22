@@ -35,16 +35,15 @@ type RawOrder = {
   wallet_discount_minor: number | null;
   reward_discount_minor: number | null;
   occurred_at: string;
-  delivered_at: string | null;
   merchants: { name: string | null; city_id: string | null } | { name: string | null; city_id: string | null }[] | null;
   couriers: { display_name: string | null; is_internal_staff: boolean | null } | { display_name: string | null; is_internal_staff: boolean | null }[] | null;
 };
 
 const COLUMNS =
-  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at,delivered_at,merchants(name,city_id),couriers(display_name,is_internal_staff)";
+  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at,merchants(name,city_id),couriers(display_name,is_internal_staff)";
 
 const COLUMNS_NO_JOIN =
-  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at,delivered_at";
+  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at";
 
 function embed<T>(value: T | T[] | null): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -110,9 +109,8 @@ export async function loadOrderMetrics(): Promise<BiOrderMetricRow[]> {
     const merchantId = row.merchant_id;
     const courierId = row.courier_id;
     const couponCode = row.coupon_code ?? "";
-    const businessDay = toKanjoBusinessDay(
-      row.delivered_at ?? row.occurred_at,
-    );
+    /* `delivered_at` is date-only, so the 14:00 cutoff needs `occurred_at`. */
+    const businessDay = toKanjoBusinessDay(row.occurred_at);
     const key = `${businessDay}|${merchantId}|${courierId}|${couponCode}`;
     const current =
       buckets.get(key) ??

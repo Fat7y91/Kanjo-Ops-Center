@@ -38,7 +38,6 @@ type OperationRow = {
   order_value_minor: number;
   delivery_fee_minor: number;
   occurred_at: string;
-  delivered_at: string | null;
 };
 
 type AttendanceRow = {
@@ -60,7 +59,7 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
     .schema("app")
     .from("operation_logs")
     .select(
-      "courier_id,courier_cut_minor,order_value_minor,delivery_fee_minor,occurred_at,delivered_at",
+      "courier_id,courier_cut_minor,order_value_minor,delivery_fee_minor,occurred_at",
     )
     .limit(5000);
 
@@ -101,9 +100,9 @@ export async function loadCourierTotals(): Promise<CourierTotals> {
 
   const deliveries: CourierDelivery[] = operationRows.map((row) => ({
     courierId: row.courier_id,
-    /* `delivered_at` is the export's delivery day; `occurred_at` is the
-     * fallback for rows that never carried one. */
-    deliveredAt: row.delivered_at ?? row.occurred_at,
+    /* `delivered_at` is only a date, so the pay engine resolves the
+     * operating day from the full operation timestamp. */
+    deliveredAt: row.occurred_at,
   }));
 
   const courierIds = new Set<string>();

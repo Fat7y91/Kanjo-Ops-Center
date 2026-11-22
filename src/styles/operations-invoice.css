@@ -158,52 +158,149 @@
   gap: 12px;
 }
 
-/* Party statement of account (printable). */
+/* Party statement of account: compact, printable A4 sheet. */
 .statement {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+}
+
+.statement-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--kanjo-purple-base);
+}
+
+.statement-brand-id {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.statement-logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.statement-company {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--kanjo-purple-base);
+}
+
+.statement-brand h3 {
+  margin: 1px 0 0;
+  font-size: 0.98rem;
+}
+
+.statement-brand-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.statement-brand-meta strong {
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+
+.statement-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.statement-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.statement-summary span {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.statement-summary strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-summary-closing {
+  border-color: var(--kanjo-gold, #d4a017) !important;
 }
 
 .statement-table {
   table-layout: fixed;
   width: 100%;
+  font-size: 0.78rem;
 }
 
 /* Dates sit on the right (start in RTL) and never wrap. */
 .statement-table th:nth-child(1),
 .statement-table td:nth-child(1) {
-  width: 92px;
+  width: 78px;
   text-align: right;
   white-space: nowrap;
 }
 
-/* The reference carries order ids and breakdown memos, so it is the one column
- * allowed to wrap; both header and cell stay start-aligned. */
+/* The description is forced to one line so a week of movements stays flat. */
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
   text-align: right;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.5;
+  white-space: nowrap;
 }
 
-/* Amounts are LTR numerals flushed to the outer edge; header and cell share the
- * same alignment so the columns never drift. */
+.statement-desc {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Amounts are LTR numerals flushed to the outer edge. */
 .statement-table th:nth-child(3),
 .statement-table td:nth-child(3),
 .statement-table th:nth-child(4),
 .statement-table td:nth-child(4),
 .statement-table th:nth-child(5),
 .statement-table td:nth-child(5) {
-  width: 112px;
+  width: 100px;
   text-align: left;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
+.statement-table th,
+.statement-table td {
+  padding: 6px 8px;
+}
+
 .statement-table td:nth-child(5) {
   font-weight: 700;
+}
+
+.statement-table tbody tr:nth-child(even) {
+  background: var(--surface-soft);
+}
+
+.statement-table tfoot td {
+  border-top: 2px solid var(--line-strong);
+  font-weight: 800;
 }
 
 /* Statement rows open the voucher for their journal entry. */
@@ -217,121 +314,37 @@
   outline: none;
 }
 
-/* Statement header, summary strip and weekly sign-off (screen + print). */
-.statement-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--kanjo-purple-base);
-}
-
-.statement-logo {
-  width: 46px;
-  height: 46px;
-  object-fit: contain;
-  border-radius: 10px;
-}
-
-.statement-company {
-  margin: 0;
-  font-weight: 700;
-  color: var(--kanjo-purple-base);
-}
-
-.statement-brand h3 {
-  margin: 2px 0 0;
-  font-size: 1rem;
-}
-
-.statement-stamp {
-  margin-inline-start: auto;
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.statement-meta {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px 18px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.statement-meta > div {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.statement-meta-label {
-  font-size: 0.72rem;
-  color: var(--ink-soft);
-}
-
-.statement-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.statement-summary > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-soft);
-}
-
-.statement-summary strong {
-  font-size: 1.05rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.statement-summary-closing {
-  border-color: var(--kanjo-gold, #d4a017) !important;
-}
-
-.statement-table tbody tr:nth-child(even) {
-  background: var(--surface-soft);
-}
-
+/* One official sign-off row: recipient and accountant. */
 .statement-signoff {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding-top: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+  padding-top: 10px;
   border-top: 1px solid var(--line);
 }
 
 .statement-signoff > div {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   font-size: 0.72rem;
   color: var(--ink-soft);
 }
 
 .statement-signoff i {
   display: block;
-  height: 22px;
+  height: 18px;
   border-bottom: 1px dashed var(--ink-soft);
 }
 
-.statement-signoff p {
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 0.75rem;
-  color: var(--ink-soft);
+.statement-signoff small {
+  font-size: 0.7rem;
 }
 
 @media print {
   @page {
     size: A4 portrait;
-    margin: 10mm;
+    margin: 8mm;
   }
 
   body > *:not(.modal-backdrop),
@@ -353,8 +366,8 @@
     inset: 0;
     width: 100%;
     padding: 0;
-    gap: 10px;
-    font-size: 11px;
+    gap: 6px;
+    font-size: 10.5px;
   }
 
   .statement-actions,
@@ -377,11 +390,56 @@
     box-shadow: none;
   }
 
+  .statement-brand {
+    padding-bottom: 5px;
+  }
+
+  .statement-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .statement-summary {
+    gap: 4px;
+  }
+
+  .statement-summary > div {
+    padding: 4px 7px;
+    background: #fff;
+    border-color: #d8d8d8;
+  }
+
+  .statement-summary span {
+    font-size: 9px;
+  }
+
+  .statement-summary strong {
+    font-size: 12px;
+  }
+
+  .statement-table {
+    font-size: 10.5px;
+  }
+
+  .statement-table th,
+  .statement-table td {
+    padding: 4px 6px;
+  }
+
+  .statement-table tbody tr:nth-child(even) {
+    background: #f5f5f5;
+  }
+
   .statement-table tr {
     page-break-inside: avoid;
   }
 
-  .statement-summary > div {
-    background: #fff;
+  .statement-signoff {
+    gap: 36px;
+    padding-top: 6px;
+  }
+
+  .statement-signoff i {
+    height: 14px;
   }
 }

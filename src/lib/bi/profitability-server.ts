@@ -32,7 +32,6 @@ const TIMEOUT_MS = 8_000;
 
 type RawOrder = {
   courier_id: string;
-  delivered_at: string | null;
   occurred_at: string;
   commission_minor: number | string;
   delivery_fee_minor: number | string;
@@ -115,7 +114,7 @@ function loadOrders() {
     .schema("app")
     .from("operation_logs")
     .select(
-      "courier_id,delivered_at,occurred_at,commission_minor,delivery_fee_minor,shipping_discount_minor,discount_minor,reward_discount_minor,merchants(city_id)",
+      "courier_id,occurred_at,commission_minor,delivery_fee_minor,shipping_discount_minor,discount_minor,reward_discount_minor,merchants(city_id)",
     )
     .eq("currency", "EGP")
     .order("occurred_at", { ascending: true })
@@ -218,7 +217,9 @@ export async function loadProfitability(params: {
     const cityId = merchant?.city_id ?? null;
     if (params.cityId && cityId !== params.cityId) continue;
 
-    const occurredAt = row.delivered_at ?? row.occurred_at;
+    /* `delivered_at` is a date-only export column; the operating day must
+     * come from the real `occurred_at` timestamp (14:00 cutoff). */
+    const occurredAt = row.occurred_at;
     const day = toKanjoBusinessDay(occurredAt);
     if (!orderInRange(occurredAt, day, params.from, params.to)) continue;
 
