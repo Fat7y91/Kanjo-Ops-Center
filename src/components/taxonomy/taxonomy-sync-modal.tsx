@@ -4,26 +4,9 @@ import { useMemo, useState } from "react";
 import Papa from "papaparse";
 
 import { Modal } from "@/components/field-ops/modal";
+import { TaxonomySyncSummaryView } from "@/components/taxonomy/taxonomy-sync-summary";
 import { Button } from "@/components/ui/button";
-
-type SyncSummary = {
-  vendorTypesParsed: number;
-  categoriesParsed: number;
-  duplicates: number;
-  unresolvedParents: number;
-  unknownVendors: number[];
-  created: number;
-  updated: number;
-  variantGroupsParsed: number;
-  variantOptionsParsed: number;
-  variantGroupsCreated: number;
-  variantGroupsUpdated: number;
-  variantOptionsCreated: number;
-  variantOptionsUpdated: number;
-  variantDuplicates: number;
-  unresolvedVariantGroups: number;
-  issues: { file: string; line: number; message: string }[];
-};
+import type { TaxonomySyncSummary } from "@/lib/taxonomy/csv-sync/summary";
 
 type FileKey = "vendorTypes" | "categories" | "variantAttributes";
 
@@ -46,7 +29,7 @@ function parseFile(file: File): Promise<Record<string, unknown>[]> {
     Papa.parse<Record<string, unknown>>(file, {
       header: true,
       skipEmptyLines: "greedy",
-      transformHeader: (header) => header.trim(),
+      transformHeader: (header) => header.replace(/^\uFEFF/, "").trim(),
       complete: (result) => resolve(result.data),
       error: (error) => reject(error),
     });
@@ -72,7 +55,7 @@ export function TaxonomySyncModal({
 }) {
   const [files, setFiles] = useState<ParseState>(EMPTY);
   const [names, setNames] = useState<Partial<Record<FileKey, string>>>({});
-  const [summary, setSummary] = useState<SyncSummary | null>(null);
+  const [summary, setSummary] = useState<TaxonomySyncSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -123,7 +106,7 @@ export function TaxonomySyncModal({
         }),
       });
       const payload = (await response.json()) as {
-        summary?: SyncSummary;
+        summary?: TaxonomySyncSummary;
         error?: string;
       };
       if (!response.ok || !payload.summary) {
@@ -131,10 +114,12 @@ export function TaxonomySyncModal({
       }
       setSummary(payload.summary);
       const created =
-        payload.summary.created +
-        payload.summary.variantGroupsCreated +
-        payload.summary.variantOptionsCreated;
+        payload.summary.createdVendorTypes.length +
+        payload.summary.createdCategories.length +
+        payload.summary.createdVariantGroups.length +
+        payload.summary.createdVariantOptions.length;
       const updated =
+        payload.summary.vendorTypesUpdated +
         payload.summary.updated +
         payload.summary.variantGroupsUpdated +
         payload.summary.variantOptionsUpdated;
@@ -198,58 +183,7 @@ export function TaxonomySyncModal({
           </p>
         ) : null}
 
-        {summary ? (
-          <div className="inline-note" role="status">
-            <strong>اكتملت المزامنة</strong>
-            {summary.categoriesParsed > 0 || summary.vendorTypesParsed > 0 ? (
-              <>
-                <br />
-                تم إنشاء {summary.created} تصنيفاً وتحديث {summary.updated}.
-                تحليل {summary.categoriesParsed} تصنيفاً من أصل{" "}
-                {summary.vendorTypesParsed} نوع تاجر
-                {summary.duplicates > 0
-                  ? `، و${summary.duplicates} صف مكرر دُمج`
-                  : ""}
-                {summary.unresolvedParents > 0
-                  ? `، و${summary.unresolvedParents} أب غير موجود (اعتُبر المستوى الأول)`
-                  : ""}
-                .
-              </>
-            ) : null}
-            {summary.variantGroupsParsed > 0 ||
-            summary.variantOptionsParsed > 0 ? (
-              <>
-                <br />
-                تم إنشاء {summary.variantGroupsCreated} مجموعة متغيرات و
-                {summary.variantOptionsCreated} خياراً، وتحديث{" "}
-                {summary.variantGroupsUpdated} مجموعة و
-                {summary.variantOptionsUpdated} خياراً. تحليل{" "}
-                {summary.variantOptionsParsed} خياراً داخل{" "}
-                {summary.variantGroupsParsed} مجموعة
-                {summary.variantDuplicates > 0
-                  ? `، و${summary.variantDuplicates} صف مكرر دُمج`
-                  : ""}
-                {summary.unresolvedVariantGroups > 0
-                  ? `، و${summary.unresolvedVariantGroups} مجموعة بلا اسم لم تُحفظ`
-                  : ""}
-                .
-              </>
-            ) : null}
-            {summary.unknownVendors.length > 0 ? (
-              <>
-                <br />
-                {summary.unknownVendors.length} نوع تاجر غير معروف: ارفع
-                vendor-types.csv لاستبدال المعرّف الرقمي باسمه.
-              </>
-            ) : null}
-            {summary.issues.length > 0 ? (
-              <>
-                <br />
-                {summary.issues.length} صفاً لم يُستورد.
-              </>
-            ) : null}
-          </div>
-        ) : null}
+        {summary ? <TaxonomySyncSummaryView summary={summary} /> : null}
 
         <div className="form-actions">
           <Button variant="quiet" onClick={reset} disabled={busy}>

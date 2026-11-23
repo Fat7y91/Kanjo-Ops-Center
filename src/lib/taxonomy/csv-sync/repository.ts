@@ -27,6 +27,7 @@ export class CsvSyncError extends Error {
 export type CategoryWriteResult = {
   created: number;
   updated: number;
+  createdRows: { nameAr: string; nameEn: string; vendorType: string }[];
 };
 
 const CHUNK = 500;
@@ -118,12 +119,21 @@ export async function syncCategories(
     }
   }
 
+  const createdRows: CategoryWriteResult["createdRows"] = [];
   for (const row of plan) {
-    if (before.has(row.id)) updated += 1;
-    else created += 1;
+    if (before.has(row.id)) {
+      updated += 1;
+    } else {
+      created += 1;
+      createdRows.push({
+        nameAr: row.name_ar,
+        nameEn: row.name_en,
+        vendorType: row.vendor_type,
+      });
+    }
   }
 
-  return { created, updated };
+  return { created, updated, createdRows };
 }
 
 export const VARIANT_ATTRIBUTE_TABLE = "variant_attributes";
@@ -134,6 +144,8 @@ export type VariantWriteResult = {
   groupsUpdated: number;
   optionsCreated: number;
   optionsUpdated: number;
+  createdGroups: { id: number; nameAr: string; nameEn: string }[];
+  createdOptions: { id: number; nameAr: string; groupName: string }[];
 };
 
 async function existingVariantIds(
@@ -223,21 +235,32 @@ export async function syncVariants(plan: {
     if (error) throw variantWriteError(error);
   }
 
-  let groupsCreated = 0;
-  let groupsUpdated = 0;
+  const createdGroups: VariantWriteResult["createdGroups"] = [];
+  const groupNames = new Map<number, string>();
   for (const row of plan.attributes) {
-    if (existingGroups.has(row.id)) groupsUpdated += 1;
-    else groupsCreated += 1;
+    groupNames.set(row.id, row.name_ar);
+    if (existingGroups.has(row.id)) continue;
+    createdGroups.push({ id: row.id, nameAr: row.name_ar, nameEn: row.name_en });
   }
 
-  let optionsCreated = 0;
-  let optionsUpdated = 0;
+  const createdOptions: VariantWriteResult["createdOptions"] = [];
   for (const row of plan.options) {
-    if (existingOptions.has(row.id)) optionsUpdated += 1;
-    else optionsCreated += 1;
+    if (existingOptions.has(row.id)) continue;
+    createdOptions.push({
+      id: row.id,
+      nameAr: row.name_ar,
+      groupName: groupNames.get(row.variant_id) ?? "",
+    });
   }
 
-  return { groupsCreated, groupsUpdated, optionsCreated, optionsUpdated };
+  return {
+    groupsCreated: createdGroups.length,
+    groupsUpdated: plan.attributes.length - createdGroups.length,
+    optionsCreated: createdOptions.length,
+    optionsUpdated: plan.options.length - createdOptions.length,
+    createdGroups,
+    createdOptions,
+  };
 }
 
 function variantWriteError(error: {

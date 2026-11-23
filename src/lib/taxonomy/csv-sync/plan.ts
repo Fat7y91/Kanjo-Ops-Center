@@ -28,6 +28,7 @@ export type CategoryPlanResult = {
   rows: CategoryUpsertPlan[];
   duplicates: number;
   unresolvedParents: number;
+  unresolvedVendors: number;
 };
 
 /**
@@ -43,8 +44,13 @@ export function buildCategoryPlan(
   const byKey = new Map<string, CategoryCsvRow>();
   let duplicates = 0;
   let unresolvedParents = 0;
+  let unresolvedVendors = 0;
 
   for (const row of parsed.rows) {
+    if (row.vendorTypeId == null) {
+      unresolvedVendors += 1;
+      continue;
+    }
     const key = `${row.vendorTypeId}:${row.numericId}`;
     if (byKey.has(key)) duplicates += 1;
     byKey.set(key, row);
@@ -53,10 +59,12 @@ export function buildCategoryPlan(
   const levelCache = new Map<string, number>();
 
   const hasParent = (row: CategoryCsvRow): boolean =>
+    row.vendorTypeId != null &&
     row.parentNumericId != null &&
     byKey.has(`${row.vendorTypeId}:${row.parentNumericId}`);
 
   const levelOf = (row: CategoryCsvRow, stack: Set<string>): number => {
+    if (row.vendorTypeId == null) return 1;
     const key = `${row.vendorTypeId}:${row.numericId}`;
     const cached = levelCache.get(key);
     if (cached !== undefined) return cached;
@@ -66,7 +74,9 @@ export function buildCategoryPlan(
       return 1;
     }
     if (stack.has(key)) return 1; // cycle guard
-    const parent = byKey.get(`${row.vendorTypeId}:${row.parentNumericId}`)!;
+    const parent = byKey.get(
+      `${row.vendorTypeId}:${row.parentNumericId}`,
+    )!;
     stack.add(key);
     const level = levelOf(parent, stack) + 1;
     stack.delete(key);
@@ -76,6 +86,7 @@ export function buildCategoryPlan(
 
   const rows: CategoryUpsertPlan[] = [];
   for (const row of byKey.values()) {
+    if (row.vendorTypeId == null) continue;
     const vendorName = vendorNames.get(row.vendorTypeId);
     // A parent that is not in this export cannot be linked: writing a uuid that
     // does not exist would either violate a self-referential FK or dangle. The
@@ -95,7 +106,7 @@ export function buildCategoryPlan(
   }
 
   rows.sort((a, b) => a.level - b.level || a.id.localeCompare(b.id));
-  return { rows, duplicates, unresolvedParents };
+  return { rows, duplicates, unresolvedParents, unresolvedVendors };
 }
 
 export type VariantAttributeUpsert = {

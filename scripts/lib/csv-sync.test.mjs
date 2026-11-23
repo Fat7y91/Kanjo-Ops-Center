@@ -14,6 +14,12 @@ const parse = loadTsModule(
 const plan = loadTsModule(
   path.join(projectRoot, "src/lib/taxonomy/csv-sync/plan.ts"),
 );
+const vendors = loadTsModule(
+  path.join(projectRoot, "src/lib/taxonomy/csv-sync/vendor-types.ts"),
+);
+const summary = loadTsModule(
+  path.join(projectRoot, "src/lib/taxonomy/csv-sync/summary.ts"),
+);
 
 const nodeMd5 = (value) => createHash("md5").update(value).digest("hex");
 
@@ -160,4 +166,161 @@ test("buildVariantPlan skips options whose group has no name", () => {
   assert.equal(result.attributes.length, 0);
   assert.equal(result.options.length, 0);
   assert.equal(result.unresolvedGroups, 1);
+});
+
+
+test("parseCategories strips a UTF-8 BOM from the first header", () => {
+  const result = parse.parseCategories([
+    { "\uFEFFid": "10", "\uFEFFvendor_type": "5", name_ar: "تورتة" },
+  ]);
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].numericId, 10);
+  assert.equal(result.rows[0].vendorTypeId, 5);
+  assert.equal(result.issues.length, 0);
+});
+
+test("parseVendorTypes reads key and preserves live V1 columns", () => {
+  const result = parse.parseVendorTypes([
+    {
+      "\uFEFFid": "17",
+      key: "desserts",
+      name_ar: "الحلو",
+      name_en: "Desserts",
+      returns_to_vendor: "0",
+    },
+  ]);
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].key, "desserts");
+  assert.equal(result.rows[0].nameEn, "Desserts");
+});
+
+test("single-file categories resolve vendor_type by id, key, name_ar and name_en", () => {
+  const parsed = parse.parseCategories([
+    { id: "1", vendor_type: "desserts", name_ar: "تورتة" },
+    { id: "2", vendor_type: "الحلو", name_ar: "حلى" },
+    { id: "3", vendor_type: "Desserts", name_ar: "حلويات شرقية" },
+    { id: "4", vendor_type: "5", name_ar: "كيك" },
+  ]);
+  const catalog = vendors.buildVendorCatalog(
+    [],
+    [{ id: 5, key: "desserts", nameAr: "الحلو", nameEn: "Desserts" }],
+  );
+  const resolved = vendors.resolveCategoryVendors(parsed, catalog);
+  assert.equal(resolved.unresolved, 0);
+  assert.equal(resolved.parsed.rows.length, 4);
+  assert.equal(resolved.parsed.rows.every((row) => row.vendorTypeId === 5), true);
+
+  const categoryPlan = plan.buildCategoryPlan(
+    resolved.parsed,
+    resolved.vendorNames,
+  );
+  assert.equal(categoryPlan.rows.length, 4);
+  assert.equal(categoryPlan.rows.every((row) => row.vendor_type === "الحلو"), true);
+});
+
+test("unresolved vendor type skips only that row with an actionable reason", () => {
+  const parsed = parse.parseCategories([
+    { id: "1", vendor_type: "unknown-slug", name_ar: "يتيم" },
+    { id: "2", vendor_type: "5", name_ar: "سليم" },
+  ]);
+  const catalog = vendors.buildVendorCatalog(
+    [],
+    [{ id: 5, key: "desserts", nameAr: "الحلو", nameEn: "Desserts" }],
+  );
+  const resolved = vendors.resolveCategoryVendors(parsed, catalog);
+  assert.equal(resolved.unresolved, 1);
+  assert.equal(resolved.parsed.rows.length, 1);
+  assert.equal(resolved.parsed.rows[0].nameAr, "سليم");
+  assert.match(
+    resolved.parsed.issues[0].message,
+    /نوع تاجر غير موجود في القاعدة: unknown-slug — ارفع vendor-types.csv أولاً/,
+  );
+});
+
+test("vendor-types upload reports created and updated names", () => {
+  const parsed = parse.parseVendorTypes([
+    { id: "1", key: "restaurant", name_ar: "مطعم", name_en: "Restaurant" },
+    { id: "17", key: "desserts", name_ar: "الحلو", name_en: "Desserts" },
+  ]);
+  const result = vendors.planVendorTypes(parsed.rows, [
+    { id: 1, key: "restaurant", nameAr: "مطعم", nameEn: "Restaurant" },
+  ]);
+  assert.equal(result.updated.length, 1);
+  assert.equal(result.created.length, 1);
+  assert.equal(result.created[0].nameAr, "الحلو");
+  assert.equal(result.created[0].key, "desserts");
+
+  const catalog = vendors.buildVendorCatalog([], result.rows);
+  const category = parse.parseCategories([
+    { id: "175", vendor_type: "desserts", name_ar: "تورتة" },
+  ]);
+  const resolved = vendors.resolveCategoryVendors(category, catalog);
+  assert.equal(resolved.parsed.rows[0].vendorTypeId, 17);
+});
+
+test("detailed summary names created categories, types, variants and skipped rows", () => {
+  const vendorPlan = {
+    rows: [{ id: 17, key: "desserts", nameAr: "الحلو", nameEn: "Desserts" }],
+    created: [{ id: 17, key: "desserts", nameAr: "الحلو", nameEn: "Desserts" }],
+    updated: [],
+    duplicates: 0,
+  };
+  const categoryPlan = {
+    rows: [
+      {
+        id: "uuid",
+        parent_id: null,
+        vendor_type: "الحلو",
+        name_ar: "تورتة",
+        name_en: "Cake",
+        level: 1,
+      },
+    ],
+    duplicates: 0,
+    unresolvedParents: 0,
+    unresolvedVendors: 1,
+  };
+  const categoryWrite = {
+    created: 1,
+    updated: 0,
+    createdRows: [{ nameAr: "تورتة", nameEn: "Cake", vendorType: "الحلو" }],
+  };
+  const variantPlan = {
+    attributes: [{ id: 1, name_ar: "الحجم", name_en: "Size", updated_at: "x" }],
+    options: [
+      { id: 2, variant_id: 1, name_ar: "صغير", name_en: "Small", updated_at: "x" },
+    ],
+    duplicates: 0,
+    unresolvedGroups: 0,
+  };
+  const variantWrite = {
+    groupsCreated: 1,
+    groupsUpdated: 0,
+    optionsCreated: 1,
+    optionsUpdated: 0,
+    createdGroups: [{ id: 1, nameAr: "الحجم", nameEn: "Size" }],
+    createdOptions: [{ id: 2, nameAr: "صغير", groupName: "الحجم" }],
+  };
+  const receipt = summary.buildTaxonomySyncSummary({
+    vendorPlan,
+    categoryPlan,
+    categoryWrite,
+    variantPlan,
+    variantWrite,
+    issues: [
+      {
+        file: "categories.csv",
+        line: 9,
+        message: "نوع تاجر غير موجود في القاعدة: X — ارفع vendor-types.csv أولاً",
+      },
+    ],
+  });
+
+  assert.equal(receipt.createdVendorTypes[0].nameAr, "الحلو");
+  assert.equal(receipt.createdCategories[0].nameAr, "تورتة");
+  assert.equal(receipt.createdCategories[0].vendorType, "الحلو");
+  assert.equal(receipt.createdVariantGroups[0].nameAr, "الحجم");
+  assert.equal(receipt.createdVariantOptions[0].groupName, "الحجم");
+  assert.equal(receipt.issues[0].line, 9);
+  assert.match(receipt.issues[0].message, /vendor-types.csv/);
 });

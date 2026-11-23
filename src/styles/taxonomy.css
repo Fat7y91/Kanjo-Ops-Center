@@ -345,3 +345,43 @@
   }
 }
 
+
+/* V1 sync receipt: names first, counts second. Lists scroll so 200 imported
+ * categories never stretch the modal past the viewport. */
+.taxonomy-sync-report {
+  display: grid;
+  gap: 12px;
+}
+
+.taxonomy-sync-report section {
+  display: grid;
+  gap: 6px;
+}
+
+.taxonomy-sync-report h4 {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.taxonomy-sync-report p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.taxonomy-sync-scroll {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.taxonomy-sync-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
