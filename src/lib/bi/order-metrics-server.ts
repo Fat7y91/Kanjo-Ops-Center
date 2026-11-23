@@ -26,6 +26,7 @@ type RawOrder = {
   currency: BiOrderMetricRow["currency"];
   order_value_minor: number;
   delivery_fee_minor: number;
+  discount_minor: number | null;
   shipping_discount_minor: number | null;
   commission_minor: number;
   courier_cut_minor: number;
@@ -40,10 +41,10 @@ type RawOrder = {
 };
 
 const COLUMNS =
-  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at,merchants(name,city_id),couriers(display_name,is_internal_staff)";
+  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,discount_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at,merchants(name,city_id),couriers(display_name,is_internal_staff)";
 
 const COLUMNS_NO_JOIN =
-  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at";
+  "merchant_id,courier_id,coupon_code,currency,order_value_minor,delivery_fee_minor,discount_minor,shipping_discount_minor,commission_minor,courier_cut_minor,coupon_discount_minor,coupon_platform_funded_minor,coupon_vendor_funded_minor,wallet_discount_minor,reward_discount_minor,occurred_at";
 
 function embed<T>(value: T | T[] | null): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
@@ -65,6 +66,7 @@ type Bucket = {
   orders: number;
   volume: number;
   deliveryFee: number;
+  orderDiscount: number;
   shippingDiscount: number;
   commission: number;
   courierCut: number;
@@ -129,6 +131,7 @@ export async function loadOrderMetrics(): Promise<BiOrderMetricRow[]> {
         orders: 0,
         volume: 0,
         deliveryFee: 0,
+        orderDiscount: 0,
         shippingDiscount: 0,
         commission: 0,
         courierCut: 0,
@@ -145,6 +148,7 @@ export async function loadOrderMetrics(): Promise<BiOrderMetricRow[]> {
     current.orders += 1;
     current.volume += Number(row.order_value_minor ?? 0);
     current.deliveryFee += Number(row.delivery_fee_minor ?? 0);
+    current.orderDiscount += Number(row.discount_minor ?? 0);
     current.shippingDiscount += Number(row.shipping_discount_minor ?? 0);
     current.commission += Number(row.commission_minor ?? 0);
     current.courierCut += Number(row.courier_cut_minor ?? 0);
@@ -160,6 +164,7 @@ export async function loadOrderMetrics(): Promise<BiOrderMetricRow[]> {
     ...bucket,
     volume: bucket.volume / 100,
     deliveryFee: bucket.deliveryFee / 100,
+    orderDiscount: bucket.orderDiscount / 100,
     shippingDiscount: bucket.shippingDiscount / 100,
     commission: bucket.commission / 100,
     courierCut: bucket.courierCut / 100,

@@ -26,9 +26,12 @@ function order(overrides = {}) {
     orders: 1,
     volume: 1000,
     deliveryFee: 30,
+    orderDiscount: 0,
+    shippingDiscount: 0,
     commission: 100,
     courierCut: 20,
     couponDiscount: 0,
+    rewardDiscount: 0,
     platformFunded: 0,
     vendorFunded: 0,
     walletDiscount: 0,
@@ -180,4 +183,53 @@ test("signed contracts total counts final and signed merchants only", () => {
 
   assert.equal(finance.signedCount, 1);
   assert.equal(finance.signedContracts, 2);
+});
+
+test("imported order and shipping discounts reach the totals and platform profit", () => {
+  const summary = summarizeOrderMetrics([
+    order({ orderDiscount: 500, shippingDiscount: 100, commission: 150 }),
+    order({ orderDiscount: 317.5, shippingDiscount: 147, commission: 150 }),
+  ]);
+
+  assert.equal(summary.discounts, 1064.5);
+  assert.equal(summary.platformDiscount, 1064.5);
+  assert.equal(summary.platformProfit, 300 - 1064.5);
+});
+
+test("the generic order discount and coupon amount are never double counted", () => {
+  const summary = summarizeOrderMetrics([
+    order({
+      orderDiscount: 50,
+      couponDiscount: 50,
+      platformFunded: 20,
+      shippingDiscount: 10,
+      rewardDiscount: 5,
+      walletDiscount: 20,
+      commission: 300,
+    }),
+  ]);
+
+  assert.equal(summary.discounts, 85);
+  assert.equal(summary.platformDiscount, 65);
+  assert.equal(summary.platformProfit, 300 - 65 - 20);
+});
+
+test("legacy coupon rows use the platform share for platform support", () => {
+  const summary = summarizeOrderMetrics([
+    order({
+      orderDiscount: 0,
+      couponDiscount: 100,
+      platformFunded: 40,
+      vendorFunded: 60,
+      shippingDiscount: 10,
+      rewardDiscount: 5,
+      walletDiscount: 20,
+      commission: 300,
+    }),
+  ]);
+
+  assert.equal(summary.discounts, 135);
+  assert.equal(summary.platformDiscount, 55);
+  assert.equal(summary.platformProfit, 300 - 55 - 20);
+  assert.equal(summary.merchantProfit, 1000 - 300 - 60);
 });

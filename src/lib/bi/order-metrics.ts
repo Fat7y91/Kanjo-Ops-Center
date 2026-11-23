@@ -61,10 +61,17 @@ export function filterOrderRows(
 /**
  * Profit is derived, never stored.
  *
- * Platform keeps the commission minus the discounts it funds (coupon platform
- * share and wallet credit). The merchant nets order value minus commission and
- * the discounts it funds itself. The courier earns the frozen delivery cut.
- * Discounts are reported as a total for visibility, not subtracted twice.
+ * `orderDiscount` is the generic order discount imported from the orders CSV.
+ * Legacy coupon rows predate that column and store the same money in
+ * `couponDiscount`, so the two are coalesced rather than summed: one order
+ * discount is counted once. Shipping, reward and wallet discounts are separate
+ * line items and are always added.
+ *
+ * The platform keeps the commission minus the discounts it funds: the generic
+ * order discount (or the coupon platform share on native coupon rows), free
+ * shipping, rewards and wallet credit. The merchant nets order value minus
+ * commission and the discounts it funds itself. The courier earns the frozen
+ * delivery cut. The displayed total is not deducted a second time.
  */
 export function summarizeOrderMetrics(
   rows: readonly BiOrderMetricRow[],
@@ -75,23 +82,42 @@ export function summarizeOrderMetrics(
   let driverCommission = 0;
   let commission = 0;
   let courierCut = 0;
-  let platformFunded = 0;
+  let orderDiscount = 0;
+  let platformOrderDiscount = 0;
+  let shippingDiscount = 0;
+  let rewardDiscount = 0;
   let vendorFunded = 0;
-  let couponDiscount = 0;
   let walletDiscount = 0;
 
   for (const row of rows) {
+    const genericDiscount = row.orderDiscount ?? 0;
+    const couponDiscount = row.couponDiscount ?? 0;
+    const couponPlatformShare = row.platformFunded ?? 0;
+
     orders += row.orders;
     volume += row.volume;
     deliveryFee += row.deliveryFee;
     driverCommission += Math.max(0, row.deliveryFee - row.courierCut);
     commission += row.commission;
     courierCut += row.courierCut;
-    platformFunded += row.platformFunded;
+
+    /* One order discount, never both representations. */
+    orderDiscount += genericDiscount > 0 ? genericDiscount : couponDiscount;
+    platformOrderDiscount +=
+      genericDiscount > 0
+        ? genericDiscount
+        : couponPlatformShare > 0
+          ? couponPlatformShare
+          : couponDiscount;
+
+    shippingDiscount += row.shippingDiscount ?? 0;
+    rewardDiscount += row.rewardDiscount ?? 0;
     vendorFunded += row.vendorFunded;
-    couponDiscount += row.couponDiscount;
     walletDiscount += row.walletDiscount;
   }
+
+  const platformDiscount =
+    platformOrderDiscount + shippingDiscount + rewardDiscount;
 
   return {
     orders,
@@ -100,11 +126,12 @@ export function summarizeOrderMetrics(
     merchantCommission: commission,
     driverCommission,
     operationalCollection: commission + driverCommission,
-    platformProfit: commission - platformFunded - walletDiscount,
+    platformProfit: commission - platformDiscount - walletDiscount,
     merchantProfit: volume - commission - vendorFunded,
     courierProfit: courierCut,
-    platformDiscount: platformFunded + walletDiscount,
-    discounts: couponDiscount + walletDiscount,
+    platformDiscount,
+    discounts:
+      orderDiscount + shippingDiscount + rewardDiscount + walletDiscount,
   };
 }
 

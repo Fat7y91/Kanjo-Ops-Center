@@ -201,7 +201,7 @@ export function OrdersMetricsSection({
           <WidgetStat
             label="إجمالي الخصومات"
             value={money(summary.discounts)}
-            detail="كوبونات + محفظة"
+            detail="طلبات + شحن + مكافآت + محفظة"
             tone="red"
           />
           <WidgetStat

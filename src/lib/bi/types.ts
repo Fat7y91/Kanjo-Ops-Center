@@ -207,6 +207,9 @@ export const biOrderMetricRowSchema = z.object({
   orders: z.number().int().nonnegative(),
   volume: z.number(),
   deliveryFee: z.number(),
+  /** Generic order discount (imported `discount_amount`). */
+  orderDiscount: z.number().default(0),
+  /** Free-shipping discount funded by the platform. */
   shippingDiscount: z.number().default(0),
   commission: z.number(),
   courierCut: z.number(),
