@@ -145,3 +145,17 @@
     width: 100%;
   }
 }
+
+/* Report vs delivered actuals switch and the delivered cash view. */
+.coupon-report-mode {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.coupon-delivered {
+  display: grid;
+  gap: 10px;
+}

@@ -156,6 +156,7 @@ export async function importOrders(
       deliveryFeeMinor: toMinorUnits(candidate.deliveryFee),
       courierFeeMinor: toMinorUnits(candidate.courierFee),
       couponId: null,
+      couponCode: candidate.couponCode,
       walletDiscountMinor: 0,
       walletDiscountReason: "",
       walletDiscountRef: "",

@@ -36,12 +36,12 @@ test("parses coupon usage rows into minor units", () => {
       couponType: "percentage_discount",
       discountFundedBy: "split",
       usesCount: 3,
-      discountAmount: 12050,
-      shippingDiscount: 1500,
-      cashbackAmount: 525,
-      totalImpact: 14075,
-      platformFunded: 7025,
-      vendorFunded: 6025,
+      discountAmount: 120.5,
+      shippingDiscount: 15,
+      cashbackAmount: 5.25,
+      totalImpact: 140.75,
+      platformFunded: 70.25,
+      vendorFunded: 60.25,
       lastUsedAt: "2026-11-15T11:00:00.000Z",
     },
   ]);
@@ -53,8 +53,8 @@ test("falls back to summed impact when total_impact is empty", () => {
     usage({ coupon_code: "ASEM100", total_impact: "" }),
   ]);
 
-  assert.equal(rows[0].totalImpact, 99900);
-  assert.equal(rows[1].totalImpact, 14075);
+  assert.equal(rows[0].totalImpact, 999);
+  assert.equal(rows[1].totalImpact, 140.75);
 });
 
 test("dedupes by uppercase code, keeping the last row", () => {
@@ -103,4 +103,24 @@ test("treats malformed money as zero instead of NaN", () => {
   assert.equal(rows[0].discountAmount, 0);
   assert.equal(rows[0].shippingDiscount, 0);
   assert.equal(rows[0].cashbackAmount, 0);
+});
+
+
+test("a 50.0 CSV value stays 50.00 and never becomes 5,000.00", () => {
+  const { rows } = parseCouponUsageReportRows([
+    usage({
+      coupon_code: "MOHAMED1",
+      uses_count: "1",
+      discount_amount: "50.0",
+      shipping_discount: "0",
+      cashback_amount: "0",
+      total_impact: "50.0",
+      platform_funded_amount: "50.0",
+      vendor_funded_amount: "0",
+    }),
+  ]);
+  assert.equal(rows[0].discountAmount, 50);
+  assert.equal(rows[0].totalImpact, 50);
+  assert.equal(rows[0].totalImpact.toFixed(2), "50.00");
+  assert.notEqual(rows[0].totalImpact, 5000);
 });

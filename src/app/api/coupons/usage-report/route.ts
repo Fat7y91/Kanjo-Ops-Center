@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { apiError, authorizeAny, readJson } from "@/lib/auth/api";
 import { CouponsError } from "@/lib/coupons/errors";
 import { parseCouponUsageReportRows } from "@/lib/coupons/usage-report";
+import { loadDeliveredCouponUsage } from "@/lib/coupons/delivered-usage-server";
 import {
   listCouponUsageReportRows,
   replaceCouponUsageReportRows,
@@ -19,9 +20,12 @@ export async function GET() {
   if (!session) return response;
 
   try {
-    const rows = await listCouponUsageReportRows();
+    const [rows, delivered] = await Promise.all([
+      listCouponUsageReportRows(),
+      loadDeliveredCouponUsage(),
+    ]);
     return NextResponse.json(
-      { rows },
+      { rows, delivered },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

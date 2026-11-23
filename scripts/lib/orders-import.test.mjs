@@ -262,3 +262,10 @@ test("a legacy row without settlement columns is not settlement-driven", () => {
   assert.equal(plan.candidates[0].settlementDriven, false);
   assert.equal(plan.candidates[0].netDuePlatform, 0);
 });
+
+test("coupon_code is captured from the order export when present", () => {
+  const withCode = importer.planImport([row({ coupon_code: "kanjo" })], roster);
+  assert.equal(withCode.candidates[0].couponCode, "KANJO");
+  const withoutCode = importer.planImport([row()], roster);
+  assert.equal(withoutCode.candidates[0].couponCode, "");
+});

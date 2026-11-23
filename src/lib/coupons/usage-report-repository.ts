@@ -56,6 +56,7 @@ export async function listCouponUsageReportRows(): Promise<
     .from("coupon_usage_reports")
     .select(COLUMNS)
     .order("total_impact_minor", { ascending: false })
+    .order("uses_count", { ascending: false })
     .limit(5000);
 
   if (error) {

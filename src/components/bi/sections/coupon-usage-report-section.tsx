@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+import { CouponDeliveredActuals } from "@/components/bi/coupon-delivered-actuals";
 import { CouponUsageImportModal } from "@/components/bi/coupon-usage-import-modal";
 import { useCouponUsageReport } from "@/components/bi/use-coupon-usage-report";
 import { Widget } from "@/components/bi/widget";
 import { Button } from "@/components/ui/button";
 import { ToggleField } from "@/components/ui/form-inputs";
-import { amount, count, money } from "@/lib/bi/format";
+import { amount, count } from "@/lib/bi/format";
 import {
   COUPON_FUNDING_LABEL,
   COUPON_TYPE_LABEL,
@@ -15,15 +16,19 @@ import {
   type CouponType,
 } from "@/lib/coupons/types";
 
-function typeLabel(value: CouponType): string {
-  return COUPON_TYPE_LABEL[value] ?? value;
+function egp(value: number): string {
+  return `${amount(value)} ج.م.`;
 }
 
-function fundingLabel(value: CouponFunding): string {
-  return COUPON_FUNDING_LABEL[value] ?? value;
+function typeLabel(value?: CouponType): string {
+  return value ? COUPON_TYPE_LABEL[value] ?? value : "—";
 }
 
-function lastUsedLabel(value: string | null): string {
+function fundingLabel(value?: CouponFunding): string {
+  return value ? COUPON_FUNDING_LABEL[value] ?? value : "—";
+}
+
+function lastUsedLabel(value?: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleString("ar-EG-u-nu-latn", {
     dateStyle: "short",
@@ -34,14 +39,14 @@ function lastUsedLabel(value: string | null): string {
 /**
  * Coupon Usage Report card.
  *
- * The imported report counts every order a code was applied to, including
- * cancelled and undelivered orders. It is a marketing snapshot, not the
- * delivered-order P&L, so the note keeps the two totals from being read as a
- * contradiction.
+ * Report mode is the imported marketing snapshot (all applied orders).
+ * Delivered mode is the cash actual from delivered operation ledger rows, so
+ * cancelled orders never inflate the financial comparison.
  */
 export function CouponUsageReportSection() {
   const report = useCouponUsageReport();
   const [toast, setToast] = useState("");
+  const deliveredMode = report.mode === "delivered";
 
   useEffect(() => {
     if (!toast) return;
@@ -56,32 +61,50 @@ export function CouponUsageReportSection() {
       span={12}
       badge={
         <span className="badge badge-gold">
-          {count(report.totals.activeCodes)} كود مستخدم ·{" "}
-          {count(report.totals.totalCodes)} إجمالي
+          {deliveredMode
+            ? `${count(report.delivered.orders)} طلب مسلّم`
+            : `${count(report.totals.activeCodes)} كود مستخدم · ${count(
+                report.totals.totalCodes,
+              )} إجمالي`}
         </span>
       }
     >
-      <div className="coupon-report-toolbar">
+      <div className="coupon-report-mode">
         <ToggleField
-          label="إظهار الكوبونات غير المستخدمة"
-          hint={`${count(report.rows.length)} كود في التقرير`}
-          checked={report.showUnused}
-          onChange={report.setShowUnused}
+          label={
+            deliveredMode
+              ? "المستخدم فعلياً (الطلبات المسلّمة فقط)"
+              : "إجمالي التقرير كله"
+          }
+          hint={
+            deliveredMode
+              ? `${egp(report.delivered.totalImpact)} من الطلبات المسلّمة`
+              : `${egp(report.totals.totalImpact)} من ملف التقرير المستورد`
+          }
+          checked={deliveredMode}
+          onChange={(checked) =>
+            report.setMode(checked ? "delivered" : "report")
+          }
         />
-        <Button
-          variant="accent"
-          onClick={() => report.setImporting(true)}
-          disabled={report.loading}
-        >
-          استيراد تقرير CSV
-        </Button>
       </div>
 
-      <p className="inline-note coupon-report-note">
-        يشمل تقرير استخدام الكوبونات كل الطلبات التي طُبّق عليها الكود، بما فيها
-        الملغاة وغير المسلّمة. أما أرباح المنصة والتاجر فتُحسب من الطلبات
-        المسلّمة فقط.
-      </p>
+      {!deliveredMode ? (
+        <div className="coupon-report-toolbar">
+          <ToggleField
+            label="إظهار الكوبونات غير المستخدمة"
+            hint={`${count(report.rows.length)} كود في التقرير`}
+            checked={report.showUnused}
+            onChange={report.setShowUnused}
+          />
+          <Button
+            variant="accent"
+            onClick={() => report.setImporting(true)}
+            disabled={report.loading}
+          >
+            استيراد تقرير CSV
+          </Button>
+        </div>
+      ) : null}
 
       {report.error ? (
         <p className="form-error" role="alert">
@@ -91,6 +114,12 @@ export function CouponUsageReportSection() {
 
       {report.loading ? (
         <p className="bi-widget-empty">جارٍ تحميل تقرير الكوبونات…</p>
+      ) : deliveredMode ? (
+        <CouponDeliveredActuals
+          delivered={report.delivered}
+          reportTotalImpact={report.totals.totalImpact}
+          rows={report.visible}
+        />
       ) : report.rows.length === 0 ? (
         <div className="bi-widget-empty">
           <p>لم يُستورد تقرير الكوبونات بعد.</p>
@@ -108,6 +137,12 @@ export function CouponUsageReportSection() {
         </p>
       ) : (
         <>
+          <p className="inline-note coupon-report-note">
+            يشمل تقرير استخدام الكوبونات كل الطلبات التي طُبّق عليها الكود، بما
+            فيها الملغاة وغير المسلّمة. بدّل إلى الطلبات المسلّمة للمقارنة
+            المالية.
+          </p>
+
           <div className="coupon-report-top">
             {report.topCodes.map((row, index) => (
               <div className="coupon-report-top-card" key={row.code}>
@@ -115,7 +150,7 @@ export function CouponUsageReportSection() {
                 <div>
                   <strong dir="ltr">{row.code}</strong>
                   <span>
-                    {count(row.usesCount)} استخدام · {money(row.totalImpact)}
+                    {count(row.usesCount)} استخدام · {egp(row.totalImpact)}
                   </span>
                 </div>
               </div>
@@ -126,7 +161,7 @@ export function CouponUsageReportSection() {
             <div className="bi-stat">
               <span className="bi-stat-label">إجمالي الأثر</span>
               <strong className="bi-stat-value">
-                {money(report.totals.totalImpact)}
+                {egp(report.totals.totalImpact)}
               </strong>
               <span className="bi-stat-detail">
                 {count(report.totals.uses)} استخدام
@@ -135,28 +170,28 @@ export function CouponUsageReportSection() {
             <div className="bi-stat">
               <span className="bi-stat-label">مدفوع من المنصة</span>
               <strong className="bi-stat-value">
-                {money(report.totals.platformFunded)}
+                {egp(report.totals.platformFunded)}
               </strong>
               <span className="bi-stat-detail">تمويل كانجو</span>
             </div>
             <div className="bi-stat">
               <span className="bi-stat-label">مدفوع من التاجر</span>
               <strong className="bi-stat-value">
-                {money(report.totals.vendorFunded)}
+                {egp(report.totals.vendorFunded)}
               </strong>
               <span className="bi-stat-detail">حصة التاجر</span>
             </div>
             <div className="bi-stat">
               <span className="bi-stat-label">خصم الشحن والاسترداد</span>
               <strong className="bi-stat-value">
-                {money(
+                {egp(
                   report.totals.shippingDiscount +
                     report.totals.cashbackAmount,
                 )}
               </strong>
               <span className="bi-stat-detail">
-                {money(report.totals.shippingDiscount)} شحن ·{" "}
-                {money(report.totals.cashbackAmount)} استرداد
+                {egp(report.totals.shippingDiscount)} شحن ·{" "}
+                {egp(report.totals.cashbackAmount)} استرداد
               </span>
             </div>
           </div>

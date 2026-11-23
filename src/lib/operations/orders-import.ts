@@ -50,6 +50,12 @@ export type ImportCandidate = {
   shippingDiscount: number;
   tip: number;
   walletAmount: number;
+  /**
+   * Coupon code carried by the export, when present. It is stored verbatim so
+   * the delivered-coupon report can group actuals per code without needing a
+   * matching coupon rule row.
+   */
+  couponCode: string;
   /** `subtotal − discounts + shipping + tip`, recomputed, never trusted. */
   expectedTotal: number;
   /** `expectedTotal − walletAmount`. */
@@ -286,6 +292,9 @@ export function planImport(
     const shippingDiscount = parseFee(
       field(row, "shipping_discount", "shippingDiscount", "خصم الشحن"),
     );
+    const couponCode = clean(
+      field(row, "coupon_code", "couponCode", "coupon", "coupon_code ", "الكوبون", "كود الكوبون"),
+    ).toUpperCase();
     const tip = parseFee(field(row, "tip", "tip_amount", "tipAmount", "البقشيش"));
     const walletAmount = parseFee(
       field(row, "wallet_amount", "walletAmount", "wallet", "المحفظة"),
@@ -390,6 +399,7 @@ export function planImport(
       discount,
       rewardDiscount,
       shippingDiscount,
+      couponCode,
       tip,
       walletAmount,
       expectedTotal,

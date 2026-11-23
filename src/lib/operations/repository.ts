@@ -236,6 +236,8 @@ export type OperationWrite = {
   /** Courier's own earning; only set for settlement-driven imports. */
   courierFeeMinor?: number;
   couponId: string | null;
+  /** Code carried by an imported order export; never guessed from the id. */
+  couponCode?: string;
   walletDiscountMinor: number;
   walletDiscountReason: string;
   walletDiscountRef: string;
@@ -276,6 +278,7 @@ function insertRow(write: OperationWrite): Record<string, unknown> {
      * resolves it from the courier's fixed profit. Sending zero keeps the
      * employee blind to the amount while the database stays authoritative. */
     coupon_id: write.couponId,
+    ...(write.couponCode !== undefined ? { coupon_code: write.couponCode } : {}),
     wallet_discount_minor: write.walletDiscountMinor,
     wallet_discount_reason: write.walletDiscountReason,
     wallet_discount_ref: write.walletDiscountRef,

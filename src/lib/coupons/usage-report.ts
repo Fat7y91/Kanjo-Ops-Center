@@ -13,9 +13,11 @@ import {
  * different from the delivered-order financial journal, so the two totals can
  * disagree without either one being wrong.
  *
- * Money is currency units on input and becomes minor units here, once. Rows
- * with `uses_count = 0` are kept: the dashboard hides them by default but the
- * operator can switch them on to see the full 308-code snapshot.
+ * Money stays in currency units (EGP) from CSV to API to UI; the repository
+ * performs the single conversion to database minor units. Converting here as
+ * well made every amount render 100x too high. Rows with `uses_count = 0` are
+ * kept: the dashboard hides them by default but the operator can switch them on
+ * to see the full 308-code snapshot.
  */
 
 export const COUPON_USAGE_REPORT_COLUMNS = [
@@ -79,9 +81,9 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function toMinor(value: unknown): number {
+function toMoney(value: unknown): number {
   const numeric = toNumber(value);
-  return numeric === null ? 0 : Math.round(numeric * 100);
+  return numeric === null ? 0 : Math.round(numeric * 100) / 100;
 }
 
 function toEnum<T extends string>(
@@ -124,14 +126,14 @@ export function parseCouponUsageReportRows(
 
     if (byCode.has(code)) parsed.duplicates += 1;
 
-    const discountAmount = toMinor(row.discount_amount);
-    const shippingDiscount = toMinor(row.shipping_discount);
-    const cashbackAmount = toMinor(row.cashback_amount);
+    const discountAmount = toMoney(row.discount_amount);
+    const shippingDiscount = toMoney(row.shipping_discount);
+    const cashbackAmount = toMoney(row.cashback_amount);
     const totalImpactRaw = clean(row.total_impact);
     const totalImpact =
       totalImpactRaw === ""
-        ? discountAmount + shippingDiscount + cashbackAmount
-        : toMinor(row.total_impact);
+        ? Math.round((discountAmount + shippingDiscount + cashbackAmount) * 100) / 100
+        : toMoney(row.total_impact);
 
     byCode.set(code, {
       code,
@@ -150,8 +152,8 @@ export function parseCouponUsageReportRows(
       shippingDiscount,
       cashbackAmount,
       totalImpact,
-      platformFunded: toMinor(row.platform_funded_amount),
-      vendorFunded: toMinor(row.vendor_funded_amount),
+      platformFunded: toMoney(row.platform_funded_amount),
+      vendorFunded: toMoney(row.vendor_funded_amount),
       lastUsedAt: toTimestamp(row.last_used_at),
     });
   });
