@@ -196,6 +196,30 @@ test("imported order and shipping discounts reach the totals and platform profit
   assert.equal(summary.platformProfit, 300 - 1064.5);
 });
 
+test("waterfall reconciles gross revenue to net order profit", () => {
+  const summary = summarizeOrderMetrics([
+    order({
+      volume: 1000,
+      commission: 100,
+      deliveryFee: 30,
+      orderDiscount: 40,
+      shippingDiscount: 10,
+      rewardDiscount: 5,
+      walletDiscount: 15,
+      courierCut: 20,
+    }),
+  ]);
+
+  assert.equal(summary.grossCommission, 100);
+  assert.equal(summary.grossDeliveryFees, 30);
+  assert.equal(summary.grossRevenue, 130);
+  assert.equal(summary.netMerchantShare, 900);
+  assert.equal(summary.orderDiscounts, 60);
+  assert.equal(summary.shippingDiscount, 10);
+  assert.equal(summary.courierProfit, 20);
+  assert.equal(summary.netOrderProfit, 40);
+});
+
 test("the generic order discount and coupon amount are never double counted", () => {
   const summary = summarizeOrderMetrics([
     order({

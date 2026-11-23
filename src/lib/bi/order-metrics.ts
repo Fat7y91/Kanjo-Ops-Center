@@ -38,6 +38,20 @@ export type OrderMetricSummary = {
   platformProfit: number;
   merchantProfit: number;
   courierProfit: number;
+  /** Gross merchant commission before any discount is netted off. */
+  grossCommission: number;
+  /** Gross delivery fees charged before shipping coupons. */
+  grossDeliveryFees: number;
+  /** Gross commissions plus gross delivery fees. */
+  grossRevenue: number;
+  /** Order value less merchant commission, before funding adjustments. */
+  netMerchantShare: number;
+  /** Order, reward and wallet discounts charged against the order. */
+  orderDiscounts: number;
+  /** Free-shipping discount funded by the platform. */
+  shippingDiscount: number;
+  /** Gross revenue less direct order, shipping and courier costs. */
+  netOrderProfit: number;
   /** Discounts the platform itself funded: coupon share plus wallet credit. */
   platformDiscount: number;
   discounts: number;
@@ -118,6 +132,8 @@ export function summarizeOrderMetrics(
 
   const platformDiscount =
     platformOrderDiscount + shippingDiscount + rewardDiscount;
+  const orderDiscounts = orderDiscount + rewardDiscount + walletDiscount;
+  const grossRevenue = commission + deliveryFee;
 
   return {
     orders,
@@ -129,6 +145,14 @@ export function summarizeOrderMetrics(
     platformProfit: commission - platformDiscount - walletDiscount,
     merchantProfit: volume - commission - vendorFunded,
     courierProfit: courierCut,
+    grossCommission: commission,
+    grossDeliveryFees: deliveryFee,
+    grossRevenue,
+    netMerchantShare: volume - commission,
+    orderDiscounts,
+    shippingDiscount,
+    netOrderProfit:
+      grossRevenue - orderDiscounts - shippingDiscount - courierCut,
     platformDiscount,
     discounts:
       orderDiscount + shippingDiscount + rewardDiscount + walletDiscount,

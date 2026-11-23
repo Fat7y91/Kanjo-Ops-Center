@@ -19,9 +19,12 @@ export type CategoryUpsertPlan = {
   id: string;
   parent_id: string | null;
   vendor_type: string;
+  vendor_type_id: number;
+  numeric_id: number;
   name_ar: string;
   name_en: string;
   level: number;
+  source: "v1";
 };
 
 export type CategoryPlanResult = {
@@ -99,9 +102,12 @@ export function buildCategoryPlan(
         ? taxonomyUuid(row.vendorTypeId, row.parentNumericId as number)
         : null,
       vendor_type: vendorName ?? String(row.vendorTypeId),
+      vendor_type_id: row.vendorTypeId,
+      numeric_id: row.numericId,
       name_ar: row.nameAr,
       name_en: row.nameEn,
       level: levelOf(row, new Set()),
+      source: "v1",
     });
   }
 

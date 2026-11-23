@@ -1,13 +1,7 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { requireModuleAccess } from "@/lib/auth/guard";
-import { refreshVariantsFromDatabase } from "@/lib/taxonomy/db-variants";
-import {
-  listCategories,
-  listTaxonomyRequests,
-  listVendorTypes,
-  listVariants,
-  taxonomyRevision,
-} from "@/lib/taxonomy/store";
+import { loadTaxonomySnapshotFromDatabase } from "@/lib/taxonomy/db-taxonomy";
+import { listTaxonomyRequests } from "@/lib/taxonomy/store";
 import { TaxonomyCenter } from "./taxonomy-center";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +9,7 @@ export const runtime = "edge";
 
 export default async function CatalogTaxonomyPage() {
   const session = await requireModuleAccess("/catalog/taxonomy");
-  await refreshVariantsFromDatabase();
-
-  const snapshot = {
-    vendorTypes: listVendorTypes(),
-    categories: listCategories(),
-    variants: listVariants(),
-  };
+  const snapshot = await loadTaxonomySnapshotFromDatabase();
   const requests = listTaxonomyRequests();
   const pending = requests.filter((request) => request.status === "pending").length;
 
@@ -45,7 +33,7 @@ export default async function CatalogTaxonomyPage() {
       <TaxonomyCenter
         initialSnapshot={snapshot}
         initialRequests={requests}
-        initialRevision={taxonomyRevision()}
+        initialRevision={snapshot.revision}
         viewerName={session.user.name}
       />
     </>

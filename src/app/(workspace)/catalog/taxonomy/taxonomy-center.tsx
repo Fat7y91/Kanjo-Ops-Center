@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Modal } from "@/components/field-ops/modal";
 import { usePermission } from "@/components/auth/use-permission";
@@ -60,6 +61,7 @@ export function TaxonomyCenter({
   initialRevision,
   viewerName,
 }: TaxonomyCenterProps) {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<Snapshot>(initialSnapshot);
   const [requests, setRequests] = useState<TaxonomyRequest[]>(initialRequests);
   const [revision, setRevision] = useState(initialRevision);
@@ -108,7 +110,7 @@ export function TaxonomyCenter({
         variants: snapshotPayload.variants ?? [],
       });
       setRequests(requestsPayload.requests ?? []);
-      setRevision(requestsPayload.revision ?? snapshotPayload.revision ?? 0);
+      setRevision(snapshotPayload.revision ?? requestsPayload.revision ?? 0);
     } catch {
       /* keep last known state */
     }
@@ -277,7 +279,7 @@ export function TaxonomyCenter({
         onClose={() => setSyncOpen(false)}
         onSynced={(message) => {
           setToast(message);
-          void refresh();
+          void refresh().then(() => router.refresh());
         }}
       />
 

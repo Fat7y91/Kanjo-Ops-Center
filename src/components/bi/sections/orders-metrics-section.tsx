@@ -168,48 +168,67 @@ export function OrdersMetricsSection({
       {summary.orders === 0 ? (
         <p className="bi-widget-empty">لا توجد طلبات في هذا النطاق.</p>
       ) : (
-        <div className="order-metrics-grid">
-          <WidgetStat
-            label="إجمالي حجم الطلبات"
-            value={money(summary.volume)}
-            detail={`${summary.orders} طلب`}
-            tone="purple"
-          />
-          <WidgetStat
-            label="متوسط قيمة الطلب"
-            value={money(summary.averageOrderValue)}
-            detail="لكل طلب داخل النطاق"
-            tone="gold"
-          />
-          <WidgetStat
-            label="ربح المنصة"
-            value={money(summary.platformProfit)}
-            detail="العمولة ناقص الخصومات الممولة"
-            tone="green"
-          />
-          <WidgetStat
-            label="ربح التاجر"
-            value={money(summary.merchantProfit)}
-            detail="صافي قيمة الطلبات"
-            tone="gold"
-          />
-          <WidgetStat
-            label="ربح مندوب التوصيل"
-            value={money(summary.courierProfit)}
-            detail="حصة التوصيل المجمدة"
-          />
-          <WidgetStat
-            label="إجمالي الخصومات"
-            value={money(summary.discounts)}
-            detail="طلبات + شحن + مكافآت + محفظة"
-            tone="red"
-          />
-          <WidgetStat
-            label="دعم الكوبونات والخصومات"
-            value={money(summary.platformDiscount)}
-            detail="ممول من المنصة"
-            tone="red"
-          />
+        <div className="order-metrics-waterfall">
+          <p className="order-metrics-row-label">حجم النشاط وإجمالي الإيرادات</p>
+          <div className="order-metrics-row order-metrics-row-five">
+            <WidgetStat
+              label="إجمالي حجم الطلبات (GMV)"
+              value={money(summary.volume)}
+              detail={`${summary.orders} طلب · متوسط ${money(summary.averageOrderValue)}/طلب`}
+              tone="purple"
+            />
+            <WidgetStat
+              label="صافي حصة التجار"
+              value={money(summary.netMerchantShare)}
+              detail="قيمة الطلبات ناقص العمولة"
+              tone="gold"
+            />
+            <WidgetStat
+              label="إجمالي العمولات (قبل الخصم)"
+              value={money(summary.grossCommission)}
+              detail="عمولة التجار قبل أي خصم"
+            />
+            <WidgetStat
+              label="إجمالي رسوم التوصيل (قبل الخصم)"
+              value={money(summary.grossDeliveryFees)}
+              detail="رسوم التوصيل قبل كوبونات الشحن"
+            />
+            <WidgetStat
+              label="إجمالي إيراد المنصة (Gross Revenue)"
+              value={money(summary.grossRevenue)}
+              detail="العمولات + رسوم التوصيل"
+              tone="purple"
+            />
+          </div>
+
+          <p className="order-metrics-row-label">
+            التكاليف المباشرة وصافي ربح الطلبات
+          </p>
+          <div className="order-metrics-row order-metrics-row-four">
+            <WidgetStat
+              label="خصم الكوبونات على الطلبات"
+              value={money(summary.orderDiscounts)}
+              detail="خصم الطلب + المكافآت + المحفظة"
+              tone="red"
+            />
+            <WidgetStat
+              label="خصم الشحن المجاني"
+              value={money(summary.shippingDiscount)}
+              detail="دعم الشحن الممول من المنصة"
+              tone="red"
+            />
+            <WidgetStat
+              label="أجر المناديب على الطلبات"
+              value={money(summary.courierProfit)}
+              detail="أجر التوصيل لكل طلب قبل الأساس اليومي"
+            />
+            <WidgetStat
+              label="صافي ربح الطلبات (قبل اليوميات الثابتة)"
+              value={money(summary.netOrderProfit)}
+              detail={`متوسط ${money(summary.netOrderProfit / summary.orders)}/طلب`}
+              tone={summary.netOrderProfit >= 0 ? "green" : "red"}
+            />
+          </div>
         </div>
       )}
     </Widget>

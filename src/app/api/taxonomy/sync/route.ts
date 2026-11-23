@@ -16,6 +16,7 @@ import {
   type VariantWriteResult,
 } from "@/lib/taxonomy/csv-sync/repository";
 import { buildTaxonomySyncSummary } from "@/lib/taxonomy/csv-sync/summary";
+import { bumpTaxonomyRevision } from "@/lib/taxonomy/taxonomy-state";
 import {
   buildVendorCatalog,
   planVendorTypes,
@@ -120,6 +121,15 @@ export async function POST(request: Request) {
       variantPlan.attributes.length > 0 || variantPlan.options.length > 0
         ? await syncVariants(variantPlan)
         : EMPTY_VARIANT_WRITE;
+
+    if (
+      vendorPlan.rows.length > 0 ||
+      categoryPlan.rows.length > 0 ||
+      variantPlan.attributes.length > 0 ||
+      variantPlan.options.length > 0
+    ) {
+      await bumpTaxonomyRevision();
+    }
 
     const summary = buildTaxonomySyncSummary({
       vendorPlan,

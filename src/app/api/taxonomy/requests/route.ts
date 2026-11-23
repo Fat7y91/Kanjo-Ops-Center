@@ -9,11 +9,8 @@ import {
 } from "@/lib/auth/api";
 import { permissionsForModule } from "@/lib/rbac/modules";
 import { taxonomyRequestCreateSchema } from "@/lib/schemas/taxonomy";
-import {
-  createTaxonomyRequest,
-  listTaxonomyRequests,
-  taxonomyRevision,
-} from "@/lib/taxonomy/store";
+import { loadTaxonomyRevisionFromDatabase } from "@/lib/taxonomy/db-taxonomy";
+import { createTaxonomyRequest, listTaxonomyRequests } from "@/lib/taxonomy/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -25,7 +22,10 @@ export async function GET() {
   if (!session) return response;
 
   return NextResponse.json(
-    { requests: listTaxonomyRequests(), revision: taxonomyRevision() },
+    {
+      requests: listTaxonomyRequests(),
+      revision: await loadTaxonomyRevisionFromDatabase(),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
