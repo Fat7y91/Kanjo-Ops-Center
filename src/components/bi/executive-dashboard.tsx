@@ -12,6 +12,7 @@ import { ProfitabilitySection } from "@/components/bi/profitability-section";
 import { SlideOver } from "@/components/bi/slide-over";
 import { CatalogSection } from "@/components/bi/sections/catalog-section";
 import { ComplianceSection } from "@/components/bi/sections/compliance-section";
+import { CouponUsageReportSection } from "@/components/bi/sections/coupon-usage-report-section";
 import { FinanceSection } from "@/components/bi/sections/finance-section";
 import { FunnelSection } from "@/components/bi/sections/funnel-section";
 import { MarketingSection } from "@/components/bi/sections/marketing-section";
@@ -210,6 +211,8 @@ export function ExecutiveDashboard({
             range={filters.range}
           />
         ) : null}
+
+        {canSeeFinance ? <CouponUsageReportSection /> : null}
 
         {canSeeNegotiation ? (
           <NegotiationSection

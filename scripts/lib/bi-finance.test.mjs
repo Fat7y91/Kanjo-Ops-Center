@@ -233,3 +233,63 @@ test("legacy coupon rows use the platform share for platform support", () => {
   assert.equal(summary.platformProfit, 300 - 55 - 20);
   assert.equal(summary.merchantProfit, 1000 - 300 - 60);
 });
+
+const { aggregateOrderRows } = loadTsModule(
+  path.join(projectRoot, "src/lib/bi/order-metrics-aggregate.ts"),
+);
+
+test("order aggregation maps discount_minor and shipping_discount_minor", () => {
+  const rows = aggregateOrderRows([
+    {
+      merchant_id: "m1",
+      courier_id: "d1",
+      coupon_code: null,
+      currency: "EGP",
+      order_value_minor: 100000,
+      delivery_fee_minor: 3000,
+      discount_minor: 1000,
+      shipping_discount_minor: 250,
+      commission_minor: 10000,
+      courier_cut_minor: 2000,
+      coupon_discount_minor: null,
+      coupon_platform_funded_minor: null,
+      coupon_vendor_funded_minor: null,
+      wallet_discount_minor: 0,
+      reward_discount_minor: 0,
+      occurred_at: "2026-11-15T10:00:00Z",
+      merchants: { name: "تاجر", city_id: "c1" },
+      couriers: { display_name: "مندوب", is_internal_staff: false },
+    },
+    {
+      merchant_id: "m1",
+      courier_id: "d1",
+      coupon_code: null,
+      currency: "EGP",
+      order_value_minor: 50000,
+      delivery_fee_minor: 3000,
+      discount_minor: 500,
+      shipping_discount_minor: 0,
+      commission_minor: 5000,
+      courier_cut_minor: 2000,
+      coupon_discount_minor: null,
+      coupon_platform_funded_minor: null,
+      coupon_vendor_funded_minor: null,
+      wallet_discount_minor: 0,
+      reward_discount_minor: 0,
+      occurred_at: "2026-11-15T11:00:00Z",
+      merchants: { name: "تاجر", city_id: "c1" },
+      couriers: { display_name: "مندوب", is_internal_staff: false },
+    },
+  ]);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].orders, 2);
+  assert.equal(rows[0].volume, 1500);
+  assert.equal(rows[0].orderDiscount, 15);
+  assert.equal(rows[0].shippingDiscount, 2.5);
+
+  const summary = summarizeOrderMetrics(rows);
+  assert.equal(summary.discounts, 17.5);
+  assert.equal(summary.platformDiscount, 17.5);
+  assert.equal(summary.platformProfit, 150 - 17.5);
+});
