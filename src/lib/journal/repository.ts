@@ -133,6 +133,34 @@ async function findReceiptRow(
   );
 }
 
+/**
+ * The operating instant behind an entry.
+ *
+ * For an operation the voucher should show when the order was delivered, not
+ * when the bookkeeper happened to import it. The journal header only stores
+ * `created_at`, so the delivery timestamp is read from the operation row. Other
+ * sources keep their own clock out of this read and fall back to `createdAt`.
+ */
+async function findOperationOccurredAt(entry: EntryRow): Promise<string | null> {
+  if (entry.source_type !== "operation" || !entry.source_id) return null;
+  const client = getSupabaseServerClient();
+  const { data, error } = await client
+    .schema("app")
+    .from("operation_logs")
+    .select("occurred_at")
+    .eq("id", entry.source_id)
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS))
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return null;
+    console.error("[journal] failed to read operation timestamp", error);
+    return null;
+  }
+  if (!data) return null;
+  return (data as { occurred_at: string | null }).occurred_at ?? null;
+}
+
 function partyNameFor(
   line: LineRow,
   names: { merchants: Map<string, string>; couriers: Map<string, string> },
@@ -187,9 +215,10 @@ export async function loadJournalEntry(
   const entry = await findEntryRow(entryId);
   if (!entry) return null;
 
-  const [lineRows, receiptRow] = await Promise.all([
+  const [lineRows, receiptRow, occurredAt] = await Promise.all([
     listLineRows(entryId),
     findReceiptRow(entryId),
+    findOperationOccurredAt(entry),
   ]);
 
   const names = await resolvePartyNames({
@@ -247,6 +276,7 @@ export async function loadJournalEntry(
     entryNo: String(entry.entry_no),
     entryDate: entry.entry_date,
     createdAt: entry.created_at,
+    occurredAt,
     memo: entry.memo ?? "",
     sourceType: entry.source_type,
     sourceId: entry.source_id,

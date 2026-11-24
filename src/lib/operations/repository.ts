@@ -285,6 +285,7 @@ function insertRow(write: OperationWrite): Record<string, unknown> {
     note: write.note,
     logged_by: write.loggedBy,
     ...(write.occurredAt ? { occurred_at: write.occurredAt } : {}),
+    ...(write.deliveredAt ? { delivered_at: write.deliveredAt } : {}),
   };
 
   /* Settlement-driven rows carry the raw CSV terms. They are omitted for
@@ -301,7 +302,6 @@ function insertRow(write: OperationWrite): Record<string, unknown> {
     row.amount_due_minor = write.amountDueMinor ?? 0;
     row.cod_collected_minor = write.codCollectedMinor ?? 0;
     row.net_due_platform_minor = write.netDuePlatformMinor ?? 0;
-    row.delivered_at = write.deliveredAt ?? null;
   }
 
   return row;
@@ -404,4 +404,38 @@ export async function findExistingOrderIds(
   }
 
   return existing;
+}
+
+export type TimestampHeal = {
+  orderId: string;
+  occurredAt?: string;
+  deliveredAt?: string;
+};
+
+/**
+ * Corrects the delivery/operating instants of orders that already exist.
+ *
+ * A re-uploaded sheet must not be treated as a pure duplicate: the money terms
+ * are frozen and stay untouched, but the timestamp can be wrong (an older
+ * import truncated it to a date). The database exposes a narrow, service-role
+ * only RPC that rewrites only `occurred_at`/`delivered_at` and re-syncs the
+ * courier's attendance base. Returns the number of rows that actually moved.
+ */
+export async function healOperationTimestamps(
+  rows: readonly TimestampHeal[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const client = getSupabaseServerClient();
+  const payload = rows.map((row) => ({
+    order_id: row.orderId,
+    occurred_at: row.occurredAt ?? null,
+    delivered_at: row.deliveredAt ?? null,
+  }));
+  const { data, error } = await client
+    .schema("app")
+    .rpc("heal_operation_timestamps", { p_rows: payload })
+    .abortSignal(AbortSignal.timeout(BATCH_WRITE_TIMEOUT_MS));
+
+  if (error) throw error;
+  return typeof data === "number" ? data : Number(data ?? 0);
 }

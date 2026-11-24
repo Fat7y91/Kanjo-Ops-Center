@@ -48,7 +48,7 @@ test("a valid row maps to a candidate with the roster ids", () => {
   assert.equal(candidate.paymentMethod, "COD");
   assert.equal(candidate.orderValue, 250);
   assert.equal(candidate.deliveryFee, 25);
-  assert.equal(candidate.occurredAt, "2026-11-11");
+  assert.equal(candidate.occurredAt, "2026-11-10T22:00:00.000Z");
 });
 
 test("an unknown vendor is reported, not guessed", () => {
@@ -159,7 +159,7 @@ test("alternate headers from the PO export are accepted", () => {
   );
   assert.equal(plan.candidates.length, 1);
   assert.equal(plan.candidates[0].paymentMethod, "ONLINE");
-  assert.equal(plan.candidates[0].occurredAt, "2026-11-11");
+  assert.equal(plan.candidates[0].occurredAt, "2026-11-10T22:00:00.000Z");
 });
 
 test("the data line number accounts for the header row", () => {
@@ -228,9 +228,34 @@ test("delivered_at wins when present and falls back to the order date otherwise"
     [settlementRow({ delivered_at: "2026-11-13" })],
     roster,
   );
-  assert.equal(withDelivery.candidates[0].deliveredAt, "2026-11-13");
+  assert.equal(withDelivery.candidates[0].deliveredAt, "2026-11-12T22:00:00.000Z");
   const withoutDelivery = importer.planImport([settlementRow()], roster);
-  assert.equal(withoutDelivery.candidates[0].deliveredAt, "2026-11-11");
+  assert.equal(withoutDelivery.candidates[0].deliveredAt, "2026-11-10T22:00:00.000Z");
+});
+
+test("the real Cairo delivery time is kept, never truncated to a date", () => {
+  const plan = importer.planImport(
+    [settlementRow({ delivered_at: "2026-11-22 20:14:50" })],
+    roster,
+  );
+  const candidate = plan.candidates[0];
+  /* Cairo is UTC+2 in November, so 20:14:50 local is the exact same operating
+   * day and must not fall back to midnight UTC (02:00 Cairo). */
+  assert.equal(candidate.occurredAt, "2026-11-22T18:14:50.000Z");
+  assert.equal(candidate.deliveredAt, "2026-11-22T18:14:50.000Z");
+});
+
+test("an evening and an early-afternoon delivery keep distinct business days", () => {
+  const evening = importer.planImport(
+    [settlementRow({ delivered_at: "2026-11-22 20:14:50" })],
+    roster,
+  );
+  const afternoon = importer.planImport(
+    [settlementRow({ delivered_at: "2026-11-22 13:53:00" })],
+    roster,
+  );
+  assert.equal(evening.candidates[0].occurredAt, "2026-11-22T18:14:50.000Z");
+  assert.equal(afternoon.candidates[0].occurredAt, "2026-11-22T11:53:00.000Z");
 });
 
 test("camelCase settlement headers are accepted", () => {

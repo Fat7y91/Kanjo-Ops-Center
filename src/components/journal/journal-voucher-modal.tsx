@@ -140,7 +140,9 @@ export function JournalVoucherModal({
           <header className="voucher-head">
             <div>
               <h3 dir="ltr">{voucher.entryNo}</h3>
-              <p className="muted">{fullDateTime(voucher.createdAt)}</p>
+              <p className="muted">
+                {fullDateTime(voucher.occurredAt ?? voucher.createdAt)}
+              </p>
             </div>
             <strong className="voucher-amount" dir="ltr">
               {money(amount)}
@@ -150,7 +152,10 @@ export function JournalVoucherModal({
           <section className="voucher-section">
             <h3>بيانات الحركة</h3>
             <dl className="voucher-details">
-              <Detail label="التاريخ" value={fullDateTime(voucher.createdAt)} />
+              <Detail
+                label="التاريخ"
+                value={fullDateTime(voucher.occurredAt ?? voucher.createdAt)}
+              />
               <Detail
                 label="الرقم المرجعي"
                 value={voucher.entryId}

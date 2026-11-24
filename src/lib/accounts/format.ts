@@ -37,6 +37,7 @@ const DATE_TIME = new Intl.DateTimeFormat("ar-EG-u-nu-latn", {
   hour: "2-digit",
   minute: "2-digit",
   hour12: true,
+  timeZone: "Africa/Cairo",
 });
 
 /** Exact date and time, for an audit voucher where the minute matters. */

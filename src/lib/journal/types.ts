@@ -36,6 +36,12 @@ export type JournalEntryDetail = {
   entryNo: string;
   entryDate: string;
   createdAt: string;
+  /**
+   * The operating timestamp of the underlying document (the order's delivery
+   * instant for an operation entry). Null when the source carries no clock of
+   * its own, in which case the voucher falls back to `createdAt`.
+   */
+  occurredAt: string | null;
   memo: string;
   sourceType: string;
   sourceId: string | null;

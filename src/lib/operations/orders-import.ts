@@ -69,9 +69,13 @@ export type ImportCandidate = {
   netDuePlatform: number;
   /** Signed cash the courier must remit: `codCollected − courierFee − tip`. */
   courierRemittance: number;
-  /** Delivery timestamp when the export carries one, else `occurredAt`. */
+  /**
+   * Delivery instant (UTC ISO), always carrying the exact Cairo clock time when
+   * the export includes one. Falls back to the order timestamp.
+   */
   deliveredAt: string;
   note: string;
+  /** Operating instant; the business day is derived from this timestamp. */
   occurredAt: string;
 };
 
@@ -111,7 +115,8 @@ export {
   parseFee,
 } from "@/lib/import/csv";
 
-import { clean, field, matchKey, normalizeDigits, parseAmount, parseFee } from "@/lib/import/csv";
+import { clean, field, matchKey, parseAmount, parseFee } from "@/lib/import/csv";
+import { parseCairoTimestamp } from "@/lib/import/csv-time";
 
 const COD_LABELS = [
   "cod",
@@ -173,24 +178,6 @@ const DELIVERED_HEADERS = [
 /** Rounds a major-unit money value to two decimals without float drift. */
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function parseDate(value: unknown): string | null {
-  const text = normalizeDigits(clean(value));
-  if (text === "") return null;
-  // Accept `YYYY-MM-DD`, `DD/MM/YYYY` and anything Date can parse. A date that
-  // cannot be read is reported so the row is not stamped with import time.
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-  const dmY = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
-  if (dmY) {
-    const day = dmY[1].padStart(2, "0");
-    const month = dmY[2].padStart(2, "0");
-    return `${dmY[3]}-${month}-${day}`;
-  }
-  const parsed = new Date(text);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
 }
 
 function currencyOf(value: unknown): "EGP" | "SAR" {
@@ -362,12 +349,19 @@ export function planImport(
       return;
     }
 
-    const occurredAt = parseDate(field(row, ...DATE_HEADERS));
-    if (occurredAt === null) {
+    const orderTimestamp = parseCairoTimestamp(field(row, ...DATE_HEADERS));
+    const deliveryTimestamp = parseCairoTimestamp(field(row, ...DELIVERED_HEADERS));
+    /* The delivery instant is the operating moment of the order: attendance and
+     * daily pay are bundled by the 14:00 Cairo cutoff applied to it. When the
+     * export carries a real delivery time it must win over the date-only order
+     * column, otherwise the order lands on the previous business day. */
+    const primary = deliveryTimestamp ?? orderTimestamp;
+    if (primary === null) {
       issues.push({ line, message: "تاريخ الطلب مفقود أو غير صالح." });
       return;
     }
-    const deliveredAt = parseDate(field(row, ...DELIVERED_HEADERS)) ?? occurredAt;
+    const occurredAt = primary.iso;
+    const deliveredAt = deliveryTimestamp?.iso ?? occurredAt;
 
     const expectedTotal = settlementDriven
       ? round2(orderValue - discount - rewardDiscount + deliveryFee - shippingDiscount + tip)

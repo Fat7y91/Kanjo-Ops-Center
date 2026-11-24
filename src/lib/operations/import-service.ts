@@ -7,6 +7,7 @@ import { OperationsError, fromDatabaseError } from "./errors";
 import { planImport, type ImportRoster } from "./orders-import";
 import {
   findExistingOrderIds,
+  healOperationTimestamps,
   insertImportedOperation,
   insertOperationBatch,
   isOperationsDatabaseConfigured,
@@ -129,17 +130,37 @@ export async function importOrders(
   const plan = planImport(rows, activeRoster);
   const skipped = [...plan.issues];
 
-  /* An order that already exists must be skipped completely: re-posting it
-   * would double the ledger and the courier target. Drop those rows before the
-   * write and report them separately from validation failures. */
+  /* An order that already exists must not be re-posted: that would double the
+   * ledger and the courier target. It is still useful on a re-upload, though:
+   * an older import may have truncated its delivery time to a date. Correct the
+   * timestamp of existing rows (money stays frozen) before dropping them from
+   * the write set. */
   const existing = await findExistingOrderIds(
     plan.candidates.map((candidate) => candidate.orderId),
   );
+  const existingCandidates = plan.candidates.filter((candidate) =>
+    existing.has(candidate.orderId),
+  );
+  if (existingCandidates.length > 0) {
+    try {
+      await healOperationTimestamps(
+        existingCandidates.map((candidate) => ({
+          orderId: candidate.orderId,
+          occurredAt: candidate.occurredAt,
+          deliveredAt: candidate.deliveredAt,
+        })),
+      );
+    } catch (error) {
+      /* Healing is an enhancement on top of an already-valid import. A missing
+       * migration or a transient error must not turn a re-upload into a hard
+       * failure, so it is logged and the money-safe path continues. */
+      console.error("[operations] failed to heal order timestamps on re-import", error);
+    }
+  }
   const fresh = plan.candidates.filter(
     (candidate) => !existing.has(candidate.orderId),
   );
-  const duplicates =
-    plan.duplicates.length + (plan.candidates.length - fresh.length);
+  const duplicates = plan.duplicates.length + existingCandidates.length;
 
   if (fresh.length === 0) {
     return { imported: 0, skipped, duplicates };
