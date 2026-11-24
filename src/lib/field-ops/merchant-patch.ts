@@ -27,6 +27,13 @@ export type MerchantPatch = Partial<{
   strategicNotes: string;
   phone: string;
   address: string;
+  legalName: string;
+  commercialRegisterNo: string;
+  taxCardNo: string;
+  legalRepresentativeName: string;
+  legalRepresentativeTitle: string;
+  legalRepresentativeNationalId: string;
+  legalAddress: string;
   team: string | null;
   contractState: ContractState;
   commissionAmount: number;
@@ -60,6 +67,21 @@ export function toPatchColumns(
   }
   if (patch.phone !== undefined) row.phone = patch.phone;
   if (patch.address !== undefined) row.address = patch.address;
+  if (patch.legalName !== undefined) row.legal_name = patch.legalName;
+  if (patch.commercialRegisterNo !== undefined) {
+    row.commercial_register_no = patch.commercialRegisterNo;
+  }
+  if (patch.taxCardNo !== undefined) row.tax_card_no = patch.taxCardNo;
+  if (patch.legalRepresentativeName !== undefined) {
+    row.legal_representative_name = patch.legalRepresentativeName;
+  }
+  if (patch.legalRepresentativeTitle !== undefined) {
+    row.legal_representative_title = patch.legalRepresentativeTitle;
+  }
+  if (patch.legalRepresentativeNationalId !== undefined) {
+    row.legal_representative_national_id = patch.legalRepresentativeNationalId;
+  }
+  if (patch.legalAddress !== undefined) row.legal_address = patch.legalAddress;
   if (patch.team !== undefined) row.team = patch.team;
   if (patch.contractState !== undefined) {
     row.contract_state = patch.contractState;

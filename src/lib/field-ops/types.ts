@@ -175,6 +175,18 @@ export type Merchant = {
   phone: string;
   /** Physical business address, editable from the merchant profile. */
   address: string;
+  /** Registered legal name printed on the contract; falls back to `name`. */
+  legalName: string;
+  /** Commercial register number of the merchant entity. */
+  commercialRegisterNo: string;
+  /** Tax registration card number of the merchant entity. */
+  taxCardNo: string;
+  /** Authorised signatory printed in the contract's second-party panel. */
+  legalRepresentativeName: string;
+  legalRepresentativeTitle: string;
+  legalRepresentativeNationalId: string;
+  /** Registered legal address printed on the contract. */
+  legalAddress: string;
   targetCommission: number;
   monthlyValue: number;
   strategicNotes: string;

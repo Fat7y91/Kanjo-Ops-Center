@@ -29,6 +29,13 @@ export const MERCHANT_COLUMNS = [
   "cover_url",
   "phone",
   "address",
+  "legal_name",
+  "commercial_register_no",
+  "tax_card_no",
+  "legal_representative_name",
+  "legal_representative_title",
+  "legal_representative_national_id",
+  "legal_address",
   "contract_state",
   "commission_amount",
   "agreed_commission",
@@ -86,17 +93,31 @@ export function nextMerchantProjection(
   const message = String(
     (error as { message?: unknown }).message ?? "",
   );
-  const drop = message.includes("logo_url")
-    ? "logo_url,"
-    : message.includes("cover_url")
-      ? "cover_url,"
-      : message.includes("phone")
-        ? "phone,"
-        : message.includes("address")
-          ? "address,"
-          : message.includes("archived_at")
-            ? "archived_at,"
-            : null;
+  const legalColumns = [
+    "legal_name",
+    "commercial_register_no",
+    "tax_card_no",
+    "legal_representative_name",
+    "legal_representative_title",
+    "legal_representative_national_id",
+    "legal_address",
+  ] as const;
+  const legalColumn = legalColumns.find((column) =>
+    message.includes(column),
+  );
+  const drop = legalColumn
+    ? `${legalColumn},`
+    : message.includes("logo_url")
+      ? "logo_url,"
+      : message.includes("cover_url")
+        ? "cover_url,"
+        : message.includes("phone")
+          ? "phone,"
+          : message.includes("address")
+            ? "address,"
+            : message.includes("archived_at")
+              ? "archived_at,"
+              : null;
   if (!drop || !columns.includes(drop)) return null;
   const next = columns.replace(drop, "");
   return next === columns ? null : next;
@@ -117,6 +138,13 @@ export type MerchantRow = {
   cover_url?: string | null;
   phone: string;
   address: string;
+  legal_name?: string | null;
+  commercial_register_no?: string | null;
+  tax_card_no?: string | null;
+  legal_representative_name?: string | null;
+  legal_representative_title?: string | null;
+  legal_representative_national_id?: string | null;
+  legal_address?: string | null;
   contract_state: ContractState;
   commission_amount: number | string;
   agreed_commission: number | string | null;
@@ -148,6 +176,13 @@ export function toMerchant(row: MerchantRow): Merchant {
     coverUrl: row.cover_url ?? null,
     phone: row.phone ?? "",
     address: row.address ?? "",
+    legalName: row.legal_name ?? "",
+    commercialRegisterNo: row.commercial_register_no ?? "",
+    taxCardNo: row.tax_card_no ?? "",
+    legalRepresentativeName: row.legal_representative_name ?? "",
+    legalRepresentativeTitle: row.legal_representative_title ?? "",
+    legalRepresentativeNationalId: row.legal_representative_national_id ?? "",
+    legalAddress: row.legal_address ?? "",
     targetCommission: Number(row.target_commission),
     monthlyValue: Number(row.monthly_value_minor) / 100,
     strategicNotes: row.strategic_notes,

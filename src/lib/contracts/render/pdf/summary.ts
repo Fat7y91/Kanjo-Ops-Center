@@ -248,7 +248,9 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
 
   const cardWidth = (innerWidth - CARD_GAP) / 2;
   const cardsTop = Math.min(cursor, bottom + CARD_HEIGHT + PAD);
-  const contactName = input.contactName || FILL;
+  const contactName =
+    input.legalRepresentativeName || input.contactName || FILL;
+  const contactTitle = input.legalRepresentativeTitle || "صاحب النشاط";
   // RTL reading order: the first party (Kanjo) occupies the right card, the
   // second party (merchant) the left card.
   signatureCard(
@@ -266,9 +268,9 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
     writer.left + PAD,
     cardsTop,
     cardWidth,
-    `الطرف الثاني: ${input.merchantName}`,
+    `الطرف الثاني: ${input.legalName || input.merchantName}`,
     `الاسم: ${contactName}`,
-    "الصفة: صاحب النشاط",
+    `الصفة: ${contactTitle}`,
     "توقيع صاحب النشاط:",
   );
 

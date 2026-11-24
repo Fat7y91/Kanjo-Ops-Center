@@ -81,7 +81,7 @@ async function withImageColumnFallback(
 ): Promise<RowsResponse> {
   let columns = COLUMNS;
   let result = await run(columns);
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     const next = nextMerchantProjection(columns, result.error);
     if (!next) break;
     columns = next;
@@ -190,6 +190,15 @@ export async function insertMerchant(
     target_commission: merchant.targetCommission,
     monthly_value_minor: Math.round(merchant.monthlyValue * 100),
     strategic_notes: merchant.strategicNotes,
+    phone: merchant.phone,
+    address: merchant.address,
+    legal_name: merchant.legalName,
+    commercial_register_no: merchant.commercialRegisterNo,
+    tax_card_no: merchant.taxCardNo,
+    legal_representative_name: merchant.legalRepresentativeName,
+    legal_representative_title: merchant.legalRepresentativeTitle,
+    legal_representative_national_id: merchant.legalRepresentativeNationalId,
+    legal_address: merchant.legalAddress,
     contract_state: merchant.contractState,
     commission_amount: merchant.commissionAmount,
     agreed_commission: merchant.agreedCommission ?? null,

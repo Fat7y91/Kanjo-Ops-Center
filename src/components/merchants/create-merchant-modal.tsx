@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
+import {
+  EMPTY_MERCHANT_LEGAL_FIELDS,
+  MerchantLegalFields,
+  type MerchantLegalFieldsValue,
+} from "@/components/merchants/merchant-legal-fields";
 import { TaxonomyRequestButton } from "@/components/taxonomy/taxonomy-request-button";
 import type { CityStage } from "@/lib/field-ops/types";
 import type { TaxonomyVendorType } from "@/lib/taxonomy/types";
@@ -26,7 +31,7 @@ type CreateMerchantModalProps = {
   onDone: (message: string) => void;
 };
 
-type FormState = {
+type FormState = MerchantLegalFieldsValue & {
   name: string;
   cityId: string;
   vendorTypeId: number | null;
@@ -40,6 +45,7 @@ function initialForm(
   const preferred = cities.find((city) => city.id === defaultCityId);
   const preparation = cities.find((city) => city.stage === "preparation");
   return {
+    ...EMPTY_MERCHANT_LEGAL_FIELDS,
     name: "",
     cityId: preferred?.id ?? preparation?.id ?? cities[0]?.id ?? "",
     vendorTypeId: null,
@@ -100,6 +106,13 @@ export function CreateMerchantModal({
           cityId: form.cityId,
           vendorTypeId: form.vendorTypeId,
           strategicNotes: form.strategicNotes,
+          legalName: form.legalName,
+          commercialRegisterNo: form.commercialRegisterNo,
+          taxCardNo: form.taxCardNo,
+          legalRepresentativeName: form.legalRepresentativeName,
+          legalRepresentativeTitle: form.legalRepresentativeTitle,
+          legalRepresentativeNationalId: form.legalRepresentativeNationalId,
+          legalAddress: form.legalAddress,
         }),
       });
       const payload = (await response.json()) as {
@@ -223,6 +236,14 @@ export function CreateMerchantModal({
             maxLength={2000}
           />
         </label>
+
+        <MerchantLegalFields
+          value={form}
+          onChange={(patch) =>
+            setForm((current) => ({ ...current, ...patch }))
+          }
+          disabled={saving}
+        />
 
         <p className="inline-note">
           يظهر التاجر فوراً في دليل التجار وفي قائمة إسناد المهام، ويبقى بدون

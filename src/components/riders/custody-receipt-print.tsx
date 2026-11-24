@@ -41,7 +41,9 @@ export function CustodyReceiptPrint({
       <section className="custody-receipt">
         <header className="custody-head">
           <div className="custody-brand">
-            <img src="/logo.png" alt="" className="custody-logo" />
+            <span className="custody-logo-plate">
+              <img src="/logo.png" alt="" className="custody-logo" />
+            </span>
             <div>
               <strong>كانجو</strong>
               <span>منظومة مناديب التوصيل</span>
@@ -49,8 +51,8 @@ export function CustodyReceiptPrint({
           </div>
 
           <div className="custody-title">
-            <p>إيصال عهدة</p>
-            <h1>عهدة مندوب توصيل</h1>
+            <p>KANJO · CUSTODY RECEIPT</p>
+            <h1>إيصال عهدة مندوب</h1>
             <span dir="ltr">{receipt.custodyNumber}</span>
           </div>
 
@@ -66,30 +68,31 @@ export function CustodyReceiptPrint({
           </div>
         </header>
 
-        <div className="custody-rider-grid">
-          <div>
-            <span>اسم المندوب</span>
+        <div className="custody-hero">
+          <div className="custody-hero-id">
+            <span className="custody-hero-label">المندوب المسلَّم إليه</span>
             <strong>{receipt.rider.fullName}</strong>
+            <span className="custody-hero-code" dir="ltr">
+              {receipt.rider.riderCode || "—"}
+            </span>
           </div>
-          <div>
-            <span>كود المندوب</span>
-            <strong dir="ltr">{receipt.rider.riderCode || "—"}</strong>
-          </div>
-          <div>
-            <span>الرقم القومي</span>
-            <strong dir="ltr">{receipt.rider.nationalId || "—"}</strong>
-          </div>
-          <div>
-            <span>الهاتف</span>
-            <strong dir="ltr">{receipt.rider.phone}</strong>
-          </div>
-          <div>
-            <span>منطقة العمل</span>
-            <strong>{receipt.rider.workArea || "—"}</strong>
-          </div>
-          <div>
-            <span>الموقع</span>
-            <strong>{locationLabel}</strong>
+          <div className="custody-hero-stats">
+            <div>
+              <span>الرقم القومي</span>
+              <strong dir="ltr">{receipt.rider.nationalId || "—"}</strong>
+            </div>
+            <div>
+              <span>الهاتف</span>
+              <strong dir="ltr">{receipt.rider.phone}</strong>
+            </div>
+            <div>
+              <span>منطقة العمل</span>
+              <strong>{receipt.rider.workArea || "—"}</strong>
+            </div>
+            <div>
+              <span>الموقع</span>
+              <strong>{locationLabel}</strong>
+            </div>
           </div>
         </div>
 
@@ -130,7 +133,7 @@ export function CustodyReceiptPrint({
 
         <div className="custody-totals">
           <div className="custody-total-row">
-            <span>العهدة النقدية</span>
+            <span>العهد النقدية</span>
             <strong dir="ltr">{riderMoney(receipt.cashCustody)}</strong>
           </div>
           <div className="custody-total-row is-grand">
@@ -145,6 +148,11 @@ export function CustodyReceiptPrint({
             <strong>ملاحظات:</strong> {receipt.notes}
           </p>
         ) : null}
+
+        <p className="custody-acknowledge">
+          أقر أنا الموقّع أدناه باستلام العهدة الموضّحة أعلاه بكامل بنودها
+          وقيمتها، وألتزم بالحفاظ عليها وإعادتها أو تسويتها عند الطلب.
+        </p>
 
         <div className="custody-signatures">
           <div>
@@ -170,7 +178,9 @@ export function CustodyReceiptPrint({
       <section className="wallet-card">
         <div className="wallet-card-head">
           <div className="wallet-card-brand">
-            <span className="wallet-card-mark">K</span>
+            <span className="wallet-card-logo">
+              <img src="/logo.png" alt="" />
+            </span>
             <div>
               <strong>كانجو</strong>
               <span>بطاقة عهدة مندوب توصيل</span>

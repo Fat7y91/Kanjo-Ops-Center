@@ -347,6 +347,7 @@
   overflow: hidden;
   border: 1.5px solid #230535;
   border-radius: 8px;
+  background: #ffffff;
 }
 
 .custody-head {
@@ -356,7 +357,9 @@
   gap: 6mm;
   padding: 4mm 5mm;
   color: #ffffff;
-  background: linear-gradient(135deg, #230535 0%, #3b0764 62%, #4c1d95 100%);
+  background:
+    radial-gradient(circle at 12% 120%, rgba(255, 215, 0, 0.18), transparent 46%),
+    linear-gradient(135deg, #230535 0%, #3b0764 62%, #4c1d95 100%);
 }
 
 .custody-brand {
@@ -365,13 +368,22 @@
   gap: 3mm;
 }
 
-.custody-logo {
-  width: 14mm;
-  height: 14mm;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1.5px solid #ffd700;
+.custody-logo-plate {
+  display: grid;
+  place-items: center;
+  width: 16mm;
+  height: 16mm;
+  padding: 1.2mm;
+  border-radius: 4mm;
   background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.5);
+}
+
+.custody-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 3mm;
 }
 
 .custody-brand strong {
@@ -392,9 +404,9 @@
 }
 
 .custody-title p {
-  font-size: 7.4pt;
-  letter-spacing: 0.16em;
-  color: #f59e0b;
+  font-size: 6.8pt;
+  letter-spacing: 0.14em;
+  color: #fbbf24;
   font-weight: 700;
 }
 
@@ -436,29 +448,66 @@
   color: #ffffff;
 }
 
-.custody-rider-grid {
+.custody-hero {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  grid-template-columns: 1.1fr 1.6fr;
   border-bottom: 1px solid #e4d4f7;
+  background: linear-gradient(180deg, #faf6ff 0%, #ffffff 100%);
 }
 
-.custody-rider-grid > div {
+.custody-hero-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4mm;
+  padding: 3mm 4mm;
+  border-left: 1px solid #ede4fa;
+}
+
+.custody-hero-label {
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #7c3aed;
+}
+
+.custody-hero-id strong {
+  font-size: 15pt;
+  line-height: 1.15;
+  color: #230535;
+}
+
+.custody-hero-code {
+  align-self: flex-start;
+  padding: 0.8mm 2.6mm;
+  border-radius: 999px;
+  background: #230535;
+  color: #ffd700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8pt;
+  font-weight: 700;
+}
+
+.custody-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.custody-hero-stats > div {
   display: flex;
   flex-direction: column;
   gap: 0.6mm;
-  padding: 2.4mm 4mm;
-  border-left: 1px solid #f3e8ff;
+  padding: 2.2mm 4mm;
   border-bottom: 1px solid #f3e8ff;
+  border-left: 1px solid #f3e8ff;
 }
 
-.custody-rider-grid span {
-  font-size: 7pt;
+.custody-hero-stats span {
+  font-size: 6.8pt;
   color: #64748b;
 }
 
-.custody-rider-grid strong {
-  font-size: 9.2pt;
+.custody-hero-stats strong {
+  font-size: 9pt;
   color: #230535;
 }
 
@@ -492,7 +541,7 @@
 }
 
 .custody-totals {
-  margin: auto 4mm 0;
+  margin: 3mm 4mm 0;
   padding-top: 2mm;
 }
 
@@ -538,10 +587,19 @@
   font-size: 7.6pt;
 }
 
+.custody-acknowledge {
+  margin: 2.4mm 4mm 0;
+  font-size: 7.6pt;
+  line-height: 1.6;
+  color: #475569;
+  text-align: justify;
+}
+
 .custody-signatures {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10mm;
+  margin-top: auto;
   padding: 5mm 6mm 3mm;
 }
 
@@ -601,18 +659,38 @@
 }
 
 .wallet-card {
+  position: relative;
   display: flex;
-  flex: 0 0 58mm;
+  flex: 0 0 56mm;
   flex-direction: column;
-  height: 58mm;
+  height: 56mm;
   padding: 4mm 5mm;
   overflow: hidden;
-  border: 1.5px solid #ffd700;
+  border: 1.2px solid rgba(255, 215, 0, 0.55);
   border-radius: 5mm;
   color: #ffffff;
   background:
-    radial-gradient(circle at 88% 12%, rgba(255, 215, 0, 0.2), transparent 42%),
+    radial-gradient(circle at 88% 12%, rgba(255, 215, 0, 0.22), transparent 44%),
+    radial-gradient(circle at 6% 108%, rgba(124, 58, 237, 0.55), transparent 52%),
     linear-gradient(135deg, #230535 0%, #331047 55%, #4c1d95 100%);
+}
+
+.wallet-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.04) 0 1px,
+    transparent 1px 7px
+  );
+  pointer-events: none;
+}
+
+.wallet-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .wallet-card-head {
@@ -627,16 +705,20 @@
   gap: 2.4mm;
 }
 
-.wallet-card-mark {
+.wallet-card-logo {
   display: grid;
   place-items: center;
-  width: 9mm;
-  height: 9mm;
-  border-radius: 50%;
-  background: linear-gradient(145deg, #facc15, #ffd700);
-  color: #230535;
-  font-weight: 800;
-  font-size: 12pt;
+  width: 9.5mm;
+  height: 9.5mm;
+  padding: 0.8mm;
+  border-radius: 2.4mm;
+  background: #ffffff;
+}
+
+.wallet-card-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .wallet-card-brand strong {
@@ -759,8 +841,13 @@
     text-align: center;
   }
 
-  .custody-rider-grid {
+  .custody-hero {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custody-hero-id {
+    border-left: 0;
+    border-bottom: 1px solid #ede4fa;
   }
 
   .wallet-card {
@@ -851,6 +938,43 @@
   .custody-print-toolbar,
   .print-hidden {
     display: none !important;
+  }
+
+  .custody-head {
+    grid-template-columns: 1fr auto 1fr !important;
+    text-align: initial !important;
+  }
+
+  .custody-brand,
+  .custody-meta {
+    justify-self: initial !important;
+    text-align: initial !important;
+  }
+
+  .custody-meta {
+    justify-self: end !important;
+  }
+
+  .custody-hero {
+    grid-template-columns: 1.1fr 1.6fr !important;
+  }
+
+  .custody-hero-id {
+    border-left: 1px solid #ede4fa !important;
+    border-bottom: 0 !important;
+  }
+
+  .custody-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .wallet-card {
+    height: 56mm !important;
+    flex: 0 0 56mm !important;
+  }
+
+  .wallet-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   .custody-receipt,

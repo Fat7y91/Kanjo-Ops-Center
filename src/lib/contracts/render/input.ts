@@ -26,6 +26,14 @@ export type ContractDocumentInput = ClauseRenderInput & {
   contactName?: string;
   contactPhone?: string;
   address?: string;
+  /** Merchant legal identity bound into the second-party panel. */
+  legalName?: string;
+  commercialRegisterNo?: string;
+  taxCardNo?: string;
+  legalRepresentativeName?: string;
+  legalRepresentativeTitle?: string;
+  legalRepresentativeNationalId?: string;
+  legalAddress?: string;
   merchantLogo?: string;
   /** Full clause list overriding the canonical generator, when provided. */
   clauses?: ContractClauseTemplate[];

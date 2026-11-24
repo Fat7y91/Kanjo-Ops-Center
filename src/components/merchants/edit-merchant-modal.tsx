@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 
 import { Modal } from "@/components/field-ops/modal";
 import type { MerchantCityOption } from "@/components/merchants/create-merchant-modal";
+import {
+  MerchantLegalFields,
+  type MerchantLegalFieldsValue,
+} from "@/components/merchants/merchant-legal-fields";
 import { Button } from "@/components/ui/button";
 import { TextAreaField, TextField } from "@/components/ui/form-inputs";
 import { SelectMenu } from "@/components/ui/select-menus";
@@ -19,7 +23,7 @@ type EditMerchantModalProps = {
   onDone: (message: string) => void;
 };
 
-type FormState = {
+type FormState = MerchantLegalFieldsValue & {
   name: string;
   phone: string;
   address: string;
@@ -34,6 +38,13 @@ function initialForm(merchant: Merchant): FormState {
     name: merchant.name,
     phone: merchant.phone ?? "",
     address: merchant.address ?? "",
+    legalName: merchant.legalName ?? "",
+    commercialRegisterNo: merchant.commercialRegisterNo ?? "",
+    taxCardNo: merchant.taxCardNo ?? "",
+    legalRepresentativeName: merchant.legalRepresentativeName ?? "",
+    legalRepresentativeTitle: merchant.legalRepresentativeTitle ?? "",
+    legalRepresentativeNationalId: merchant.legalRepresentativeNationalId ?? "",
+    legalAddress: merchant.legalAddress ?? "",
     vendorTypeId: merchant.vendorTypeId || null,
     cityId: merchant.cityId,
     targetCommission: String(merchant.targetCommission),
@@ -87,6 +98,13 @@ export function EditMerchantModal({
           name: form.name,
           phone: form.phone,
           address: form.address,
+          legalName: form.legalName,
+          commercialRegisterNo: form.commercialRegisterNo,
+          taxCardNo: form.taxCardNo,
+          legalRepresentativeName: form.legalRepresentativeName,
+          legalRepresentativeTitle: form.legalRepresentativeTitle,
+          legalRepresentativeNationalId: form.legalRepresentativeNationalId,
+          legalAddress: form.legalAddress,
           vendorTypeId: form.vendorTypeId,
           cityId: form.cityId,
           targetCommission: form.targetCommission,
@@ -148,6 +166,14 @@ export function EditMerchantModal({
           onChange={(event) => update("address", event.target.value)}
           placeholder="العنوان الفعلي للمحل"
           maxLength={240}
+        />
+
+        <MerchantLegalFields
+          value={form}
+          onChange={(patch) =>
+            setForm((current) => ({ ...current, ...patch }))
+          }
+          disabled={saving}
         />
 
         <div className="form-grid">

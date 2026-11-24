@@ -91,6 +91,14 @@ export async function createMerchant(
     coverUrl: null,
     phone: "",
     address: "",
+    legalName: input.legalName?.trim() ?? "",
+    commercialRegisterNo: input.commercialRegisterNo?.trim() ?? "",
+    taxCardNo: input.taxCardNo?.trim() ?? "",
+    legalRepresentativeName: input.legalRepresentativeName?.trim() ?? "",
+    legalRepresentativeTitle: input.legalRepresentativeTitle?.trim() ?? "",
+    legalRepresentativeNationalId:
+      input.legalRepresentativeNationalId?.trim() ?? "",
+    legalAddress: input.legalAddress?.trim() ?? "",
     targetCommission: input.targetCommission,
     monthlyValue: input.estimatedMonthlyValue,
     strategicNotes: input.strategicNotes.trim(),
@@ -167,6 +175,28 @@ export async function updateMerchantDetails(
   }
   if (input.address !== undefined) {
     patch.address = input.address.trim();
+  }
+  if (input.legalName !== undefined) {
+    patch.legalName = input.legalName.trim();
+  }
+  if (input.commercialRegisterNo !== undefined) {
+    patch.commercialRegisterNo = input.commercialRegisterNo.trim();
+  }
+  if (input.taxCardNo !== undefined) {
+    patch.taxCardNo = input.taxCardNo.trim();
+  }
+  if (input.legalRepresentativeName !== undefined) {
+    patch.legalRepresentativeName = input.legalRepresentativeName.trim();
+  }
+  if (input.legalRepresentativeTitle !== undefined) {
+    patch.legalRepresentativeTitle = input.legalRepresentativeTitle.trim();
+  }
+  if (input.legalRepresentativeNationalId !== undefined) {
+    patch.legalRepresentativeNationalId =
+      input.legalRepresentativeNationalId.trim();
+  }
+  if (input.legalAddress !== undefined) {
+    patch.legalAddress = input.legalAddress.trim();
   }
 
   const updated = await updateMerchantRow(merchantId, patch);

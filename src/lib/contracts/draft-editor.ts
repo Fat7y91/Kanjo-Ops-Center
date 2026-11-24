@@ -70,6 +70,14 @@ export const EMPTY_CONTRACT_TERMS: ContractTerms = {
   commissionLines: [],
 };
 
+/** Canonical preamble shown when the contract has no operator override. */
+export const DEFAULT_CONTRACT_PREAMBLE =
+  "حيث إن كانچو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانچو، ويضمن جودة المنتجات. ويعد هذا التمهيد وملاحق العقد جزءًا لا يتجزأ منه.";
+
+/** Canonical copies note shown when the contract has no operator override. */
+export const DEFAULT_CONTRACT_COPIES_NOTE =
+  "تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها، ويتكون العقد من البنود والملاحق المذكورة أعلاه.";
+
 /** Generates a stable-enough client id for a freshly added row. */
 export function draftId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -98,10 +106,8 @@ export function seedDraft(merchantName: string, baseCommission = 0): ContractDra
 export const MOCK_CONTRACT_DRAFT: ContractDraft = {
   merchantName: "سفير السعادة",
   baseCommission: 12,
-  preamble:
-    "حيث إن كانچو منصة إلكترونية تجارية وتشغيلية لعرض وطلب وتوصيل المنتجات، وحيث إن الطرف الثاني يرغب في الانضمام إليها؛ فقد اتفق الطرفان على تنظيم العلاقة بما يحفظ حقوق كانچو، ويضمن جودة المنتجات.",
-  copiesNote:
-    "تحرر هذا العقد من نسختين أصليتين متطابقتين، بِيَد كل طرف نسخة للعمل بموجبها.",
+  preamble: DEFAULT_CONTRACT_PREAMBLE,
+  copiesNote: DEFAULT_CONTRACT_COPIES_NOTE,
   firstPartyRows: [
     { id: "fp-reg", label: "السجل التجاري", value: "٣٠٨٢٣٤ — استثمار القاهرة" },
     { id: "fp-tax", label: "البطاقة الضريبية", value: "٥١٢-٣٤٥-٦٧٨" },

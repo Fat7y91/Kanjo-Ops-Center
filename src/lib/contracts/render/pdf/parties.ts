@@ -183,14 +183,32 @@ function secondParty(writer: DocumentWriter, input: ContractDocumentInput): void
     override && override.length > 0
       ? override.map((row) => [row.label, row.value || FILL])
       : [
-          ["اسم المنشأة / المحل:", input.merchantName],
-          ["اسم المفوض / صاحب النشاط:", input.contactName || FILL],
-          ["بطاقة الرقم القومي (١٤ رقمًا):", FILL],
-          ["رقم السجل التجاري:", FILL],
-          ["رقم التسجيل الضريبي:", FILL],
+          [
+            "اسم المنشأة / المحل:",
+            input.legalName?.trim() || input.merchantName,
+          ],
+          [
+            "اسم المفوض / صاحب النشاط:",
+            input.legalRepresentativeName?.trim() ||
+              input.contactName ||
+              FILL,
+          ],
+          [
+            "صفة المفوض:",
+            input.legalRepresentativeTitle?.trim() || FILL,
+          ],
+          [
+            "بطاقة الرقم القومي (١٤ رقمًا):",
+            input.legalRepresentativeNationalId?.trim() || FILL,
+          ],
+          ["رقم السجل التجاري:", input.commercialRegisterNo?.trim() || FILL],
+          ["رقم التسجيل الضريبي:", input.taxCardNo?.trim() || FILL],
           ["رقم الهاتف / واتساب:", input.contactPhone || FILL],
           ["البريد الإلكتروني:", FILL],
-          ["العنوان:", input.address || FILL],
+          [
+            "العنوان:",
+            input.legalAddress?.trim() || input.address || FILL,
+          ],
         ];
   const estimate =
     PANEL_PAD + TEXT.heading.lineHeight + TEXT.dense.lineHeight + 16 + rows.length * TEXT.dense.lineHeight + PANEL_PAD;

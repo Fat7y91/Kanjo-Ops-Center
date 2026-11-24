@@ -67,6 +67,29 @@ export const merchantCreateSchema = z.object({
     .max(100_000_000)
     .default(0),
   strategicNotes: z.string().trim().max(2000).default(""),
+  legalName: z.string().trim().max(160, "الاسم القانوني طويل جداً.").default(""),
+  commercialRegisterNo: z
+    .string()
+    .trim()
+    .max(60, "رقم السجل التجاري طويل جداً.")
+    .default(""),
+  taxCardNo: z.string().trim().max(60, "رقم البطاقة الضريبية طويل جداً.").default(""),
+  legalRepresentativeName: z
+    .string()
+    .trim()
+    .max(160, "اسم المفوض طويل جداً.")
+    .default(""),
+  legalRepresentativeTitle: z
+    .string()
+    .trim()
+    .max(120, "صفة المفوض طويلة جداً.")
+    .default(""),
+  legalRepresentativeNationalId: z
+    .string()
+    .trim()
+    .max(30, "الرقم القومي طويل جداً.")
+    .default(""),
+  legalAddress: z.string().trim().max(240, "العنوان القانوني طويل جداً.").default(""),
 });
 
 export const merchantUpdateSchema = z
@@ -74,6 +97,13 @@ export const merchantUpdateSchema = z
     name: z.string().trim().min(2, "اسم التاجر مطلوب.").max(120).optional(),
     phone: z.string().trim().max(30, "رقم الهاتف طويل جداً.").optional(),
     address: z.string().trim().max(240, "العنوان طويل جداً.").optional(),
+    legalName: z.string().trim().max(160).optional(),
+    commercialRegisterNo: z.string().trim().max(60).optional(),
+    taxCardNo: z.string().trim().max(60).optional(),
+    legalRepresentativeName: z.string().trim().max(160).optional(),
+    legalRepresentativeTitle: z.string().trim().max(120).optional(),
+    legalRepresentativeNationalId: z.string().trim().max(30).optional(),
+    legalAddress: z.string().trim().max(240).optional(),
     vendorTypeId: z.coerce
       .number()
       .int("نوع التاجر يجب أن يكون معرّفاً رقمياً.")
