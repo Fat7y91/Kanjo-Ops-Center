@@ -17,6 +17,12 @@ const STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
   { value: "excused", label: "بعذر" },
 ];
 
+const STATUS_CONFIRMATION: Record<AttendanceStatus, string> = {
+  present: "تم تسجيل الحضور وإضافة يومية 165 ج.م.",
+  absent: "تم تسجيل الغياب وإلغاء يومية الحضور (165 ج.م.)",
+  excused: "تم تسجيل الغياب بعذر وإلغاء يومية الحضور (165 ج.م.)",
+};
+
 /**
  * Manual attendance override for one courier.
  *
@@ -69,7 +75,7 @@ export function CourierAttendanceControl({
         return;
       }
       setNote("");
-      setMessage("تم تسجيل الحضور.");
+      setMessage(STATUS_CONFIRMATION[status]);
       onChanged();
     } catch {
       setError("تعذر الاتصال بالخادم.");

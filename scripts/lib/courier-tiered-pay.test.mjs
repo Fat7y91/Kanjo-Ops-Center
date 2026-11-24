@@ -64,6 +64,31 @@ test("an absent day keeps the order tiers but pays no base", () => {
   assert.equal(summary.attendanceDays, 0);
 });
 
+test("switching a zero-order day from present to absent reverses the 165 EGP base", () => {
+  const day = "2026-11-18";
+  const present = pay.computeCourierPay(
+    "c-1",
+    [],
+    [{ courierId: "c-1", day, status: "present" }],
+  );
+  const absent = pay.computeCourierPay(
+    "c-1",
+    [],
+    [{ courierId: "c-1", day, status: "absent" }],
+  );
+
+  // The manual present override posts the 165 EGP attendance journal base.
+  assert.equal(present.baseMinor, 16_500);
+  assert.equal(present.attendanceDays, 1);
+  assert.equal(present.totalMinor, 16_500);
+
+  // Marking the same day absent must reverse that base and the working day.
+  assert.equal(absent.baseMinor, 0);
+  assert.equal(absent.attendanceDays, 0);
+  assert.equal(absent.totalMinor, 0);
+  assert.equal(present.totalMinor - absent.totalMinor, 16_500);
+});
+
 test("tiers reset per day and couriers never share days", () => {
   const rows = [...deliveries(10, "c-1"), ...deliveries(20, "c-2")];
   const first = pay.computeCourierPay("c-1", rows, []);
