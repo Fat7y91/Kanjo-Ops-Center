@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (107 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (119 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:
@@ -240,6 +240,12 @@ export const PERMISSIONS = [
     key: "delete_products",
     label: "حذف المنتجات",
     description: "إزالة المنتجات من الكتالوج.",
+    group: "الكتالوج",
+  },
+  {
+    key: "delete_catalog",
+    label: "حذف الكتالوج بالكامل",
+    description: "مسح جميع منتجات تاجر واحد نهائياً في خطوة واحدة.",
     group: "الكتالوج",
   },
   {

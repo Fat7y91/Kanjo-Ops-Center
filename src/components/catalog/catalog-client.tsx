@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Protect } from "@/components/auth/protect";
+import { usePermission } from "@/components/auth/use-permission";
 import { AutopilotModal } from "@/components/catalog/autopilot-modal";
 import { CatalogGrid } from "@/components/catalog/catalog-grid";
+import { ClearCatalogModal } from "@/components/catalog/clear-catalog-modal";
 import { MirrorImagesModal } from "@/components/catalog/mirror-images-modal";
 import { ProductEntry } from "@/components/catalog/product-entry";
 import { useCatalogExport } from "@/components/catalog/use-catalog-export";
@@ -46,12 +49,34 @@ export function CatalogClient({
   const [open, setOpen] = useState(false);
   const [autopilotOpen, setAutopilotOpen] = useState(false);
   const [mirrorOpen, setMirrorOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [toast, setToast] = useState("");
   const [editRequestId, setEditRequestId] = useState<string | null>(null);
   const excel = useCatalogExport();
+  const router = useRouter();
+  const { hasPermission, clearanceLevel } = usePermission();
+  const canClearCatalog =
+    hasPermission("delete_catalog") || clearanceLevel >= 4;
   const activeMerchant = merchants.find(
     (merchant) => merchant.id === defaultMerchantId,
   );
   const merchantName = activeMerchant?.name ?? "catalog";
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const handleCleared = useCallback(
+    (deletedCount: number) => {
+      setProducts([]);
+      setClearOpen(false);
+      setToast(`تم حذف ${deletedCount} منتجاً بنجاح`);
+      router.refresh();
+    },
+    [router],
+  );
 
   const handleMirrored = useCallback((productId: string, url: string) => {
     setProducts((current) =>
@@ -136,8 +161,23 @@ export function CatalogClient({
               </Button>
             </>
           ) : null}
+          {defaultMerchantId && canClearCatalog ? (
+            <Button
+              variant="danger"
+              onClick={() => setClearOpen(true)}
+              disabled={products.length === 0}
+            >
+              حذف الكتالوج بالكامل
+            </Button>
+          ) : null}
         </div>
       </section>
+
+      {toast ? (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      ) : null}
 
       {excel.error ? (
         <p className="form-error" role="alert">
@@ -169,6 +209,17 @@ export function CatalogClient({
           onClose={() => setMirrorOpen(false)}
           onMirrored={handleMirrored}
           onEditProduct={setEditRequestId}
+        />
+      ) : null}
+
+      {defaultMerchantId ? (
+        <ClearCatalogModal
+          open={clearOpen}
+          merchantId={defaultMerchantId}
+          merchantName={merchantName}
+          productCount={products.length}
+          onClose={() => setClearOpen(false)}
+          onCleared={handleCleared}
         />
       ) : null}
 
