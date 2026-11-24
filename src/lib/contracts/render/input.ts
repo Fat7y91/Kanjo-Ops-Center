@@ -19,6 +19,10 @@ export type ContractDocumentInput = ClauseRenderInput & {
   merchantName: string;
   businessType: string;
   titleBusinessType?: string;
+  /** Contract reference shown on the cover badge. */
+  reference: string;
+  /** Contract effective date (ISO), formatted on the cover. */
+  effectiveDate?: string;
   displayRate: number;
   baseCommission: number | null;
   exceptions: { category: string; rate: number }[];

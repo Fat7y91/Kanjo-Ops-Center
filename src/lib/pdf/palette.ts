@@ -30,6 +30,8 @@ export const PALETTE = {
   muted: hex("#6B7280"),
   /** Primary brand purple, matching the issued V1 contracts. */
   royal: hex("#4B0082"),
+  /** Executive cover purple, deeper than the body brand purple. */
+  coverRoyal: hex("#230535"),
   /** Darker purple used for cover bands and mastheads. */
   royalDeep: hex("#2C0A4D"),
   /** Mid purple for gradients-by-bands and accents. */
@@ -39,6 +41,9 @@ export const PALETTE = {
   gold: hex("#B8860B"),
   goldDeep: hex("#8C6508"),
   goldBright: hex("#D9B44A"),
+  /** Warm gold used for the cover frame and badge outlines. */
+  goldWarm: hex("#D97434"),
+  goldPure: hex("#FFD700"),
   goldSoft: hex("#FBF3DC"),
   /** Card and panel fills. */
   panel: hex("#F7F4FB"),

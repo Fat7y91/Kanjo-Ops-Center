@@ -11,13 +11,13 @@ import {
   FINAL_CLAUSE_TITLE,
   FINANCIAL_MECHANISM_TITLE,
   FOOD_CLAUSE,
+  GEOGRAPHICAL_SCOPE_CLAUSE,
   MEDICAL_CLAUSE,
   commissionClauseBody,
   finalClauseBody,
   financialMechanismClauseBody,
   type ContractClauseTemplate,
 } from "./data/clauses";
-import { toArabicNumerals } from "./format";
 
 export type ClauseRenderInput = {
   category: string;
@@ -44,7 +44,9 @@ export function buildClauses(input: ClauseRenderInput): ContractClauseTemplate[]
   // Commission clause sits after the base obligations (index 4 in V1 order).
   clauses.splice(4, 0, {
     title: COMMISSION_CLAUSE_TITLE,
-    body: commissionClauseBody(toArabicNumerals(input.achievedPercent)),
+    body: commissionClauseBody(
+      `\u2066${String(input.achievedPercent)}%\u2069`,
+    ),
   });
 
   if (foodApplies) clauses.push(FOOD_CLAUSE);
@@ -69,6 +71,8 @@ export function buildClauses(input: ClauseRenderInput): ContractClauseTemplate[]
     title: FINAL_CLAUSE_TITLE,
     body: finalClauseBody(input.jurisdictionClause),
   });
+
+  clauses.push(GEOGRAPHICAL_SCOPE_CLAUSE);
 
   return clauses;
 }

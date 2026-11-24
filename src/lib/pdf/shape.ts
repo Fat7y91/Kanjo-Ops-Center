@@ -22,6 +22,13 @@ import type { Direction, ShapedGlyph, ShapedRun, StyledSpan } from "./types";
 
 type RawGlyph = { id: number; advance: number; offsetX: number; offsetY: number };
 
+const BIDI_CONTROLS = /[\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]/g;
+
+/** Removes bidi formatting marks after levels are resolved; fonts have no glyphs for them. */
+function stripBidiControls(text: string): string {
+  return text.replace(BIDI_CONTROLS, "");
+}
+
 function shapeRun(face: EmbeddedFace, text: string): { glyphs: RawGlyph[]; width: number } {
   const layout: FontGlyphRun = face.metrics.layout(
     text,
@@ -87,7 +94,7 @@ export function shapeSpans(
     for (let i = bidiRun.start + 1; i <= bidiRun.end; i += 1) {
       if (i === bidiRun.end || boldAt[i] !== boldAt[start]) {
         const bold = Boolean(boldAt[start]);
-        const sub = mirrored.slice(start, i);
+        const sub = stripBidiControls(mirrored.slice(start, i));
         const { glyphs, width } = shapeRun(bold ? fonts.bold : fonts.regular, sub);
         subRuns.push({
           level: bidiRun.level,

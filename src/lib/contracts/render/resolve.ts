@@ -3,7 +3,7 @@ import "server-only";
 import { getMerchantById } from "@/lib/field-ops/store";
 import { findContractTerms } from "../terms-repository";
 import { resolveBusinessType } from "./constants";
-import { getBaseName, sanitizeLegalText } from "./format";
+import { getBaseName, sanitizeLegalText, stripUnsupportedGlyphs } from "./format";
 import type { ContractDocumentInput } from "./input";
 import { resolveLogoDataUri } from "./logo";
 import type { Contract } from "../types";
@@ -27,7 +27,8 @@ export async function resolveContractDocumentInput(
   const baseName = getBaseName(rawName) || rawName;
   const merchantName = sanitizeLegalText(baseName) || baseName;
 
-  const category = sanitizeLegalText(merchant?.vendorType ?? "") || merchant?.vendorType || "غير محدد";
+  const category =
+    stripUnsupportedGlyphs(sanitizeLegalText(merchant?.vendorType ?? "")) || "غير محدد";
   const businessType = resolveBusinessType(category, null);
 
   const agreed = merchant?.agreedCommission;
@@ -48,12 +49,17 @@ export async function resolveContractDocumentInput(
   const commissionLines = terms?.commissionLines ?? [];
   const exceptions = commissionLines
     .filter((line) => line.category.trim().length > 0)
-    .map((line) => ({ category: line.category, rate: line.rate }));
+    .map((line) => ({
+      category: stripUnsupportedGlyphs(line.category),
+      rate: line.rate,
+    }));
 
   return {
     merchantId: contract.merchantId,
     merchantName,
     businessType,
+    reference: contract.reference,
+    effectiveDate: contract.createdAt,
     category,
     displayRate,
     baseCommission: terms?.baseCommission ?? null,

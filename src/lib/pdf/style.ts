@@ -24,25 +24,25 @@ export const TEXT = {
   /** Cover kicker line above the partnership title. */
   coverKicker: style(12, PALETTE.goldBright, 18),
   /** Large cover title. */
-  coverTitle: style(26, PALETTE.royal, 40),
+  coverTitle: style(27, PALETTE.coverRoyal, 42),
   /** Merchant name line on the cover. */
-  coverName: style(19, PALETTE.ink, 30),
+  coverName: style(20, PALETTE.ink, 32),
   /** Cover supporting metadata. */
-  coverMeta: style(10, PALETTE.inkSoft, 16),
+  coverMeta: style(10.5, PALETTE.inkSoft, 17),
   /** Main contract title in the running header. */
   title: style(17, PALETTE.royal, 24),
   /** Section and clause headings. */
-  heading: style(12.5, PALETTE.royal, 19),
+  heading: style(13, PALETTE.royal, 20),
   /** Secondary labels inside panels. */
-  label: style(9.6, PALETTE.royal, 15),
+  label: style(9.8, PALETTE.royal, 15.5),
   /** Body copy inside clauses and panels. */
-  body: style(10.5, PALETTE.ink, 18.5),
+  body: style(10.8, PALETTE.ink, 18.9),
   /** Slightly smaller body for dense identification panels. */
-  dense: style(9.8, PALETTE.ink, 16),
+  dense: style(10.2, PALETTE.ink, 17.8),
   /** Small print: notes, footer, copyright. */
   small: style(8.6, PALETTE.muted, 13),
   /** Table cells. */
-  cell: style(9.8, PALETTE.ink, 15),
+  cell: style(10, PALETTE.ink, 16),
   /** Table header cells (white on purple). */
-  cellHead: style(9.8, PALETTE.white, 15),
+  cellHead: style(10, PALETTE.white, 16),
 } as const;

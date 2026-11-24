@@ -1,4 +1,5 @@
 import { KANJO_FIRST_PARTY } from "./render/constants";
+import { BRANCH_SCOPE_SUFFIX } from "./render/data/clauses";
 import {
   DEFAULT_CONTRACT_COPIES_NOTE,
   DEFAULT_CONTRACT_PREAMBLE,
@@ -97,10 +98,9 @@ export function defaultSecondPartyRows(
     {
       id: "sp-name",
       label: "اسم المنشأة / المحل",
-      value:
-        text(merchant.legalName) ||
-        text(merchant.name) ||
-        "",
+      value: text(merchant.legalName)
+        ? `${text(merchant.legalName)}${BRANCH_SCOPE_SUFFIX}`
+        : text(merchant.name),
     },
     {
       id: "sp-representative",
@@ -117,7 +117,7 @@ export function defaultSecondPartyRows(
     },
     {
       id: "sp-national-id",
-      label: "بطاقة الرقم القومي",
+      label: "الرقم القومي للمنشأة",
       value: text(merchant.legalRepresentativeNationalId),
     },
     {

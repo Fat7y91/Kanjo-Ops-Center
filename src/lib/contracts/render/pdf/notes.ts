@@ -36,7 +36,7 @@ export function drawPreamble(
   const panelH = lines.length * TEXT.body.lineHeight + BODY_PAD * 2;
   writer.ensure(headingHeight({ title }) + panelH);
 
-  drawSectionHeading(writer, { eyebrow: "تمهيد", title });
+  drawSectionHeading(writer, { title });
 
   const { canvas } = writer;
   const top = writer.y;

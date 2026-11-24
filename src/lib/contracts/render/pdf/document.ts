@@ -21,7 +21,6 @@ import { CONTRACT_PAGE } from "./geometry";
 import type { ChromeAssets } from "./header";
 import { drawCopiesNote, drawPreamble } from "./notes";
 import { drawParties } from "./parties";
-import { drawSocial } from "./social";
 import { drawSummary } from "./summary";
 
 async function embedAssets(
@@ -59,7 +58,6 @@ export async function renderContractDocument(
   drawCommission(writer, input);
   drawCopiesNote(writer, input);
   drawSummary(writer, input);
-  drawSocial(writer);
 
   return writer.finish(pageDecorations(assets, input));
 }

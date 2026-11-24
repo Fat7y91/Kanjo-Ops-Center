@@ -68,10 +68,19 @@ test("buildClauses keeps canonical order and injects the commission clause", () 
   assert.equal(titles[0], "موضوع العقد وطبيعة العلاقة");
   assert.ok(titles.includes("رسوم تقديم الخدمات والتشغيل"));
   assert.ok(titles.includes("العقاقير الطبية والمنتجات المقيدة"));
-  assert.equal(titles.at(-1), "القانون والإخطارات والأحكام الختامية");
+  assert.equal(
+    titles.at(-1),
+    "نطاق السريان الجغرافي وشمول الفروع الحالية والمستقبلية",
+  );
+  assert.equal(titles.length, 19);
+
+  const geographical = list.find((c) =>
+    c.title.includes("نطاق السريان الجغرافي"),
+  );
+  assert.match(geographical.body, /جميع فروع الطرف الثاني/);
 
   const commission = list.find((c) => c.title === "رسوم تقديم الخدمات والتشغيل");
-  assert.match(commission.body, /\[ ١٢% \]/);
+  assert.match(commission.body, /12%/);
 });
 
 test("buildClauses adds the food clause only for food categories", () => {

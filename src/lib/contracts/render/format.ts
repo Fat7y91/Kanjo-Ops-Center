@@ -6,6 +6,14 @@
  * normaliser. Pure functions only, so they are trivially testable.
  */
 
+/** Removes emoji and pictographs the embedded Arabic font cannot render. */
+export function stripUnsupportedGlyphs(value: unknown): string {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u20E3]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const EASTERN_ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
 
 export function toArabicNumerals(value: unknown): string {

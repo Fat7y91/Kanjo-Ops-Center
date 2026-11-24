@@ -10,6 +10,9 @@ const hydration = loadTsModule(
 const draft = loadTsModule(
   path.join(projectRoot, "src/lib/contracts/draft-editor.ts"),
 );
+const clauseData = loadTsModule(
+  path.join(projectRoot, "src/lib/contracts/render/data/clauses.ts"),
+);
 
 const { hydrateContractTerms, contractTermsAreUnset } = hydration;
 const { EMPTY_CONTRACT_TERMS, DEFAULT_CONTRACT_PREAMBLE } = draft;
@@ -64,12 +67,19 @@ test("second-party rows bind the merchant legal identity", () => {
   const byLabel = Object.fromEntries(
     terms.secondPartyRows.map((row) => [row.label, row.value]),
   );
-  assert.equal(byLabel["اسم المنشأة / المحل"], merchant.legalName);
+  assert.equal(
+    byLabel["اسم المنشأة / المحل"],
+    `${merchant.legalName}${clauseData.BRANCH_SCOPE_SUFFIX}`,
+  );
   assert.equal(byLabel["رقم السجل التجاري"], merchant.commercialRegisterNo);
   assert.equal(byLabel["رقم التسجيل الضريبي"], merchant.taxCardNo);
   assert.equal(
     byLabel["اسم المفوض / صاحب النشاط"],
     merchant.legalRepresentativeName,
+  );
+  assert.equal(
+    byLabel["الرقم القومي للمنشأة"],
+    merchant.legalRepresentativeNationalId,
   );
   assert.equal(byLabel["العنوان"], merchant.legalAddress);
 });
