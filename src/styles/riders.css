@@ -785,31 +785,67 @@
     background: #ffffff !important;
   }
 
-  body * {
+  /* Only when a custody receipt is mounted: drop the shell chrome and every
+   * other surface, then let the receipt own the page. Scoping the hide rules
+   * with `:has(.custody-sheet)` keeps statement printing untouched. */
+  body:has(.custody-sheet) .sidebar,
+  body:has(.custody-sheet) .topbar,
+  body:has(.custody-sheet) .nav-scrim,
+  body:has(.custody-sheet) .route-progress {
+    display: none !important;
+  }
+
+  body:has(.custody-sheet) .app-shell {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  body:has(.custody-sheet) .app-main,
+  body:has(.custody-sheet) .content {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body:has(.custody-sheet) * {
     visibility: hidden;
+  }
+
+  .custody-print-page {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    background: #ffffff !important;
   }
 
   .custody-sheet,
   .custody-sheet * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
   .custody-sheet {
-    position: absolute;
-    inset-inline: 0;
-    top: 0;
-    width: 190mm;
-    min-height: 277mm;
-    padding: 0;
-    margin: 0;
-    box-shadow: none;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  .custody-print-page {
-    padding: 0;
-    background: #ffffff;
+    display: flex !important;
+    position: static !important;
+    box-sizing: border-box;
+    width: 100% !important;
+    height: 276mm;
+    min-height: 0 !important;
+    max-height: 276mm;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   .custody-print-toolbar,
@@ -820,5 +856,6 @@
   .custody-receipt,
   .wallet-card {
     break-inside: avoid;
+    page-break-inside: avoid;
   }
 }

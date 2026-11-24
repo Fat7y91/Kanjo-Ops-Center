@@ -413,21 +413,24 @@
     margin: 10mm;
   }
 
-  body > *:not(.modal-backdrop),
-  .modal-backdrop:not(:has(.statement-sheet)) {
+  /* Only while a party statement is mounted: hide the app and every other
+   * modal, then let the statement own the page. Scoped with `:has` so these
+   * rules never blank out a different printable page (e.g. a custody receipt). */
+  body:has(.statement-sheet) > *:not(.modal-backdrop),
+  body:has(.statement-sheet) .modal-backdrop:not(:has(.statement-sheet)) {
     display: none !important;
   }
 
-  body * {
+  body:has(.statement-sheet) * {
     visibility: hidden;
   }
 
-  .statement-sheet,
-  .statement-sheet * {
+  body:has(.statement-sheet) .statement-sheet,
+  body:has(.statement-sheet) .statement-sheet * {
     visibility: visible;
   }
 
-  .statement-sheet {
+  body:has(.statement-sheet) .statement-sheet {
     box-sizing: border-box;
     position: absolute;
     inset: 0;
@@ -439,15 +442,15 @@
     font-size: 10.5px;
   }
 
-  .statement-actions,
-  .modal-close,
-  .modal-head {
+  body:has(.statement-sheet) .statement-actions,
+  body:has(.statement-sheet) .modal-close,
+  body:has(.statement-sheet) .modal-head {
     display: none !important;
   }
 
-  .modal-backdrop,
-  .modal-card,
-  .modal-body {
+  body:has(.statement-sheet) .modal-backdrop,
+  body:has(.statement-sheet) .modal-card,
+  body:has(.statement-sheet) .modal-body {
     width: 100% !important;
     max-width: 100% !important;
     max-height: none;
@@ -458,7 +461,7 @@
     box-shadow: none;
   }
 
-  .modal-backdrop {
+  body:has(.statement-sheet) .modal-backdrop {
     position: static;
     background: #fff;
   }

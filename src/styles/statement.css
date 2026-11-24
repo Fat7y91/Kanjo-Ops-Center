@@ -113,34 +113,65 @@
   gap: 8px;
 }
 
-/* Print: the dialog chrome, buttons and every other surface disappear, leaving
- * only the statement on an A4 page. */
+/* Print: only while this statement is mounted, the dialog chrome, buttons and
+ * every other surface disappear so the statement owns the A4 page. Scoping the
+ * hide rules with `:has(.bank-statement)` keeps them from leaking onto other
+ * printable pages such as a custody receipt. */
 @media print {
-  body * {
+  body:has(.bank-statement) > *:not(.modal-backdrop) {
+    display: none !important;
+  }
+
+  body:has(.bank-statement) .modal-backdrop,
+  body:has(.bank-statement) .modal-card,
+  body:has(.bank-statement) .modal-body {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  body:has(.bank-statement) .modal-backdrop {
+    position: static !important;
+    background: #fff !important;
+  }
+
+  body:has(.bank-statement) .modal-head,
+  body:has(.bank-statement) .modal-close {
+    display: none !important;
+  }
+
+  body:has(.bank-statement) * {
     visibility: hidden;
   }
 
-  .bank-statement,
-  .bank-statement * {
+  body:has(.bank-statement) .bank-statement,
+  body:has(.bank-statement) .bank-statement * {
     visibility: visible;
   }
 
-  .bank-statement {
+  body:has(.bank-statement) .bank-statement {
     position: absolute;
     inset-inline: 0;
     top: 0;
     color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  .bank-statement-actions {
+  body:has(.bank-statement) .bank-statement-actions {
     display: none;
   }
 
-  .bank-statement-scroll {
+  body:has(.bank-statement) .bank-statement-scroll {
     overflow: visible;
   }
 
-  .bank-statement-table {
+  body:has(.bank-statement) .bank-statement-table {
     font-size: 0.72rem;
   }
 }
