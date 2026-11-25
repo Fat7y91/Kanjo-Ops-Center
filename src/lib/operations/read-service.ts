@@ -18,7 +18,17 @@ import {
   listPartyStatementRows,
 } from "./statement-repository";
 import { listCourierWorkingDates } from "./clearinghouse-activity";
-import type { PartyStatement, PartyStatementLine } from "./types";
+import {
+  countStatementOrders,
+  round2,
+  statementDay,
+  withinStatementRange,
+} from "./statement-metrics";
+import type {
+  PartyStatement,
+  PartyStatementLine,
+  StatementRange,
+} from "./types";
 
 /**
  * Read-only management views over the operation book.
@@ -72,6 +82,7 @@ export async function loadOrderBreakdown(
  */
 export async function loadPartyStatement(
   accountId: string,
+  range: StatementRange | null = null,
 ): Promise<PartyStatement> {
   requireOperationsDatabase();
 
@@ -85,7 +96,10 @@ export async function loadPartyStatement(
       );
     }
 
-    const rows = await listPartyStatementRows(accountId);
+    const allRows = await listPartyStatementRows(accountId);
+    const rows = allRows.filter((row) =>
+      withinStatementRange(statementDay(row.date), range),
+    );
     const facts = await listOperationStatementFacts(
       rows
         .filter((row) => row.sourceType === "operation" && row.sourceId)
@@ -101,7 +115,15 @@ export async function loadPartyStatement(
         : names.couriers.get(account.partyId)) ??
       (account.partyType === "merchant" ? "تاجر غير معروف" : "مندوب غير معروف");
 
-    let runningMinor = 0;
+    const openingMinor = range?.from
+      ? allRows
+          .filter((row) => statementDay(row.date) < (range.from as string))
+          .reduce(
+            (sum, row) => sum + row.debitMinor - row.creditMinor,
+            0,
+          )
+      : 0;
+    let runningMinor = openingMinor;
     const lines: PartyStatementLine[] = rows.map((row) => {
       runningMinor += row.debitMinor - row.creditMinor;
       const fact =
@@ -130,8 +152,15 @@ export async function loadPartyStatement(
     let workingDays: number | undefined;
     if (account.partyType === "courier") {
       const working = await listCourierWorkingDates();
-      workingDays = working.get(account.partyId)?.length ?? 0;
+      workingDays = (working.get(account.partyId) ?? []).filter((day) =>
+        withinStatementRange(day, range),
+      ).length;
     }
+
+    const closing =
+      range?.to !== null && range?.to !== undefined
+        ? round2(runningMinor / 100)
+        : account.balance;
 
     return {
       accountId: account.accountId,
@@ -139,8 +168,11 @@ export async function loadPartyStatement(
       partyId: account.partyId,
       partyName,
       currency: account.currency,
-      balance: account.balance,
+      balance: closing,
       workingDays,
+      orderCount: countStatementOrders(rows),
+      openingBalance: round2(openingMinor / 100),
+      period: range ?? { from: null, to: null },
       lines,
     };
   } catch (error) {

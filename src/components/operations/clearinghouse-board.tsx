@@ -18,15 +18,18 @@ import type {
 } from "@/lib/operations/types";
 
 import { BreakdownModal } from "./breakdown-modal";
-import { PartyBook } from "./clearinghouse-party-book";
+import { ClearingBookPanels } from "./clearing-book-panels";
+import { ClearingReportModal } from "./clearing-report-modal";
 import { AccountRows, OrderRows } from "./clearinghouse-rows";
 import { ClearinghouseToolbar } from "./clearinghouse-toolbar";
 import { PartyStatementModal } from "./party-statement-modal";
 import { ProfitabilityPanel } from "./profitability-panel";
+import { ManualAdjustmentModal } from "./manual-adjustment-modal";
 import { QuickSettleModal } from "./quick-settle-modal";
 import { useBreakdown } from "./use-breakdown";
 import { useClearinghouse } from "./use-clearinghouse";
 import { useClearinghouseExport } from "./use-clearinghouse-export";
+import { useClearingReport } from "./use-clearing-report";
 import { useClearinghouseView } from "./use-clearinghouse-view";
 import { useInternalStaffFilter } from "./use-internal-staff-filter";
 import { usePartyStatement } from "./use-party-statement";
@@ -45,6 +48,7 @@ export function ClearinghouseBoard({
   const { hasPermission } = usePermission();
   const canSettle = hasPermission("settle_clearinghouse");
   const canPartial = hasPermission("settle_clearinghouse_partial");
+  const canAdjust = hasPermission("post_journal_entries") || canSettle;
 
   const {
     accounts,
@@ -57,6 +61,7 @@ export function ClearinghouseBoard({
     setPartialAmount,
     settle,
     submitSettlement,
+    refresh,
   } = useClearinghouse(initialAccounts, initialPayables, initialReceivables);
 
   const { excludeInternalStaff, setExcludeInternalStaff } =
@@ -73,9 +78,11 @@ export function ClearinghouseBoard({
   const statement = usePartyStatement();
   const voucher = useJournalVoucher();
   const exporter = useClearinghouseExport();
+  const report = useClearingReport();
   const [quickAccount, setQuickAccount] = useState<ClearingAccountRow | null>(
     null,
   );
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const operations = Array.isArray(initialOperations) ? initialOperations : [];
 
   const receivablesTotal = view.openReceivables.reduce(
@@ -192,39 +199,18 @@ export function ClearinghouseBoard({
                   </div>
                 </div>
 
-                <div className="clearing-book">
-                  <article className="panel">
-                    <div className="panel-head">
-                      <h2>مستحق لهم</h2>
-                      <span className="muted">مبالغ على كانجو سدادها</span>
-                    </div>
-                    <PartyBook
-                      accounts={view.payables}
-                      emptyLabel="لا توجد مبالغ مستحقة السداد."
-                      range={view.range}
-                      canSettle={canSettle}
-                      onOpenStatement={statement.openFor}
-                      onQuickSettle={setQuickAccount}
-                    />
-                  </article>
-
-                  <article className="panel">
-                    <div className="panel-head">
-                      <h2>مستحق لنا</h2>
-                      <span className="muted">
-                        مبالغ على التجار ومناديب التوصيل تحصيلها
-                      </span>
-                    </div>
-                    <PartyBook
-                      accounts={view.receivables}
-                      emptyLabel="لا توجد مبالغ مستحقة التحصيل."
-                      range={view.range}
-                      canSettle={canSettle}
-                      onOpenStatement={statement.openFor}
-                      onQuickSettle={setQuickAccount}
-                    />
-                  </article>
-                </div>
+                <ClearingBookPanels
+                  payables={view.payables}
+                  receivables={view.receivables}
+                  range={view.range}
+                  canSettle={canSettle}
+                  exporting={report.exporting}
+                  exportError={report.exportError}
+                  onOpenStatement={statement.openFor}
+                  onQuickSettle={setQuickAccount}
+                  onExport={(kind) => void report.exportFor(kind, view.range)}
+                  onPrint={(kind) => report.openFor(kind, view.range)}
+                />
               </>
             ),
           },
@@ -281,8 +267,26 @@ export function ClearinghouseBoard({
         onClose={statement.close}
         onRetry={statement.retry}
         onOpenEntry={voucher.openFor}
+        canAdjust={canAdjust}
+        onAdjust={() => setAdjustOpen(true)}
       />
-
+      <ManualAdjustmentModal
+        open={adjustOpen}
+        statement={statement.statement}
+        onClose={() => setAdjustOpen(false)}
+        onPosted={() => {
+          statement.retry();
+          void refresh();
+        }}
+      />
+      <ClearingReportModal
+        open={report.open}
+        loading={report.loading}
+        error={report.error}
+        report={report.report}
+        onClose={report.close}
+        onRetry={report.retry}
+      />
       <JournalVoucherModal
         open={voucher.open}
         loading={voucher.loading}

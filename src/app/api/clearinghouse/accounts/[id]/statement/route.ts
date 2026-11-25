@@ -14,7 +14,7 @@ export const runtime = "edge";
  * date, reference and amount, so the response is printable as-is.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   const { session, response } = await authorize("view_clearinghouse");
@@ -29,8 +29,17 @@ export async function GET(
     );
   }
 
+  const url = new URL(request.url);
+  const cleanDay = (value: string | null) =>
+    value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+  const from = cleanDay(url.searchParams.get("from"));
+  const to = cleanDay(url.searchParams.get("to"));
+
   try {
-    const statement = await loadPartyStatement(accountId);
+    const statement = await loadPartyStatement(
+      accountId,
+      from || to ? { from, to } : null,
+    );
     return NextResponse.json(statement, {
       headers: { "Cache-Control": "no-store" },
     });

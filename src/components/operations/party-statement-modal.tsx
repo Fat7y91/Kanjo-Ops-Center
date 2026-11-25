@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { cairoDateTime, currencyMoney, shortDate } from "@/lib/accounts/format";
 import {
   statementArabicDate,
-  statementClosingLabel,
   statementLineDescription,
   statementPrintStamp,
 } from "@/lib/operations/format";
+import { statementTotals } from "@/lib/operations/statement-metrics";
 import type { PartyStatement } from "@/lib/operations/types";
+
+import { StatementSummary } from "./statement-summary";
+import { useStatementExcel } from "./use-statement-excel";
 
 type PartyStatementModalProps = {
   open: boolean;
@@ -20,6 +23,8 @@ type PartyStatementModalProps = {
   onRetry: () => void;
   /** Opens the voucher for a statement line when the viewer may read it. */
   onOpenEntry?: (entryId: string) => void;
+  canAdjust?: boolean;
+  onAdjust?: () => void;
 };
 
 const BRAND = "كانجو للتوصيل والتجارة الإلكترونية";
@@ -41,16 +46,21 @@ export function PartyStatementModal({
   onClose,
   onRetry,
   onOpenEntry,
+  canAdjust = false,
+  onAdjust,
 }: PartyStatementModalProps) {
+  const excel = useStatementExcel();
   const currency = statement?.currency ?? "EGP";
   const money = (value: number) => currencyMoney(value, currency);
-  const totalDebit =
-    statement?.lines.reduce((sum, line) => sum + line.debit, 0) ?? 0;
-  const totalCredit =
-    statement?.lines.reduce((sum, line) => sum + line.credit, 0) ?? 0;
+  const totals = statementTotals(statement?.lines ?? []);
   const firstDate = statement?.lines[0]?.date;
   const lastDate = statement?.lines.at(-1)?.date;
   const balance = statement?.balance ?? 0;
+  const period = statement?.period;
+  const periodText =
+    period?.from || period?.to
+      ? `${statementArabicDate(period.from ?? undefined)} ← ${statementArabicDate(period.to ?? undefined)}`
+      : `${statementArabicDate(firstDate)} ← ${statementArabicDate(lastDate)}`;
 
   return (
     <Modal
@@ -112,47 +122,27 @@ export function PartyStatementModal({
                 <strong>{statement.workingDays ?? 0} أيام</strong>
               </div>
             ) : null}
+            <div className="statement-meta-item">
+              <span className="statement-meta-label">عدد الطلبات:</span>
+              <strong>{statement.orderCount} طلب</strong>
+            </div>
             <div className="statement-meta-period">
               <span className="statement-meta-label">الفترة:</span>
-              <span>
-                من{" "}
-                <span className="statement-date" dir="rtl">
-                  {statementArabicDate(firstDate)}
-                </span>{" "}
-                إلى{" "}
-                <span className="statement-date" dir="rtl">
-                  {statementArabicDate(lastDate)}
-                </span>
+              <span className="statement-date" dir="rtl">
+                {periodText}
               </span>
             </div>
           </div>
 
-          <div className="statement-summary">
-            <div>
-              <span>إجمالي المدين</span>
-              <strong dir="ltr">{money(totalDebit)}</strong>
+          {canAdjust && onAdjust ? (
+            <div className="statement-toolbar">
+              <Button variant="accent" size="sm" onClick={onAdjust}>
+                + إضافة مكافأة / تسوية
+              </Button>
             </div>
-            <div>
-              <span>إجمالي الدائن</span>
-              <strong dir="ltr">{money(totalCredit)}</strong>
-            </div>
-            <div>
-              <span>
-                {statement.partyType === "courier" ? "أيام العمل" : "عدد الحركات"}
-              </span>
-              <strong dir="ltr">
-                {statement.partyType === "courier"
-                  ? statement.workingDays ?? 0
-                  : statement.lines.length}
-              </strong>
-            </div>
-            <div className="statement-summary-closing">
-              <span>
-                الرصيد الختامي · {statementClosingLabel(statement.partyType, balance)}
-              </span>
-              <strong dir="ltr">{money(Math.abs(balance))}</strong>
-            </div>
-          </div>
+          ) : null}
+
+          <StatementSummary statement={statement} />
 
           {statement.lines.length === 0 ? (
             <p className="muted">لا توجد حركات على هذا الحساب بعد.</p>
@@ -212,8 +202,8 @@ export function PartyStatementModal({
                 <tr>
                   <td className="statement-total-label">الإجمالي</td>
                   <td />
-                  <td dir="ltr">{money(totalDebit)}</td>
-                  <td dir="ltr">{money(totalCredit)}</td>
+                  <td dir="ltr">{money(totals.debit)}</td>
+                  <td dir="ltr">{money(totals.credit)}</td>
                   <td dir="ltr">{money(balance)}</td>
                 </tr>
               </tfoot>
@@ -232,7 +222,17 @@ export function PartyStatementModal({
             </div>
           </footer>
 
+          {excel.error ? <p className="form-error">{excel.error}</p> : null}
+
           <div className="breakdown-foot statement-actions">
+            <Button
+              variant="accent"
+              size="sm"
+              disabled={excel.busy}
+              onClick={() => void excel.exportStatement(statement)}
+            >
+              {excel.busy ? "جارٍ التصدير…" : "تصدير Excel"}
+            </Button>
             <Button
               variant="primary"
               size="sm"

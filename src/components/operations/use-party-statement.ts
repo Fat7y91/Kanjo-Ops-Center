@@ -2,7 +2,10 @@
 
 import { useCallback, useState } from "react";
 
-import type { PartyStatement } from "@/lib/operations/types";
+import type {
+  PartyStatement,
+  StatementRange,
+} from "@/lib/operations/types";
 
 /**
  * Loads a party statement for the drill-down modal.
@@ -17,13 +20,18 @@ export function usePartyStatement() {
   const [error, setError] = useState("");
   const [statement, setStatement] = useState<PartyStatement | null>(null);
   const [accountId, setAccountId] = useState("");
+  const [range, setRange] = useState<StatementRange | null>(null);
 
-  const load = useCallback(async (id: string) => {
+  const load = useCallback(async (id: string, window: StatementRange | null) => {
     setLoading(true);
     setError("");
     try {
+      const query = new URLSearchParams();
+      if (window?.from) query.set("from", window.from);
+      if (window?.to) query.set("to", window.to);
+      const suffix = query.size > 0 ? `?${query.toString()}` : "";
       const response = await fetch(
-        `/api/clearinghouse/accounts/${id}/statement`,
+        `/api/clearinghouse/accounts/${id}/statement${suffix}`,
         { cache: "no-store" },
       );
       const payload = (await response.json()) as
@@ -46,11 +54,12 @@ export function usePartyStatement() {
   }, []);
 
   const openFor = useCallback(
-    (id: string) => {
+    (id: string, window: StatementRange | null = null) => {
       setAccountId(id);
+      setRange(window);
       setStatement(null);
       setOpen(true);
-      void load(id);
+      void load(id, window);
     },
     [load],
   );
@@ -60,11 +69,12 @@ export function usePartyStatement() {
     setStatement(null);
     setError("");
     setAccountId("");
+    setRange(null);
   }, []);
 
   const retry = useCallback(() => {
-    if (accountId) void load(accountId);
-  }, [accountId, load]);
+    if (accountId) void load(accountId, range);
+  }, [accountId, range, load]);
 
   return { open, loading, error, statement, openFor, close, retry };
 }

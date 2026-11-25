@@ -167,6 +167,11 @@ export type PartyStatementLine = {
  * names the source (order id, settlement label) so a line is readable on its
  * own, which is what makes the statement printable.
  */
+export type StatementRange = {
+  from: string | null;
+  to: string | null;
+};
+
 export type PartyStatement = {
   accountId: string;
   partyType: ClearingPartyType;
@@ -174,8 +179,14 @@ export type PartyStatement = {
   partyName: string;
   currency: "EGP" | "SAR";
   balance: number;
-  /** Paid attendance days, couriers only. */
+  /** Paid attendance days in the selected range, couriers only. */
   workingDays?: number;
+  /** Distinct delivered orders included in the selected range. */
+  orderCount: number;
+  /** Opening balance before the first displayed line. */
+  openingBalance: number;
+  /** Selected window; an all-time statement carries null bounds. */
+  period: StatementRange;
   lines: PartyStatementLine[];
 };
 
@@ -279,3 +290,23 @@ export const orderCommissionInputSchema = z.object({
 });
 
 export type OrderCommissionInput = z.infer<typeof orderCommissionInputSchema>;
+
+export const manualAdjustmentInputSchema = z.object({
+  direction: z.enum(["credit", "debit"]),
+  amount: z.coerce
+    .number()
+    .positive("المبلغ يجب أن يكون أكبر من صفر.")
+    .max(10_000_000, "المبلغ أكبر من الحد المسموح."),
+  entryDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الحركة غير صالح."),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "اكتب تفسيراً واضحاً للمكافأة أو التسوية.")
+    .max(1000, "التفسير أطول من الحد المسموح."),
+});
+
+export type ManualAdjustmentInput = z.infer<
+  typeof manualAdjustmentInputSchema
+>;
