@@ -45,15 +45,15 @@ begin
   reason := btrim(coalesce(p_reason, ''));
 
   if p_amount_minor is null or p_amount_minor <= 0 then
-    raise exception 'ADJUSTMENT_AMOUNT_INVALID: amount must be positive'
+    raise exception 'ADJUSTMENT_AMOUNT_INVALID: المبلغ يجب أن يكون أكبر من صفر.'
       using errcode = '23514';
   end if;
   if reason = '' then
-    raise exception 'ADJUSTMENT_REASON_REQUIRED: explanation is required'
+    raise exception 'ADJUSTMENT_REASON_REQUIRED: اكتب تفسيراً واضحاً للمكافأة أو التسوية.'
       using errcode = '23514';
   end if;
   if p_direction not in ('credit', 'debit') then
-    raise exception 'ADJUSTMENT_DIRECTION_INVALID: %', p_direction
+    raise exception 'ADJUSTMENT_DIRECTION_INVALID: نوع الحركة غير صالح (%)', p_direction
       using errcode = '23514';
   end if;
 
@@ -64,15 +64,15 @@ begin
 
   select * into acct from app.accounts where id = p_account_id;
   if acct.id is null then
-    raise exception 'ADJUSTMENT_ACCOUNT_MISSING: account % does not exist', p_account_id
+    raise exception 'ADJUSTMENT_ACCOUNT_MISSING: لا يوجد حساب دفتر أستاذ بهذا المعرّف.'
       using errcode = '23503';
   end if;
   if acct.party_type is null then
-    raise exception 'ADJUSTMENT_NOT_A_PARTY: account % is a control account', p_account_id
+    raise exception 'ADJUSTMENT_NOT_A_PARTY: لا يمكن تسجيل مكافأة أو تسوية على حساب مراقبة.'
       using errcode = '23514';
   end if;
   if acct.party_type not in ('merchant', 'courier') then
-    raise exception 'ADJUSTMENT_PARTY_TYPE_UNSUPPORTED: %', acct.party_type
+    raise exception 'ADJUSTMENT_PARTY_TYPE_UNSUPPORTED: نوع الطرف غير مدعوم (%)', acct.party_type
       using errcode = '23514';
   end if;
 
@@ -95,7 +95,7 @@ begin
       case acct.party_type when 'courier' then '5110' else '5210' end
     );
     if contra_id is null then
-      raise exception 'ADJUSTMENT_EXPENSE_ACCOUNT_MISSING'
+      raise exception 'ADJUSTMENT_EXPENSE_ACCOUNT_MISSING: حساب مصروف المكافآت غير مهيأ.'
         using errcode = '23503';
     end if;
 
@@ -106,7 +106,7 @@ begin
   else
     contra_id := app.system_account('4900');
     if contra_id is null then
-      raise exception 'ADJUSTMENT_INCOME_ACCOUNT_MISSING'
+      raise exception 'ADJUSTMENT_INCOME_ACCOUNT_MISSING: حساب إيرادات التسويات غير مهيأ.'
         using errcode = '23503';
     end if;
 
