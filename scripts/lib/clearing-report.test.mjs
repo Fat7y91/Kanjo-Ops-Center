@@ -178,3 +178,61 @@ test("excludeInternal keeps merchants and only drops internal couriers", () => {
     ["تاجر"],
   );
 });
+
+test("ZEMBAWY is excluded by name when the ledger flag is missing", () => {
+  const accounts = [
+    account({
+      accountId: "zem",
+      partyName: "zembawy",
+      isInternalStaff: false,
+      balance: -826.5,
+    }),
+    account({
+      accountId: "zem-upper",
+      partyName: "  ZEMBAWY  ",
+      isInternalStaff: undefined,
+      balance: -10,
+    }),
+    account({
+      accountId: "yusuf",
+      partyName: "يوسف علي",
+      balance: -100,
+    }),
+  ];
+
+  const scoped = report.selectClearingReportAccounts({
+    accounts,
+    kind: "payables",
+    range: { from: null, to: null },
+    excludeInternal: true,
+  });
+
+  assert.deepEqual(
+    scoped.map((row) => row.accountId),
+    ["yusuf"],
+  );
+});
+
+test("a merchant whose name contains ZEMBAWY is never treated as internal", () => {
+  const accounts = [
+    account({
+      accountId: "merchant-zem",
+      partyType: "merchant",
+      partyName: "ZEMBAWY market",
+      isInternalStaff: true,
+      balance: 900,
+    }),
+  ];
+
+  const scoped = report.selectClearingReportAccounts({
+    accounts,
+    kind: "collections",
+    range: { from: null, to: null },
+    excludeInternal: true,
+  });
+
+  assert.deepEqual(
+    scoped.map((row) => row.accountId),
+    ["merchant-zem"],
+  );
+});

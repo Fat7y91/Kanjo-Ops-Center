@@ -2,7 +2,10 @@ import type {
   ClearingAccountRow,
   StatementRange,
 } from "./types";
-import { filterClearingAccounts } from "./clearinghouse-view";
+import {
+  filterClearingAccounts,
+  isInternalCourierAccount,
+} from "./clearinghouse-view";
 
 export type ClearingReportKind = "collections" | "payables";
 
@@ -89,11 +92,7 @@ export function isInternalCourier(
   account: ClearingAccountRow,
   excludeInternal: boolean,
 ): boolean {
-  return (
-    excludeInternal &&
-    account.partyType === "courier" &&
-    Boolean(account.isInternalStaff)
-  );
+  return excludeInternal && isInternalCourierAccount(account);
 }
 
 /**

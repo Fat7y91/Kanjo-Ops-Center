@@ -6,6 +6,7 @@ import {
   clearingPeriodLabel,
   DEFAULT_CLEARING_PERIOD,
   filterClearingAccounts,
+  isInternalCourierAccount,
   resolveClearingRange,
   sortClearingAccounts,
   type ClearingPeriodState,
@@ -33,10 +34,7 @@ export function useClearinghouseView(
   const scoped = useMemo(
     () =>
       excludeInternalStaff
-        ? accounts.filter(
-            (account) =>
-              !(account.partyType === "courier" && account.isInternalStaff),
-          )
+        ? accounts.filter((account) => !isInternalCourierAccount(account))
         : accounts,
     [accounts, excludeInternalStaff],
   );

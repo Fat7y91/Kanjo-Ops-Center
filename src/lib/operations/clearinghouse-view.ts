@@ -102,6 +102,23 @@ export function filterClearingAccounts(
   return accounts.filter((account) => hasActivity(account, range));
 }
 
+/**
+ * One definition of an internal delivery partner for both the settlement
+ * screen and every report/export. The ledger flag is authoritative; the name
+ * check keeps a legacy or unlinked ZEMBAWY account out of the scope too.
+ */
+const INTERNAL_COURIER_NAME = /zembawy/i;
+
+export function isInternalCourierAccount(
+  account: ClearingAccountRow,
+): boolean {
+  return (
+    account.partyType === "courier" &&
+    (Boolean(account.isInternalStaff) ||
+      INTERNAL_COURIER_NAME.test(account.partyName))
+  );
+}
+
 export function clearingWorkingDays(
   account: ClearingAccountRow,
   range: ClearingRange,
