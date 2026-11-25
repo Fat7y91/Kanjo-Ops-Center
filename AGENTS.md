@@ -57,3 +57,8 @@ Every refactor commit must pass:
 npm run typecheck
 npm run build
 ```
+
+## Fast verification (targeted tests only)
+
+- Do **not** run the full `npm test` suite for a feature tweak or hotfix. Run only the test file(s) covering the modules you changed, e.g. `node --test scripts/lib/<relevant>.test.mjs`, which finishes in seconds.
+- Run `npm run typecheck`, the targeted `node --test ...`, and `npm run build` **once**, immediately before `git commit` and `git push`. Never run them twice in the same task.

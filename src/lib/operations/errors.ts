@@ -29,7 +29,9 @@ export function fromDatabaseError(error: unknown): OperationsError | null {
 
   const marker = message.match(/^([A-Z_]+):\s*([\s\S]*)$/);
   if (marker) {
-    return new OperationsError(marker[1], marker[2] || message, 409);
+    // Adjustment guards are input rules, not a state conflict.
+    const status = marker[1].startsWith("ADJUSTMENT_") ? 422 : 409;
+    return new OperationsError(marker[1], marker[2] || message, status);
   }
 
   if (code === "42501") {
@@ -44,6 +46,41 @@ export function fromDatabaseError(error: unknown): OperationsError | null {
       "CONFLICT",
       "رقم الطلب مسجّل بالفعل.",
       409,
+    );
+  }
+  if (code === "23502") {
+    return new OperationsError(
+      "VALIDATION",
+      "بعض بيانات القيد المطلوبة غير مكتملة.",
+      422,
+    );
+  }
+  if (code === "22P02") {
+    return new OperationsError(
+      "INVALID_INPUT",
+      "صيغة أحد الحقول غير صالحة.",
+      422,
+    );
+  }
+  if (code === "23503") {
+    return new OperationsError(
+      "MISSING_REFERENCE",
+      "الحساب أو الطرف المرتبط بالقيد غير موجود.",
+      422,
+    );
+  }
+  if (code === "23514") {
+    return new OperationsError(
+      "VALIDATION",
+      "القيد لا يستوفي شروط التسجيل.",
+      422,
+    );
+  }
+  if (code === "42883" || code === "42P01" || code === "PGRST202") {
+    return new OperationsError(
+      "FEATURE_UNAVAILABLE",
+      "خدمة التسويات غير مهيأة على الخادم بعد. حاول لاحقاً.",
+      503,
     );
   }
   return null;

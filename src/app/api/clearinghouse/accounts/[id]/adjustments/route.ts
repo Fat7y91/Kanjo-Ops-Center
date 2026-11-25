@@ -17,8 +17,8 @@ export async function POST(
   if (!session) return response;
 
   const { id } = await context.params;
-  const accountId = id?.trim() ?? "";
-  if (accountId === "") {
+  const accountRef = id?.trim() ?? "";
+  if (accountRef === "") {
     return NextResponse.json(
       { error: "معرّف الحساب مطلوب.", code: "INVALID_REQUEST" },
       { status: 422 },
@@ -37,7 +37,7 @@ export async function POST(
 
   try {
     const entryId = await submitManualAdjustment(
-      accountId,
+      accountRef,
       session.user.id,
       body,
     );
