@@ -1,5 +1,5 @@
 import { KANJO_FIRST_PARTY } from "./render/constants";
-import { BRANCH_SCOPE_SUFFIX } from "./render/data/clauses";
+import { BRANCH_SCOPE_SUFFIX, DURATION_CLAUSE } from "./render/data/clauses";
 import {
   DEFAULT_CONTRACT_COPIES_NOTE,
   DEFAULT_CONTRACT_PREAMBLE,
@@ -117,7 +117,7 @@ export function defaultSecondPartyRows(
     },
     {
       id: "sp-national-id",
-      label: "الرقم القومي للمنشأة",
+      label: "الرقم القومي للمفوض بالتوقيع",
       value: text(merchant.legalRepresentativeNationalId),
     },
     {
@@ -155,6 +155,23 @@ export function hydrateContractTerms(
   const unset = !stored || contractTermsAreUnset(stored);
   const base = stored ?? EMPTY_CONTRACT_TERMS;
 
+  const hydratedClauses = unset
+    ? input.clauses.map((clause) => ({
+        title: clause.title,
+        body: clause.body,
+        enabled: true,
+      }))
+    : base.clauses.map((clause) => ({ ...clause }));
+  if (
+    !hydratedClauses.some(
+      (clause) =>
+        clause.title.includes("مدة سريان العقد") ||
+        clause.body.includes("مدة سريان العقد"),
+    )
+  ) {
+    hydratedClauses.push({ ...DURATION_CLAUSE, enabled: true });
+  }
+
   return {
     baseCommission: base.baseCommission ?? input.baseCommission,
     preamble:
@@ -172,13 +189,7 @@ export function hydrateContractTerms(
         ? defaultSecondPartyRows(input.merchant)
         : base.secondPartyRows,
     summaryNote: base.summaryNote ?? "",
-    clauses: unset
-      ? input.clauses.map((clause) => ({
-          title: clause.title,
-          body: clause.body,
-          enabled: true,
-        }))
-      : base.clauses,
+    clauses: hydratedClauses,
     commissionLines: unset
       ? input.exceptions
           .filter((line) => text(line.category))

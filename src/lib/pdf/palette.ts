@@ -45,6 +45,9 @@ export const PALETTE = {
   goldWarm: hex("#D97434"),
   goldPure: hex("#FFD700"),
   goldSoft: hex("#FBF3DC"),
+  /** Tinted signature-card headers. */
+  signatureFirst: hex("#F5F0FA"),
+  signatureSecond: hex("#FDF8EE"),
   /** Card and panel fills. */
   panel: hex("#F7F4FB"),
   panelAlt: hex("#FDFBF7"),

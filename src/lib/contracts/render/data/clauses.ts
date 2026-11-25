@@ -89,8 +89,12 @@ export function commissionClauseBody(achievedPercent: string): string {
 
 export function financialMechanismClauseBody(
   financialSpecialException: string,
+  showNotes = true,
 ): string {
-  return `يتم تنظيم الدورة المالية بين الطرفين على النحو التالي: في الطلبات النقدية (الدفع عند الاستلام) يلتزم مندوب كانچو بدفع قيمة الطلب إلى الطرف الثاني عند الاستلام، وتصبح عمولة كانچو دينًا مستحقًا على الطرف الثاني يظهر بشكل مباشر وحي على التطبيق، ويتم تحصيلها دوريًا قبل بلوغ الحد الائتماني المقرر. وفي الطلبات الإلكترونية (الدفع أونلاين) تصبح كانچو مدينة للطرف الثاني بقيمة الطلب بعد خصم عمولتها، وتظهر المستحقات بشكل مباشر وحي على التطبيق، ويمكن للطرف الثاني طلب سحب مستحقاته في أي وقت، وتُحوَّل إليه في أسرع وقت ممكن وفقًا لقواعد وتعليمات البنك المركزي المصري.${financialSpecialException}<br><br>ملاحظات:<div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%; margin-top: 6px;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div>`;
+  const notes = showNotes
+    ? '<br><br>ملاحظات:<div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%; margin-top: 6px;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div><div style="height: 30px; border-bottom: 1px dashed #000; margin-bottom: 8px; width: 100%;"></div>'
+    : "";
+  return `يتم تنظيم الدورة المالية بين الطرفين على النحو التالي: في الطلبات النقدية (الدفع عند الاستلام) يلتزم مندوب كانچو بدفع قيمة الطلب إلى الطرف الثاني عند الاستلام، وتصبح عمولة كانچو دينًا مستحقًا على الطرف الثاني يظهر بشكل مباشر وحي على التطبيق، ويتم تحصيلها دوريًا قبل بلوغ الحد الائتماني المقرر. وفي الطلبات الإلكترونية (الدفع أونلاين) تصبح كانچو مدينة للطرف الثاني بقيمة الطلب بعد خصم عمولتها، وتظهر المستحقات بشكل مباشر وحي على التطبيق، ويمكن للطرف الثاني طلب سحب مستحقاته في أي وقت، وتُحوَّل إليه في أسرع وقت ممكن وفقًا لقواعد وتعليمات البنك المركزي المصري.${financialSpecialException}${notes}`;
 }
 
 export const FINANCIAL_MECHANISM_TITLE = "آلية المعاملات النقدية والتسويات المالية";
@@ -104,6 +108,11 @@ export const FINAL_CLAUSE_TITLE = "القانون والإخطارات والأ�
 export const GEOGRAPHICAL_SCOPE_CLAUSE: ContractClauseTemplate = {
   title: "نطاق السريان الجغرافي وشمول الفروع الحالية والمستقبلية",
   body: "يسري هذا العقد بكافة بنوده وأحكامه ونسب العمولات المتفق عليها على فرع (أو فروع) الطرف الثاني بمدينة دسوق، ويمتد نطاق سريانه تلقائياً ليشمل جميع فروع الطرف الثاني القائمة حالياً أو التي يتم افتتاحها مستقبلاً في أي مدينة أو محافظة داخل جمهورية مصر العربية يباشر الطرف الأول (كانجو) نشاطه وتشغيل خدماته فيها، وذلك دون الحاجة إلى إبرام عقد جديد أو ملحق منفصل لكل فرع، ويُفعَّل العمل لأي فرع إضافي بمجرد إدراجه على منصة الطرف الأول أو الإخطار الكتابي بين الطرفين، ما لم يُتفق كتابةً على شروط خاصة بذلك الفرع.",
+};
+
+export const DURATION_CLAUSE: ContractClauseTemplate = {
+  title: "مدة سريان العقد وتجديده",
+  body: "مدة سريان هذا العقد سنة ميلادية كاملة تبدأ من تاريخ التوقيع عليه (أو تاريخ السريان الموضح بصدر العقد)، ويتجدد العقد تلقائياً لمدد أخرى مماثلة بذات الشروط والأحكام ما لم يُخطر أحد الطرفين الطرف الآخر كتابةً بعدم رغبته في التجديد قبل انتهاء المدة الأصلية أو المجددة بثلاثين (30) يوماً على الأقل، ومع عدم الإخلال بأحكام البند السادس عشر بشأن الإنهاء، يلتزم الطرفان بتسوية وتصفية كافة المستحقات والالتزامات المالية القائمة بينهما حتى تاريخ انتهاء أو إنهاء العقد.",
 };
 
 /** Legal phrase binding the merchant as acting for all current and future branches. */

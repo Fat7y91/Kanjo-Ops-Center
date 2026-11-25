@@ -178,7 +178,7 @@ function drawBadge(
 ): void {
   const { canvas } = writer;
   const height = 40;
-  const width = 380;
+  const width = 430;
   const x = area.centerX - width / 2;
   const y = top - height;
 
@@ -199,8 +199,8 @@ function drawBadge(
     {
       x: x + 16,
       y: y + 13,
-      size: 9.6,
-      maxWidth: width - 32,
+      size: 9.4,
+      maxWidth: width - 24,
       align: "center",
       direction: "rtl",
       color: PALETTE.royalDeep,

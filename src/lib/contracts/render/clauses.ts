@@ -8,6 +8,7 @@ import {
   BASE_CONTRACT_CLAUSES,
   CLOSING_CONTRACT_CLAUSES,
   COMMISSION_CLAUSE_TITLE,
+  DURATION_CLAUSE,
   FINAL_CLAUSE_TITLE,
   FINANCIAL_MECHANISM_TITLE,
   FOOD_CLAUSE,
@@ -24,6 +25,8 @@ export type ClauseRenderInput = {
   achievedPercent: number;
   financialSpecialException: string;
   jurisdictionClause: string;
+  /** Keeps the notes label only when the operator supplied notes. */
+  showNotes?: boolean;
 };
 
 /**
@@ -59,7 +62,10 @@ export function buildClauses(input: ClauseRenderInput): ContractClauseTemplate[]
   );
   const financialClause: ContractClauseTemplate = {
     title: FINANCIAL_MECHANISM_TITLE,
-    body: financialMechanismClauseBody(input.financialSpecialException),
+    body: financialMechanismClauseBody(
+      input.financialSpecialException,
+      input.showNotes !== false,
+    ),
   };
   if (financialIndex >= 0) {
     clauses.splice(financialIndex, 0, financialClause);
@@ -73,6 +79,7 @@ export function buildClauses(input: ClauseRenderInput): ContractClauseTemplate[]
   });
 
   clauses.push(GEOGRAPHICAL_SCOPE_CLAUSE);
+  clauses.push(DURATION_CLAUSE);
 
   return clauses;
 }

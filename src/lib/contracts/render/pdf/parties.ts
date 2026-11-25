@@ -93,7 +93,7 @@ function secondPartyRows(input: ContractDocumentInput): PartyTableRow[] {
       value: input.legalRepresentativeTitle?.trim() || "",
     },
     {
-      label: "الرقم القومي للمنشأة",
+      label: "الرقم القومي للمفوض بالتوقيع",
       value: input.legalRepresentativeNationalId?.trim() || "",
     },
     { label: "رقم السجل التجاري", value: input.commercialRegisterNo?.trim() || "" },

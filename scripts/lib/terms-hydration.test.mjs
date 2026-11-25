@@ -44,7 +44,8 @@ const input = {
 
 test("an entirely empty terms payload is fully hydrated", () => {
   const terms = hydrateContractTerms(null, input);
-  assert.equal(terms.clauses.length, 2);
+  assert.equal(terms.clauses.length, 3);
+  assert.equal(terms.clauses.at(-1).title, "مدة سريان العقد وتجديده");
   assert.equal(terms.baseCommission, 12);
   assert.equal(terms.preamble, DEFAULT_CONTRACT_PREAMBLE);
   assert.match(terms.copiesNote, /نسختين أصليتين/);
@@ -58,7 +59,7 @@ test("an entirely empty terms payload is fully hydrated", () => {
 test("a stored-but-empty payload is treated as unset", () => {
   assert.equal(contractTermsAreUnset(EMPTY_CONTRACT_TERMS), true);
   const terms = hydrateContractTerms(EMPTY_CONTRACT_TERMS, input);
-  assert.equal(terms.clauses.length, 2);
+  assert.equal(terms.clauses.length, 3);
   assert.equal(terms.preamble, DEFAULT_CONTRACT_PREAMBLE);
 });
 
@@ -78,7 +79,7 @@ test("second-party rows bind the merchant legal identity", () => {
     merchant.legalRepresentativeName,
   );
   assert.equal(
-    byLabel["الرقم القومي للمنشأة"],
+    byLabel["الرقم القومي للمفوض بالتوقيع"],
     merchant.legalRepresentativeNationalId,
   );
   assert.equal(byLabel["العنوان"], merchant.legalAddress);
@@ -101,8 +102,9 @@ test("explicitly cleared sections are preserved on re-open", () => {
   assert.equal(terms.copiesNote, "");
   assert.deepEqual(terms.firstPartyRows, []);
   assert.deepEqual(terms.secondPartyRows, []);
-  assert.equal(terms.clauses.length, 1);
+  assert.equal(terms.clauses.length, 2);
   assert.equal(terms.clauses[0].title, "بند محفوظ");
+  assert.equal(terms.clauses.at(-1).title, "مدة سريان العقد وتجديده");
   assert.deepEqual(terms.commissionLines, [{ category: "خاص", rate: 3 }]);
 });
 
@@ -125,6 +127,7 @@ test("only null sections are hydrated; explicit values win", () => {
     { id: "sp-x", label: "يدوي", value: "قيمة" },
   ]);
   assert.equal(terms.summaryNote, "ملخص");
-  assert.equal(terms.clauses.length, 1);
+  assert.equal(terms.clauses.length, 2);
+  assert.equal(terms.clauses.at(-1).title, "مدة سريان العقد وتجديده");
   assert.deepEqual(terms.commissionLines, []);
 });

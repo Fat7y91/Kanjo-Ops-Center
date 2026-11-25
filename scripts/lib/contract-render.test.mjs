@@ -68,16 +68,18 @@ test("buildClauses keeps canonical order and injects the commission clause", () 
   assert.equal(titles[0], "موضوع العقد وطبيعة العلاقة");
   assert.ok(titles.includes("رسوم تقديم الخدمات والتشغيل"));
   assert.ok(titles.includes("العقاقير الطبية والمنتجات المقيدة"));
-  assert.equal(
-    titles.at(-1),
-    "نطاق السريان الجغرافي وشمول الفروع الحالية والمستقبلية",
-  );
-  assert.equal(titles.length, 19);
+  assert.equal(titles.at(-2), "نطاق السريان الجغرافي وشمول الفروع الحالية والمستقبلية");
+  assert.equal(titles.at(-1), "مدة سريان العقد وتجديده");
+  assert.equal(titles.length, 20);
 
   const geographical = list.find((c) =>
     c.title.includes("نطاق السريان الجغرافي"),
   );
   assert.match(geographical.body, /جميع فروع الطرف الثاني/);
+
+  const duration = list.find((c) => c.title === "مدة سريان العقد وتجديده");
+  assert.match(duration.body, /سنة ميلادية كاملة/);
+  assert.match(duration.body, /يتجدد العقد تلقائياً/);
 
   const commission = list.find((c) => c.title === "رسوم تقديم الخدمات والتشغيل");
   assert.match(commission.body, /12%/);

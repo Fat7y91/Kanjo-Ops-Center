@@ -18,7 +18,9 @@ import { drawSectionHeading, headingHeight } from "./heading";
 const FILL = "..........................";
 const PAD = 12;
 const CARD_GAP = 12;
-const CARD_HEIGHT = 138;
+const CARD_HEIGHT = 205;
+const CARD_HEADER = 40;
+const SIGN_GRID_HEIGHT = 65;
 
 function drawLines(
   writer: DocumentWriter,
@@ -52,79 +54,109 @@ function signatureCard(
   top: number,
   width: number,
   heading: string,
+  headerFill: typeof PALETTE.signatureFirst,
+  tone: typeof PALETTE.royal,
   entity: string,
   person: string,
   role: string,
-  tone: typeof PALETTE.royal,
 ): void {
   const { canvas } = writer;
   const inner = width - PAD * 2;
+  const bottom = top - CARD_HEIGHT;
+
   canvas.box(
-    { x, y: top - CARD_HEIGHT, width, height: CARD_HEIGHT },
+    { x, y: bottom, width, height: CARD_HEIGHT },
     { fill: PALETTE.white, border: PALETTE.lineStrong, borderWidth: 1, radius: 6 },
   );
-  canvas.box({ x, y: top - 4, width, height: 4 }, { fill: tone, radius: 2 });
+  canvas.box(
+    { x: x + 1, y: top - CARD_HEADER, width: width - 2, height: CARD_HEADER - 1 },
+    { fill: headerFill },
+  );
+  canvas.page.drawLine({
+    start: { x, y: top - CARD_HEADER },
+    end: { x: x + width, y: top - CARD_HEADER },
+    thickness: 0.8,
+    color: PALETTE.lineStrong,
+  });
 
-  let cursor = top - PAD - 4;
+  let headerY = top - 12;
   const headingLines = wrapSpans(
     [{ text: heading, bold: true }],
-    inner,
-    10.6,
+    inner - 8,
+    10.2,
     writer.fonts,
     "rtl",
   ).map((line) => line.map((span) => span.text).join(""));
-  cursor = drawLines(writer, headingLines, x + PAD, cursor, inner, 10.6, 15, tone);
+  for (const line of headingLines) {
+    canvas.text([{ text: line, bold: true }], {
+      x: x + PAD + 4,
+      y: headerY - 10.2,
+      size: 10.2,
+      maxWidth: inner - 8,
+      align: "start",
+      direction: "rtl",
+      color: tone,
+    });
+    headerY -= 13.2;
+  }
 
-  const entityLines = wrapSpans(
-    [{ text: entity }],
-    inner,
-    9.4,
-    writer.fonts,
-    "rtl",
-  ).map((line) => line.map((span) => span.text).join(""));
-  cursor = drawLines(
-    writer,
-    entityLines,
-    x + PAD,
-    cursor - 4,
-    inner,
-    9.4,
-    14,
-    PALETTE.ink,
+  let cursor = top - CARD_HEADER - 12;
+  const rows: [string, string][] = [
+    ["الكيان القانوني", entity || "—"],
+    ["المفوض بالتوقيع", person || "—"],
+    ["الصفة", role || "—"],
+  ];
+  for (const [label, value] of rows) {
+    const lines = wrapSpans(
+      [{ text: `${label}: `, bold: true }, { text: value }],
+      inner,
+      9.2,
+      writer.fonts,
+      "rtl",
+    );
+    for (const line of lines) {
+      canvas.text(line, {
+        x: x + PAD,
+        y: cursor - 9.2,
+        size: 9.2,
+        maxWidth: inner,
+        align: "start",
+        direction: "rtl",
+        color: PALETTE.inkSoft,
+      });
+      cursor -= 13.4;
+    }
+    cursor -= 2;
+  }
+
+  const gridBottom = bottom + PAD;
+  const gridTop = gridBottom + SIGN_GRID_HEIGHT;
+  const half = inner / 2;
+  canvas.box(
+    { x: x + PAD, y: gridBottom, width: inner, height: SIGN_GRID_HEIGHT },
+    { border: PALETTE.lineStrong, borderWidth: 0.8 },
   );
-
-  cursor = drawLines(
-    writer,
-    [`الاسم: ${person}`, `الصفة: ${role}`],
-    x + PAD,
-    cursor - 2,
-    inner,
-    9.2,
-    13.5,
-    PALETTE.inkSoft,
-  );
-
-  const bottom = top - CARD_HEIGHT;
-  const signY = bottom + 46;
-  canvas.dashedRule(x + PAD, x + width - PAD, signY, PALETTE.lineStrong, 0.8);
+  canvas.page.drawLine({
+    start: { x: x + PAD + half, y: gridBottom },
+    end: { x: x + PAD + half, y: gridTop },
+    thickness: 0.8,
+    color: PALETTE.lineStrong,
+  });
   canvas.text([{ text: "التوقيع", bold: true }], {
-    x: x + PAD,
-    y: signY - 12,
-    size: TEXT.small.size,
-    maxWidth: inner,
-    align: "start",
+    x: x + PAD + half + 6,
+    y: gridTop - 13,
+    size: 8.2,
+    maxWidth: half - 12,
+    align: "center",
     direction: "rtl",
     color: PALETTE.muted,
   });
-
-  const stampY = bottom + 20;
-  canvas.dashedRule(x + PAD, x + width - PAD, stampY, PALETTE.lineStrong, 0.8);
   canvas.text([{ text: "الختم الرسمي", bold: true }], {
     x: x + PAD,
-    y: stampY - 12,
-    size: TEXT.small.size,
-    maxWidth: inner,
-    align: "start",
+    y: gridTop - 13,
+    size: 8.2,
+    maxWidth: half - 12,
+    align: "center",
     direction: "rtl",
     color: PALETTE.muted,
   });
@@ -251,6 +283,10 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
     cursor -= 8;
   }
 
+  const legalName = input.legalName?.trim() ?? "";
+  const secondPartyTitle = legalName
+    ? `الطرف الثاني: ${legalName} (${input.merchantName})`
+    : `الطرف الثاني: ${input.merchantName}`;
   const cardWidth = (innerWidth - CARD_GAP) / 2;
   const cardsTop = Math.min(cursor, bottom + CARD_HEIGHT + PAD);
 
@@ -261,21 +297,23 @@ export function drawSummary(writer: DocumentWriter, input: ContractDocumentInput
     cardsTop,
     cardWidth,
     "الطرف الأول: شركة كاند جوو",
+    PALETTE.signatureFirst,
+    PALETTE.royal,
     KANJO_FIRST_PARTY.tradeName,
     "م/ محمود الجمل",
     "مدير التشغيل والتعاقدات",
-    PALETTE.royal,
   );
   signatureCard(
     writer,
     writer.left + PAD,
     cardsTop,
     cardWidth,
-    "الطرف الثاني: التاجر",
+    secondPartyTitle,
+    PALETTE.signatureSecond,
+    PALETTE.goldDeep,
     input.legalName?.trim() || input.merchantName,
     input.legalRepresentativeName?.trim() || input.contactName || FILL,
     input.legalRepresentativeTitle?.trim() || "صاحب النشاط",
-    PALETTE.goldDeep,
   );
 
   writer.commit(bodyH, 12);

@@ -130,8 +130,17 @@ function drawFillRules(writer: DocumentWriter, count: number): void {
   }
 }
 
+/** Removes the blank notes block when the operator did not supply notes. */
+function visibleClauseBody(body: string, showNotes: boolean): string {
+  if (showNotes) return body;
+  const marker = body.indexOf("ملاحظات:");
+  if (marker < 0) return body;
+  return body.slice(0, marker).replace(/(?:<br\s*\/?>)+\s*$/i, "");
+}
+
 /** Draws the numbered legal clauses (with the commission clause injected). */
 export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput): void {
+  const showNotes = Boolean(input.summaryNote?.trim());
   const { financialSpecialException, jurisdictionClause } = resolveLegalContext(input);
   const clauses =
     input.clauses && input.clauses.length > 0
@@ -141,21 +150,23 @@ export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput
           achievedPercent: input.displayRate,
           financialSpecialException,
           jurisdictionClause,
+          showNotes,
         });
 
   for (let index = 0; index < clauses.length; index += 1) {
     const clause = clauses[index]!;
+    const body = visibleClauseBody(clause.body, showNotes);
     const title = `البند ${clauseNumberLabel(index)}: ${clause.title}`;
 
     if (!headingFits(writer, title)) writer.addPage();
 
     drawClauseHeading(writer, title);
-    for (const line of segmentLines(clause.body)) {
+    for (const line of segmentLines(body)) {
       const { spans, bullet } = asBullet(line);
       drawParagraph(writer, spans, bullet);
     }
 
-    const rules = countFillRules(clause.body);
+    const rules = countFillRules(body);
     if (rules > 0) drawFillRules(writer, rules);
 
     const remaining = writer.y - writer.floor;
