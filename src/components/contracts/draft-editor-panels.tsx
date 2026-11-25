@@ -1,6 +1,6 @@
 "use client";
 
-import { toArabicNumerals } from "@/lib/contracts/render/format";
+import { normalizeBrandSpelling, toArabicNumerals } from "@/lib/contracts/render/format";
 import type { ContractDraft } from "@/lib/contracts/draft-editor";
 import type { DraftEditorController } from "@/components/contracts/use-draft-editor";
 
@@ -10,7 +10,7 @@ export function DraftSummaryStrip({ editor }: { editor: DraftEditorController })
   const activeCount = draft.clauses.filter((clause) => clause.enabled).length;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="badge badge-gold">{draft.merchantName}</span>
+      <span className="badge badge-gold">{normalizeBrandSpelling(draft.merchantName)}</span>
       <span className="text-[0.78rem] text-[color:var(--ink-soft)]">
         {toArabicNumerals(activeCount)} بند نشط
         {editor.disabledCount > 0
@@ -29,7 +29,7 @@ export function DraftPreview({ draft }: { draft: ContractDraft }) {
     <div className="flex flex-col gap-3 rounded-[var(--radius-lg)] bg-[color:var(--surface-soft)] p-5">
       <div>
         <p className="text-[0.7rem] font-bold uppercase tracking-wide text-[color:var(--ink-soft)]">
-          {draft.merchantName}
+          {normalizeBrandSpelling(draft.merchantName)}
         </p>
         <h3 className="mt-1 text-base font-bold text-[color:var(--ink)]">
           مسودة بنود العقد
@@ -38,7 +38,7 @@ export function DraftPreview({ draft }: { draft: ContractDraft }) {
 
       {draft.preamble ? (
         <p className="whitespace-pre-line text-sm leading-relaxed text-[color:var(--ink-soft)]">
-          {draft.preamble}
+          {normalizeBrandSpelling(draft.preamble)}
         </p>
       ) : null}
 
@@ -46,10 +46,10 @@ export function DraftPreview({ draft }: { draft: ContractDraft }) {
         {active.map((clause, index) => (
           <div key={clause.id}>
             <p className="text-sm font-bold text-[color:var(--kanjo-pastel-ink)]">
-              {toArabicNumerals(index + 1)}. {clause.title}
+              {toArabicNumerals(index + 1)}. {normalizeBrandSpelling(clause.title)}
             </p>
             <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-[color:var(--ink)]">
-              {clause.body.replace(/\*\*/g, "")}
+              {normalizeBrandSpelling(clause.body).replace(/\*\*/g, "")}
             </p>
           </div>
         ))}
@@ -70,7 +70,7 @@ export function DraftPreview({ draft }: { draft: ContractDraft }) {
             ? ` · ${draft.commissionLines
                 .map(
                   (line) =>
-                    `${line.category || "بدون اسم"}: ${toArabicNumerals(line.rate)}%`,
+                    `${normalizeBrandSpelling(line.category) || "بدون اسم"}: ${toArabicNumerals(line.rate)}%`,
                 )
                 .join(" · ")}`
             : ""}
@@ -83,7 +83,7 @@ export function DraftPreview({ draft }: { draft: ContractDraft }) {
             ملاحظة الملخص
           </p>
           <p className="mt-1 whitespace-pre-line text-sm text-[color:var(--ink)]">
-            {draft.summaryNote}
+            {normalizeBrandSpelling(draft.summaryNote)}
           </p>
         </div>
       ) : null}

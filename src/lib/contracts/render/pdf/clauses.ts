@@ -26,20 +26,55 @@ import {
 import { countFillRules, segmentLines } from "./html";
 
 const FILL_RULE_HEIGHT = 22;
-const MIN_BODY_LINES_AFTER_HEADING = 2;
 const BULLET_INDENT = 16;
+const CLAUSE_GAP = 8;
+/** Spacing `drawClauseHeading` commits after the title block. */
+const HEADING_GAP = 6;
 
 /** UI-safe LTR isolation for a percentage, so `10%` always reads forward. */
 export function percentageLabel(rate: number): string {
   return `\u2066${rate}%\u2069`;
 }
 
-/** True when the remaining space can hold a heading plus two body lines. */
-function headingFits(writer: DocumentWriter, title: string): boolean {
-  const needed =
-    clauseHeadingHeight(writer, title) +
-    TEXT.body.lineHeight * MIN_BODY_LINES_AFTER_HEADING;
-  return writer.y - needed >= writer.floor;
+/** Height of one authored line after wrapping at the clause body face. */
+function paragraphHeight(
+  writer: DocumentWriter,
+  spans: StyledSpan[],
+  bullet: boolean,
+): number {
+  const width = writer.contentWidth - (bullet ? BULLET_INDENT : 0);
+  const lines = wrapSpans(spans, width, TEXT.body.size, writer.fonts, "rtl");
+  return lines.length * TEXT.body.lineHeight;
+}
+
+/**
+ * Full height of a clause: heading + every wrapped body line + fill rules +
+ * the closing gap. Measured before drawing so a clause is never split across
+ * pages.
+ */
+function measureClauseHeight(
+  writer: DocumentWriter,
+  title: string,
+  body: string,
+): number {
+  let height = clauseHeadingHeight(writer, title) + HEADING_GAP;
+  for (const line of segmentLines(body)) {
+    const { spans, bullet } = asBullet(line);
+    height += paragraphHeight(writer, spans, bullet);
+  }
+  height += countFillRules(body) * FILL_RULE_HEIGHT;
+  return height + CLAUSE_GAP;
+}
+
+/** Usable vertical space on a fresh content page. */
+function pageCapacity(writer: DocumentWriter): number {
+  const { geometry } = writer;
+  return (
+    geometry.height -
+    geometry.marginTop -
+    (geometry.continuationTopReserve ?? 0) -
+    writer.floor
+  );
 }
 
 /** Strips a leading bullet marker from an author line. */
@@ -158,7 +193,13 @@ export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput
     const body = visibleClauseBody(clause.body, showNotes);
     const title = `البند ${clauseNumberLabel(index)}: ${clause.title}`;
 
-    if (!headingFits(writer, title)) writer.addPage();
+    // Reserve the whole clause up front so no sentence of it is ever stranded
+    // across a page break. A clause taller than a page still flows (it cannot
+    // fit anywhere), but every normal clause stays atomic.
+    const clauseHeight = measureClauseHeight(writer, title, body);
+    if (clauseHeight <= pageCapacity(writer) && writer.y - clauseHeight < writer.floor) {
+      writer.addPage();
+    }
 
     drawClauseHeading(writer, title);
     for (const line of segmentLines(body)) {
@@ -169,8 +210,7 @@ export function drawClauses(writer: DocumentWriter, input: ContractDocumentInput
     const rules = countFillRules(body);
     if (rules > 0) drawFillRules(writer, rules);
 
-    const remaining = writer.y - writer.floor;
-    writer.commit(0, remaining < 90 ? 6 : 10);
+    writer.commit(0, CLAUSE_GAP);
   }
 }
 

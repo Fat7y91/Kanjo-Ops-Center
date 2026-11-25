@@ -11,7 +11,6 @@
 import { TEXT, type DocumentWriter } from "@/lib/pdf";
 
 import { KANJO_FIRST_PARTY } from "../constants";
-import { BRANCH_SCOPE_SUFFIX } from "../data/clauses";
 import type { ContractDocumentInput } from "../input";
 import { drawPartyTable, type PartyTableRow } from "./party-table";
 
@@ -77,13 +76,17 @@ function secondPartyRows(input: ContractDocumentInput): PartyTableRow[] {
     }));
   }
 
-  const legalName = input.legalName?.trim();
-  const entity = legalName
-    ? `${legalName}${BRANCH_SCOPE_SUFFIX}`
-    : input.merchantName;
+  const legalName = input.legalName?.trim() ?? "";
 
   return [
-    { label: "اسم المنشأة / المحل", value: entity },
+    {
+      label: "الاسم القانوني (بالسجل التجاري)",
+      value: legalName,
+    },
+    {
+      label: "الاسم التجاري (الشهرة)",
+      value: input.merchantName,
+    },
     {
       label: "اسم المفوض / صاحب النشاط",
       value: input.legalRepresentativeName?.trim() || input.contactName || "",
@@ -117,10 +120,15 @@ export function drawParties(writer: DocumentWriter, input: ContractDocumentInput
     KANJO_FIRST_PARTY.tradeName,
     firstPartyRows(input),
   );
+
+  const legalName = input.legalName?.trim();
+  const secondPartyTitle = legalName
+    ? `الطرف الثاني: ${legalName} (${input.merchantName})`
+    : `الطرف الثاني: ${input.merchantName}`;
   drawPartyTable(
     writer,
     "gold",
-    "الطرف الثاني: التاجر",
+    secondPartyTitle,
     `${input.businessType}: ${input.merchantName}`,
     secondPartyRows(input),
   );

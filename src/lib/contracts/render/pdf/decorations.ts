@@ -18,6 +18,7 @@ import { drawRunningHeader, type ChromeAssets } from "./header";
 
 const WATERMARK_SIZE = 300;
 const WEBSITE = "kanjo.com.eg";
+const LEGAL_NAME = "شركة كاند جوو لخدمات التوصيل والتجارة الإلكترونية";
 
 function drawFooter(canvas: PageCanvas, page: PageHookInfo): void {
   const left = PAGE_MARGIN;
@@ -28,16 +29,33 @@ function drawFooter(canvas: PageCanvas, page: PageHookInfo): void {
   canvas.rule(left, right, y + 14, PALETTE.line, 0.8);
 
   if (page.number === null) return;
-  const parts =
-    `شركة كاند جوو لخدمات التوصيل والتجارة الإلكترونية © ٢٠٢٦` +
-    ` · \u2066${WEBSITE}\u2069 · صفحة ${toArabicNumerals(page.number)} من ${toArabicNumerals(page.total)}`;
 
-  canvas.text([{ text: parts, bold: true }], {
+  // Isolate the copyright year and the website so bidi never merges the `©`
+  // into the year or pushes the year to the far end of the line.
+  const copyright =
+    `${LEGAL_NAME} · ` +
+    `\u2066© ${toArabicNumerals(2026)}\u2069 · \u2066${WEBSITE}\u2069`;
+  canvas.text([{ text: copyright, bold: true }], {
     x: left,
     y,
-    size: TEXT.small.size,
+    size: TEXT.small.size - 0.4,
     maxWidth: width,
-    align: "center",
+    align: "start",
+    direction: "rtl",
+    color: PALETTE.muted,
+  });
+
+  // The page counter is a separate run anchored to the physical left, so the
+  // total can never be clipped by the copyright line's width.
+  const counter =
+    `صفحة \u2066${toArabicNumerals(page.number)}\u2069 ` +
+    `من \u2066${toArabicNumerals(page.total)}\u2069`;
+  canvas.text([{ text: counter }], {
+    x: left,
+    y,
+    size: TEXT.small.size - 0.4,
+    maxWidth: width,
+    align: "end",
     direction: "rtl",
     color: PALETTE.muted,
   });

@@ -36,7 +36,7 @@ export const TEXT = {
   /** Secondary labels inside panels. */
   label: style(9.8, PALETTE.royal, 15.5),
   /** Body copy inside clauses and panels. */
-  body: style(10.8, PALETTE.ink, 18.9),
+  body: style(10, PALETTE.ink, 15.5),
   /** Slightly smaller body for dense identification panels. */
   dense: style(10.2, PALETTE.ink, 17.8),
   /** Small print: notes, footer, copyright. */

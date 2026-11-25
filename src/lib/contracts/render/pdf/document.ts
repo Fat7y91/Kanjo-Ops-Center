@@ -13,6 +13,7 @@ import { DocumentWriter } from "@/lib/pdf";
 import type { PDFImage } from "pdf-lib";
 
 import type { ContractDocumentInput } from "../input";
+import { normalizeContractDocumentInput } from "../input";
 import { decodeLogoDataUri, kanjoLogoBytes } from "./assets";
 import { drawClauses, drawCommission } from "./clauses";
 import { drawCover } from "./cover";
@@ -44,10 +45,18 @@ async function embedAssets(
  * logo only if the whole render fails.
  */
 export async function renderContractDocument(
-  input: ContractDocumentInput,
+  rawInput: ContractDocumentInput,
 ): Promise<Uint8Array> {
+  const input = normalizeContractDocumentInput(rawInput);
   const writer = await DocumentWriter.create(CONTRACT_PAGE, "cover");
   const assets = await embedAssets(writer, input);
+
+  // A descriptive document title makes browser "Save as PDF" and the PDF
+  // viewer's title bar default to the merchant + contract reference instead of
+  // a generic filename.
+  writer.doc.setTitle(`عقد - ${input.merchantName} - ${input.reference}`);
+  writer.doc.setAuthor("كانچو — منصة التوصيل والتجارة الإلكترونية");
+  writer.doc.setSubject("اتفاقية شراكة وتشغيل وتقديم خدمات توصيل");
 
   drawCover(writer, input, assets.kanjo, assets.merchant);
 

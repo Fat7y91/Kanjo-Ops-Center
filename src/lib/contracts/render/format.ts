@@ -16,6 +16,24 @@ export function stripUnsupportedGlyphs(value: unknown): string {
 
 const EASTERN_ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
 
+const INFORMAL_BRAND = /كانجو/g;
+const CANONICAL_BRAND = "كانچو";
+
+/**
+ * Normalises every informal brand spelling to the canonical `كانچو` (3-dot
+ * cheh, U+0686).
+ *
+ * Stored clauses and operator-typed overrides were authored over time with the
+ * 2-dot `كانجو` form (and its prefixed variants like `لكانجو`). Normalising at
+ * render time guarantees the document and the in-app preview agree, even for
+ * clauses added after the copy was standardised. The official legal entity
+ * `شركة كاند جوو ...` contains no `كانجو` substring, so it is never touched.
+ */
+export function normalizeBrandSpelling(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(INFORMAL_BRAND, CANONICAL_BRAND);
+}
+
 export function toArabicNumerals(value: unknown): string {
   return String(value === null || value === undefined ? "" : value).replace(
     /[0-9]/g,

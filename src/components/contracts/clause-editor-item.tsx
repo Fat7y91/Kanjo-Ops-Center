@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InputControl, TextareaControl } from "@/components/ui/form-inputs";
 import { cx } from "@/components/ui/cx";
 import type { DraftClause } from "@/lib/contracts/draft-editor";
+import { normalizeBrandSpelling } from "@/lib/contracts/render/format";
 
 type ClauseEditorItemProps = {
   clause: DraftClause;
@@ -22,7 +23,8 @@ type ClauseEditorItemProps = {
  * else is escaped first, so a pasted `<script>` stays literal text.
  */
 function renderPreview(markup: string): { __html: string } {
-  const escaped = markup
+  const normalized = normalizeBrandSpelling(markup);
+  const escaped = normalized
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");

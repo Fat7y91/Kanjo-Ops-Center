@@ -13,6 +13,71 @@ const constants = loadTsModule(
 const clauses = loadTsModule(
   path.join(projectRoot, "src/lib/contracts/render/clauses.ts"),
 );
+const input = loadTsModule(
+  path.join(projectRoot, "src/lib/contracts/render/input.ts"),
+);
+
+test("normalizeBrandSpelling standardises the informal brand", () => {
+  assert.equal(fmt.normalizeBrandSpelling("كانجو"), "كانچو");
+  assert.equal(fmt.normalizeBrandSpelling("لكانجو وبكانجو"), "لكانچو وبكانچو");
+  assert.equal(
+    fmt.normalizeBrandSpelling("شركة كاند جوو لخدمات التوصيل"),
+    "شركة كاند جوو لخدمات التوصيل",
+  );
+  assert.equal(fmt.normalizeBrandSpelling(undefined), "");
+});
+
+test("canonical clauses use the canonical brand and softened stock copy", () => {
+  const list = clauses.buildClauses({
+    category: "حلويات",
+    achievedPercent: 10,
+    financialSpecialException: "",
+    jurisdictionClause: "",
+  });
+
+  for (const clause of list) {
+    assert.ok(!clause.title.includes("كانجو"), `${clause.title} title brand`);
+    assert.ok(!clause.body.includes("كانجو"), `${clause.title} body brand`);
+  }
+
+  const obligations = list.find((c) => c.title === "التزامات الطرف الثاني العامة");
+  assert.match(obligations.body, /الحرص قدر الإمكان/);
+
+  const stock = list.find((c) => c.title === "المخزون والتجهيز والتغليف");
+  assert.match(stock.body, /يحرص الطرف الثاني/);
+  assert.doesNotMatch(stock.body, /بتحديث المخزون فورًا/);
+  assert.doesNotMatch(stock.body, /مسؤولية أي خطأ أو نقص أو تضليل/);
+
+  const violations = list.find((c) => c.title === "التقييمات والجزاءات والمسؤولية");
+  assert.doesNotMatch(violations.body, /نفاد المخزون/);
+});
+
+test("normalizeContractDocumentInput normalises every brand-bearing field", () => {
+  const normalized = input.normalizeContractDocumentInput({
+    merchantId: "m-1",
+    merchantName: "كانجو",
+    businessType: "كانجو",
+    reference: "CTR-1",
+    displayRate: 10,
+    baseCommission: 10,
+    exceptions: [{ category: "كانجو", rate: 10 }],
+    financialSpecialException: "لكانجو",
+    jurisdictionClause: "وكانجو",
+    clauses: [{ title: "بكانجو", body: "فكانجو" }],
+    preamble: "كانجو",
+    summaryNote: "كانجو",
+  });
+
+  assert.equal(normalized.merchantName, "كانچو");
+  assert.equal(normalized.businessType, "كانچو");
+  assert.equal(normalized.financialSpecialException, "لكانچو");
+  assert.equal(normalized.jurisdictionClause, "وكانچو");
+  assert.equal(normalized.clauses[0].title, "بكانچو");
+  assert.equal(normalized.clauses[0].body, "فكانچو");
+  assert.equal(normalized.preamble, "كانچو");
+  assert.equal(normalized.summaryNote, "كانچو");
+  assert.equal(normalized.exceptions[0].category, "كانچو");
+});
 
 test("toArabicNumerals maps every Western digit to Eastern Arabic", () => {
   assert.equal(fmt.toArabicNumerals("2026"), "٢٠٢٦");

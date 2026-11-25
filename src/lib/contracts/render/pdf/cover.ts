@@ -241,7 +241,7 @@ export function drawCover(
 
   drawCentered(
     writer,
-    `كانجو و ${input.merchantName}`,
+    `كانچو و ${input.merchantName}`,
     605,
     TEXT.coverName.size,
     TEXT.coverName.lineHeight,

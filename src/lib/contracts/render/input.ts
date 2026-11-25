@@ -1,5 +1,6 @@
 import type { ClauseRenderInput } from "./clauses";
 import type { ContractClauseTemplate } from "./data/clauses";
+import { normalizeBrandSpelling } from "./format";
 
 /** A single editable party-panel row (label + value). */
 export type PartyRowInput = { label: string; value: string };
@@ -48,3 +49,66 @@ export type ContractDocumentInput = ClauseRenderInput & {
   secondPartyRows?: PartyRowInput[];
   summaryNote?: string;
 };
+
+function normalizeOptional(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : normalizeBrandSpelling(value);
+}
+
+function normalizeRows(rows: PartyRowInput[] | undefined): PartyRowInput[] | undefined {
+  return rows?.map((row) => ({
+    label: normalizeBrandSpelling(row.label),
+    value: normalizeBrandSpelling(row.value),
+  }));
+}
+
+function normalizeClauses(
+  clauses: ContractClauseTemplate[] | undefined,
+): ContractClauseTemplate[] | undefined {
+  return clauses?.map((clause) => ({
+    title: normalizeBrandSpelling(clause.title),
+    body: normalizeBrandSpelling(clause.body),
+  }));
+}
+
+/**
+ * Applies the canonical brand spelling to every user-visible text field.
+ *
+ * Called at the render boundary (both the PDF engine and the in-app preview),
+ * so operator-authored clauses and legacy rows always print `كانچو` even when
+ * their stored copy still uses the informal `كانجو` form.
+ */
+export function normalizeContractDocumentInput(
+  input: ContractDocumentInput,
+): ContractDocumentInput {
+  return {
+    ...input,
+    merchantName: normalizeBrandSpelling(input.merchantName),
+    businessType: normalizeBrandSpelling(input.businessType),
+    titleBusinessType: normalizeOptional(input.titleBusinessType),
+    reference: normalizeBrandSpelling(input.reference),
+    contactName: normalizeOptional(input.contactName),
+    contactPhone: normalizeOptional(input.contactPhone),
+    address: normalizeOptional(input.address),
+    legalName: normalizeOptional(input.legalName),
+    commercialRegisterNo: normalizeOptional(input.commercialRegisterNo),
+    taxCardNo: normalizeOptional(input.taxCardNo),
+    legalRepresentativeName: normalizeOptional(input.legalRepresentativeName),
+    legalRepresentativeTitle: normalizeOptional(input.legalRepresentativeTitle),
+    legalRepresentativeNationalId: normalizeOptional(
+      input.legalRepresentativeNationalId,
+    ),
+    legalAddress: normalizeOptional(input.legalAddress),
+    clauses: normalizeClauses(input.clauses),
+    preamble: normalizeOptional(input.preamble),
+    copiesNote: normalizeOptional(input.copiesNote),
+    firstPartyRows: normalizeRows(input.firstPartyRows),
+    secondPartyRows: normalizeRows(input.secondPartyRows),
+    summaryNote: normalizeOptional(input.summaryNote),
+    exceptions: (input.exceptions ?? []).map((exception) => ({
+      category: normalizeBrandSpelling(exception.category),
+      rate: exception.rate,
+    })),
+    financialSpecialException: normalizeBrandSpelling(input.financialSpecialException),
+    jurisdictionClause: normalizeBrandSpelling(input.jurisdictionClause),
+  };
+}

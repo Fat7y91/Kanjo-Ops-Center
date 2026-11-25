@@ -98,11 +98,20 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
     }
   }
 
+  // A descriptive filename makes direct downloads and browser "Save as PDF"
+  // default to the merchant + contract reference. The ASCII fallback keeps
+  // legacy clients happy, while RFC 5987 carries the Arabic display name.
+  const displayName = `عقد - ${contract.merchantName} - ${contract.reference}.pdf`;
+  const asciiFallback = `contract-${contract.reference.replace(/[^A-Za-z0-9._-]/g, "")}.pdf`;
+  const contentDisposition =
+    `inline; filename="${asciiFallback}"; ` +
+    `filename*=UTF-8''${encodeURIComponent(displayName)}`;
+
   return new NextResponse(bytes, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="contract-${contract.reference}.pdf"`,
+      "Content-Disposition": contentDisposition,
       "Cache-Control": "no-store",
       "X-Contract-Sha256": sha256,
     },
