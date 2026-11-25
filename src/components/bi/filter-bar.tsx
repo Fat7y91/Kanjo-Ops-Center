@@ -20,6 +20,8 @@ type FilterBarProps = {
   vendorTypes: { id: number; name: string }[];
   resultCount: number;
   excludeInternalStaff: boolean;
+  /** Founders only; everyone else never sees the internal-courier switch. */
+  canViewInternalStaff: boolean;
   onChange: (patch: Partial<BiFilters>) => void;
   onExcludeInternalStaffChange: (next: boolean) => void;
   onReset: () => void;
@@ -43,6 +45,7 @@ export function FilterBar({
   vendorTypes,
   resultCount,
   excludeInternalStaff,
+  canViewInternalStaff,
   onChange,
   onExcludeInternalStaffChange,
   onReset,
@@ -168,11 +171,13 @@ export function FilterBar({
       </div>
 
       <div className="bi-filterbar-meta">
-        <ToggleField
-          label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
-          checked={excludeInternalStaff}
-          onChange={onExcludeInternalStaffChange}
-        />
+        {canViewInternalStaff ? (
+          <ToggleField
+            label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+            checked={excludeInternalStaff}
+            onChange={onExcludeInternalStaffChange}
+          />
+        ) : null}
         <span className="bi-result-count">{resultCount} تاجر في النطاق</span>
         {dirty ? (
           <Button size="sm" variant="quiet" onClick={onReset}>

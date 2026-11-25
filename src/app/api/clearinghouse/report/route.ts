@@ -29,13 +29,20 @@ export async function GET(request: Request) {
   const from = cleanDay(url.searchParams.get("from"));
   const to = cleanDay(url.searchParams.get("to"));
   const excludeParam = url.searchParams.get("excludeInternal");
-  const excludeInternal = excludeParam === "1" || excludeParam === "true";
+  const canViewInternal = session.permissions.includes(
+    "view_internal_staff_accounts",
+  );
+  // Internal courier payables are founder-only: a non-founder request is pinned
+  // to the excluded scope even if it explicitly asks to include them.
+  const excludeInternal =
+    !canViewInternal || excludeParam === "1" || excludeParam === "true";
 
   try {
     const report = await loadClearingReport(
       rawKind as ClearingReportKind,
       { from, to },
       excludeInternal,
+      canViewInternal,
     );
     return NextResponse.json(report, {
       headers: { "Cache-Control": "no-store" },

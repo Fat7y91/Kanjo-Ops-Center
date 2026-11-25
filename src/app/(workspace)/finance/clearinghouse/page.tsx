@@ -9,18 +9,23 @@ export const runtime = "edge";
 export default async function ClearinghousePage() {
   // Reading and settling are separate capabilities: a reviewer may open the
   // book without being able to release money, and a settler must still see it.
-  await requireAnyPermission([
+  const session = await requireAnyPermission([
     "view_clearinghouse",
     "settle_clearinghouse",
     "settle_clearinghouse_partial",
   ]);
+  const canViewInternalStaffAccounts = session.permissions.includes(
+    "view_internal_staff_accounts",
+  );
 
-  const board = await loadClearinghouse().catch(() => ({
-    accounts: [],
-    payables: [],
-    receivables: [],
-    operations: [],
-  }));
+  const board = await loadClearinghouse(canViewInternalStaffAccounts).catch(
+    () => ({
+      accounts: [],
+      payables: [],
+      receivables: [],
+      operations: [],
+    }),
+  );
 
   return (
     <>
@@ -35,6 +40,7 @@ export default async function ClearinghousePage() {
         initialPayables={board.payables}
         initialReceivables={board.receivables}
         initialOperations={board.operations}
+        canViewInternalStaffAccounts={canViewInternalStaffAccounts}
       />
     </>
   );

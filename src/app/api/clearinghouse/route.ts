@@ -24,7 +24,10 @@ export async function GET() {
   if (!session) return response;
 
   try {
-    const board = await loadClearinghouse();
+    const canViewInternal = session.permissions.includes(
+      "view_internal_staff_accounts",
+    );
+    const board = await loadClearinghouse(canViewInternal);
     return NextResponse.json(board, {
       headers: { "Cache-Control": "no-store" },
     });

@@ -16,6 +16,7 @@ export async function loadClearingReport(
   kind: ClearingReportKind,
   range: StatementRange,
   excludeInternal = false,
+  canViewInternal = false,
 ): Promise<ClearingReport> {
   requireOperationsDatabase();
 
@@ -26,6 +27,7 @@ export async function loadClearingReport(
       kind,
       range,
       excludeInternal,
+      canViewInternal,
     });
 
     const stats = await listAccountPeriodStats(

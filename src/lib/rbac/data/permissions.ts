@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (120 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (121 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:
@@ -662,6 +662,12 @@ export const PERMISSIONS = [
     key: "settle_clearinghouse_partial",
     label: "تسوية جزئية",
     description: "سداد أو تحصيل جزء من رصيد طرف في المقاصة مع إبقاء الباقي مفتوحاً.",
+    group: "المقاصة والعمليات",
+  },
+  {
+    key: "view_internal_staff_accounts",
+    label: "عرض حسابات المناديب الداخليين",
+    description: "الاطلاع على حسابات المناديب الداخليين مثل ZEMBAWY وتفاصيلها المحاسبية.",
     group: "المقاصة والعمليات",
   },
   /* ── 20. طلبات التجار ── */

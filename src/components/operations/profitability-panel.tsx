@@ -23,6 +23,8 @@ type ProfitabilityPanelProps = {
   periodLabel: string;
   excludeInternalStaff: boolean;
   onExcludeInternalStaffChange: (next: boolean) => void;
+  /** Founders only; everyone else never sees the internal-courier switch. */
+  canViewInternalStaff: boolean;
 };
 
 /**
@@ -39,6 +41,7 @@ export function ProfitabilityPanel({
   periodLabel,
   excludeInternalStaff,
   onExcludeInternalStaffChange,
+  canViewInternalStaff,
 }: ProfitabilityPanelProps) {
   const [knownCities, setKnownCities] = useState<
     { id: string; name: string }[]
@@ -65,11 +68,13 @@ export function ProfitabilityPanel({
           </span>
         </div>
         <div className="profitability-controls">
-          <ToggleField
-            label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
-            checked={excludeInternalStaff}
-            onChange={onExcludeInternalStaffChange}
-          />
+          {canViewInternalStaff ? (
+            <ToggleField
+              label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+              checked={excludeInternalStaff}
+              onChange={onExcludeInternalStaffChange}
+            />
+          ) : null}
           {knownCities.length > 0 ? (
             <SelectMenu
               label="المدينة"

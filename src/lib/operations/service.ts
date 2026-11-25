@@ -10,6 +10,7 @@ import {
   listClearingAccounts,
   postSettlement,
 } from "./clearinghouse-repository";
+import { isInternalCourierAccount } from "./clearinghouse-view";
 import { resolvePartyNames } from "./party-lookup";
 import { hardDeleteOperations } from "./deletion-repository";
 import {
@@ -239,14 +240,21 @@ export async function logOperation(
  * receivables are positive (they owe Kanjo). Both are slices of the same
  * derived list, so the two panels can never disagree.
  */
-export async function loadClearinghouse(): Promise<ClearinghouseBoard> {
+export async function loadClearinghouse(
+  canViewInternal = false,
+): Promise<ClearinghouseBoard> {
   requireDatabase();
 
   try {
-    const [accounts, operations] = await Promise.all([
+    const [rawAccounts, operations] = await Promise.all([
       listClearingAccounts(),
       listOperations(40),
     ]);
+    // Internal courier accounts are a founder-only slice: everyone else gets the
+    // external book, never a partial row or a hint that ZEMBAWY exists.
+    const accounts = canViewInternal
+      ? rawAccounts
+      : rawAccounts.filter((account) => !isInternalCourierAccount(account));
     return {
       accounts,
       payables: accounts.filter((account) => account.balance < 0),

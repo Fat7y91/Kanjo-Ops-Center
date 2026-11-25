@@ -108,6 +108,7 @@ export function filterClearingAccounts(
  * check keeps a legacy or unlinked ZEMBAWY account out of the scope too.
  */
 const INTERNAL_COURIER_NAME = /zembawy/i;
+export { INTERNAL_COURIER_NAME };
 
 export function isInternalCourierAccount(
   account: ClearingAccountRow,

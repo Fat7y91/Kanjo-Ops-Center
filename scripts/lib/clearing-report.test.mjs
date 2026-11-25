@@ -150,6 +150,45 @@ test("excludeInternal drops ZEMBAWY from export rows and summary totals", () => 
   assert.deepEqual(report.clearingReportTotals(built.rows), built.totals);
 });
 
+test("canViewInternal=false forces internal exclusion even when the caller asks to include them", () => {
+  const accounts = [
+    account({
+      accountId: "zem",
+      partyId: "ZEMBAWY",
+      partyName: "ZEMBAWY",
+      isInternalStaff: true,
+      balance: -826.5,
+    }),
+    account({
+      accountId: "yusuf",
+      partyId: "yusuf",
+      partyName: "يوسف علي",
+      balance: -4272.7,
+    }),
+  ];
+
+  const hidden = report.selectClearingReportAccounts({
+    accounts,
+    kind: "payables",
+    range: { from: null, to: null },
+    excludeInternal: false,
+    canViewInternal: false,
+  });
+  assert.deepEqual(
+    hidden.map((row) => row.partyName),
+    ["يوسف علي"],
+  );
+
+  const founder = report.selectClearingReportAccounts({
+    accounts,
+    kind: "payables",
+    range: { from: null, to: null },
+    excludeInternal: false,
+    canViewInternal: true,
+  });
+  assert.equal(founder.length, 2);
+});
+
 test("excludeInternal keeps merchants and only drops internal couriers", () => {
   const accounts = [
     account({

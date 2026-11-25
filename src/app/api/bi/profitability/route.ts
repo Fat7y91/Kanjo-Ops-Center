@@ -62,11 +62,17 @@ export async function GET(request: Request) {
       excludeInternalStaff: params.get("excludeInternalStaff") || undefined,
     });
 
+    const canViewInternalStaff = session.permissions.includes(
+      "view_internal_staff_accounts",
+    );
     const summary = await loadProfitability({
       from: query.from ?? null,
       to: query.to ?? null,
       cityId: query.cityId ?? null,
-      excludeInternalStaff: query.excludeInternalStaff === "1",
+      // Internal courier payables are founder-only: a caller without the grant
+      // is pinned to the excluded slice even when it asks to include them.
+      excludeInternalStaff:
+        !canViewInternalStaff || query.excludeInternalStaff === "1",
     });
 
     return NextResponse.json(summary, {

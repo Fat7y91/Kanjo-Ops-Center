@@ -11,7 +11,6 @@ import { JournalVoucherModal } from "@/components/journal/journal-voucher-modal"
 import { useJournalVoucher } from "@/components/journal/use-journal-voucher";
 import { ToggleField } from "@/components/ui/form-inputs";
 import { Tabs } from "@/components/ui/tabs";
-import { operationMoney } from "@/lib/operations/format";
 import type {
   ClearingAccountRow,
   OperationSummary,
@@ -19,6 +18,7 @@ import type {
 
 import { BreakdownModal } from "./breakdown-modal";
 import { ClearingBookPanels } from "./clearing-book-panels";
+import { ClearingKpis } from "./clearing-kpis";
 import { ClearingReportModal } from "./clearing-report-modal";
 import { AccountRows, OrderRows } from "./clearinghouse-rows";
 import { ClearinghouseToolbar } from "./clearinghouse-toolbar";
@@ -39,11 +39,13 @@ export function ClearinghouseBoard({
   initialPayables,
   initialReceivables,
   initialOperations,
+  canViewInternalStaffAccounts,
 }: {
   initialAccounts: ClearingAccountRow[];
   initialPayables: ClearingAccountRow[];
   initialReceivables: ClearingAccountRow[];
   initialOperations: OperationSummary[];
+  canViewInternalStaffAccounts: boolean;
 }) {
   const { hasPermission } = usePermission();
   const canSettle = hasPermission("settle_clearinghouse");
@@ -66,13 +68,18 @@ export function ClearinghouseBoard({
 
   const { excludeInternalStaff, setExcludeInternalStaff } =
     useInternalStaffFilter();
-  const view = useClearinghouseView(accounts, excludeInternalStaff);
+  // Without the founder-only grant the internal scope is permanently excluded,
+  // and the switch is never offered.
+  const effectiveExcludeInternal = canViewInternalStaffAccounts
+    ? excludeInternalStaff
+    : true;
+  const view = useClearinghouseView(accounts, effectiveExcludeInternal);
   const [profitCityId, setProfitCityId] = useState<string | null>(null);
   const profitability = useProfitability(
     view.range.from,
     view.range.to,
     profitCityId,
-    excludeInternalStaff,
+    effectiveExcludeInternal,
   );
   const breakdown = useBreakdown();
   const statement = usePartyStatement();
@@ -120,7 +127,7 @@ export function ClearinghouseBoard({
             view.range.from,
             view.range.to,
             profitCityId,
-            excludeInternalStaff,
+            effectiveExcludeInternal,
           );
 
     void exporter.exportBook({
@@ -165,39 +172,17 @@ export function ClearinghouseBoard({
                   cityId={profitCityId}
                   onCityChange={setProfitCityId}
                   periodLabel={view.label}
-                  excludeInternalStaff={excludeInternalStaff}
+                  excludeInternalStaff={effectiveExcludeInternal}
                   onExcludeInternalStaffChange={setExcludeInternalStaff}
+                  canViewInternalStaff={canViewInternalStaffAccounts}
                 />
 
-                <div className="clearing-kpis">
-                  <div className="clearing-kpi clearing-kpi-positive">
-                    <span>إجمالي مستحق لنا</span>
-                    <strong dir="ltr">
-                      {operationMoney(receivablesTotal, summaryCurrency)}
-                    </strong>
-                  </div>
-                  <div className="clearing-kpi clearing-kpi-negative">
-                    <span>إجمالي مستحق لهم</span>
-                    <strong dir="ltr">
-                      {operationMoney(payablesTotal, summaryCurrency)}
-                    </strong>
-                  </div>
-                  <div
-                    className={`clearing-kpi ${
-                      netTotal >= 0
-                        ? "clearing-kpi-positive"
-                        : "clearing-kpi-negative"
-                    }`}
-                  >
-                    <span>
-                      الصافي النهائي{" "}
-                      {netTotal >= 0 ? "(مستحق لنا)" : "(مستحق لهم)"}
-                    </span>
-                    <strong dir="ltr">
-                      {operationMoney(Math.abs(netTotal), summaryCurrency)}
-                    </strong>
-                  </div>
-                </div>
+                <ClearingKpis
+                  receivables={receivablesTotal}
+                  payables={payablesTotal}
+                  net={netTotal}
+                  currency={summaryCurrency}
+                />
 
                 <ClearingBookPanels
                   payables={view.payables}
@@ -208,8 +193,8 @@ export function ClearinghouseBoard({
                   exportError={report.exportError}
                   onOpenStatement={statement.openFor}
                   onQuickSettle={setQuickAccount}
-                  onExport={(kind) => void report.exportFor(kind, view.range, excludeInternalStaff)}
-                  onPrint={(kind) => report.openFor(kind, view.range, excludeInternalStaff)}
+                  onExport={(kind) => void report.exportFor(kind, view.range, effectiveExcludeInternal)}
+                  onPrint={(kind) => report.openFor(kind, view.range, effectiveExcludeInternal)}
                 />
               </>
             ),
@@ -219,14 +204,16 @@ export function ClearinghouseBoard({
             label: "تسديد وتحصيل",
             content: (
               <>
-                <div className="clearing-scope-toggle">
-                  <ToggleField
-                    label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
-                    hint="يبقي طلباتهم وعمولات التجار، ويستبعد أجرهم من المستحقات."
-                    checked={excludeInternalStaff}
-                    onChange={setExcludeInternalStaff}
-                  />
-                </div>
+                {canViewInternalStaffAccounts ? (
+                  <div className="clearing-scope-toggle">
+                    <ToggleField
+                      label="استبعاد مستحقات المناديب الداخليين (ZEMBAWY)"
+                      hint="يبقي طلباتهم وعمولات التجار، ويستبعد أجرهم من المستحقات."
+                      checked={excludeInternalStaff}
+                      onChange={setExcludeInternalStaff}
+                    />
+                  </div>
+                ) : null}
                 <AccountRows {...rowsProps} />
               </>
             ),

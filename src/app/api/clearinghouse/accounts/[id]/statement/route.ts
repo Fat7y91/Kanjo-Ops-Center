@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiError, authorize } from "@/lib/auth/api";
+import { partyAccountIsInternal } from "@/lib/operations/internal-courier-visibility";
 import { loadPartyStatement } from "@/lib/operations/read-service";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ export async function GET(
 ) {
   const { session, response } = await authorize("view_clearinghouse");
   if (!session) return response;
+  const canViewInternal = session.permissions.includes(
+    "view_internal_staff_accounts",
+  );
 
   const { id } = await context.params;
   const accountId = id?.trim() ?? "";
@@ -36,6 +40,16 @@ export async function GET(
   const to = cleanDay(url.searchParams.get("to"));
 
   try {
+    if (!canViewInternal && (await partyAccountIsInternal(accountId))) {
+      return NextResponse.json(
+        {
+          error: "غير مصرح بعرض حسابات المناديب الداخليين.",
+          code: "FORBIDDEN_INTERNAL_ACCOUNT",
+        },
+        { status: 403 },
+      );
+    }
+
     const statement = await loadPartyStatement(
       accountId,
       from || to ? { from, to } : null,

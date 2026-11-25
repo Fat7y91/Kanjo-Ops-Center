@@ -71,13 +71,19 @@ export function ExecutiveDashboard({
   const [activeStage, setActiveStage] = useState<BiDealStage | null>(null);
   const { excludeInternalStaff, setExcludeInternalStaff } =
     useInternalStaffFilter();
+  const canViewInternalStaff = hasPermission("view_internal_staff_accounts");
+  // Internal courier payables are founder-only; everyone else is pinned to the
+  // excluded slice and never sees the switch.
+  const effectiveExcludeInternal = canViewInternalStaff
+    ? excludeInternalStaff
+    : true;
 
   const profitWindow = useMemo(() => resolveBiWindow(filters), [filters]);
   const profitability = useProfitability(
     profitWindow.from?.toISOString() ?? null,
     profitWindow.to?.toISOString() ?? null,
     filters.cityId,
-    excludeInternalStaff,
+    effectiveExcludeInternal,
   );
   const profitLabel =
     filters.range === "custom"
@@ -156,7 +162,8 @@ export function ExecutiveDashboard({
           reps={dataset.reps}
           vendorTypes={dataset.vendorTypes}
           resultCount={scoped.merchants.length}
-          excludeInternalStaff={excludeInternalStaff}
+          excludeInternalStaff={effectiveExcludeInternal}
+          canViewInternalStaff={canViewInternalStaff}
           onChange={updateFilters}
           onExcludeInternalStaffChange={setExcludeInternalStaff}
           onReset={() => {

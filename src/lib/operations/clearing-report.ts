@@ -107,12 +107,19 @@ export function selectClearingReportAccounts(input: {
   kind: ClearingReportKind;
   range: StatementRange;
   excludeInternal: boolean;
+  /**
+   * Founders only. A caller without `view_internal_staff_accounts` is forced to
+   * the internal-excluded scope even when the request asks for the opposite.
+   */
+  canViewInternal?: boolean;
 }): ClearingAccountRow[] {
+  const excludeInternal =
+    input.canViewInternal === false || input.excludeInternal;
   return filterClearingAccounts(input.accounts, input.range)
     .filter((account) =>
       input.kind === "collections" ? account.balance > 0 : account.balance < 0,
     )
-    .filter((account) => !isInternalCourier(account, input.excludeInternal))
+    .filter((account) => !isInternalCourier(account, excludeInternal))
     .sort((left, right) => Math.abs(right.balance) - Math.abs(left.balance));
 }
 
