@@ -18,6 +18,8 @@ export type DropdownMenuItem = {
   tone?: "default" | "danger";
   disabled?: boolean;
   icon?: ReactNode;
+  /** Secondary explanation; also used to justify a disabled item. */
+  hint?: string;
 };
 
 export type DropdownMenuProps = {
@@ -83,12 +85,20 @@ export function DropdownMenu({
             onClick={item.onSelect}
             className={cx(
               "flex w-full items-center gap-2 rounded-lg px-3.5 py-2 text-end text-sm font-semibold transition duration-150 ease-out",
-              "focus:outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45",
+              "focus:outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60",
               ITEM_TONE[item.tone ?? "default"],
+              item.hint && "items-start",
             )}
           >
             {item.icon}
-            <span className="flex-1">{item.label}</span>
+            <span className="flex flex-1 flex-col gap-0.5">
+              <span>{item.label}</span>
+              {item.hint ? (
+                <span className="text-[11px] font-normal leading-snug text-[color:var(--muted)]">
+                  {item.hint}
+                </span>
+              ) : null}
+            </span>
           </MenuItem>
         ))}
       </MenuItems>

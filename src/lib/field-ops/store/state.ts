@@ -10,6 +10,7 @@ import { calculateCommission } from "./crm";
 import { requireMerchant } from "./merchants";
 import { updateMerchantRow } from "../merchant-repository";
 import { syncContractSignedFromMerchant } from "@/lib/contracts/sync";
+import { reconcileContractsFromMerchantState } from "@/lib/contracts/governance-sync";
 import {
   isMerchantStateDatabaseConfigured,
   listStateOverrideRows,
@@ -168,6 +169,22 @@ export async function setMerchantState(
       );
     } catch (syncError) {
       console.error("Contract sync failed after merchant state change", {
+        merchantId: saved.id,
+        syncError,
+      });
+    }
+  } else if (state === "no_agreement" || state === "provisional") {
+    // Falling back out of an agreement makes any executed contract stale: it is
+    // terminated so the register cannot describe a deal the merchant no longer
+    // holds. A paperwork failure must not undo the manager's decision.
+    try {
+      await reconcileContractsFromMerchantState({
+        merchantId: saved.id,
+        nextState: state,
+        actor,
+      });
+    } catch (syncError) {
+      console.error("Contract termination sync failed after merchant state change", {
         merchantId: saved.id,
         syncError,
       });

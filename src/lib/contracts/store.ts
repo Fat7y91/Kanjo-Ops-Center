@@ -8,6 +8,7 @@ import {
   type ContractEditInput,
 } from "./types";
 import { attachContractCommissionRates } from "./commission-repository";
+import { reopenSignedContract, terminateSignedContract } from "./governance-store";
 import { setContractBaseCommission } from "./terms-repository";
 import { syncMerchantSignedFromContract } from "./sync";
 import {
@@ -37,8 +38,11 @@ const TRANSITIONS: Record<Contract["status"], Contract["status"][]> = {
    * paperwork without the intermediate "waiting for signature" step. */
   draft: ["pending_signature", "signed", "cancelled"],
   pending_signature: ["signed", "cancelled"],
-  signed: [],
-  cancelled: [],
+  /* Terminal rows are no longer write-once: a `manage_signed_contracts` holder
+   * may reopen an executed/cancelled contract or terminate a signed one. The
+   * route capability gate decides who may; the table states what is possible. */
+  signed: ["draft", "cancelled"],
+  cancelled: ["draft"],
 };
 
 export function isContractsConfigured(): boolean {
@@ -128,6 +132,15 @@ export async function applyContractAction(
   const current = await findContractRow(id);
   if (!current) {
     throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
+  }
+
+  // Terminal actions reconcile the merchant profile and have their own audit
+  // copy, so they branch before the open-state transition table.
+  if (parsed.data.action === "reopen") {
+    return reopenSignedContract(id, parsed.data.note, actor);
+  }
+  if (current.status === "signed" && parsed.data.action === "cancel") {
+    return terminateSignedContract(id, parsed.data.note, actor);
   }
 
   const next =

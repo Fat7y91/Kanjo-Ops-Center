@@ -36,17 +36,17 @@ export function isContractsDatabaseConfigured(): boolean {
   return hasSupabaseConfig();
 }
 
-export async function listContractRows(): Promise<Contract[]> {
+export async function listContractRows(
+  merchantId?: string,
+): Promise<Contract[]> {
   if (!isContractsDatabaseConfigured()) return [];
 
   const client = getSupabaseServerClient();
-  const read = async (columns: string) =>
-    client
-      .schema("app")
-      .from("contracts")
-      .select(columns)
-      .order("created_at", { ascending: false })
-      .limit(500);
+  const read = async (columns: string) => {
+    const base = client.schema("app").from("contracts").select(columns);
+    const filtered = merchantId ? base.eq("merchant_id", merchantId) : base;
+    return filtered.order("created_at", { ascending: false }).limit(500);
+  };
 
   let { data, error } = await read(COLUMNS);
   // The V2 columns (serial/storage/sha256) may not be deployed yet. Fall back to
@@ -240,4 +240,25 @@ export async function setContractStatusRow(
     );
   }
   return data ? toContract(data as unknown as ContractRow) : null;
+}
+
+/** Permanently removes one contract; child terms cascade. */
+export async function deleteContractRow(id: string): Promise<boolean> {
+  if (!isContractsDatabaseConfigured()) {
+    throw new ContractRepositoryError(
+      "STORE_UNAVAILABLE",
+      "سجل العقود غير مُفعّل على هذا النشر بعد.",
+      503,
+    );
+  }
+
+  const client = getSupabaseServerClient();
+  const { error, count } = await client
+    .schema("app")
+    .from("contracts")
+    .delete({ count: "exact" })
+    .eq("id", id);
+
+  if (error) contractWriteError(error);
+  return (count ?? 0) > 0;
 }

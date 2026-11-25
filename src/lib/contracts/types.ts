@@ -122,7 +122,33 @@ export type ContractCommissionLineInput = z.infer<
 >;
 
 export const CONTRACT_ACTION_INPUT = z.object({
-  action: z.enum(["send", "sign", "cancel"]),
+  action: z.enum(["send", "sign", "cancel", "reopen"]),
   note: z.string().trim().max(500).optional(),
 });
 export type ContractActionInput = z.infer<typeof CONTRACT_ACTION_INPUT>;
+
+/**
+ * Governance actions on an executed contract. `amend` carries the new headline
+ * rate; the state-changing actions (`reopen`, `terminate`, `delete`) may carry a
+ * short note that lands in the audit trail.
+ */
+export const CONTRACT_GOVERNANCE_INPUT = z
+  .object({
+    action: z.enum(["amend", "reopen", "terminate", "delete"]),
+    commissionRate: z
+      .number()
+      .nonnegative()
+      .max(100, "النسبة يجب ألا تتجاوز 100.")
+      .optional(),
+    note: z.string().trim().max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.action === "amend" && value.commissionRate == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["commissionRate"],
+        message: "أدخل نسبة العمولة الجديدة.",
+      });
+    }
+  });
+export type ContractGovernanceInput = z.infer<typeof CONTRACT_GOVERNANCE_INPUT>;

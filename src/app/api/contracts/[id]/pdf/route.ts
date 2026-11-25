@@ -23,6 +23,7 @@ const READ_CAPABILITIES = [
   "sign_contracts",
   "cancel_contract",
   "delete_contracts",
+  "manage_signed_contracts",
 ] as const;
 
 const BUCKET = "contract-documents";

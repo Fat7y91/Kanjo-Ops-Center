@@ -5,6 +5,7 @@ import type {
   MerchantUpdateInput,
 } from "@/lib/schemas/field-ops";
 import { assertVendorTypeExists } from "@/lib/taxonomy/store";
+import { reconcileContractsFromMerchantRate } from "@/lib/contracts/governance-sync";
 
 import {
   FieldOpsError,
@@ -126,6 +127,7 @@ export async function createMerchant(
 export async function updateMerchantDetails(
   merchantId: string,
   input: MerchantUpdateInput,
+  actor: Actor,
 ): Promise<Merchant> {
   const current = await requireMerchant(merchantId);
 
@@ -203,5 +205,26 @@ export async function updateMerchantDetails(
   if (!updated) {
     throw new FieldOpsError("MERCHANT_NOT_FOUND", "التاجر غير موجود.", 404);
   }
+
+  // The profile is the source of truth: a changed target rate must reach the
+  // merchant's signed contract(s) so Clause 5 and the annex never disagree.
+  if (
+    input.targetCommission !== undefined &&
+    input.targetCommission !== current.targetCommission
+  ) {
+    try {
+      await reconcileContractsFromMerchantRate({
+        merchantId,
+        rate: updated.targetCommission,
+        actor,
+      });
+    } catch (syncError) {
+      console.error("Contract rate reconciliation failed after merchant edit", {
+        merchantId,
+        syncError,
+      });
+    }
+  }
+
   return updated;
 }

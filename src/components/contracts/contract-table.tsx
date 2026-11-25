@@ -1,8 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { shortDate } from "@/lib/accounts/format";
 import { commissionRateLabel } from "@/lib/field-ops/merchant-balance-format";
+import {
+  contractGovernanceItems,
+  type ContractGovernanceAction,
+} from "@/lib/contracts/governance";
 import {
   CONTRACT_STATUS_META,
   type Contract,
@@ -21,8 +26,15 @@ type ContractTableProps = {
   canSign: boolean;
   canCancel: boolean;
   canForceEdit: boolean;
+  canManageSigned: boolean;
+  canDelete: boolean;
+  orderCounts: Record<string, number>;
   onEdit: (contract: Contract) => void;
   onAction: (contract: Contract, action: "send" | "sign" | "cancel") => void;
+  onGovernance: (
+    contract: Contract,
+    action: ContractGovernanceAction,
+  ) => void;
 };
 
 export function ContractTable({
@@ -34,8 +46,12 @@ export function ContractTable({
   canSign,
   canCancel,
   canForceEdit,
+  canManageSigned,
+  canDelete,
+  orderCounts,
   onEdit,
   onAction,
+  onGovernance,
 }: ContractTableProps) {
   if (contracts.length === 0) {
     return (
@@ -73,6 +89,15 @@ export function ContractTable({
               const cityName = contract.cityId
                 ? (cityNameById.get(contract.cityId) ?? contract.cityId)
                 : "—";
+              const governance = contractGovernanceItems({
+                status: contract.status,
+                orderCount: orderCounts[contract.id] ?? 0,
+                caps: {
+                  manageSigned: canManageSigned,
+                  deleteContracts: canDelete,
+                  editFinalized: canForceEdit,
+                },
+              });
 
               return (
                 <tr key={contract.id}>
@@ -110,7 +135,7 @@ export function ContractTable({
                         معاينة العقد
                       </Button>
 
-                      {(canEdit || canForceEdit) && open ? (
+                      {(canEdit && open) || canForceEdit ? (
                         <Button
                           as="a"
                           href={`/contracts/draft-editor?contract=${contract.id}`}
@@ -118,7 +143,7 @@ export function ContractTable({
                           variant="quiet"
                           disabled={busy}
                         >
-                          تحرير المسودة
+                          {open ? "تحرير المسودة" : "تعديل بنود العقد"}
                         </Button>
                       ) : null}
 
@@ -163,6 +188,20 @@ export function ContractTable({
                         >
                           إلغاء
                         </Button>
+                      ) : null}
+
+                      {governance.length > 0 ? (
+                        <DropdownMenu
+                          label="إدارة العقد"
+                          items={governance.map((item) => ({
+                            id: item.action,
+                            label: item.label,
+                            tone: item.tone,
+                            disabled: busy || !item.enabled,
+                            hint: item.hint,
+                            onSelect: () => onGovernance(contract, item.action),
+                          }))}
+                        />
                       ) : null}
                     </div>
                   </td>

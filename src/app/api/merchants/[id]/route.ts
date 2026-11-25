@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { apiError, authorize, readJson } from "@/lib/auth/api";
+import { actorFromSession, apiError, authorize, readJson } from "@/lib/auth/api";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { getMerchantById, updateMerchantDetails } from "@/lib/field-ops/store";
 import { merchantUpdateSchema } from "@/lib/schemas/field-ops";
@@ -42,7 +42,11 @@ export async function PATCH(
       );
     }
 
-    const updated = await updateMerchantDetails(id, input);
+    const updated = await updateMerchantDetails(
+      id,
+      input,
+      actorFromSession(session),
+    );
     return NextResponse.json(
       { merchant: updated },
       { headers: { "Cache-Control": "no-store" } },

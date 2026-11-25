@@ -20,6 +20,7 @@ const READ_CAPABILITIES = [
   "cancel_contract",
   "delete_contracts",
   "edit_finalized_contracts",
+  "manage_signed_contracts",
 ] as const;
 
 const WRITE_CAPABILITIES = [
@@ -28,12 +29,16 @@ const WRITE_CAPABILITIES = [
   "draft_contract",
   "create_contracts",
   "edit_finalized_contracts",
+  "manage_signed_contracts",
 ] as const;
 
 type RouteProps = { params: Promise<{ id: string }> };
 
 function canForceEdit(session: ActiveSession): boolean {
-  return session.permissions.includes("edit_finalized_contracts");
+  return (
+    session.permissions.includes("edit_finalized_contracts") ||
+    session.permissions.includes("manage_signed_contracts")
+  );
 }
 
 /**

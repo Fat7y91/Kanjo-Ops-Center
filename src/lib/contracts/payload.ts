@@ -31,6 +31,8 @@ export const contractsPayloadSchema = z.object({
     }),
   ),
   cities: z.array(z.object({ id: z.string(), name: z.string() })),
+  /** Orders recorded under each terminal contract, keyed by contract id. */
+  orderCounts: z.record(z.string(), z.number()).default({}),
 });
 
 export type ContractsPayload = z.infer<typeof contractsPayloadSchema>;

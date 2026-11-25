@@ -36,13 +36,19 @@ export async function PATCH(request: Request, { params }: ContractRouteProps) {
         action === "sign"
           ? (["sign_contract", "sign_contracts"] as const)
           : action === "cancel"
-            ? (["cancel_contract", "delete_contracts"] as const)
-            : ([
-                "edit_contract",
-                "edit_contracts",
-                "draft_contract",
-                "create_contracts",
-              ] as const);
+            ? ([
+                "cancel_contract",
+                "delete_contracts",
+                "manage_signed_contracts",
+              ] as const)
+            : action === "reopen"
+              ? (["manage_signed_contracts"] as const)
+              : ([
+                  "edit_contract",
+                  "edit_contracts",
+                  "draft_contract",
+                  "create_contracts",
+                ] as const);
 
       const { session, response } = await authorizeAny(capability);
       if (!session) return response;

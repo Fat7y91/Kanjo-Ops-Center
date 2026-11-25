@@ -1,7 +1,7 @@
 /**
  * Generated capability catalogue.
  *
- * Mirrors `app.permissions` exactly (119 rows). This file is data, not logic,
+ * Mirrors `app.permissions` exactly (120 rows). This file is data, not logic,
  * and lives under `data/` so it is exempt from the source-file line budget.
  *
  * Source query:
@@ -474,6 +474,12 @@ export const PERMISSIONS = [
     key: "edit_finalized_contracts",
     label: "تحرير العقود المنتهية",
     description: "تجاوز قفل العقود الموقّعة أو الملغاة وتحرير مسودتها بالكامل.",
+    group: "العقود",
+  },
+  {
+    key: "manage_signed_contracts",
+    label: "إدارة العقود الموقّعة",
+    description: "تعديل أو إعادة فتح أو إنهاء أو حذف العقود الموقّعة مع مزامنة ملف التاجر.",
     group: "العقود",
   },
   /* ── 12. الحسابات البنكية ── */

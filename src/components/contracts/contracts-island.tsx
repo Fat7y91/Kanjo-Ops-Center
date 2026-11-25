@@ -34,7 +34,10 @@ export function ContractsIsland() {
   const canEdit = hasAny(["edit_contract", "edit_contracts"]);
   const canSign = hasAny(["sign_contract", "sign_contracts"]);
   const canCancel = hasAny(["cancel_contract", "delete_contracts"]);
-  const canForceEdit = hasPermission("edit_finalized_contracts");
+  const canManageSigned = hasPermission("manage_signed_contracts");
+  const canDelete = hasPermission("delete_contracts");
+  const canForceEdit =
+    hasPermission("edit_finalized_contracts") || canManageSigned;
 
   if (status === "loading") {
     return (
@@ -72,6 +75,8 @@ export function ContractsIsland() {
         canSign={canSign}
         canCancel={canCancel}
         canForceEdit={canForceEdit}
+        canManageSigned={canManageSigned}
+        canDelete={canDelete}
         onReload={reload}
       />
     </ClientErrorBoundary>

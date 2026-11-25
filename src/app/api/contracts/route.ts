@@ -7,6 +7,7 @@ import {
   listContractDraftMerchants,
 } from "@/lib/contracts/merchant-options";
 import { draftContract, listContracts } from "@/lib/contracts/store";
+import { loadContractOrderCounts } from "@/lib/contracts/order-counts";
 import type { ContractDraftInput } from "@/lib/contracts/types";
 import { effectiveCityIds } from "@/lib/city-scope-query";
 import { listCities } from "@/lib/field-ops/store";
@@ -24,6 +25,7 @@ const READ_CAPABILITIES = [
   "sign_contracts",
   "cancel_contract",
   "delete_contracts",
+  "manage_signed_contracts",
 ] as const;
 
 /**
@@ -45,15 +47,28 @@ export async function GET() {
       listCities(),
     ]);
 
+    const scoped = contracts.filter(
+      (contract) => !contract.cityId || allowed.has(contract.cityId),
+    );
+    // Only terminal rows can be governed, so only they need an order count.
+    const terminalIds = scoped
+      .filter(
+        (contract) =>
+          contract.status === "signed" || contract.status === "cancelled",
+      )
+      .map((contract) => contract.id);
+    const orderCounts = Object.fromEntries(
+      await loadContractOrderCounts(terminalIds),
+    );
+
     return NextResponse.json(
       {
-        contracts: contracts.filter(
-          (contract) => !contract.cityId || allowed.has(contract.cityId),
-        ),
+        contracts: scoped,
         merchants,
         cities: cities
           .filter((city) => allowed.has(city.id))
           .map((city) => ({ id: city.id, name: city.name })),
+        orderCounts,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
