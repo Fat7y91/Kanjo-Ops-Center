@@ -359,6 +359,17 @@
   overflow-wrap: anywhere;
 }
 
+/* The courier tag sits inline inside the description but reads as a badge. */
+.statement-courier {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(35, 5, 53, 0.07);
+  color: #230535;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .statement-table th,
 .statement-table td {
   box-sizing: border-box;
@@ -532,6 +543,13 @@
 
   .statement-table tr {
     page-break-inside: avoid;
+  }
+
+  .statement-courier {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    font-weight: 700;
   }
 
   .statement-signoff {

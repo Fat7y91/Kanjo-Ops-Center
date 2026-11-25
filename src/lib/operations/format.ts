@@ -54,9 +54,9 @@ export function statementClosingLabel(
 ): string {
   if (Math.abs(balance) < 0.005) return "مطابق";
   if (type === "courier") {
-    return balance > 0 ? "مستحق لكانجو" : "مستحق للمندوب";
+    return balance > 0 ? "مستحق لكانچو" : "مستحق للمندوب";
   }
-  return balance > 0 ? "مستحق لكانجو" : "مستحق للتاجر";
+  return balance > 0 ? "مستحق لكانچو" : "مستحق للتاجر";
 }
 
 function compactNumber(value: string): string {
@@ -67,16 +67,31 @@ function compactNumber(value: string): string {
     : parsed.toFixed(2).replace(/\.?0+$/, "");
 }
 
-/** A single-line description so a weekly statement stays on one A4 page. */
-export function statementLineDescription(
+/** Pieces of a statement row so the UI can highlight the courier tag. */
+export type StatementLineParts = {
+  /** Text before the courier tag. */
+  lead: string;
+  /** Assigned courier, present only on merchant order rows that recorded one. */
+  courierName: string | null;
+  /** Text after the courier tag. */
+  tail: string;
+};
+
+/**
+ * Split a statement row into its lead / courier / tail pieces.
+ *
+ * The courier is pulled out of the free-text description so the screen, the A4
+ * print and the Excel export can each style it without re-parsing a sentence.
+ */
+export function statementLineParts(
   line: PartyStatementLine,
   currency: PartyStatement["currency"] = "EGP",
-): string {
+): StatementLineParts {
   if (
     line.memo.includes("الحضور اليومي") ||
     line.reference.startsWith("حضور يومي")
   ) {
-    return `حضور يومي (${line.date})`;
+    return { lead: `حضور يومي (${line.date})`, courierName: null, tail: "" };
   }
 
   if (line.memo.includes("صافي الطلب")) {
@@ -85,9 +100,13 @@ export function statementLineDescription(
       const [value = "0", collected = "0", cut = "0"] = numbers;
       const order = /(\d{4,})/.exec(line.reference)?.[1];
       const head = order ? `طلب #${order}` : line.reference;
-      return `${head} (قيمة ${compactNumber(value)} · محصّل ${compactNumber(
-        collected,
-      )} · أجر ${compactNumber(cut)})`;
+      return {
+        lead: `${head} (قيمة ${compactNumber(value)} · محصّل ${compactNumber(
+          collected,
+        )} · أجر ${compactNumber(cut)})`,
+        courierName: null,
+        tail: "",
+      };
     }
   }
 
@@ -96,13 +115,39 @@ export function statementLineDescription(
       line.commissionPercent !== undefined
         ? ` (عمولة ${compactNumber(String(line.commissionPercent))}%)`
         : "";
-    return `طلب #${line.orderNumber} — قيمة الطلب: ${currencyMoney(
-      line.orderValue,
-      currency,
-    )}${rate}`;
+    return {
+      lead: `طلب #${line.orderNumber}`,
+      courierName: line.courierName?.trim() || null,
+      tail: ` — قيمة الطلب: ${currencyMoney(line.orderValue, currency)}${rate}`,
+    };
   }
 
-  return line.memo.replace(/^صافي الطلب:\s*/, "") || line.reference;
+  return {
+    lead: line.memo.replace(/^صافي الطلب:\s*/, "") || line.reference,
+    courierName: null,
+    tail: "",
+  };
+}
+
+/** A single-line description so a weekly statement stays on one A4 page. */
+export function statementLineDescription(
+  line: PartyStatementLine,
+  currency: PartyStatement["currency"] = "EGP",
+): string {
+  const parts = statementLineParts(line, currency);
+  const tag = parts.courierName ? ` · المندوب: ${parts.courierName}` : "";
+  return `${parts.lead}${tag}${parts.tail}`;
+}
+
+/**
+ * Arabic pluralises 1 and 2 differently from 3-10 and 11+, so the order count
+ * must not be pasted next to a single fixed noun.
+ */
+export function statementOrderCountLabel(count: number): string {
+  const value = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+  if (value === 1) return "1 طلب";
+  if (value >= 2 && value <= 10) return `${value} طلبات`;
+  return `${value} طلب`;
 }
 
 export function statementPrintStamp(): string {

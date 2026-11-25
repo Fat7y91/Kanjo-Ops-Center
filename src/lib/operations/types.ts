@@ -157,6 +157,11 @@ export type PartyStatementLine = {
   orderValue?: number;
   /** Commission percentage charged on the order. */
   commissionPercent?: number;
+  /**
+   * Assigned courier who delivered the order. Only populated on merchant
+   * statements, where the courier is a different party from the account owner.
+   */
+  courierName?: string | null;
 };
 
 /**

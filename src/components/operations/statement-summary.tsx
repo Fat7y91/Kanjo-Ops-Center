@@ -1,7 +1,10 @@
 "use client";
 
 import { currencyMoney } from "@/lib/accounts/format";
-import { statementClosingLabel } from "@/lib/operations/format";
+import {
+  statementClosingLabel,
+  statementOrderCountLabel,
+} from "@/lib/operations/format";
 import { statementTotals } from "@/lib/operations/statement-metrics";
 import type { PartyStatement } from "@/lib/operations/types";
 
@@ -12,7 +15,12 @@ export function StatementSummary({
 }) {
   const totals = statementTotals(statement.lines);
   const money = (value: number) => currencyMoney(value, statement.currency);
-  const cards: { label: string; value: string; closing?: boolean }[] = [
+  const cards: {
+    label: string;
+    value: string;
+    closing?: boolean;
+    dir?: "ltr" | "rtl";
+  }[] = [
     { label: "إجمالي المدين", value: money(totals.debit) },
     { label: "إجمالي الدائن", value: money(totals.credit) },
   ];
@@ -25,7 +33,8 @@ export function StatementSummary({
   }
   cards.push({
     label: "عدد الطلبات",
-    value: `${statement.orderCount} طلب`,
+    value: statementOrderCountLabel(statement.orderCount),
+    dir: "rtl",
   });
   cards.push({
     label: `الرصيد الختامي · ${statementClosingLabel(
@@ -48,7 +57,7 @@ export function StatementSummary({
           className={card.closing ? "statement-summary-closing" : undefined}
         >
           <span>{card.label}</span>
-          <strong dir="ltr">{card.value}</strong>
+          <strong dir={card.dir ?? "ltr"}>{card.value}</strong>
         </div>
       ))}
     </div>

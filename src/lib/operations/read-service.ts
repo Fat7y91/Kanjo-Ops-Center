@@ -18,6 +18,7 @@ import {
   listPartyStatementRows,
 } from "./statement-repository";
 import { listCourierWorkingDates } from "./clearinghouse-activity";
+import { buildPartyStatementLines } from "./statement-lines";
 import {
   countStatementOrders,
   round2,
@@ -105,9 +106,22 @@ export async function loadPartyStatement(
         .filter((row) => row.sourceType === "operation" && row.sourceId)
         .map((row) => row.sourceId as string),
     );
+    // A merchant statement names the courier on each order row, so resolve every
+    // assigned courier in one roster read alongside the account's own party name.
+    const orderCourierIds =
+      account.partyType === "merchant"
+        ? [
+            ...new Set(
+              [...facts.values()]
+                .map((fact) => fact.courierId)
+                .filter((id): id is string => Boolean(id)),
+            ),
+          ]
+        : [];
     const names = await resolvePartyNames({
       merchantIds: account.partyType === "merchant" ? [account.partyId] : [],
-      courierIds: account.partyType === "courier" ? [account.partyId] : [],
+      courierIds:
+        account.partyType === "courier" ? [account.partyId] : orderCourierIds,
     });
     const partyName =
       (account.partyType === "merchant"
@@ -123,30 +137,12 @@ export async function loadPartyStatement(
             0,
           )
       : 0;
-    let runningMinor = openingMinor;
-    const lines: PartyStatementLine[] = rows.map((row) => {
-      runningMinor += row.debitMinor - row.creditMinor;
-      const fact =
-        row.sourceType === "operation" && row.sourceId
-          ? facts.get(row.sourceId)
-          : undefined;
-      return {
-        id: row.id,
-        entryId: row.entryId,
-        date: row.date,
-        reference: row.reference,
-        memo: row.memo,
-        debit: Math.round(row.debitMinor) / 100,
-        credit: Math.round(row.creditMinor) / 100,
-        running: Math.round(runningMinor) / 100,
-        orderNumber: fact?.orderNumber,
-        occurredAt: fact?.occurredAt,
-        orderValue:
-          fact && Number.isFinite(fact.orderValueMinor)
-            ? Math.round(fact.orderValueMinor) / 100
-            : undefined,
-        commissionPercent: fact?.commissionPercent ?? undefined,
-      };
+    const lines: PartyStatementLine[] = buildPartyStatementLines({
+      rows,
+      facts,
+      courierNames: names.couriers,
+      partyType: account.partyType,
+      openingMinor,
     });
 
     let workingDays: number | undefined;
@@ -159,7 +155,9 @@ export async function loadPartyStatement(
 
     const closing =
       range?.to !== null && range?.to !== undefined
-        ? round2(runningMinor / 100)
+        ? lines.length > 0
+          ? lines[lines.length - 1].running
+          : round2(openingMinor / 100)
         : account.balance;
 
     return {

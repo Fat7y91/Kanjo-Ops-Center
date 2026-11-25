@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { cairoDateTime, currencyMoney, shortDate } from "@/lib/accounts/format";
 import {
   statementArabicDate,
-  statementLineDescription,
+  statementLineParts,
+  statementOrderCountLabel,
   statementPrintStamp,
 } from "@/lib/operations/format";
 import { statementTotals } from "@/lib/operations/statement-metrics";
@@ -27,7 +28,7 @@ type PartyStatementModalProps = {
   onAdjust?: () => void;
 };
 
-const BRAND = "كانجو للتوصيل والتجارة الإلكترونية";
+const BRAND = "كانچو للتوصيل والتجارة الإلكترونية";
 
 /**
  * Printable A4 statement of account for a merchant or courier.
@@ -124,7 +125,7 @@ export function PartyStatementModal({
             ) : null}
             <div className="statement-meta-item">
               <span className="statement-meta-label">عدد الطلبات:</span>
-              <strong>{statement.orderCount} طلب</strong>
+              <strong>{statementOrderCountLabel(statement.orderCount)}</strong>
             </div>
             <div className="statement-meta-period">
               <span className="statement-meta-label">الفترة:</span>
@@ -158,45 +159,57 @@ export function PartyStatementModal({
                 </tr>
               </thead>
               <tbody>
-                {statement.lines.map((line) => (
-                  <tr
-                    key={line.id}
-                    className={onOpenEntry ? "statement-row-clickable" : undefined}
-                    onClick={onOpenEntry ? () => onOpenEntry(line.entryId) : undefined}
-                    onKeyDown={
-                      onOpenEntry
-                        ? (event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              onOpenEntry(line.entryId);
+                {statement.lines.map((line) => {
+                  const parts = statementLineParts(line, currency);
+                  return (
+                    <tr
+                      key={line.id}
+                      className={onOpenEntry ? "statement-row-clickable" : undefined}
+                      onClick={onOpenEntry ? () => onOpenEntry(line.entryId) : undefined}
+                      onKeyDown={
+                        onOpenEntry
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onOpenEntry(line.entryId);
+                              }
                             }
-                          }
-                        : undefined
-                    }
-                    tabIndex={onOpenEntry ? 0 : undefined}
-                    role={onOpenEntry ? "button" : undefined}
-                    aria-label={
-                      onOpenEntry ? `عرض تفاصيل حركة ${line.reference}` : undefined
-                    }
-                  >
-                    <td className="statement-when">
-                      {line.occurredAt
-                        ? cairoDateTime(line.occurredAt)
-                        : shortDate(line.date)}
-                    </td>
-                    <td>
-                      <span
-                        className="statement-desc"
-                        title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
-                      >
-                        {statementLineDescription(line, currency)}
-                      </span>
-                    </td>
-                    <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
-                    <td dir="ltr">{line.credit > 0 ? money(line.credit) : "—"}</td>
-                    <td dir="ltr">{money(line.running)}</td>
-                  </tr>
-                ))}
+                          : undefined
+                      }
+                      tabIndex={onOpenEntry ? 0 : undefined}
+                      role={onOpenEntry ? "button" : undefined}
+                      aria-label={
+                        onOpenEntry ? `عرض تفاصيل حركة ${line.reference}` : undefined
+                      }
+                    >
+                      <td className="statement-when">
+                        {line.occurredAt
+                          ? cairoDateTime(line.occurredAt)
+                          : shortDate(line.date)}
+                      </td>
+                      <td>
+                        <span
+                          className="statement-desc"
+                          title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
+                        >
+                          {parts.lead}
+                          {parts.courierName ? (
+                            <>
+                              {" · "}
+                              <span className="statement-courier">
+                                المندوب: {parts.courierName}
+                              </span>
+                            </>
+                          ) : null}
+                          {parts.tail}
+                        </span>
+                      </td>
+                      <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
+                      <td dir="ltr">{line.credit > 0 ? money(line.credit) : "—"}</td>
+                      <td dir="ltr">{money(line.running)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr>

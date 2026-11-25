@@ -1,63 +1,16 @@
 import type { PartyStatement } from "./types";
-import { statementTotals } from "./statement-metrics";
+import { buildStatementSheet } from "./statement-sheet-model";
 
-export type StatementSheetModel = {
-  title: string;
-  partyName: string;
-  partyTypeLabel: string;
-  currency: string;
-  periodLabel: string;
-  orderCount: number;
-  workingDays: number | null;
-  debit: number;
-  credit: number;
-  closing: number;
-  headers: string[];
-  rows: (string | number)[][];
-  totals: (string | number)[];
-};
-
-function periodLabel(statement: PartyStatement): string {
-  const { from, to } = statement.period;
-  if (!from && !to) return "كل الفترات";
-  return `${from ?? "البداية"} ← ${to ?? "الآن"}`;
-}
-
-export function buildStatementSheet(
-  statement: PartyStatement,
-): StatementSheetModel {
-  const totals = statementTotals(statement.lines);
-  return {
-    title:
-      statement.partyType === "merchant"
-        ? "كشف حساب تاجر"
-        : "كشف حساب مندوب توصيل",
-    partyName: statement.partyName,
-    partyTypeLabel:
-      statement.partyType === "merchant" ? "تاجر" : "مندوب توصيل",
-    currency: statement.currency,
-    periodLabel: periodLabel(statement),
-    orderCount: statement.orderCount,
-    workingDays: statement.workingDays ?? null,
-    debit: totals.debit,
-    credit: totals.credit,
-    closing: statement.balance,
-    headers: ["التاريخ", "المرجع", "مدين", "دائن", "الرصيد"],
-    rows: statement.lines.map((line) => [
-      line.date,
-      line.memo ? `${line.reference} — ${line.memo}` : line.reference,
-      line.debit,
-      line.credit,
-      line.running,
-    ]),
-    totals: ["الإجمالي", "", totals.debit, totals.credit, statement.balance],
-  };
-}
+export type { StatementSheetModel } from "./statement-sheet-model";
+export { buildStatementSheet } from "./statement-sheet-model";
 
 const PURPLE = "FF230535";
 const GOLD = "FFD97434";
 const SOFT = "FFF7F2FA";
 const LINE = "FFE4D9EC";
+
+const MERCHANT_WIDTHS = [22, 40, 22, 16, 16, 18];
+const COURIER_WIDTHS = [22, 52, 16, 16, 18];
 
 export async function exportStatementExcel(
   statement: PartyStatement,
@@ -87,16 +40,14 @@ export async function exportStatementExcel(
     },
   });
 
-  sheet.columns = [
-    { width: 22 },
-    { width: 52 },
-    { width: 16 },
-    { width: 16 },
-    { width: 18 },
-  ];
+  const widths = model.headers.length === 6 ? MERCHANT_WIDTHS : COURIER_WIDTHS;
+  sheet.columns = widths.map((width) => ({ width }));
 
-  sheet.mergeCells("A1:E1");
-  sheet.getCell("A1").value = "كانجو للتوصيل والتجارة الإلكترونية";
+  const lastColumn = String.fromCharCode(64 + model.headers.length);
+  const courierColumn = model.headers.indexOf("مندوب التوصيل") + 1;
+
+  sheet.mergeCells(`A1:${lastColumn}1`);
+  sheet.getCell("A1").value = "كانچو للتوصيل والتجارة الإلكترونية";
   sheet.getCell("A1").font = {
     name: "Cairo",
     size: 18,
@@ -111,7 +62,7 @@ export async function exportStatementExcel(
   sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
   sheet.getRow(1).height = 32;
 
-  sheet.mergeCells("A2:E2");
+  sheet.mergeCells(`A2:${lastColumn}2`);
   sheet.getCell("A2").value = model.title;
   sheet.getCell("A2").font = {
     name: "Cairo",
@@ -127,7 +78,7 @@ export async function exportStatementExcel(
     ["نوع الشريك", model.partyTypeLabel],
     ["العملة", model.currency],
     ["الفترة", model.periodLabel],
-    ["عدد الطلبات", `${model.orderCount} طلب`],
+    ["عدد الطلبات", model.orderCountLabel],
   ];
   if (model.workingDays !== null) {
     meta.push(["أيام العمل", model.workingDays]);
@@ -152,10 +103,10 @@ export async function exportStatementExcel(
   });
 
   const summaryRow = 3 + meta.length;
-  const summary: [string, number][] = [
+  const summary: [string, string | number][] = [
     ["إجمالي المدين", model.debit],
     ["إجمالي الدائن", model.credit],
-    ["عدد الطلبات", model.orderCount],
+    ["عدد الطلبات", model.orderCountLabel],
     ["الرصيد الختامي", model.closing],
   ];
   summary.forEach(([label, value], index) => {
@@ -202,13 +153,14 @@ export async function exportStatementExcel(
     const row = sheet.getRow(tableStart + 1 + rowIndex);
     row.values = values;
     row.eachCell((cell, column) => {
+      const isAmount = column >= model.amountStart;
       cell.font = { name: "Cairo", size: 10 };
       cell.alignment = {
-        horizontal: column >= 3 ? "left" : "right",
+        horizontal: isAmount ? "left" : "right",
         vertical: "middle",
-        wrapText: column === 2,
+        wrapText: column === model.referenceColumn || column === courierColumn,
       };
-      if (column >= 3) cell.numFmt = "#,##0.00";
+      if (isAmount) cell.numFmt = "#,##0.00";
       cell.border = {
         bottom: { style: "hair", color: { argb: LINE } },
       };
@@ -225,14 +177,15 @@ export async function exportStatementExcel(
   const totalRow = sheet.getRow(tableStart + model.rows.length + 1);
   totalRow.values = model.totals;
   totalRow.eachCell((cell, column) => {
+    const isAmount = column >= model.amountStart;
     cell.font = { name: "Cairo", bold: true, color: { argb: "FF230535" } };
     cell.fill = {
       type: "pattern",
       pattern: "solid",
       fgColor: { argb: "FFF3E9D6" },
     };
-    cell.alignment = { horizontal: column >= 3 ? "left" : "right" };
-    if (column >= 3) cell.numFmt = "#,##0.00";
+    cell.alignment = { horizontal: isAmount ? "left" : "right" };
+    if (isAmount) cell.numFmt = "#,##0.00";
     cell.border = {
       top: { style: "medium", color: { argb: GOLD } },
       bottom: { style: "double", color: { argb: PURPLE } },

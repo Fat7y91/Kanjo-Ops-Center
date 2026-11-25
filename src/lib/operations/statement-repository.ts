@@ -11,6 +11,10 @@ export type OperationStatementFact = {
   occurredAt: string;
   orderValueMinor: number;
   commissionPercent: number | null;
+  /** Assigned courier, joined to the roster for a human-readable name. */
+  courierId: string | null;
+  /** Courier name snapshotted on the operation row, when the schema has one. */
+  courierName: string | null;
 };
 
 type OperationFactRow = {
@@ -19,6 +23,7 @@ type OperationFactRow = {
   occurred_at: string;
   order_value_minor: number | string;
   commission_percent: number | string | null;
+  courier_id?: string | null;
 };
 
 type StatementLineRow = {
@@ -149,17 +154,28 @@ export async function listOperationStatementFacts(
     batches.push(unique.slice(index, index + FACT_BATCH_SIZE));
   }
 
+  const fetchBatch = (batch: string[], withCourier: boolean) =>
+    client
+      .schema("app")
+      .from("operation_logs")
+      .select(
+        withCourier
+          ? "id,order_id,occurred_at,order_value_minor,commission_percent,courier_id"
+          : "id,order_id,occurred_at,order_value_minor,commission_percent",
+      )
+      .in("id", batch)
+      .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+
+  // A deployment whose code runs ahead of the courier column migration must
+  // still render order numbers and values; only the courier name is optional.
   const results = await Promise.all(
-    batches.map((batch) =>
-      client
-        .schema("app")
-        .from("operation_logs")
-        .select(
-          "id,order_id,occurred_at,order_value_minor,commission_percent",
-        )
-        .in("id", batch)
-        .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS)),
-    ),
+    batches.map(async (batch) => {
+      const primary = await fetchBatch(batch, true);
+      if (primary.error && isMissingSchemaObject(primary.error)) {
+        return fetchBatch(batch, false);
+      }
+      return primary;
+    }),
   );
 
   for (const { data, error } of results) {
@@ -174,6 +190,8 @@ export async function listOperationStatementFacts(
         occurredAt: row.occurred_at,
         orderValueMinor: Number(row.order_value_minor),
         commissionPercent: row.commission_percent === null ? null : percent,
+        courierId: row.courier_id ?? null,
+        courierName: null,
       });
     }
   }
