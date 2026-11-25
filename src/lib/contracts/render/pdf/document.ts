@@ -54,7 +54,9 @@ export async function renderContractDocument(
   // A descriptive document title makes browser "Save as PDF" and the PDF
   // viewer's title bar default to the merchant + contract reference instead of
   // a generic filename.
-  writer.doc.setTitle(`عقد - ${input.merchantName} - ${input.reference}`);
+  writer.doc.setTitle(
+    input.documentTitle ?? `عقد - ${input.merchantName} - ${input.reference}`,
+  );
   writer.doc.setAuthor("كانچو — منصة التوصيل والتجارة الإلكترونية");
   writer.doc.setSubject("اتفاقية شراكة وتشغيل وتقديم خدمات توصيل");
 

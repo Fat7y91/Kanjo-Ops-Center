@@ -320,6 +320,9 @@
 .statement-table td:nth-child(2) {
   width: 43%;
   text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .statement-table th:nth-child(3),
@@ -355,19 +358,39 @@
 }
 
 .statement-desc {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.statement-desc-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.statement-desc-sub {
+  font-size: 0.68rem;
+  color: #6b5b78;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The courier tag sits inline inside the description but reads as a badge. */
 .statement-courier {
   display: inline-block;
+  max-width: 100%;
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(35, 5, 53, 0.07);
   color: #230535;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .statement-table th,
@@ -550,6 +573,15 @@
     border-radius: 0;
     background: none;
     font-weight: 700;
+  }
+
+  .statement-desc {
+    gap: 1px;
+  }
+
+  .statement-desc-sub {
+    font-size: 8.5px;
+    color: #333;
   }
 
   .statement-signoff {

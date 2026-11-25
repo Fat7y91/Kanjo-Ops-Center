@@ -1,10 +1,10 @@
 import "server-only";
 
 import { listClearingAccounts } from "./clearinghouse-repository";
-import { filterClearingAccounts } from "./clearinghouse-view";
 import {
   buildClearingReport,
   clearingRangeLabel,
+  selectClearingReportAccounts,
   type ClearingReport,
   type ClearingReportKind,
 } from "./clearing-report";
@@ -15,16 +15,18 @@ import type { StatementRange } from "./types";
 export async function loadClearingReport(
   kind: ClearingReportKind,
   range: StatementRange,
+  excludeInternal = false,
 ): Promise<ClearingReport> {
   requireOperationsDatabase();
 
   try {
     const accounts = await listClearingAccounts();
-    const scoped = filterClearingAccounts(accounts, range)
-      .filter((account) =>
-        kind === "collections" ? account.balance > 0 : account.balance < 0,
-      )
-      .sort((left, right) => Math.abs(right.balance) - Math.abs(left.balance));
+    const scoped = selectClearingReportAccounts({
+      accounts,
+      kind,
+      range,
+      excludeInternal,
+    });
 
     const stats = await listAccountPeriodStats(
       scoped.map((account) => account.accountId),

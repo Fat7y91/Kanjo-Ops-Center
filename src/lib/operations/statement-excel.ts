@@ -1,3 +1,5 @@
+import { excelFileName, statementFileBase } from "@/lib/exports/file-names";
+
 import type { PartyStatement } from "./types";
 import { buildStatementSheet } from "./statement-sheet-model";
 
@@ -199,9 +201,9 @@ export async function exportStatementExcel(
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `kanjo-statement-${statement.accountId.slice(0, 8)}-${new Date()
-    .toISOString()
-    .slice(0, 10)}.xlsx`;
+  anchor.download = excelFileName(
+    statementFileBase(statement.partyType, statement.partyName),
+  );
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);

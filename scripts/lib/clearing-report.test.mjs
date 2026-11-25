@@ -93,3 +93,88 @@ test("missing stats yield zero money but keep the account row", () => {
   assert.equal(built.rows[0].debit, 0);
   assert.equal(built.rows[0].credit, 0);
 });
+
+test("excludeInternal drops ZEMBAWY from export rows and summary totals", () => {
+  const accounts = [
+    account({
+      accountId: "zem",
+      partyId: "ZEMBAWY",
+      partyName: "ZEMBAWY",
+      isInternalStaff: true,
+      balance: -826.5,
+    }),
+    account({
+      accountId: "yusuf",
+      partyId: "yusuf",
+      partyName: "يوسف علي",
+      balance: -4272.7,
+    }),
+  ];
+  const statsMap = new Map([
+    ["zem", stats({ orderCount: 2, debitMinor: 0, creditMinor: 82_650 })],
+    ["yusuf", stats({ orderCount: 3, debitMinor: 0, creditMinor: 427_270 })],
+  ]);
+
+  const included = report.selectClearingReportAccounts({
+    accounts,
+    kind: "payables",
+    range: { from: null, to: null },
+    excludeInternal: false,
+  });
+  assert.equal(included.length, 2);
+
+  const excluded = report.selectClearingReportAccounts({
+    accounts,
+    kind: "payables",
+    range: { from: null, to: null },
+    excludeInternal: true,
+  });
+  assert.deepEqual(
+    excluded.map((row) => row.partyName),
+    ["يوسف علي"],
+  );
+
+  const built = report.buildClearingReport({
+    kind: "payables",
+    accounts: excluded,
+    stats: statsMap,
+    range: { from: null, to: null },
+    periodLabel: "كل الفترات",
+    generatedAt: "2026-11-30 12:00",
+  });
+
+  assert.ok(!built.rows.some((row) => row.partyName === "ZEMBAWY"));
+  assert.equal(built.totals.orders, 3);
+  assert.equal(built.totals.credit, 4272.7);
+  assert.equal(built.totals.net, 4272.7);
+  assert.deepEqual(report.clearingReportTotals(built.rows), built.totals);
+});
+
+test("excludeInternal keeps merchants and only drops internal couriers", () => {
+  const accounts = [
+    account({
+      accountId: "m1",
+      partyType: "merchant",
+      partyName: "تاجر",
+      balance: 900,
+    }),
+    account({
+      accountId: "zem",
+      partyName: "ZEMBAWY",
+      isInternalStaff: true,
+      balance: -500,
+    }),
+  ];
+
+  const scoped = report.selectClearingReportAccounts({
+    accounts,
+    kind: "collections",
+    range: { from: null, to: null },
+    excludeInternal: true,
+  });
+
+  assert.deepEqual(
+    scoped.map((row) => row.partyName),
+    ["تاجر"],
+  );
+});

@@ -28,12 +28,15 @@ export async function GET(request: Request) {
     value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
   const from = cleanDay(url.searchParams.get("from"));
   const to = cleanDay(url.searchParams.get("to"));
+  const excludeParam = url.searchParams.get("excludeInternal");
+  const excludeInternal = excludeParam === "1" || excludeParam === "true";
 
   try {
-    const report = await loadClearingReport(rawKind as ClearingReportKind, {
-      from,
-      to,
-    });
+    const report = await loadClearingReport(
+      rawKind as ClearingReportKind,
+      { from, to },
+      excludeInternal,
+    );
     return NextResponse.json(report, {
       headers: { "Cache-Control": "no-store" },
     });

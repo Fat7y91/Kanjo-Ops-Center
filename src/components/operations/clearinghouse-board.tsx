@@ -208,8 +208,8 @@ export function ClearinghouseBoard({
                   exportError={report.exportError}
                   onOpenStatement={statement.openFor}
                   onQuickSettle={setQuickAccount}
-                  onExport={(kind) => void report.exportFor(kind, view.range)}
-                  onPrint={(kind) => report.openFor(kind, view.range)}
+                  onExport={(kind) => void report.exportFor(kind, view.range, excludeInternalStaff)}
+                  onPrint={(kind) => report.openFor(kind, view.range, excludeInternalStaff)}
                 />
               </>
             ),

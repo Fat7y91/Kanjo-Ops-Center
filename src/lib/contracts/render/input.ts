@@ -22,6 +22,8 @@ export type ContractDocumentInput = ClauseRenderInput & {
   titleBusinessType?: string;
   /** Contract reference shown on the cover badge. */
   reference: string;
+  /** Optional PDF metadata / browser print title. */
+  documentTitle?: string;
   /** Contract effective date (ISO), formatted on the cover. */
   effectiveDate?: string;
   displayRate: number;

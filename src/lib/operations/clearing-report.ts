@@ -2,6 +2,7 @@ import type {
   ClearingAccountRow,
   StatementRange,
 } from "./types";
+import { filterClearingAccounts } from "./clearinghouse-view";
 
 export type ClearingReportKind = "collections" | "payables";
 
@@ -51,6 +52,27 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * Recomputes the report totals from its own rows.
+ *
+ * The Print modal uses this instead of trusting a possibly stale `totals`, so
+ * the KPI cards, the footer and the exported rows can never disagree.
+ */
+export function clearingReportTotals(
+  rows: readonly ClearingReportRow[],
+): ClearingReport["totals"] {
+  return rows.reduce(
+    (sum, row) => ({
+      orders: sum.orders + row.orderCount,
+      workingDays: sum.workingDays + (row.workingDays ?? 0),
+      debit: round2(sum.debit + row.debit),
+      credit: round2(sum.credit + row.credit),
+      net: round2(sum.net + Math.abs(row.net)),
+    }),
+    { orders: 0, workingDays: 0, debit: 0, credit: 0, net: 0 },
+  );
+}
+
 export function clearingRangeLabel(range: StatementRange): string {
   if (!range.from && !range.to) return "كل الفترات";
   return `${range.from ?? "البداية"} ← ${range.to ?? "الآن"}`;
@@ -60,6 +82,39 @@ export function clearingReportTitle(kind: ClearingReportKind): string {
   return kind === "collections"
     ? "كشف إجمالي التحصيلات المعتمدة"
     : "كشف إجمالي السدادات والمستحقات";
+}
+
+/** True for a courier whose payables are excluded from the settlement scope. */
+export function isInternalCourier(
+  account: ClearingAccountRow,
+  excludeInternal: boolean,
+): boolean {
+  return (
+    excludeInternal &&
+    account.partyType === "courier" &&
+    Boolean(account.isInternalStaff)
+  );
+}
+
+/**
+ * The exact accounts a master report prints and exports.
+ *
+ * One definition is shared by the server report and the client's on-screen
+ * slice, so the toggle, the date window and the debit/credit side always agree
+ * between the KPI cards, the Print modal and the Excel workbook.
+ */
+export function selectClearingReportAccounts(input: {
+  accounts: readonly ClearingAccountRow[];
+  kind: ClearingReportKind;
+  range: StatementRange;
+  excludeInternal: boolean;
+}): ClearingAccountRow[] {
+  return filterClearingAccounts(input.accounts, input.range)
+    .filter((account) =>
+      input.kind === "collections" ? account.balance > 0 : account.balance < 0,
+    )
+    .filter((account) => !isInternalCourier(account, input.excludeInternal))
+    .sort((left, right) => Math.abs(right.balance) - Math.abs(left.balance));
 }
 
 export function buildClearingReport(input: {
@@ -92,16 +147,7 @@ export function buildClearingReport(input: {
     } satisfies ClearingReportRow;
   });
 
-  const totals = rows.reduce(
-    (sum, row) => ({
-      orders: sum.orders + row.orderCount,
-      workingDays: sum.workingDays + (row.workingDays ?? 0),
-      debit: round2(sum.debit + row.debit),
-      credit: round2(sum.credit + row.credit),
-      net: round2(sum.net + Math.abs(row.net)),
-    }),
-    { orders: 0, workingDays: 0, debit: 0, credit: 0, net: 0 },
-  );
+  const totals = clearingReportTotals(rows);
 
   return {
     kind: input.kind,

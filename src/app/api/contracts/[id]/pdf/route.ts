@@ -9,6 +9,7 @@ import {
 import { renderContractPdf } from "@/lib/contracts/render/pdf/render";
 import { resolveContractDocumentInput } from "@/lib/contracts/render/resolve";
 import { getSupabaseServerClient } from "@/lib/db/supabase/server";
+import { contractFileBase } from "@/lib/exports/file-names";
 
 export const dynamic = "force-dynamic";
 export const runtime = "edge";
@@ -57,7 +58,9 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
     throw new ContractRepositoryError("CONTRACT_NOT_FOUND", "العقد غير موجود.", 404);
   }
 
-  const input = await resolveContractDocumentInput(contract);
+  const resolved = await resolveContractDocumentInput(contract);
+  const fileBase = contractFileBase(contract.merchantName);
+  const input = { ...resolved, documentTitle: fileBase };
 
   let bytes: Uint8Array;
   try {
@@ -99,9 +102,10 @@ async function renderResponse(id: string, persist: boolean): Promise<NextRespons
   }
 
   // A descriptive filename makes direct downloads and browser "Save as PDF"
-  // default to the merchant + contract reference. The ASCII fallback keeps
-  // legacy clients happy, while RFC 5987 carries the Arabic display name.
-  const displayName = `عقد - ${contract.merchantName} - ${contract.reference}.pdf`;
+  // default to the partnership contract name and the Cairo date. The ASCII
+  // fallback keeps legacy clients happy, while RFC 5987 carries the Arabic
+  // display name.
+  const displayName = `${fileBase}.pdf`;
   const asciiFallback = `contract-${contract.reference.replace(/[^A-Za-z0-9._-]/g, "")}.pdf`;
   const contentDisposition =
     `inline; filename="${asciiFallback}"; ` +

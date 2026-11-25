@@ -3,6 +3,8 @@
 import { Modal } from "@/components/field-ops/modal";
 import { Button } from "@/components/ui/button";
 import { cairoDateTime, currencyMoney, shortDate } from "@/lib/accounts/format";
+import { statementFileBase } from "@/lib/exports/file-names";
+import { printWithDocumentTitle } from "@/lib/exports/print-document";
 import {
   statementArabicDate,
   statementLineParts,
@@ -62,6 +64,9 @@ export function PartyStatementModal({
     period?.from || period?.to
       ? `${statementArabicDate(period.from ?? undefined)} ← ${statementArabicDate(period.to ?? undefined)}`
       : `${statementArabicDate(firstDate)} ← ${statementArabicDate(lastDate)}`;
+  const printTitle = statement
+    ? statementFileBase(statement.partyType, statement.partyName)
+    : "كشف حساب";
 
   return (
     <Modal
@@ -161,6 +166,7 @@ export function PartyStatementModal({
               <tbody>
                 {statement.lines.map((line) => {
                   const parts = statementLineParts(line, currency);
+                  const secondary = parts.tail.replace(/^\s*—\s*/, "").trim();
                   return (
                     <tr
                       key={line.id}
@@ -192,16 +198,17 @@ export function PartyStatementModal({
                           className="statement-desc"
                           title={`${line.reference}${line.memo ? ` — ${line.memo}` : ""}`}
                         >
-                          {parts.lead}
-                          {parts.courierName ? (
-                            <>
-                              {" · "}
+                          <span className="statement-desc-main">
+                            {parts.lead}
+                            {parts.courierName ? (
                               <span className="statement-courier">
                                 المندوب: {parts.courierName}
                               </span>
-                            </>
+                            ) : null}
+                          </span>
+                          {secondary ? (
+                            <span className="statement-desc-sub">{secondary}</span>
                           ) : null}
-                          {parts.tail}
                         </span>
                       </td>
                       <td dir="ltr">{line.debit > 0 ? money(line.debit) : "—"}</td>
@@ -249,7 +256,7 @@ export function PartyStatementModal({
             <Button
               variant="primary"
               size="sm"
-              onClick={() => window.print()}
+              onClick={() => printWithDocumentTitle(printTitle)}
             >
               طباعة / حفظ PDF
             </Button>

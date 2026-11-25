@@ -1,3 +1,5 @@
+import { clearingReportFileBase, excelFileName } from "@/lib/exports/file-names";
+
 import type { ClearingReport, ClearingReportRow } from "./clearing-report";
 
 const PURPLE = "FF230535";
@@ -40,9 +42,11 @@ export function reportRowValues(
   ];
 }
 
-export function reportFileName(report: ClearingReport): string {
-  const kind = report.kind === "collections" ? "collections" : "payables";
-  return `kanjo-${kind}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+export function reportFileName(
+  report: ClearingReport,
+  at: Date = new Date(),
+): string {
+  return excelFileName(clearingReportFileBase(report.kind, at));
 }
 
 export async function exportClearingReportExcel(
@@ -92,7 +96,7 @@ export async function exportClearingReportExcel(
 
   const lastColumn = String.fromCharCode(64 + headers.length);
   sheet.mergeCells(`A1:${lastColumn}1`);
-  sheet.getCell("A1").value = "كانجو للتوصيل والتجارة الإلكترونية";
+  sheet.getCell("A1").value = "كانچو للتوصيل والتجارة الإلكترونية";
   sheet.getCell("A1").font = {
     name: "Cairo",
     size: 18,
