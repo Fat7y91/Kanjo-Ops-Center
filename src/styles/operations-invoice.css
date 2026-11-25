@@ -311,33 +311,38 @@
 /* Explicit percentages keep all five columns inside the sheet. */
 .statement-table th:nth-child(1),
 .statement-table td:nth-child(1) {
-  width: 21%;
+  width: 18%;
   text-align: right;
   white-space: nowrap;
+  vertical-align: top;
 }
 
+/* The reference wraps for every row type so long bonus/adjustment memos never
+ * spill across the amount columns. */
 .statement-table th:nth-child(2),
 .statement-table td:nth-child(2) {
   width: 43%;
   text-align: right;
-  white-space: normal;
+  white-space: normal !important;
   overflow-wrap: anywhere;
   word-break: break-word;
+  line-height: 1.55;
+  vertical-align: top;
 }
 
 .statement-table th:nth-child(3),
 .statement-table td:nth-child(3) {
-  width: 12%;
+  width: 13%;
 }
 
 .statement-table th:nth-child(4),
 .statement-table td:nth-child(4) {
-  width: 12%;
+  width: 13%;
 }
 
 .statement-table th:nth-child(5),
 .statement-table td:nth-child(5) {
-  width: 12%;
+  width: 13%;
 }
 
 .statement-table th:nth-child(3),
@@ -367,11 +372,11 @@
 }
 
 .statement-desc-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  display: block;
   min-width: 0;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .statement-desc-sub {
@@ -384,6 +389,7 @@
 .statement-courier {
   display: inline-block;
   max-width: 100%;
+  margin-inline-start: 6px;
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(35, 5, 53, 0.07);
@@ -558,6 +564,12 @@
   .statement-table th,
   .statement-table td {
     padding: 4px 6px;
+  }
+
+  .statement-table td:nth-child(2) {
+    white-space: normal !important;
+    vertical-align: top;
+    line-height: 1.5;
   }
 
   .statement-table tbody tr:nth-child(even) {

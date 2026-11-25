@@ -19,7 +19,6 @@ export function StatementSummary({
     label: string;
     value: string;
     closing?: boolean;
-    dir?: "ltr" | "rtl";
   }[] = [
     { label: "إجمالي المدين", value: money(totals.debit) },
     { label: "إجمالي الدائن", value: money(totals.credit) },
@@ -34,7 +33,6 @@ export function StatementSummary({
   cards.push({
     label: "عدد الطلبات",
     value: statementOrderCountLabel(statement.orderCount),
-    dir: "rtl",
   });
   cards.push({
     label: `الرصيد الختامي · ${statementClosingLabel(
@@ -57,7 +55,7 @@ export function StatementSummary({
           className={card.closing ? "statement-summary-closing" : undefined}
         >
           <span>{card.label}</span>
-          <strong dir={card.dir ?? "ltr"}>{card.value}</strong>
+          <strong dir="ltr">{card.value}</strong>
         </div>
       ))}
     </div>
