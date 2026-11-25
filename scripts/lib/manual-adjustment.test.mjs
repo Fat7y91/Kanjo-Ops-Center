@@ -10,6 +10,9 @@ const rules = loadTsModule(
 const errors = loadTsModule(
   path.join(projectRoot, "src/lib/operations/errors.ts"),
 );
+const types = loadTsModule(
+  path.join(projectRoot, "src/lib/operations/types.ts"),
+);
 
 const sum = (lines, side) =>
   lines.filter((line) => line.side === side).reduce((total, line) => total + line.amountMinor, 0);
@@ -118,4 +121,23 @@ test("database failures map to clear HTTP statuses instead of a generic 500", ()
   assert.equal(errors.fromDatabaseError({ code: "42501" }).status, 403);
   assert.equal(errors.fromDatabaseError({ code: "PGRST202" }).status, 503);
   assert.equal(errors.fromDatabaseError({ code: "42883" }).status, 503);
+});
+
+test("payload validation returns Arabic messages", () => {
+  const invalid = types.manualAdjustmentInputSchema.safeParse({
+    direction: "bonus",
+    amount: "abc",
+    entryDate: "25-11-2026",
+    reason: "",
+  });
+  assert.equal(invalid.success, false);
+  const messages = invalid.error.errors.map((item) => item.message);
+  assert.ok(messages.some((message) => message.includes("نوع الحركة")));
+  assert.ok(messages.some((message) => message.includes("مبلغاً رقمياً")));
+
+  const missing = types.manualAdjustmentInputSchema.safeParse({});
+  assert.equal(missing.success, false);
+  assert.ok(
+    missing.error.errors.every((item) => /[\u0600-\u06FF]/.test(item.message)),
+  );
 });

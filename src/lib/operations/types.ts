@@ -297,16 +297,18 @@ export const orderCommissionInputSchema = z.object({
 export type OrderCommissionInput = z.infer<typeof orderCommissionInputSchema>;
 
 export const manualAdjustmentInputSchema = z.object({
-  direction: z.enum(["credit", "debit"]),
+  direction: z.enum(["credit", "debit"], {
+    errorMap: () => ({ message: "نوع الحركة غير صالح." }),
+  }),
   amount: z.coerce
-    .number()
+    .number({ invalid_type_error: "أدخل مبلغاً رقمياً صالحاً." })
     .positive("المبلغ يجب أن يكون أكبر من صفر.")
     .max(10_000_000, "المبلغ أكبر من الحد المسموح."),
   entryDate: z
-    .string()
+    .string({ required_error: "تاريخ الحركة مطلوب." })
     .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ الحركة غير صالح."),
   reason: z
-    .string()
+    .string({ required_error: "اكتب تفسيراً واضحاً للمكافأة أو التسوية." })
     .trim()
     .min(3, "اكتب تفسيراً واضحاً للمكافأة أو التسوية.")
     .max(1000, "التفسير أطول من الحد المسموح."),
