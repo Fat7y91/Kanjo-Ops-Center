@@ -1,0 +1,208 @@
+/* Order P&L waterfall, shared by the command center and the settlement book.
+ * Rows read right-to-left; amounts stay LTR with tabular figures.
+ */
+
+.profitability-waterfall {
+  display: grid;
+  gap: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.profitability-row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.25rem;
+  border-bottom: 1px dashed var(--line);
+}
+
+.profitability-row:last-child {
+  border-bottom: 0;
+}
+
+.profitability-sign {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.profitability-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.profitability-detail {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.profitability-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.profitability-amount {
+  font-size: 1.02rem;
+}
+
+.profitability-currency {
+  color: var(--ink-soft);
+  font-size: 0.62em;
+  font-weight: 700;
+}
+
+.profitability-row.is-subtotal {
+  margin-top: 2px;
+  border-top: 1px solid var(--line-strong);
+  border-bottom-color: transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
+}
+
+.profitability-row.is-subtotal .profitability-label {
+  font-weight: 800;
+}
+
+.profitability-row.is-deduction .profitability-label {
+  color: var(--orange-deep);
+}
+
+.profitability-row.is-deduction .profitability-sign {
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+}
+
+.profitability-row.is-deduction .profitability-value {
+  color: var(--orange-deep);
+}
+
+.profitability-row.is-positive .profitability-label,
+.profitability-row.is-positive .profitability-value {
+  color: var(--green);
+}
+
+.profitability-row.is-positive .profitability-sign {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.profitability-row.is-negative .profitability-label,
+.profitability-row.is-negative .profitability-value {
+  color: var(--red);
+}
+
+.profitability-row.is-negative .profitability-sign {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.profitability-divider {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: var(--line-strong);
+}
+
+.profitability-row.is-total-positive,
+.profitability-row.is-total-negative {
+  margin-top: 2px;
+  padding: 0.7rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.profitability-row.is-total-positive {
+  border-color: color-mix(in srgb, var(--green) 22%, transparent);
+  background: var(--green-soft);
+}
+
+.profitability-row.is-total-negative {
+  border-color: color-mix(in srgb, var(--red) 22%, transparent);
+  background: var(--red-soft);
+}
+
+.profitability-row.is-total-positive .profitability-label,
+.profitability-row.is-total-positive .profitability-value,
+.profitability-row.is-total-negative .profitability-label,
+.profitability-row.is-total-negative .profitability-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.profitability-row.is-total-positive .profitability-label,
+.profitability-row.is-total-positive .profitability-value {
+  color: var(--green);
+}
+
+.profitability-row.is-total-negative .profitability-label,
+.profitability-row.is-total-negative .profitability-value {
+  color: var(--red);
+}
+
+.profitability-row.is-total-positive .profitability-amount,
+.profitability-row.is-total-negative .profitability-amount {
+  font-size: 1.18rem;
+}
+
+.profitability-panel-head {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.profitability-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.profitability-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .profitability-row {
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+    row-gap: 0.2rem;
+  }
+
+  .profitability-value {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .profitability-panel-head {
+    flex-direction: column;
+  }
+}
+
+.profitability-export {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}

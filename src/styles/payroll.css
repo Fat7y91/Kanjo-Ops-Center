@@ -1,0 +1,109 @@
+/* Payroll and commission engine. */
+
+.payroll-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.payroll-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--kanjo-surface);
+}
+
+.payroll-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.payroll-table th {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.payroll-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.payroll-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.payroll-table td:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.payroll-table td:first-child span {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+}
+
+.payroll-net {
+  font-weight: 800;
+  color: var(--green);
+}
+
+.payroll-select {
+  min-width: 180px;
+}
+
+.payslip-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.payslip-lines li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 0.84rem;
+}
+
+.payslip-lines em {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-style: normal;
+}
+
+.payslip-lines strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.payslip-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid var(--line);
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.payslip-total strong {
+  font-size: 1.2rem;
+  color: var(--green);
+}

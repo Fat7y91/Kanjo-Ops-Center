@@ -1,0 +1,156 @@
+"use client";
+
+import type { MouseEvent } from "react";
+
+import { CatalogImage } from "@/components/catalog/catalog-image";
+import { ImageQaActions } from "@/components/catalog/image-qa-actions";
+import { Protect } from "@/components/auth/protect";
+import { Button } from "@/components/ui/button";
+import { formatPrice, resolveDisplayImageUrl } from "@/lib/catalog/format";
+import {
+  PRODUCT_STATE_META,
+  needsImageQa,
+  type CatalogProduct,
+} from "@/lib/catalog/types";
+
+type ProductCardProps = {
+  product: CatalogProduct;
+  qaBusy: boolean;
+  onOpenDetails: (product: CatalogProduct) => void;
+  onEdit: (product: CatalogProduct) => void;
+  onDelete: (product: CatalogProduct) => void;
+  onOpenImage: (product: CatalogProduct) => void;
+  onDownloadOriginal: (product: CatalogProduct) => void;
+  onApprove: (product: CatalogProduct) => void;
+  onUploadEnhanced: (product: CatalogProduct, dataUrl: string) => void;
+};
+
+/**
+ * Catalog grid card. Clicking anywhere opens the details modal; the thumbnail
+ * is a separate hit target that opens the lightbox without opening details.
+ */
+export function ProductCard({
+  product,
+  qaBusy,
+  onOpenDetails,
+  onEdit,
+  onDelete,
+  onOpenImage,
+  onDownloadOriginal,
+  onApprove,
+  onUploadEnhanced,
+}: ProductCardProps) {
+  const meta = PRODUCT_STATE_META[product.state];
+  const imageUrl = resolveDisplayImageUrl(product.imageDataUrl);
+
+  function stop(event: MouseEvent) {
+    event.stopPropagation();
+  }
+
+  return (
+    <article
+      className="product-card is-clickable"
+      onClick={() => onOpenDetails(product)}
+    >
+      <Button
+        variant="ghost"
+        className="product-thumb"
+        onClick={(event) => {
+          stop(event);
+          if (product.imageDataUrl) onOpenImage(product);
+          else onOpenDetails(product);
+        }}
+        aria-label={
+          product.imageDataUrl
+            ? `عرض صورة ${product.name} بالحجم الكامل`
+            : `تفاصيل ${product.name}`
+        }
+      >
+        {imageUrl ? (
+          <CatalogImage src={product.imageDataUrl} alt="" />
+        ) : (
+          <span>{product.name.slice(0, 2)}</span>
+        )}
+      </Button>
+
+      <div className="product-body">
+        <div className="panel-head compact">
+          <div>
+            <p className="eyebrow">{product.merchantName}</p>
+            <h2>{product.name}</h2>
+          </div>
+          <span className={`badge ${meta.tone}`}>{meta.label}</span>
+        </div>
+
+        {product.description ? (
+          <p className="product-description">{product.description}</p>
+        ) : null}
+
+        <div className="product-meta">
+          <strong>{formatPrice(product.price)}</strong>
+          <span className="product-sku" dir="ltr">
+            {product.sku}
+          </span>
+        </div>
+
+        <div className="product-tags">
+          <span className="badge">
+            {product.productType === "variable" ? "متغير" : "بسيط"}
+          </span>
+          {product.barcode ? (
+            <span className="badge" dir="ltr">
+              {product.barcode}
+            </span>
+          ) : null}
+          <span className="badge">{product.reviewNote}</span>
+        </div>
+
+        {needsImageQa(product.state) ? (
+          <div onClick={stop}>
+            <Protect
+              require={["edit_catalog", "review_image_quality"]}
+              mode="any"
+            >
+              <ImageQaActions
+                product={product}
+                busy={qaBusy}
+                onDownload={() => onDownloadOriginal(product)}
+                onApprove={() => onApprove(product)}
+                onUploadEnhanced={(dataUrl) =>
+                  onUploadEnhanced(product, dataUrl)
+                }
+              />
+            </Protect>
+          </div>
+        ) : (
+          <div className="row-actions" onClick={stop}>
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={() => onOpenDetails(product)}
+            >
+              التفاصيل
+            </Button>
+          </div>
+        )}
+
+        <div className="row-actions" onClick={stop}>
+          <Protect require={["edit_catalog", "add_catalog"]} mode="any">
+            <Button size="sm" variant="quiet" onClick={() => onEdit(product)}>
+              تعديل
+            </Button>
+          </Protect>
+          <Protect require={["delete_products"]}>
+            <Button
+              size="sm"
+              variant="quiet"
+              onClick={() => onDelete(product)}
+            >
+              حذف
+            </Button>
+          </Protect>
+        </div>
+      </div>
+    </article>
+  );
+}

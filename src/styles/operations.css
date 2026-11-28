@@ -1,0 +1,439 @@
+/* Operations logger and clearinghouse surfaces.
+ *
+ * Layout only: colour, radii and elevation come from the tokens and the shared
+ * `panel`, `badge` and `button` primitives.
+ */
+
+.operation-log {
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* In-flight row: the entry is visible but explicitly not yet stored. */
+.operation-list li[data-pending] {
+  opacity: 0.72;
+}
+
+/* Toast owns the shared `.toast` / `.toast-error` shell; this only adds the
+ * dismiss affordance and lets the message sit beside it. */
+.operation-log .toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.operation-log .toast > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toast-dismiss {
+  color: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.operation-list,
+.clearing-rows,
+.clearing-parties {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-list li,
+.clearing-rows li,
+.clearing-parties li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 4px;
+  border-block-end: 1px solid var(--line);
+}
+
+.operation-list li:last-child,
+.clearing-rows li:last-child,
+.clearing-parties li:last-child {
+  border-block-end: 0;
+}
+
+.operation-list li > div,
+.clearing-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Party book rows share one fixed grid so the amount column stays on a single
+ * vertical line no matter how long the party name is. */
+.clearing-parties li,
+.clearing-party-head,
+.clearing-party-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.clearing-party-head {
+  padding: 10px 4px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-block-end: 1px solid var(--line);
+}
+
+.clearing-party-total {
+  margin-top: 4px;
+  padding: 14px 4px 10px;
+  border-block-start: 2px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.clearing-party-amount {
+  justify-self: stretch;
+  /* Keep the header and every amount on the same edge: the figures carry an
+   * Arabic currency glyph, so pinning the cell to LTR stops bidi from
+   * right-aligning numbers under a left-aligned header. */
+  direction: ltr;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Party name and role must never run together in Arabic; a small gap plus a
+ * pill keeps the type readable, and an over-long name truncates instead of
+ * pushing the amount out of line. */
+.clearing-party-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.clearing-party-id strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clearing-party-id .badge {
+  flex-shrink: 0;
+}
+
+/* Compact company-wide position above the two party books. */
+.clearing-scope-toggle {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.clearing-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.clearing-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.clearing-kpi span {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.clearing-kpi strong {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-kpi-positive strong {
+  color: var(--green);
+}
+
+.clearing-kpi-negative strong {
+  color: var(--red);
+}
+
+.operation-list li > div:last-child,
+.clearing-row-amount {
+  align-items: flex-end;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+/* Recent-operations rows read like a bank statement: a source → destination
+ * route, a reference line, an arithmetic breakdown and a signed amount. */
+.operation-row-main {
+  flex: 1 1 260px;
+  gap: 6px;
+}
+
+.operation-row-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.operation-party {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.operation-party strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operation-party-role {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.operation-row-arrow {
+  color: var(--kanjo-purple-base);
+  font-weight: 800;
+}
+
+.operation-row-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.operation-row-dot {
+  opacity: 0.5;
+}
+
+.operation-row-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-row-deduction {
+  color: var(--red);
+}
+
+.operation-row-note {
+  font-size: 0.72rem;
+}
+
+.operation-row-amount {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.operation-amount {
+  font-size: 0.98rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.operation-amount-credit {
+  color: var(--green);
+}
+
+.operation-amount-debit {
+  color: var(--red);
+}
+
+.operation-row-date {
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.clearinghouse {
+  display: grid;
+  gap: 18px;
+}
+
+.clearing-book {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.clearing-rows li {
+  align-items: flex-start;
+}
+
+.clearing-row-main strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.clearing-receipt {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.clearing-positive {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-negative {
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
+
+.clearing-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Settlement book toolbar: period presets, sort and export share one row that
+ * wraps on small screens; a custom range reveals a second row of date fields. */
+.clearing-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.clearing-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.clearing-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-end: auto;
+}
+
+.clearing-sort {
+  min-width: 12rem;
+}
+
+.clearing-custom-range > * {
+  flex: 1 1 160px;
+}
+
+/* Quick collect/settle actions on a party row stay together at the column edge. */
+.clearing-party-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.quick-settle-form {
+  display: grid;
+  gap: 14px;
+}
+
+/* The orders screen is a single full-width table; keeping the old two-column
+ * desktop grid would compress it into the left half of the page. */
+
+/* Per-order commission cell: applied rate + amount, with an amber flag when a
+ * zero was frozen while the merchant's contract asks for more. */
+.commission-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.commission-applied {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.commission-flag {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--gold-deep, var(--gold));
+  background: color-mix(in srgb, var(--kanjo-gold-warm) 26%, transparent);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+}
+
+/* Orders table controls: search and page-size sit above the table, the pager
+ * below it. One row on desktop, stacked on small screens. */
+.order-table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.order-table-tools > :first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.order-table-tools-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-table-page-size {
+  min-width: 9rem;
+}
+
+.table-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 4px 2px;
+}
+
+.table-pagination-label {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}

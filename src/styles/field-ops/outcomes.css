@@ -1,0 +1,50 @@
+/* Outcomes */
+
+.outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.outcome-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: start;
+  color: var(--ink);
+}
+
+.outcome-option span {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.outcome-option:hover {
+  border-color: var(--purple);
+}
+
+.outcome-option-active {
+  border-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+  box-shadow: 0 0 0 3px var(--focus);
+}
+
+.lock-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px;
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--red) 26%, transparent);
+  border-radius: 12px;
+  background: var(--red-soft);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+}
+

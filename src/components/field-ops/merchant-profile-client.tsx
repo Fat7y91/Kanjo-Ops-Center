@@ -1,0 +1,282 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import {
+  JustificationModal,
+  SignContractModal,
+  StateModal,
+} from "@/components/field-ops/request-modals";
+import {
+  VisitEngine,
+  type VisitEngineTarget,
+} from "@/components/field-ops/visit-engine";
+import type { MerchantCityOption } from "@/components/merchants/create-merchant-modal";
+import { EditMerchantModal } from "@/components/merchants/edit-merchant-modal";
+import type {
+  MerchantCrmSummary,
+  MerchantTimelineEntry,
+} from "@/lib/field-ops/store";
+import type {
+  FieldTask,
+  FollowUpTask,
+  Merchant,
+  MerchantV1Profile,
+  StateOverride,
+  VisitReport,
+} from "@/lib/field-ops/types";
+import type { TaxonomyVendorType } from "@/lib/taxonomy/types";
+
+import { CrmMetrics } from "./merchant-profile/crm-metrics";
+import { DocumentsPanel } from "./merchant-profile/documents-panel";
+import { EconomicsPanel } from "./merchant-profile/economics-panel";
+import { MerchantAssetManager } from "./merchant-profile/merchant-asset-manager";
+import { MerchantV1Panel } from "./merchant-profile/merchant-v1-panel";
+import { ProfileHero } from "./merchant-profile/profile-hero";
+import { TasksFollowups } from "./merchant-profile/tasks-followups";
+import { TimelinePanel } from "./merchant-profile/timeline-panel";
+import { VisitHistory } from "./merchant-profile/visit-history";
+
+type MerchantProfileClientProps = {
+  merchant: Merchant;
+  cityName: string;
+  v1Profile: MerchantV1Profile;
+  reports: VisitReport[];
+  overrides: StateOverride[];
+  tasks: FieldTask[];
+  followUps: FollowUpTask[];
+  timeline: MerchantTimelineEntry[];
+  summary: MerchantCrmSummary;
+  visitCount: number;
+  viewerTeam: string;
+  cities: MerchantCityOption[];
+  vendorTypes: TaxonomyVendorType[];
+  canEditMerchants: boolean;
+  canEditMerchantDetails: boolean;
+  canRequestTransfers: boolean;
+  canManageState: boolean;
+  canViewFieldOps: boolean;
+  canViewFieldOpsPage: boolean;
+  canStartVisit: boolean;
+  canEditMerchantSocials: boolean;
+  canToggleAppPublish: boolean;
+  canManageVipMenu: boolean;
+  canExportMerchantData: boolean;
+};
+
+export function MerchantProfileClient({
+  merchant,
+  cityName,
+  v1Profile,
+  reports,
+  overrides,
+  tasks,
+  followUps,
+  timeline,
+  summary,
+  visitCount,
+  viewerTeam,
+  cities,
+  vendorTypes,
+  canEditMerchants,
+  canEditMerchantDetails,
+  canRequestTransfers,
+  canManageState,
+  canViewFieldOps,
+  canViewFieldOpsPage,
+  canStartVisit,
+  canEditMerchantSocials,
+  canToggleAppPublish,
+  canManageVipMenu,
+  canExportMerchantData,
+}: MerchantProfileClientProps) {
+  const router = useRouter();
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDetailsOpen, setEditDetailsOpen] = useState(false);
+  const [stateOpen, setStateOpen] = useState(false);
+  const [signOpen, setSignOpen] = useState(false);
+  const [toast, setToast] = useState("");
+  const [visitTarget, setVisitTarget] = useState<VisitEngineTarget | null>(null);
+
+  const otherTeam = Boolean(merchant.team) && merchant.team !== viewerTeam;
+  // The agreement gate follows the resolved state, not the stored column, so a
+  // merchant whose newest visit withdrew the agreement stops exposing the
+  // documents flow for an agreement that no longer exists.
+  const agreementReached =
+    summary.currentState === "final_contract" ||
+    summary.currentState === "signed_contract";
+
+  function announce(message: string) {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 4500);
+  }
+
+  function openVisit() {
+    setVisitTarget({ merchant, taskId: null, visitCount });
+  }
+
+  function refreshWith(message: string) {
+    announce(message);
+    router.refresh();
+  }
+
+  return (
+    <>
+      <ProfileHero
+        merchant={merchant}
+        state={summary.currentState}
+        stateAt={summary.currentStateAt}
+        cityName={cityName}
+        visitCount={visitCount}
+        otherTeam={otherTeam}
+        canStartVisit={canStartVisit}
+        canViewFieldOpsPage={canViewFieldOpsPage}
+        canRequestTransfers={canRequestTransfers}
+        canManageState={canManageState}
+        canEditDetails={canEditMerchantDetails}
+        onStartVisit={openVisit}
+        onRequestTransfer={() => setTransferOpen(true)}
+        onOverrideState={() => setStateOpen(true)}
+        onEditDetails={() => setEditDetailsOpen(true)}
+      />
+
+      <CrmMetrics summary={summary} followUps={followUps} />
+
+      <MerchantAssetManager
+        merchantId={merchant.id}
+        merchantName={merchant.name}
+        logoUrl={merchant.logoUrl}
+        coverUrl={merchant.coverUrl}
+        canEdit={canEditMerchants}
+      />
+
+      <section className="profile-grid">
+        <VisitHistory merchant={merchant} summary={summary} />
+        <EconomicsPanel
+          merchant={merchant}
+          state={summary.currentState}
+          canViewFieldOps={canViewFieldOps}
+          otherTeam={otherTeam}
+          onRequestEdit={() => setEditOpen(true)}
+          onOpenSign={() => setSignOpen(true)}
+        />
+      </section>
+
+      <TimelinePanel
+        merchant={merchant}
+        timeline={timeline}
+        summary={summary}
+      />
+
+      <MerchantV1Panel
+        merchantId={merchant.id}
+        merchantName={merchant.name}
+        profile={v1Profile}
+        canEditSocials={canEditMerchantSocials}
+        canTogglePublish={canToggleAppPublish}
+        canManageVip={canManageVipMenu}
+        canExport={canExportMerchantData}
+        onAnnounce={announce}
+      />
+
+      <section className="profile-grid">
+        <DocumentsPanel
+          merchant={merchant}
+          agreementReached={agreementReached}
+          canEditMerchants={canEditMerchants}
+          onAnnounce={announce}
+        />
+        <TasksFollowups
+          merchant={merchant}
+          summary={summary}
+          tasks={tasks}
+          followUps={followUps}
+          overrides={overrides}
+          reports={reports}
+        />
+      </section>
+
+      <VisitEngine
+        target={visitTarget}
+        canManageState={canManageState}
+        onClose={() => setVisitTarget(null)}
+        onSaved={(message) => {
+          announce(message);
+          // A server refresh while offline would hard-navigate to a browser
+          // network error page. The queued visit renders from the local queue
+          // banner instead, and the next online refresh picks up the server
+          // state.
+          if (typeof navigator === "undefined" || navigator.onLine) {
+            router.refresh();
+          }
+        }}
+      />
+
+      <JustificationModal
+        open={transferOpen}
+        endpoint={`/api/field-ops/merchants/${merchant.id}/transfers`}
+        title={`نقل ملكية ${merchant.name}`}
+        eyebrow="ملكية عابرة للفرق"
+        description="يراجع المدير هذا المبرر قبل انتقال الملكية."
+        label="المبرر"
+        placeholder="لماذا يجب أن ينتقل هذا التاجر إلى فريقك؟"
+        submitLabel="إرسال طلب النقل"
+        field="justification"
+        successMessage="تم إرسال طلب النقل لاعتماد المدير."
+        onClose={() => setTransferOpen(false)}
+        onDone={refreshWith}
+      />
+
+      <JustificationModal
+        open={editOpen}
+        endpoint={`/api/field-ops/merchants/${merchant.id}/edit-requests`}
+        title={`فتح تعديل ${merchant.name}`}
+        eyebrow="قفل الاتفاق النهائي"
+        description="يجب أن يعتمد المدير السبب قبل تغيير النتيجة."
+        label="سبب التعديل"
+        placeholder="ما الخطأ، وما الذي يجب تغييره؟"
+        submitLabel="طلب اعتماد التعديل"
+        field="reason"
+        successMessage="تم إرسال طلب التعديل لاعتماد المدير."
+        onClose={() => setEditOpen(false)}
+        onDone={refreshWith}
+      />
+
+      <StateModal
+        open={stateOpen}
+        merchantName={merchant.name}
+        current={summary.currentState}
+        endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
+        onClose={() => setStateOpen(false)}
+        onDone={refreshWith}
+      />
+
+      <SignContractModal
+        open={signOpen}
+        merchantName={merchant.name}
+        currentCommission={merchant.agreedCommission ?? merchant.targetCommission}
+        suggestedCommission={merchant.targetCommission}
+        endpoint={`/api/field-ops/merchants/${merchant.id}/state`}
+        onClose={() => setSignOpen(false)}
+        onDone={refreshWith}
+      />
+
+      <EditMerchantModal
+        open={editDetailsOpen}
+        merchant={merchant}
+        cities={cities}
+        vendorTypes={vendorTypes}
+        onClose={() => setEditDetailsOpen(false)}
+        onDone={refreshWith}
+      />
+
+      {toast ? (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      ) : null}
+    </>
+  );
+}

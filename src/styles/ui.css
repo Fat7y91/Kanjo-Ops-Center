@@ -1,0 +1,274 @@
+/* ── Typography and controls ───────────────────────────────────────────── */
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: var(--orange-deep);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+.page-description {
+  max-width: 720px;
+  margin-top: 10px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.page-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 120ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.button:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.button:focus-visible,
+.nav-link:focus-visible,
+.nav-toggle:focus-visible,
+.sidebar-close:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.button-primary {
+  background: var(--gradient-primary);
+  color: var(--primary-ink);
+  box-shadow: 0 8px 22px -12px rgba(35, 5, 53, 0.7);
+}
+
+.button-primary:hover {
+  background: linear-gradient(135deg, #2c0643, #5a24a6);
+}
+
+.button-quiet {
+  background: var(--surface-soft);
+  color: var(--kanjo-purple-base);
+}
+
+.button-quiet:hover {
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+}
+
+/* Dark surfaces invert the quiet button: `--kanjo-purple-base` is near-black,
+ * so it would vanish on `--surface-soft` (#273449). Use the bright lavender
+ * ink and the deep brand tint instead, keeping the interactive purple. */
+[data-theme="dark"] .button-quiet {
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+}
+
+[data-theme="dark"] .button-quiet:hover {
+  background: rgba(108, 53, 182, 0.32);
+  color: #ffffff;
+}
+
+.button-danger {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.button-danger:hover {
+  background: color-mix(in srgb, var(--red) 16%, var(--surface));
+}
+
+.button-accent {
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+}
+
+.button-accent:hover {
+  background: color-mix(in srgb, var(--kanjo-orange) 22%, var(--surface));
+}
+
+.button-small {
+  padding: 7px 12px;
+  border-radius: var(--radius-control);
+  font-size: 0.78rem;
+}
+
+/* ── Surfaces ──────────────────────────────────────────────────────────── */
+
+.panel {
+  padding: 22px;
+  border: 1px solid rgba(35, 5, 53, 0.08);
+  border-radius: var(--radius-card);
+  background: var(--kanjo-surface);
+  box-shadow: var(--shadow);
+}
+
+.panel + .panel,
+.panel + .two-column,
+.two-column + .panel,
+.board + .panel,
+.card-grid + .panel,
+.toolbar-row + .card-grid {
+  margin-top: 22px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel-head.compact {
+  margin-bottom: 10px;
+}
+
+.panel-note {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* V1 status-chip recipe: tinted fill, matching hairline, deep readable ink. */
+.badge-green {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.badge-gold {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.badge-orange {
+  border-color: #fdba74;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.badge-red {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.badge-blue {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+.merchant-category {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.72rem;
+}
+
+
+/* ── Accessible switch ────────────────────────────────────────────────────
+ * One shared pill switch for every toggle. Logical inset keeps the thumb
+ * sliding from the inline start to the inline end in both LTR and RTL. */
+.kanjo-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: #cbd5e1;
+  cursor: pointer;
+  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kanjo-switch[data-checked] {
+  background: #6c35b6;
+}
+
+.kanjo-switch[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.kanjo-switch:focus-visible {
+  outline: 3px solid rgba(108, 53, 182, 0.35);
+  outline-offset: 2px;
+}
+
+.kanjo-switch-thumb {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: inset-inline-start 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kanjo-switch[data-checked] .kanjo-switch-thumb {
+  inset-inline-start: calc(100% - 20px);
+}
+
+.kanjo-switch-label {
+  cursor: pointer;
+}

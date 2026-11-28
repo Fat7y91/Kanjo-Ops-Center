@@ -1,0 +1,161 @@
+/* Coupon Usage Report card.
+ *
+ * Imported marketing snapshot: top codes, platform/vendor split, and a dense
+ * table. The table scrolls inside the card so the dashboard grid never grows
+ * horizontally on narrow screens.
+ */
+
+.coupon-report-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.coupon-report-note {
+  margin: 12px 0;
+}
+
+.coupon-report-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.coupon-report-top-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.coupon-report-top-card div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.coupon-report-top-card strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.coupon-report-top-card span:not(.coupon-report-rank) {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.coupon-report-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-pastel-ink);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.coupon-report-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.coupon-report-stats .bi-stat {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.coupon-report-scroll {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.coupon-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.coupon-report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: start;
+}
+
+.coupon-report-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-align: start;
+}
+
+.coupon-report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.coupon-report-table tbody tr:hover {
+  background: var(--surface-soft);
+}
+
+.coupon-report-table code {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.coupon-report-when {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 620px) {
+  .coupon-report-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .coupon-report-toolbar .kanjo-switch {
+    width: 100%;
+  }
+}
+
+/* Report vs delivered actuals switch and the delivered cash view. */
+.coupon-report-mode {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.coupon-delivered {
+  display: grid;
+  gap: 10px;
+}

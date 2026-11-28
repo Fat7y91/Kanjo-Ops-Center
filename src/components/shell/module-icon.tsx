@@ -1,0 +1,61 @@
+import type { ModuleIcon as ModuleIconName } from "@/lib/rbac/modules";
+
+const paths: Record<ModuleIconName, string> = {
+  profile:
+    "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-8 9c0-4 3.6-6 8-6s8 2 8 6",
+  overview:
+    "M4 4h7v7H4V4Zm9 0h7v4h-7V4ZM4 13h7v7H4v-7Zm9-3h7v10h-7V10Z",
+  kpi:
+    "M4 20V6m0 14h16M8 20v-8m4 8V9m4 11v-5m4 5V4M6 9l4-3 3 2 5-4",
+  cities:
+    "M3 20h18M5 20V9l5-3 5 3v11M15 20v-7l4-2 4 2v7M8 12v2M8 16v2M12 12v2M12 16v2M18 15v2M18 18v2",
+  merchants:
+    "M4 10v9h16v-9M3 10l2-6h14l2 6M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0M9 19v-4h6v4",
+  catalog:
+    "M4 7.5 12 3l8 4.5-8 4.5-8-4.5ZM4 7.5V16l8 5 8-5V7.5M12 12v9",
+  taxonomy:
+    "M4 5h6v4H4V5Zm10 0h6v4h-6V5ZM4 15h6v4H4v-4Zm10 0h6v4h-6v-4ZM7 9v6M17 9v6M10 17h4",
+  "field-ops":
+    "M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Zm0-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  contracts:
+    "M6 3h9l4 4v14H6V3Zm9 0v5h4M9 12h6M9 16h6",
+  permissions:
+    "M12 3 5 6v5c0 4.4 2.9 8.4 7 10 4.1-1.6 7-5.6 7-10V6l-7-3Zm-2.5 9 1.8 1.8 3.8-4",
+  accounts:
+    "M3 10h18M5 10V7l7-4 7 4v3M3 10v9h18v-9M8 14h3M8 17h6",
+  payroll:
+    "M4 6h16v12H4V6Zm0 4h16M7 14h4M15 14h2",
+  marketing:
+    "M4 10v4h3l6 4V6l-6 4H4Zm13-2a4 4 0 0 1 0 8M17 5a8 8 0 0 1 0 14",
+  finance:
+    "M19 5 5 19M9 7a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm10 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
+  operations:
+    "M4 5h16v14H4V5Zm4 4h8M8 13h5M16 13h.01M16 9h.01",
+  clearinghouse:
+    "M4 7h16M4 12h16M4 17h10M17 15v4M15 17h4",
+  coupons:
+    "M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7Zm10-2v14",
+  notifications:
+    "M6 9a6 6 0 0 1 12 0c0 4 1.5 6 1.5 6h-15S6 13 6 9Zm4 10a2 2 0 0 0 4 0",
+  audit:
+    "M7 3h10v3H7V3ZM5 6h14v15H5V6Zm3 5h8M8 14h8M8 17h5",
+  archive:
+    "M3 5h18v4H3V5Zm2 4v10h14V9M10 13h4",
+};
+
+export function ModuleIcon({ name }: { name: ModuleIconName }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="module-icon"
+    >
+      <path d={paths[name]} />
+    </svg>
+  );
+}

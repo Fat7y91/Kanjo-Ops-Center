@@ -1,0 +1,53 @@
+import { z } from "zod";
+
+import { PERMISSION_KEYS, type Permission } from "@/lib/rbac/permissions";
+
+/**
+ * Top-down provisioning input. There is no public signup: an authorised
+ * operator supplies the phone and initial password on the new account's behalf.
+ *
+ * `email` is optional profile data and is never a login identity. `teamId` is
+ * mandatory only for a field courier (level 1), who must belong to a field
+ * team; every other level has no team obligation. Teams are city-owned, so the
+ * service verifies the team belongs to a city in the operator's scope.
+ */
+const permissionSchema = z.enum(
+  PERMISSION_KEYS as unknown as [Permission, ...Permission[]],
+);
+
+const baseProvisionSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .regex(
+      /^\+[1-9][0-9]{7,14}$/,
+      "رقم الهاتف يجب أن يكون بصيغة E.164، مثل +201012345678.",
+    ),
+  password: z
+    .string()
+    .min(8, "كلمة المرور يجب ألا تقل عن 8 أحرف.")
+    // bcrypt silently truncates past 72 bytes; reject instead of truncating.
+    .max(72, "كلمة المرور يجب ألا تتجاوز 72 حرفاً."),
+  fullName: z.string().trim().min(2, "اسم المشغّل مطلوب.").max(80),
+  email: z.string().trim().email("أدخل بريداً إلكترونياً صالحاً.").max(120).optional(),
+  title: z.string().trim().min(2, "المسمى الوظيفي مطلوب.").max(80),
+  /** `app.field_teams.id`; the city is derived server-side from the team. */
+  teamId: z.string().uuid("معرّف الفريق غير صالح.").optional(),
+  clearanceLevel: z.coerce
+    .number()
+    .int("مستوى التصريح يجب أن يكون رقماً صحيحاً.")
+    .min(1, "أدنى مستوى تصريح هو 1.")
+    .max(4, "أعلى مستوى تصريح هو 4."),
+  permissions: z.array(permissionSchema).default([]),
+  accessibleCities: z.array(z.string().trim().min(1)).default([]),
+});
+
+export const provisionAccountSchema = baseProvisionSchema.refine(
+  (value) => value.clearanceLevel !== 1 || value.teamId !== undefined,
+  {
+    message: "الفريق مطلوب للمندوب.",
+    path: ["teamId"],
+  },
+);
+
+export type ProvisionAccountInput = z.infer<typeof baseProvisionSchema>;

@@ -1,0 +1,179 @@
+import "server-only";
+
+import { buildOrderBreakdown, type OrderBreakdown } from "./breakdown";
+import {
+  findOperationEntryId,
+  listEntryLines,
+} from "./breakdown-repository";
+import { OperationsError } from "./errors";
+import { resolvePartyNames } from "./party-lookup";
+import { findOperation } from "./repository";
+import {
+  requireOperationsDatabase,
+  translateOperationError,
+} from "./service-guards";
+import {
+  findPartyAccount,
+  listOperationStatementFacts,
+  listPartyStatementRows,
+} from "./statement-repository";
+import { listCourierWorkingDates } from "./clearinghouse-activity";
+import { buildPartyStatementLines } from "./statement-lines";
+import {
+  countStatementOrders,
+  round2,
+  statementDay,
+  withinStatementRange,
+} from "./statement-metrics";
+import type {
+  PartyStatement,
+  PartyStatementLine,
+  StatementRange,
+} from "./types";
+
+/**
+ * Read-only management views over the operation book.
+ *
+ * The order breakdown and the party statement both render frozen data plus the
+ * journal that produced it; neither writes. They live apart from the write-path
+ * service so each file stays focused and within its size budget.
+ */
+
+/**
+ * Unit-economics breakdown for one logged order.
+ *
+ * Reads the frozen money terms from the operation row and the posted lines from
+ * its journal entry. The two are shown together so a reviewer can reconcile the
+ * invoice against the book without a second screen. Missing rows answer 404; a
+ * missing journal entry is reported as an unposted order, never as a fake
+ * zeroed entry.
+ */
+export async function loadOrderBreakdown(
+  operationId: string,
+): Promise<OrderBreakdown> {
+  requireOperationsDatabase();
+
+  try {
+    const operation = await findOperation(operationId);
+    if (!operation) {
+      throw new OperationsError(
+        "OPERATION_NOT_FOUND",
+        "العملية غير موجودة.",
+        404,
+      );
+    }
+
+    const entryId = await findOperationEntryId(operationId);
+    const lines = entryId ? await listEntryLines(entryId) : [];
+
+    return buildOrderBreakdown(operation, entryId, lines);
+  } catch (error) {
+    translateOperationError(error);
+  }
+}
+
+/**
+ * A party's statement of account: every journal line that moved their balance,
+ * oldest first, with a running total.
+ *
+ * The closing balance is taken from the balance view, so the statement's own
+ * arithmetic is cross-checked against the book the clearinghouse reads. A
+ * mismatched closing figure proves a data defect instead of silently printing
+ * a plausible number.
+ */
+export async function loadPartyStatement(
+  accountId: string,
+  range: StatementRange | null = null,
+): Promise<PartyStatement> {
+  requireOperationsDatabase();
+
+  try {
+    const account = await findPartyAccount(accountId);
+    if (!account) {
+      throw new OperationsError(
+        "ACCOUNT_NOT_FOUND",
+        "حساب الطرف غير موجود.",
+        404,
+      );
+    }
+
+    const allRows = await listPartyStatementRows(accountId);
+    const rows = allRows.filter((row) =>
+      withinStatementRange(statementDay(row.date), range),
+    );
+    const facts = await listOperationStatementFacts(
+      rows
+        .filter((row) => row.sourceType === "operation" && row.sourceId)
+        .map((row) => row.sourceId as string),
+    );
+    // A merchant statement names the courier on each order row, so resolve every
+    // assigned courier in one roster read alongside the account's own party name.
+    const orderCourierIds =
+      account.partyType === "merchant"
+        ? [
+            ...new Set(
+              [...facts.values()]
+                .map((fact) => fact.courierId)
+                .filter((id): id is string => Boolean(id)),
+            ),
+          ]
+        : [];
+    const names = await resolvePartyNames({
+      merchantIds: account.partyType === "merchant" ? [account.partyId] : [],
+      courierIds:
+        account.partyType === "courier" ? [account.partyId] : orderCourierIds,
+    });
+    const partyName =
+      (account.partyType === "merchant"
+        ? names.merchants.get(account.partyId)
+        : names.couriers.get(account.partyId)) ??
+      (account.partyType === "merchant" ? "تاجر غير معروف" : "مندوب غير معروف");
+
+    const openingMinor = range?.from
+      ? allRows
+          .filter((row) => statementDay(row.date) < (range.from as string))
+          .reduce(
+            (sum, row) => sum + row.debitMinor - row.creditMinor,
+            0,
+          )
+      : 0;
+    const lines: PartyStatementLine[] = buildPartyStatementLines({
+      rows,
+      facts,
+      courierNames: names.couriers,
+      partyType: account.partyType,
+      openingMinor,
+    });
+
+    let workingDays: number | undefined;
+    if (account.partyType === "courier") {
+      const working = await listCourierWorkingDates();
+      workingDays = (working.get(account.partyId) ?? []).filter((day) =>
+        withinStatementRange(day, range),
+      ).length;
+    }
+
+    const closing =
+      range?.to !== null && range?.to !== undefined
+        ? lines.length > 0
+          ? lines[lines.length - 1].running
+          : round2(openingMinor / 100)
+        : account.balance;
+
+    return {
+      accountId: account.accountId,
+      partyType: account.partyType,
+      partyId: account.partyId,
+      partyName,
+      currency: account.currency,
+      balance: closing,
+      workingDays,
+      orderCount: countStatementOrders(rows),
+      openingBalance: round2(openingMinor / 100),
+      period: range ?? { from: null, to: null },
+      lines,
+    };
+  } catch (error) {
+    translateOperationError(error);
+  }
+}

@@ -1,0 +1,138 @@
+.autopilot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.autopilot-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.autopilot-file-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.autopilot-file-line span {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.autopilot-note {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.autopilot-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+}
+
+.autopilot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.autopilot-table th,
+.autopilot-table td {
+  padding: 8px 10px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.autopilot-table th {
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.autopilot-table tbody tr + tr td {
+  border-top: 1px solid var(--kanjo-field-border);
+}
+
+.autopilot-skipped {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--orange-soft);
+  color: var(--orange-deep);
+  font-size: 0.78rem;
+}
+
+.autopilot-skipped p,
+.autopilot-skipped ul {
+  margin: 0;
+}
+
+.autopilot-skipped ul {
+  padding-inline-start: 18px;
+}
+
+.autopilot-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.autopilot-progress-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.autopilot-bar {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--kanjo-field-border);
+}
+
+.autopilot-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+  transition: width 240ms ease-out;
+}
+
+.autopilot-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.autopilot-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: var(--kanjo-surface);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.autopilot-stat strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+@media (max-width: 640px) {
+  .autopilot-table th,
+  .autopilot-table td {
+    padding: 6px 8px;
+  }
+}

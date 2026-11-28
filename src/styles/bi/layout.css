@@ -1,0 +1,208 @@
+/* Executive dashboard — layout: dashboard frame, filter bar, widget shell,
+ * twelve-column rows and the chart/side split.
+ *
+ * Imported by bi.css. Every selector is namespaced with `.bi-`.
+ */
+
+.bi-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Sticky command bar ───────────────────────────────────────────────────
+ * The title block and the universal filter bar scroll as one unit and pin
+ * directly under the app topbar (72px desktop / 64px <=1023px). The background
+ * is opaque so the widgets passing underneath stay unreadable, not ghosted.
+ */
+
+.bi-sticky-head {
+  position: sticky;
+  top: var(--topbar-height, 72px);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 12px;
+  background: var(--canvas);
+}
+
+.bi-sticky-head .page-header {
+  margin-bottom: 0;
+}
+
+/* ── Universal filter bar ─────────────────────────────────────────────── */
+
+.bi-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.bi-filterbar-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bi-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.bi-filter select,
+.bi-filter button {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  box-shadow: none;
+}
+
+.bi-filterbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bi-result-count {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+/* ── Widget shell ─────────────────────────────────────────────────────── */
+
+.bi-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(35, 5, 53, 0.08);
+  border-radius: var(--radius-card);
+  background: var(--gradient-card);
+  box-shadow: var(--shadow);
+}
+
+.bi-widget-4 {
+  grid-column: span 4;
+}
+
+.bi-widget-5 {
+  grid-column: span 5;
+}
+
+.bi-widget-6 {
+  grid-column: span 6;
+}
+
+.bi-widget-7 {
+  grid-column: span 7;
+}
+
+.bi-widget-8 {
+  grid-column: span 8;
+}
+
+.bi-widget-12 {
+  grid-column: 1 / -1;
+}
+
+.bi-widget-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bi-widget-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bi-widget-titles h2 {
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+
+.bi-widget-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.bi-widget-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── Bento grid ───────────────────────────────────────────────────────────
+ * Flexible rows instead of a fixed twelve-column grid. Half-width widgets share
+ * a row while both are visible, and the survivor stretches to the full row when
+ * its partner is hidden by permissions. That keeps the command center tight for
+ * every grant combination, with no empty slot where a revoked section was.
+ */
+
+.bi-bento {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* Three dense columns: full-width orders row plus two rows of paired widgets
+ * keeps the command center close to one viewport on a 1080p screen. */
+.bi-bento > .bi-widget {
+  flex: 1 1 calc(33.333% - 8px);
+  min-width: 0;
+}
+
+.bi-bento > .bi-widget-12 {
+  flex: 1 0 100%;
+}
+
+/* ── Split layout: chart + side stats ─────────────────────────────────── */
+
+.bi-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.bi-split-tight {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr);
+  align-items: center;
+}
+
+.bi-split-main,
+.bi-split-side {
+  min-width: 0;
+}
+

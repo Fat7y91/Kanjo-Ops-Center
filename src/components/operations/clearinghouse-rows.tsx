@@ -1,0 +1,185 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/form-inputs";
+import { operationMoney } from "@/lib/operations/format";
+import type {
+  ClearingAccountRow,
+  OperationSummary,
+} from "@/lib/operations/types";
+
+import { RoleBadge } from "./clearinghouse-party-book";
+
+/**
+ * The clearinghouse lists: open accounts and logged orders.
+ *
+ * The party book lives in its own module so this file stays focused on the
+ * per-account settle controls and the recent-orders list.
+ */
+
+export type AccountRowsProps = {
+  accounts: ClearingAccountRow[];
+  busyId: string;
+  receiptNo: Record<string, string>;
+  setReceiptNo: (
+    update: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  setFile: (
+    update: (current: Record<string, File | null>) => Record<string, File | null>,
+  ) => void;
+  partialAmount: Record<string, string>;
+  setPartialAmount: (
+    update: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  /** Partial releases are only offered to viewers granted the capability. */
+  canPartial: boolean;
+  /** Closing the balance outright requires its own, separate grant. */
+  canSettle: boolean;
+  settle: (account: ClearingAccountRow) => void;
+};
+
+export function AccountRows({
+  accounts,
+  busyId,
+  receiptNo,
+  setReceiptNo,
+  setFile,
+  partialAmount,
+  setPartialAmount,
+  canPartial,
+  canSettle,
+  settle,
+}: AccountRowsProps) {
+  if (accounts.length === 0) {
+    return <p className="muted">لا توجد أرصدة مفتوحة في هذه القائمة.</p>;
+  }
+
+  return (
+    <ul className="clearing-rows">
+      {accounts.map((account) => (
+        <li key={account.accountId}>
+          <div className="clearing-row-main">
+            <strong>{account.partyName}</strong>
+            <RoleBadge partyType={account.partyType} />
+          </div>
+
+          <div className="clearing-row-amount">
+            <strong
+              className={
+                account.balance > 0 ? "clearing-positive" : "clearing-negative"
+              }
+            >
+              {operationMoney(Math.abs(account.balance), account.currency)}
+            </strong>
+            <span className="badge badge-gold">
+              {account.balance > 0 ? "مستحق لنا" : "مستحق لهم"}
+            </span>
+          </div>
+
+          <div className="clearing-row-actions">
+            {canPartial ? (
+              <TextField
+                fieldClassName="clearing-receipt"
+                placeholder={`${canSettle ? "مبلغ جزئي (اختياري)" : "المبلغ"} حتى ${operationMoney(
+                  Math.abs(account.balance),
+                  account.currency,
+                )}`}
+                inputMode="decimal"
+                dir="ltr"
+                value={partialAmount[account.accountId] ?? ""}
+                onChange={(event) =>
+                  setPartialAmount((current) => ({
+                    ...current,
+                    [account.accountId]: event.target.value,
+                  }))
+                }
+              />
+            ) : null}
+            <TextField
+              fieldClassName="clearing-receipt"
+              placeholder="رقم الإيصال (اختياري)"
+              value={receiptNo[account.accountId] ?? ""}
+              onChange={(event) =>
+                setReceiptNo((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.value,
+                }))
+              }
+            />
+            <input
+              type="file"
+              className="clearing-receipt"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(event) =>
+                setFile((current) => ({
+                  ...current,
+                  [account.accountId]: event.target.files?.[0] ?? null,
+                }))
+              }
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={
+                busyId === account.accountId ||
+                (!canSettle &&
+                  (partialAmount[account.accountId] ?? "").trim() === "")
+              }
+              onClick={() => settle(account)}
+            >
+              {canSettle
+                ? account.balance > 0
+                  ? "تحصيل"
+                  : "سداد"
+                : "تسديد جزئي"}
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function OrderRows({
+  operations,
+  onOpen,
+}: {
+  operations: OperationSummary[];
+  onOpen: (operation: OperationSummary) => void;
+}) {
+  if (operations.length === 0) {
+    return <p className="muted">لا توجد عمليات مسجلة بعد.</p>;
+  }
+
+  return (
+    <ul className="clearing-rows">
+      {operations.map((operation) => (
+        <li key={operation.id}>
+          <div className="clearing-row-main">
+            <strong dir="ltr">{operation.orderId}</strong>
+            <span>
+              {operation.merchantName} · {operation.courierName}
+            </span>
+          </div>
+          <div className="clearing-row-amount">
+            <strong dir="ltr">
+              {operationMoney(operation.orderValue, operation.currency)}
+            </strong>
+            <span className="badge badge-gold">
+              {operation.couponCode ? `كوبون ${operation.couponCode}` : "بدون كوبون"}
+            </span>
+          </div>
+          <div className="clearing-row-actions">
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => onOpen(operation)}
+            >
+              تفاصيل الأرباح
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}

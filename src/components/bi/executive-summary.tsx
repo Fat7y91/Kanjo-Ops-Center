@@ -1,0 +1,156 @@
+"use client";
+
+import Link from "next/link";
+
+import { amount, count, currencySymbol, money, percent } from "@/lib/bi/format";
+import type { OrderMetricSummary } from "@/lib/bi/order-metrics";
+import type {
+  CatalogSummary,
+  FinanceSummary,
+  MarketingSummary,
+} from "@/lib/bi/select";
+
+type ExecutiveSummaryProps = {
+  merchantCount: number;
+  signedCount: number;
+  orders: OrderMetricSummary;
+  finance: FinanceSummary;
+  /** Accrual operating result from the P&L waterfall; null while loading. */
+  operatingProfit: number | null;
+  marketing: MarketingSummary;
+  catalog: CatalogSummary;
+  showFinancials: boolean;
+};
+
+type Tile = {
+  href: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: "purple" | "gold" | "green" | "red";
+};
+
+/**
+ * Command-center strip.
+ *
+ * Six or five compact tiles answer the first question of the screen — is the
+ * business healthy? — and each tile is the entry point to the module that owns
+ * the number. This replaces the old scroll to a detail section for the headline
+ * facts.
+ */
+export function ExecutiveSummary({
+  merchantCount,
+  signedCount,
+  orders,
+  finance,
+  operatingProfit,
+  marketing,
+  catalog,
+  showFinancials,
+}: ExecutiveSummaryProps) {
+  const finalAgreements = catalog.signedTotal;
+  const tiles: Tile[] = [
+    {
+      href: "/merchants",
+      label: "التجار",
+      value: count(merchantCount),
+      detail: `${count(finalAgreements)} اتفاق نهائي · ${count(signedCount)} موقّع`,
+      tone: "purple",
+    },
+    {
+      href: "/contracts",
+      label: "التعاقدات المكتملة",
+      value: count(finalAgreements),
+      detail: `${count(signedCount)} عقد موقّع · ${count(Math.max(finalAgreements - signedCount, 0))} اتفاق نهائي`,
+      tone: "gold",
+    },
+  ];
+
+  if (showFinancials) {
+    tiles.push(
+      {
+        href: "/operations/log",
+        label: "الطلبات",
+        value: count(orders.orders),
+        detail: `${money(orders.volume)} حجم · ${amount(
+          orders.averageOrderValue,
+        )} ج.م./طلب`,
+        tone: "green",
+      },
+      {
+        href: "/finance/clearinghouse",
+        label: "صافي ربح/خسارة التشغيل",
+        value:
+          operatingProfit === null
+            ? "—"
+            : `${amount(operatingProfit)} ${currencySymbol("EGP")}`,
+        detail:
+          operatingProfit === null
+            ? "جارٍ حساب ربحية الطلبات"
+            : "ربحية الطلبات بعد يوميات المناديب",
+        tone:
+          operatingProfit === null
+            ? "gold"
+            : operatingProfit >= 0
+              ? "green"
+              : "red",
+      },
+      {
+        href: "/finance/clearinghouse",
+        label: "مبالغ لم تحصل",
+        value: money(finance.receivables),
+        detail: "مستحقة لكانجو",
+        tone: "gold",
+      },
+      {
+        href: "/finance/clearinghouse",
+        label: "مبالغ لم تسدد",
+        value: money(finance.payables),
+        detail: "مستحقة على كانجو",
+        tone: "red",
+      },
+    );
+  }
+
+  tiles.push(
+    {
+      href: "/marketing",
+      label: "تحويلات الحملات",
+      value: count(marketing.conversions),
+      detail: `${count(marketing.leads)} عميل محتمل`,
+      tone: "gold",
+    },
+    {
+      href: "/catalog",
+      label: "جاهزية الكتالوج",
+      value: percent(catalog.signedReadiness),
+      detail: `${count(catalog.liveMerchants)} من ${count(
+        catalog.signedTotal,
+      )} تاجر متفق معه`,
+      tone: catalog.signedReadiness >= 0.8 ? "green" : "red",
+    },
+  );
+
+  return (
+    <nav
+      className="exec-summary"
+      data-tiles={tiles.length}
+      aria-label="ملخص مؤشرات المؤسسة"
+    >
+      {tiles.map((tile) => (
+        <Link
+          key={tile.href}
+          href={tile.href}
+          className={`exec-tile exec-tile-${tile.tone}`}
+        >
+          <span className="exec-tile-label">{tile.label}</span>
+          <strong className="exec-tile-value">{tile.value}</strong>
+          <span className="exec-tile-detail">{tile.detail}</span>
+          <span className="exec-tile-link" aria-hidden="true">
+            عرض التفاصيل
+          </span>
+        </Link>
+      ))}
+    </nav>
+  );
+}

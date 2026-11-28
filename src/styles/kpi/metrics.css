@@ -1,0 +1,78 @@
+/* KPI metric cards and usage strip. */
+
+.kpi-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.kpi-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.kpi-metric:hover {
+  border-color: color-mix(in srgb, var(--kanjo-purple-interactive) 32%, transparent);
+  transform: translateY(-1px);
+}
+
+.kpi-metric-label {
+  color: var(--ink-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.kpi-metric-value {
+  color: var(--kanjo-purple-base);
+  font-size: 1.32rem;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.kpi-metric[data-direction="lower"] .kpi-metric-value {
+  color: var(--red);
+}
+
+.kpi-metric-hint {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.kpi-usage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line);
+}
+
+.kpi-usage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi-usage-item span {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.kpi-usage-item strong {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+[data-theme="dark"] .kpi-metric-value {
+  color: var(--ink);
+}

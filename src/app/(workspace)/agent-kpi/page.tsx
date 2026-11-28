@@ -1,0 +1,219 @@
+import { KpiAgentCard } from "@/app/(workspace)/agent-kpi/components/kpi-agent-card";
+import { KpiFilterBar } from "@/app/(workspace)/agent-kpi/components/kpi-filter-bar";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
+import { requireAnyPermission } from "@/lib/auth/guard";
+import { effectiveCityIds } from "@/lib/city-scope-query";
+import { monthLabel, recentMonthKeys } from "@/lib/kpi/calendar";
+import { formatScore } from "@/lib/kpi/format";
+import { loadKpiDataset } from "@/lib/kpi/repository";
+import { operationMoney } from "@/lib/operations/format";
+import {
+  loadOperationsKpiReport,
+  normalizeMonth,
+} from "@/lib/operations/kpi-service";
+import { buildKpiReport } from "@/lib/kpi/services/agent-kpi-service";
+import { KpiError } from "@/lib/kpi/types";
+import {
+  buildKpiFilterOptions,
+  isKpiAdmin,
+  normalizeFilters,
+  parseKpiFilters,
+  resolveKpiScope,
+} from "@/lib/kpi/scope";
+
+export const dynamic = "force-dynamic";
+export const runtime = "edge";
+
+type AgentKpiPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+/**
+ * Agent KPI dashboard (Tier 1 server container).
+ *
+ * Authorizes, resolves the viewer scope (reps are pinned to themselves; admins
+ * may filter city/team/rep), delegates all math to the Tier 3 service and
+ * renders one card per agent in scope.
+ */
+export default async function AgentKpiPage({ searchParams }: AgentKpiPageProps) {
+  const session = await requireAnyPermission(["view_global_kpi", "view_rep_kpi"]);
+  const params = await searchParams;
+
+  const filters = normalizeFilters(parseKpiFilters(params));
+  const dataset = await loadKpiDataset(filters.month);
+  // The money summary stays behind the payroll evidence permission: a courier
+  // sees their own scorecard, never the commission totals the blind-entry rule
+  // keeps away from field staff.
+  const canViewOperations = session.permissions.includes("view_operations_kpi");
+  const operations = canViewOperations
+    ? await loadOperationsKpiReport(normalizeMonth(filters.month)).catch(() => ({
+        totals: { operationCount: 0, orderValueTotal: 0, commissionTotal: 0 },
+      }))
+    : null;
+  const allowedCityIds = await effectiveCityIds(session);
+
+  const { scope, lockedToSelf, selfAgent, cityId } = resolveKpiScope({
+    viewer: {
+      id: session.user.id,
+      globalScope: session.globalScope,
+      clearanceLevel: session.clearanceLevel,
+    },
+    allowedCityIds,
+    filters,
+    agents: dataset.agents,
+  });
+
+  // An empty scope is a normal state, not an error: a fresh workspace has no
+  // field reps yet, and a manager may filter down to a team with none. Without
+  // this guard the domain's EMPTY_SCOPE error escapes as an RSC 500.
+  let report: ReturnType<typeof buildKpiReport>;
+  try {
+    report = buildKpiReport(dataset, scope, session.user.id);
+  } catch (error) {
+    if (error instanceof KpiError && error.code === "EMPTY_SCOPE") {
+      return <KpiEmptyState />;
+    }
+    throw error;
+  }
+
+  const self = report.snapshots.find(
+    (snapshot) => snapshot.agent.id === session.user.id,
+  );
+  const focus = self ?? report.snapshots[0];
+  const options = buildKpiFilterOptions(dataset, allowedCityIds, cityId);
+
+  const averageScore =
+    Math.round(
+      (report.snapshots.reduce((total, item) => total + item.score, 0) /
+        report.snapshots.length) *
+        10,
+    ) / 10;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="أداء المناديب"
+        title="لوحة مؤشرات المناديب"
+        description="أرقام كل مندوب تُقرأ مباشرة من قاعدة البيانات: الشهر الجاري يُحتسب لحظياً من الإسناد الفردي، والشهور السابقة تُقرأ من سجل المؤشرات المؤرشف. المقارنة والترتيب داخل المدينة فقط."
+        actions={
+          <span className="badge badge-gold">
+            {report.snapshots.length} مندوب · {monthLabel(filters.month)}
+          </span>
+        }
+      />
+
+      <KpiFilterBar
+        cities={options.cities}
+        teams={options.teams}
+        agents={options.agents}
+        cityId={filters.cityId}
+        team={filters.team}
+        agentId={filters.agentId}
+        windowDays={filters.windowDays}
+        month={filters.month}
+        monthOptions={recentMonthKeys(6).map((key) => ({
+          value: key,
+          label: monthLabel(key),
+        }))}
+        lockedToSelf={lockedToSelf}
+        selfAgent={selfAgent}
+        selfLabel={`${session.user.name} · ${session.user.team}`}
+      />
+
+      {dataset.vault.source === "unavailable" && (
+        <p className="kpi-filter-note">
+          قاعدة بيانات المؤشرات غير متصلة حالياً؛ تُعرض الأرقام صفراً حتى
+          اكتمال الربط.
+        </p>
+      )}
+
+      <section className="stat-grid">
+        <StatCard
+          label="نطاق العرض"
+          value={String(report.snapshots.length)}
+          detail={
+            lockedToSelf
+              ? selfAgent
+                ? "مندوب واحد (حساب مندوب)"
+                : "مناديب مدينتك"
+              : "مناديب مطابقون للتصفية"
+          }
+          tone="gold"
+        />
+        <StatCard
+          label="متوسط نقاط الفريق"
+          value={formatScore(averageScore)}
+          detail="متوسط درجات الأداء في النطاق المحدد"
+        />
+        <StatCard
+          label="المتصدر"
+          value={focus ? formatScore(focus.topPerformer.score) : "—"}
+          detail={focus ? `${focus.topPerformer.name} · ${focus.rank.cityName}` : "لا بيانات"}
+          tone="green"
+        />
+        <StatCard
+          label="مرحلة المدينة"
+          value={focus ? focus.stageLabel : "—"}
+          detail="المؤشرات تتكيف مع مرحلة دورة الحياة"
+        />
+      </section>
+
+      {operations ? (
+        <section className="stat-grid" aria-label="ملخص عمليات الشهر">
+          <StatCard
+            label="إجمالي العمليات"
+            value={String(operations.totals.operationCount)}
+            detail="عملية مسجلة في الشهر"
+          />
+          <StatCard
+            label="قيمة الطلبات"
+            value={operationMoney(operations.totals.orderValueTotal, "EGP")}
+            detail="إجمالي قيمة الطلبات المسجلة"
+            tone="gold"
+          />
+          <StatCard
+            label="إجمالي العمولات"
+            value={operationMoney(operations.totals.commissionTotal, "EGP")}
+            detail="عمولات التجار المحتسبة"
+            tone="green"
+          />
+        </section>
+      ) : null}
+
+      <section className="kpi-agent-grid">
+        {report.snapshots.map((snapshot) => (
+          <KpiAgentCard key={snapshot.agent.id} snapshot={snapshot} />
+        ))}
+      </section>
+
+      {!isKpiAdmin({
+          id: session.user.id,
+          globalScope: session.globalScope,
+          clearanceLevel: session.clearanceLevel,
+        }) ? null : (
+        <p className="kpi-filter-note">
+          عرض إداري: يمكنك اختيار المدينة أو الفريق أو المندوب من شريط التصفية.
+          الترتيب يُحتسب دائماً داخل نفس المدينة.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Rendered when no field rep matches the viewer's scope. */
+function KpiEmptyState() {
+  return (
+    <>
+      <PageHeader
+        eyebrow="أداء المناديب"
+        title="لوحة مؤشرات المناديب"
+        description="تقييم موحّد لكل مندوب وفق مرحلة دورة حياة مدينته."
+      />
+      <p className="empty-state">
+        لا يوجد مناديب في نطاقك بعد. تُحتسب المؤشرات بعد إسناد مناديب ميدانيين
+        إلى المدن.
+      </p>
+    </>
+  );
+}

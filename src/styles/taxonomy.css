@@ -1,0 +1,387 @@
+/* ── Taxonomy MDM ─────────────────────────────────────────────────────── */
+
+.taxonomy-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+}
+
+.taxonomy-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.taxonomy-tab:hover {
+  background: var(--kanjo-pastel);
+  color: var(--kanjo-purple-interactive);
+}
+
+.taxonomy-tab.is-active {
+  background: var(--primary);
+  color: var(--on-primary, #fff);
+}
+
+.taxonomy-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--gold) 18%, var(--surface));
+  color: var(--gold-deep);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.taxonomy-tab.is-active .taxonomy-tab-count {
+  background: rgba(255, 215, 0, 0.22);
+  color: #2b1b06;
+}
+
+.taxonomy-revision {
+  margin-inline-start: auto;
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sits after the revision marker; keeps its own gap so the count does not
+ * look glued to the sync action on narrow layouts. High-visibility brand
+ * treatment: royal purple plate with a warm-gold border and cream ink, legible
+ * on both light and dark canvases. */
+.taxonomy-sync-trigger {
+  margin-inline-start: 8px;
+  border: 2px solid var(--kanjo-gold) !important;
+  background: var(--gradient-primary) !important;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 10px 24px -12px rgba(35, 5, 53, 0.85);
+}
+
+.taxonomy-sync-trigger:hover {
+  background: linear-gradient(135deg, #2c0643, #5a24a6) !important;
+  color: var(--kanjo-gold) !important;
+  transform: translateY(-1px);
+}
+
+.taxonomy-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.taxonomy-request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.taxonomy-request-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.taxonomy-request-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.taxonomy-request-head h3 {
+  margin: 6px 0 2px;
+  font-size: 1rem;
+}
+
+.taxonomy-request-head p {
+  font-size: 0.78rem;
+}
+
+.taxonomy-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin: 0;
+}
+
+.taxonomy-meta div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.taxonomy-meta dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.taxonomy-meta dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.taxonomy-justification {
+  margin: 0;
+  padding: 10px 12px;
+  border-inline-start: 3px solid var(--purple);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.taxonomy-decided-head {
+  margin-top: 8px;
+}
+
+.taxonomy-id {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--purple) 8%, var(--surface));
+  color: var(--purple);
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.taxonomy-id-small {
+  min-width: 34px;
+  padding: 2px 6px;
+  font-size: 0.68rem;
+}
+
+.taxonomy-id-hint {
+  color: var(--ink-soft);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.taxonomy-field-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.taxonomy-request-trigger {
+  flex-shrink: 0;
+}
+
+.taxonomy-request-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--green) 26%, transparent);
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.taxonomy-variant-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.taxonomy-variant-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--surface-soft);
+}
+
+.taxonomy-variant-card h3 {
+  margin: 6px 0 2px;
+  font-size: 0.95rem;
+}
+
+.taxonomy-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.taxonomy-option-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.78rem;
+}
+
+.taxonomy-approve-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.taxonomy-approve-summary h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-inline > span {
+  white-space: nowrap;
+  font-size: 0.74rem;
+}
+
+.field-inline select {
+  min-width: 180px;
+}
+
+[data-theme="dark"] .taxonomy-request-card,
+[data-theme="dark"] .taxonomy-variant-card,
+[data-theme="dark"] .taxonomy-approve-summary {
+  background: var(--surface-raised);
+}
+
+[data-theme="dark"] .taxonomy-justification,
+[data-theme="dark"] .taxonomy-option-list li {
+  background: var(--surface-soft);
+}
+
+[data-theme="dark"] .taxonomy-id {
+  border-color: var(--line-strong);
+  background: rgba(201, 167, 255, 0.12);
+  color: #d9bcff;
+}
+
+[data-theme="dark"] .taxonomy-tab:hover {
+  background: var(--surface-soft);
+}
+
+[data-theme="dark"] .taxonomy-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+}
+
+[data-theme="dark"] .taxonomy-tab-count {
+  background: rgba(255, 215, 0, 0.16);
+  color: #ffd700;
+}
+
+[data-theme="dark"] .taxonomy-request-note {
+  border-color: rgba(89, 214, 155, 0.35);
+  background: #10281d;
+  color: var(--green);
+}
+
+@media (max-width: 760px) {
+  .taxonomy-tabs {
+    gap: 4px;
+  }
+
+  .taxonomy-tab {
+    padding: 7px 11px;
+    font-size: 0.76rem;
+  }
+
+  .taxonomy-revision {
+    margin-inline-start: 0;
+  }
+
+  .taxonomy-request-head {
+    flex-direction: column;
+  }
+
+  .field-inline {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+
+/* V1 sync receipt: names first, counts second. Lists scroll so 200 imported
+ * categories never stretch the modal past the viewport. */
+.taxonomy-sync-report {
+  display: grid;
+  gap: 12px;
+}
+
+.taxonomy-sync-report section {
+  display: grid;
+  gap: 6px;
+}
+
+.taxonomy-sync-report h4 {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.taxonomy-sync-report p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.taxonomy-sync-scroll {
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+
+.taxonomy-sync-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
