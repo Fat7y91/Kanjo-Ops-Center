@@ -13,6 +13,7 @@ import { buildPayslips } from "@/lib/payroll/store";
 
 import { buildLiveExpenses, buildLiveMarketing } from "./live-facts";
 import { loadOrderMetrics } from "./order-metrics-server";
+import { loadOperatingCostFacts } from "./operating-costs-server";
 import { loadMerchantFacts } from "./merchant-facts";
 import {
   biDatasetSchema,
@@ -200,9 +201,10 @@ export async function buildBiDataset(): Promise<BiDataset> {
 
   // Built once and shared: the treasury obligation and the payroll widget must
   // read the same rollup, not two independent snapshots.
-  const [payslips, orders] = await Promise.all([
+  const [payslips, orders, operatingCosts] = await Promise.all([
     buildPayslips(),
     loadOrderMetrics(),
+    loadOperatingCostFacts(),
   ]);
   const financials = await buildFounderFinancials(payslips);
   const treasury = financials.accounts.map((snapshot) => ({
@@ -285,6 +287,7 @@ export async function buildBiDataset(): Promise<BiDataset> {
     marketing: buildLiveMarketing(campaigns, marketingEntries, resolveCity),
     catalog: catalogRows,
     orders,
+    operatingCosts,
     partyBalances,
     treasury,
     accounts,

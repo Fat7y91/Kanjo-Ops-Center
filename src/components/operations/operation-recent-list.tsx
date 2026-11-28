@@ -44,6 +44,8 @@ export function OperationRecentList({
   canDelete,
   canEditCommission,
   selected,
+  selectedIds,
+  allFilteredSelected,
   onToggle,
   onToggleAll,
   onDelete,
@@ -54,6 +56,10 @@ export function OperationRecentList({
   canDelete: boolean;
   canEditCommission: boolean;
   selected: Set<string>;
+  /** Every selected id across pages, so the bulk bar never shrinks on a page change. */
+  selectedIds: string[];
+  /** Whether every filtered row (not just this page) is selected. */
+  allFilteredSelected: boolean;
   onToggle: (id: string) => void;
   onToggleAll: (checked: boolean) => void;
   onDelete: (ids: string[]) => void;
@@ -63,12 +69,6 @@ export function OperationRecentList({
   if (operations.length === 0) {
     return <p className="empty-state">لا توجد عمليات مسجلة بعد.</p>;
   }
-
-  const allSelected =
-    operations.length > 0 && operations.every((row) => selected.has(row.id));
-  const selectedIds = operations
-    .filter((row) => selected.has(row.id))
-    .map((row) => row.id);
 
   return (
     <>
@@ -95,7 +95,7 @@ export function OperationRecentList({
                   <Checkbox
                     aria-label="تحديد كل الطلبات"
                     className={CHECKBOX_CLASS}
-                    checked={allSelected}
+                    checked={allFilteredSelected}
                     onChange={onToggleAll}
                   />
                 </th>

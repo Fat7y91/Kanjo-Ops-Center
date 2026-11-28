@@ -32,7 +32,10 @@ export async function GET() {
   const canSeeFinancials =
     session.permissions.includes("view_overview_finance") &&
     session.clearanceLevel >= 3;
-  if (!canSeeFinancials) dataset.orders = [];
+  if (!canSeeFinancials) {
+    dataset.orders = [];
+    dataset.operatingCosts = [];
+  }
 
   return NextResponse.json(dataset, {
     headers: { "Cache-Control": "no-store" },

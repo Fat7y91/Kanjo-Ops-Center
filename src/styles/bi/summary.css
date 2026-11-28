@@ -155,6 +155,22 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+/* Net Profit hero: the final card carries the result, so it gets a stronger
+ * border and a tinted surface that flips with the sign. */
+.order-metrics-row-net .bi-stat:last-child {
+  border-width: 2px;
+}
+
+.order-metrics-row-net .bi-stat:last-child.bi-stat-green {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--line));
+  background: color-mix(in srgb, var(--green) 9%, var(--surface-soft));
+}
+
+.order-metrics-row-net .bi-stat:last-child.bi-stat-red {
+  border-color: color-mix(in srgb, var(--red) 55%, var(--line));
+  background: color-mix(in srgb, var(--red) 9%, var(--surface-soft));
+}
+
 .order-metrics-row-label {
   margin: 4px 0 0;
   color: var(--ink-soft);

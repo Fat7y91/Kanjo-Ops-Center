@@ -392,3 +392,48 @@
   border-radius: 999px;
   padding: 0.05rem 0.45rem;
 }
+
+/* Orders table controls: search and page-size sit above the table, the pager
+ * below it. One row on desktop, stacked on small screens. */
+.order-table-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.order-table-tools > :first-child {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.order-table-tools-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-table-page-size {
+  min-width: 9rem;
+}
+
+.table-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 4px 2px;
+}
+
+.table-pagination-label {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}

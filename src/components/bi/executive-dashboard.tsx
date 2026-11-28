@@ -214,6 +214,7 @@ export function ExecutiveDashboard({
         {canSeeFinance ? (
           <OrdersMetricsSection
             rows={dataset.orders}
+            operatingCosts={dataset.operatingCosts}
             cities={dataset.cities}
             range={filters.range}
           />

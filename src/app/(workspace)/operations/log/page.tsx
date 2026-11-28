@@ -15,6 +15,7 @@ export default async function OperationsLogPage() {
       console.error("[operations] board load failed", error);
       return {
         operations: [],
+        operationsTotal: 0,
         couriers: [],
         merchants: [],
         coupons: [],
@@ -33,6 +34,10 @@ export default async function OperationsLogPage() {
   // could return a partial shape. Normalise here so the client never receives
   // `undefined` for a list it iterates.
   const operations = Array.isArray(board.operations) ? board.operations : [];
+  const operationsTotal =
+    typeof board.operationsTotal === "number"
+      ? board.operationsTotal
+      : operations.length;
   const couriers = Array.isArray(board.couriers) ? board.couriers : [];
   const merchants = Array.isArray(board.merchants) ? board.merchants : [];
   const coupons = Array.isArray(board.coupons) ? board.coupons : [];
@@ -50,6 +55,7 @@ export default async function OperationsLogPage() {
         merchants={merchants}
         coupons={coupons}
         initialOperations={operations}
+        initialTotal={operationsTotal}
         importRoster={{
           merchants: [...roster.merchants],
           couriers: [...roster.couriers],

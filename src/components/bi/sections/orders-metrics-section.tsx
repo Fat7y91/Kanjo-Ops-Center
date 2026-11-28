@@ -17,14 +17,18 @@ import {
 import { rangeStart } from "@/lib/bi/select";
 import type {
   BiCityOption,
+  BiOperatingCostFact,
   BiOrderMetricRow,
   BiRange,
 } from "@/lib/bi/types";
+
+import { NetProfitRow } from "./net-profit-row";
 
 const ALL = "";
 
 type OrdersMetricsSectionProps = {
   rows: BiOrderMetricRow[];
+  operatingCosts: BiOperatingCostFact[];
   cities: BiCityOption[];
   range: BiRange;
 };
@@ -40,6 +44,7 @@ type OrdersMetricsSectionProps = {
  */
 export function OrdersMetricsSection({
   rows,
+  operatingCosts,
   cities,
   range,
 }: OrdersMetricsSectionProps) {
@@ -229,6 +234,20 @@ export function OrdersMetricsSection({
               tone={summary.netOrderProfit >= 0 ? "green" : "red"}
             />
           </div>
+
+          <NetProfitRow
+            rows={rows}
+            operatingCosts={operatingCosts}
+            filters={{
+              from: effective.from,
+              to: effective.to,
+              courierId: effective.courierId,
+              cityId: effective.cityId,
+            }}
+            orderNetProfit={summary.netOrderProfit}
+            volume={summary.volume}
+            orders={summary.orders}
+          />
         </div>
       )}
     </Widget>

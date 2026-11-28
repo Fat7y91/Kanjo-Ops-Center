@@ -18,6 +18,7 @@ import {
   type CommissionEditResult,
 } from "./commission-repository";
 import {
+  countOperations,
   insertOperation,
   isOperationsDatabaseConfigured,
   listOperations,
@@ -54,6 +55,8 @@ import {
 
 export type OperationsBoard = {
   operations: OperationSummary[];
+  /** Exact stored row count, so the orders screen can paginate without a cap. */
+  operationsTotal: number;
   couriers: CourierOption[];
   merchants: MerchantOption[];
   coupons: CouponOption[];
@@ -101,9 +104,10 @@ export async function loadOperationsBoard(): Promise<OperationsBoard> {
   // One failing list must not blank the whole screen, and a legacy row must not
   // take the logger down with it. Each read settles independently and the
   // rejection is logged so the real cause is visible in the server logs.
-  const [operationsRead, couriersRead, merchantsRead, couponsRead] =
+  const [operationsRead, operationsCountRead, couriersRead, merchantsRead, couponsRead] =
     await Promise.allSettled([
       listOperations(),
+      countOperations(),
       listCouriers(),
       listMerchantOptions(),
       listCouponOptions(),
@@ -119,9 +123,14 @@ export async function loadOperationsBoard(): Promise<OperationsBoard> {
   const couriers = settle(couriersRead, "couriers");
   const merchants = settle(merchantsRead, "merchants");
   const coupons = settle(couponsRead, "coupons");
+  const operationsTotal =
+    operationsCountRead.status === "fulfilled"
+      ? operationsCountRead.value
+      : operations.length;
 
   return {
     operations: operations.map(toOperationSummary),
+    operationsTotal,
     couriers,
     merchants,
     coupons,

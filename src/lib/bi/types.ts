@@ -222,6 +222,29 @@ export const biOrderMetricRowSchema = z.object({
 export type BiOrderMetricRow = z.infer<typeof biOrderMetricRowSchema>;
 
 /**
+ * One posted expense / revenue leg the Net Profit row deducts.
+ *
+ * The orders widget already nets the per-order courier cut and coupon expense
+ * off its own profit, so the ledger is read again only for the fixed costs that
+ * sit below the order line: the attendance base, manual bonuses and other
+ * operating expenses. Facts stay raw (one per journal line) so the dashboard can
+ * filter by day, courier and city before summing.
+ */
+export const biOperatingCostFactSchema = z.object({
+  /** Operating day, `YYYY-MM-DD`, from the journal entry date. */
+  day: z.string(),
+  /** Account code, e.g. `5100` (courier pay) or `5110` (courier bonuses). */
+  code: z.string(),
+  sourceType: z.string(),
+  sourceId: z.string().nullable(),
+  partyType: z.enum(["merchant", "courier", "bank", "customer"]).nullable(),
+  partyId: z.string().nullable(),
+  debitMinor: z.number().int(),
+  creditMinor: z.number().int(),
+});
+export type BiOperatingCostFact = z.infer<typeof biOperatingCostFactSchema>;
+
+/**
  * Party-account totals from the double-entry clearinghouse.
  *
  * Receivables are positive party balances (the party owes Kanjo); payables are
@@ -250,6 +273,8 @@ export const biDatasetSchema = z.object({
   marketing: z.array(biMarketingRowSchema),
   catalog: z.array(biCatalogRowSchema),
   orders: z.array(biOrderMetricRowSchema),
+  /** Posted expense/revenue legs below the order line, for the Net Profit row. */
+  operatingCosts: z.array(biOperatingCostFactSchema),
   /** Absolute clearinghouse positions; never narrowed by the filter bar. */
   partyBalances: z.array(biPartyBalanceSchema),
   /**

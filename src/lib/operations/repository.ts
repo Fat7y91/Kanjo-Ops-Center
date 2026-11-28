@@ -137,7 +137,19 @@ async function selectOperations(
   return { data, error };
 }
 
-export async function listOperations(limit = 100): Promise<OperationLog[]> {
+/**
+ * Upper bound for the orders screen.
+ *
+ * The screen paginates in the browser and bulk-selects across pages, so it
+ * needs the whole slice in one payload. The bound is a guard against an
+ * unbounded read, not a display cap: the screen also reads the exact row count
+ * and says so when the bound is reached.
+ */
+export const OPERATIONS_LIST_MAX = 5_000;
+
+export async function listOperations(
+  limit = OPERATIONS_LIST_MAX,
+): Promise<OperationLog[]> {
   const primary = await selectOperations(OPERATION_COLUMNS, limit);
   if (!primary.error) {
     return ((primary.data ?? []) as unknown as OperationRow[]).map(toOperation);
@@ -169,6 +181,28 @@ export async function listOperations(limit = 100): Promise<OperationLog[]> {
         : null,
     }),
   );
+}
+
+/**
+ * Exact number of stored orders.
+ *
+ * The list read is bounded (see `OPERATIONS_LIST_MAX`); the header badge must
+ * still show the true total, so the screen reads the count separately and never
+ * presents the bound as if it were the whole book.
+ */
+export async function countOperations(): Promise<number> {
+  const client = getSupabaseServerClient();
+  const { count, error } = await client
+    .schema("app")
+    .from("operation_logs")
+    .select("id", { count: "exact", head: true })
+    .abortSignal(AbortSignal.timeout(READ_TIMEOUT_MS));
+
+  if (error) {
+    if (isMissingSchemaObject(error)) return 0;
+    throw error;
+  }
+  return count ?? 0;
 }
 
 /**

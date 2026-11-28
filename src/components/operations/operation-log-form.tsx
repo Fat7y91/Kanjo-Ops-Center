@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import { usePermission } from "@/components/auth/use-permission";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { couponTypeLabel } from "@/lib/coupons/format";
 import { pickLabel } from "@/lib/operations/optimistic";
 import type {
@@ -21,7 +20,7 @@ import {
   type CommissionSaveResult,
 } from "./commission-edit-modal";
 import { NO_COUPON } from "./operation-log-fields";
-import { OperationRecentList } from "./operation-recent-list";
+import { OperationOrdersPanel } from "./operation-orders-panel";
 import { useOperationForm } from "./use-operation-form";
 
 export function OperationLogForm({
@@ -29,12 +28,15 @@ export function OperationLogForm({
   merchants,
   coupons,
   initialOperations,
+  initialTotal,
   importRoster,
 }: {
   couriers: CourierOption[];
   merchants: MerchantOption[];
   coupons: CouponOption[];
   initialOperations: OperationSummary[];
+  /** Exact stored count; falls back to the loaded length when absent. */
+  initialTotal: number;
   importRoster: {
     merchants: [string, string][];
     couriers: [string, string][];
@@ -43,6 +45,8 @@ export function OperationLogForm({
   const merchantList = Array.isArray(merchants) ? merchants : [];
   const courierList = Array.isArray(couriers) ? couriers : [];
   const couponList = Array.isArray(coupons) ? coupons : [];
+  const totalCount =
+    typeof initialTotal === "number" ? initialTotal : initialOperations.length;
 
   const { hasPermission } = usePermission();
   const canImport = hasPermission("import_orders");
@@ -130,8 +134,8 @@ export function OperationLogForm({
     });
   }
 
-  function toggleAll(checked: boolean) {
-    setSelected(checked ? new Set(operations.map((row) => row.id)) : new Set());
+  function toggleAll(checked: boolean, ids: string[]) {
+    setSelected(checked ? new Set(ids) : new Set());
   }
 
   async function handleDelete(ids: string[]) {
@@ -206,42 +210,21 @@ export function OperationLogForm({
 
   return (
     <div className="operation-log">
-      <article className="panel">
-        <div className="panel-head">
-          <div>
-            <h2>الطلبات</h2>
-            <span className="muted">{operations.length} طلب</span>
-          </div>
-          <DropdownMenu
-            label="إضافة طلبات +"
-            items={[
-              {
-                id: "new-order",
-                label: "طلب جديد",
-                onSelect: () => setCreateOpen(true),
-              },
-              {
-                id: "import-orders",
-                label: "استيراد ملف CSV",
-                onSelect: () => setImportOpen(true),
-                disabled: !canImport,
-              },
-            ]}
-          />
-        </div>
-
-        <OperationRecentList
-          operations={operations}
-          canDelete={canDelete}
-          canEditCommission={canEditCommission}
-          selected={selected}
-          onToggle={toggle}
-          onToggleAll={toggleAll}
-          onDelete={handleDelete}
-          onEditCommission={setEditingCommission}
-          deleting={deleting}
-        />
-      </article>
+      <OperationOrdersPanel
+        operations={operations}
+        total={totalCount}
+        canImport={canImport}
+        canDelete={canDelete}
+        canEditCommission={canEditCommission}
+        selected={selected}
+        onToggle={toggle}
+        onToggleAll={toggleAll}
+        onDelete={handleDelete}
+        onEditCommission={setEditingCommission}
+        deleting={deleting}
+        onOpenCreate={() => setCreateOpen(true)}
+        onOpenImport={() => setImportOpen(true)}
+      />
 
       <CommissionEditModal
         open={editingCommission !== null}
